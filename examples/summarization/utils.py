@@ -14,7 +14,6 @@ from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 
 from transformers import BartTokenizer
-from transformers.tokenization_utils import trim_batch
 
 
 def encode_file(
@@ -55,11 +54,22 @@ def encode_file(
     return examples
 
 
+
 def lmap(f, x):
     return list(map(f, x))
 
 
 T5_PREFIX = "summarize: "  # HACK, fixme
+
+def trim_batch(
+    input_ids, pad_token_id, attention_mask=None,
+):
+    """Remove columns that are populated exclusively by pad_token_id"""
+    keep_column_mask = input_ids.ne(pad_token_id).any(dim=0)
+    if attention_mask is None:
+        return input_ids[:, keep_column_mask]
+    else:
+        return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
 
 
 class SummarizationDataset(Dataset):

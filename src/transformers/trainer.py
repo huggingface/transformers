@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 import os
@@ -19,7 +18,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
-from .data.data_collator import DataCollator, DefaultDataCollator
+from .data.data_collator import DataCollator, default_data_collator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
@@ -190,10 +189,7 @@ class Trainer:
         """
         self.model = model.to(args.device)
         self.args = args
-        if data_collator is not None:
-            self.data_collator = data_collator
-        else:
-            self.data_collator = DefaultDataCollator()
+        self.data_collator = data_collator if data_collator is not None else default_data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
@@ -239,7 +235,7 @@ class Trainer:
             self.train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
-            collate_fn=self.data_collator.collate_batch,
+            collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
@@ -264,7 +260,7 @@ class Trainer:
             eval_dataset,
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator.collate_batch,
+            collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
@@ -285,7 +281,7 @@ class Trainer:
             test_dataset,
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator.collate_batch,
+            collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
@@ -556,6 +552,9 @@ class Trainer:
     def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         if self.epoch is not None:
             logs["epoch"] = self.epoch
+        if self.global_step is None:
+            # when logging evaluation metrics without training
+            self.global_step = 0
         if self.tb_writer:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
@@ -574,11 +573,11 @@ class Trainer:
         if is_wandb_available():
             if self.is_world_master():
                 wandb.log(logs, step=self.global_step)
-        output = json.dumps({**logs, **{"step": self.global_step}})
+        output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
         else:
-            print(output)
+            logger.info(output)
 
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer

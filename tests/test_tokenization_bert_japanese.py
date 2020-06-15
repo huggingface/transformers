@@ -60,10 +60,25 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         input_text = "こんにちは、世界。 \nこんばんは、世界。"
         output_text = "こんにちは 、 世界 。 こんばんは 、 世界 。"
         return input_text, output_text
+
+    def get_clean_sequence(self, tokenizer):
+        input_text, output_text = self.get_input_output_texts(tokenizer)
+        ids = tokenizer.encode(output_text, add_special_tokens=False)
+        text = tokenizer.decode(ids, clean_up_tokenization_spaces=False)
+        return text, ids
+
+    def test_pretokenized_inputs(self):
+        pass  # TODO add if relevant
+
+    def test_maximum_encoding_length_pair_input(self):
+        pass  # TODO add if relevant
+
+    def test_maximum_encoding_length_single_input(self):
+        pass  # TODO add if relevant
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
@@ -157,10 +172,19 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
     def get_tokenizer(self, **kwargs):
         return BertJapaneseTokenizer.from_pretrained(self.tmpdirname, subword_tokenizer_type="character", **kwargs)
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         input_text = "こんにちは、世界。 \nこんばんは、世界。"
         output_text = "こ ん に ち は 、 世 界 。 こ ん ば ん は 、 世 界 。"
         return input_text, output_text
+
+    def test_pretokenized_inputs(self):
+        pass  # TODO add if relevant
+
+    def test_maximum_encoding_length_pair_input(self):
+        pass  # TODO add if relevant
+
+    def test_maximum_encoding_length_single_input(self):
+        pass  # TODO add if relevant
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, subword_tokenizer_type="character")
