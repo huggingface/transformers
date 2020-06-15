@@ -46,6 +46,8 @@ train_args = {
     }
 ```
 
+[You can even train your own model using this colab notebook](https://colab.research.google.com/drive/1I5cK1M_0dLaf5xoewh6swcm5nAInfwHy?usp=sharing)
+
 ## Results
 ```{"correct": 6832, "similar": 4409, "incorrect": 632, "eval_loss": -14.950117511952177}```
 
