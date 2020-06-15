@@ -166,10 +166,7 @@ def train(args, train_dataset, model, tokenizer):
                 )  # XLM and DistilBERT don't use segment_ids
             if args.model_type == 'xlm':
                 # XLM model such as xlm-mlm-tlm-xnli15-1024 need lang parameter as well
-                inputs.update(
-                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * model.module.config.lang2id[
-                            args.train_language]).to(args.device)}
-                )
+                inputs.update({"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * model.module.config.lang2id[args.train_language]).to(args.device)})
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -279,10 +276,7 @@ def evaluate(args, model, tokenizer, prefix=""):
                     )  # XLM and DistilBERT don't use segment_ids
                 if args.model_type == 'xlm':
                 # XLM model such as xlm-mlm-tlm-xnli15-1024 need langs as input as well
-                inputs.update(
-                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * model.module.config.lang2id[
-                            args.language]).to(args.device)}
-                )
+                inputs.update({"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * model.module.config.lang2id[args.language]).to(args.device)})
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
