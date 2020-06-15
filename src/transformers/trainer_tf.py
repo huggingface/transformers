@@ -128,7 +128,7 @@ class TFTrainer:
         Returns:
           The loss corresponding to the given batch.
         """
-        per_replica_loss, per_replica_logits = self.args.strategy.experimental_run_v2(
+        per_replica_loss, per_replica_logits = self.args.strategy.run(
             self._run_model, args=(per_replica_features, per_replica_labels, False)
         )
 
@@ -321,7 +321,7 @@ class TFTrainer:
     @tf.function
     def _apply_gradients(self, optimizer):
         """Applies the gradients (cross-replica)."""
-        self.args.strategy.experimental_run_v2(self._step, args=(optimizer,))
+        self.args.strategy.run(self._step, args=(optimizer,))
 
     def _step(self, optimizer):
         """Applies gradients and resets accumulation."""
@@ -352,7 +352,7 @@ class TFTrainer:
 
     def _accumulate_gradients(self, per_replica_features, per_replica_labels):
         """Accumulates the gradients across all the replica."""
-        per_replica_loss = self.args.strategy.experimental_run_v2(
+        per_replica_loss = self.args.strategy.run(
             self._forward, args=(per_replica_features, per_replica_labels)
         )
 
