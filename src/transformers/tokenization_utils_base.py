@@ -183,6 +183,16 @@ class BatchEncoding(UserDict):
         except KeyError:
             raise AttributeError
 
+    def __getstate__(self):
+        return {"data": self.data, "encodings": self._encodings}
+
+    def __setstate__(self, state):
+        if "data" in state:
+            self.data = state["data"]
+
+        if "encodings" in state:
+            self._encodings = state["encodings"]
+
     def keys(self):
         return self.data.keys()
 
