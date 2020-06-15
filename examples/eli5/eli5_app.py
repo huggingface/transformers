@@ -137,7 +137,7 @@ def img_to_bytes(img_path):
     return encoded
 
 
-header_html = "<img src='data:image/jpg;base64,{}'>".format(img_to_bytes("images/huggingface_logo.jpg"))
+header_html = "<img src='https://huggingface.co/front/assets/huggingface_logo.svg'>"
 header_full = """
 <html>
   <head>
