@@ -736,6 +736,9 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
+    def get_output_embeddings(self):
+        return self.albert.embeddings
+
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
