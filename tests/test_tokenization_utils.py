@@ -132,4 +132,4 @@ class TokenizerUtilsTest(unittest.TestCase):
             self.assertFalse(tokenizer_p("Small example to_encode").is_fast)
 
         with self.subTest("Rust Tokenizer"):
-            self.assertFalse(tokenizer_r("Small example to_encode").is_fast)
+            self.assertTrue(tokenizer_r("Small example to_encode").is_fast)
