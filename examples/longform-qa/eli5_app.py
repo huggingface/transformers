@@ -1,6 +1,3 @@
-import base64
-from pathlib import Path
-
 import numpy as np
 import torch
 
@@ -129,14 +126,7 @@ def answer_question(
 
 st.title("Long Form Question Answering with ELI5")
 
-
 # Start sidebar
-def img_to_bytes(img_path):
-    img_bytes = Path(img_path).read_bytes()
-    encoded = base64.b64encode(img_bytes).decode()
-    return encoded
-
-
 header_html = "<img src='https://huggingface.co/front/assets/huggingface_logo.svg'>"
 header_full = """
 <html>
