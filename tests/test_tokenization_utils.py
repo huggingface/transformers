@@ -69,6 +69,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     def test_batch_encoding_pickle(self):
         import numpy as np
+
         tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
         tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
 
@@ -78,8 +79,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         with self.subTest("BatchEncoding (Python, return_tensors=NUMPY)"):
             self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.NUMPY),
-                np.array_equal
+                tokenizer_p("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
             )
 
         with self.subTest("BatchEncoding (Rust, return_tensors=None)"):
@@ -87,44 +87,41 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         with self.subTest("BatchEncoding (Rust, return_tensors=NUMPY)"):
             self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.NUMPY),
-                np.array_equal
+                tokenizer_r("Small example to encode", return_tensors=TensorType.NUMPY), np.array_equal
             )
 
     @require_tf
     def test_batch_encoding_pickle_tf(self):
         import tensorflow as tf
+
         tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
         tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
 
         with self.subTest("BatchEncoding (Python, return_tensors=TENSORFLOW)"):
             self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.TENSORFLOW),
-                tf.equal
+                tokenizer_p("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf.equal
             )
 
         with self.subTest("BatchEncoding (Rust, return_tensors=TENSORFLOW)"):
             self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.TENSORFLOW),
-                tf.equal
+                tokenizer_r("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf.equal
             )
 
     @require_torch
     def test_batch_encoding_pickle_pt(self):
         import torch
+
         tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
         tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
 
         with self.subTest("BatchEncoding (Python, return_tensors=PYTORCH)"):
             self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.PYTORCH),
-                torch.equal
+                tokenizer_p("Small example to encode", return_tensors=TensorType.PYTORCH), torch.equal
             )
 
         with self.subTest("BatchEncoding (Rust, return_tensors=PYTORCH)"):
             self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.PYTORCH),
-                torch.equal
+                tokenizer_r("Small example to encode", return_tensors=TensorType.PYTORCH), torch.equal
             )
 
     def test_batch_encoding_is_fast(self):
