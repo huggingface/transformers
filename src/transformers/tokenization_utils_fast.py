@@ -55,19 +55,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     Class attributes (overridden by derived classes):
 
-        - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file
-            required by the model, and as associated values, the filename for saving the associated file (string).
-        - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys
-            being the ``__init__`` keyword name of each vocabulary file required by the model, the low-level being the
-            `short-cut-names` (string) of the pretrained models with, as associated values, the `url` (string) to the
-            associated pretrained vocabulary file.
-        - ``max_model_input_sizes``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained
-            models, and as associated values, the maximum length of the sequence inputs of this model, or None if the
-            model has no maximum input size.
-        - ``pretrained_init_configuration``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the
-            pretrained models, and as associated values, a dictionnary of specific arguments to pass to the
-            ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the
-            ``from_pretrained()`` method.
+    - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file
+      required by the model, and as associated values, the filename for saving the associated file (string).
+    - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys
+      being the ``__init__`` keyword name of each vocabulary file required by the model, the low-level being the
+      `short-cut-names` (string) of the pretrained models with, as associated values, the `url` (string) to the
+      associated pretrained vocabulary file.
+    - ``max_model_input_sizes``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained
+      models, and as associated values, the maximum length of the sequence inputs of this model, or None if the
+      model has no maximum input size.
+    - ``pretrained_init_configuration``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the
+      pretrained models, and as associated values, a dictionnary of specific arguments to pass to the
+      ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the
+      ``from_pretrained()`` method.
 
     Args:
         - ``tokenizer`` (`BaseTokenizerFast`): A Fast tokenizer from the HuggingFace tokenizer library (in low level Rust language)
@@ -211,9 +211,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens: string or list of string or AddedTokenFast. Each string is a token to add.
-            Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to let you personnalize it's behavior (Whether this token should only match against single word, whether this token should strip all potential whitespaces on the left side, Whether this token should strip all potential whitespaces on the right side...).
-            See details for AddedToken in HuggingFace tokenizers library.
+            new_tokens: string or list of string or :class:`~transformers.AddedTokenFast`. Each string is a token to add.
+                Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to
+                let you personnalize it's behavior (Whether this token should only match against single word, whether
+                this token should strip all potential whitespaces on the left side, Whether this token should strip
+                all potential whitespaces on the right side...).
+
+                See details for :class:`~transformers.AddedToken` in HuggingFace tokenizers library.
 
         Returns:
             Number of tokens added to the vocabulary.

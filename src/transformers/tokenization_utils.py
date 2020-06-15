@@ -54,19 +54,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     Class attributes (overridden by derived classes):
 
-        - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file
-            required by the model, and as associated values, the filename for saving the associated file (string).
-        - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys
-            being the ``__init__`` keyword name of each vocabulary file required by the model, the low-level being the
-            `short-cut-names` (string) of the pretrained models with, as associated values, the `url` (string) to the
-            associated pretrained vocabulary file.
-        - ``max_model_input_sizes``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained
-            models, and as associated values, the maximum length of the sequence inputs of this model, or None if the
-            model has no maximum input size.
-        - ``pretrained_init_configuration``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the
-            pretrained models, and as associated values, a dictionnary of specific arguments to pass to the
-            ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the
-            ``from_pretrained()`` method.
+    - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file
+      required by the model, and as associated values, the filename for saving the associated file (string).
+    - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys
+      being the ``__init__`` keyword name of each vocabulary file required by the model, the low-level being the
+      `short-cut-names` (string) of the pretrained models with, as associated values, the `url` (string) to the
+      associated pretrained vocabulary file.
+    - ``max_model_input_sizes``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained
+      models, and as associated values, the maximum length of the sequence inputs of this model, or None if the
+      model has no maximum input size.
+    - ``pretrained_init_configuration``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the
+      pretrained models, and as associated values, a dictionnary of specific arguments to pass to the
+      ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the
+      ``from_pretrained()`` method.
 
     Args:
         - ``model_max_length``: (`Optional`) int: the maximum length in number of tokens for the inputs to the transformer model.
@@ -128,7 +128,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         Args:
             new_tokens: string or list of string. Each string is a token to add. Tokens are only added if they are not
-            already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+                already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
 
         Returns:
             Number of tokens added to the vocabulary.
@@ -642,12 +642,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 `tokenize` and `convert_tokens_to_ids` methods.
             num_tokens_to_remove (:obj:`int`, `optional`, defaults to ``0``):
                 number of tokens to remove using the truncation strategy
-            truncation_strategy: string selected in the following options:
+            truncation_strategy (:obj:`string`, `optional`, defaults to "only_first"):
+                String selected in the following options:
+
                 - 'only_first' (default): Only truncate the first sequence. raise an error if the first sequence is shorter or equal to than num_tokens_to_remove.
                 - 'only_second': Only truncate the second sequence
-                - 'longest_first' Iteratively reduce the inputs sequence until the input is under max_length
-                    starting from the longest one at each token (when there is a pair of input sequences).
-                    Overflowing tokens only contains overflow from the first sequence.
+                - 'longest_first': Iteratively reduce the inputs sequence until the input is under max_length
+                  starting from the longest one at each token (when there is a pair of input sequences).
+                  Overflowing tokens only contains overflow from the first sequence.
                 - 'do_not_truncate'
             stride (:obj:`int`, `optional`, defaults to ``0``):
                 If set to a number along with max_length, the overflowing tokens returned will contain some tokens

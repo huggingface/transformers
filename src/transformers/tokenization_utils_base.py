@@ -208,16 +208,18 @@ class BatchEncoding(UserDict):
         return self._encodings[batch_index].words
 
     def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
-        """ Get the index of the word corresponding (i.e. comprising) to an encoded token
-            in a sequence of the batch.
+        """
+        Get the index of the word corresponding (i.e. comprising) to an encoded token
+        in a sequence of the batch.
 
-            Can be called as:
-                - self.token_to_word(token_index) if batch size is 1
-                - self.token_to_word(batch_index, token_index) if batch size is greater than 1
+        Can be called as:
 
-            This method is particularly suited when the input sequences are provided as
-            pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-            to easily associate encoded tokens with provided tokenized words.
+        - ``self.token_to_word(token_index)`` if batch size is 1
+        - ``self.token_to_word(batch_index, token_index)`` if batch size is greater than 1
+
+        This method is particularly suited when the input sequences are provided as
+        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
+        to easily associate encoded tokens with provided tokenized words.
 
         Args:
             batch_or_token_index (:obj:`int`):
@@ -228,7 +230,7 @@ class BatchEncoding(UserDict):
                 of the token in the sequence.
 
         Returns:
-            word_index (:obj:`int`):
+            :obj:`int`:
                 index of the word in the input sequence.
 
         """
@@ -247,19 +249,22 @@ class BatchEncoding(UserDict):
         return self._encodings[batch_index].token_to_word(token_index)
 
     def word_to_tokens(self, batch_or_word_index: int, word_index: Optional[int] = None) -> TokenSpan:
-        """ Get the encoded token span corresponding to a word in the sequence of the batch.
+        """
+        Get the encoded token span corresponding to a word in the sequence of the batch.
 
-            Token spans are returned as a TokenSpan NamedTuple with:
-                start: index of the first token
-                end: index of the token following the last token
+        Token spans are returned as a TokenSpan NamedTuple with:
 
-            Can be called as:
-                - self.word_to_tokens(word_index) if batch size is 1
-                - self.word_to_tokens(batch_index, word_index) if batch size is greater or equal to 1
+        - start: index of the first token
+        - end: index of the token following the last token
 
-            This method is particularly suited when the input sequences are provided as
-            pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-            to easily associate encoded tokens with provided tokenized words.
+        Can be called as:
+
+        - ``self.word_to_tokens(word_index)`` if batch size is 1
+        - ``self.word_to_tokens(batch_index, word_index)`` if batch size is greater or equal to 1
+
+        This method is particularly suited when the input sequences are provided as
+        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
+        to easily associate encoded tokens with provided tokenized words.
 
         Args:
             batch_or_word_index (:obj:`int`):
@@ -270,12 +275,13 @@ class BatchEncoding(UserDict):
                 of the word in the sequence.
 
         Returns:
-            token_span (:obj:`TokenSpan`):
+            :obj:`TokenSpan`:
                 Span of tokens in the encoded sequence.
 
-                TokenSpan are NamedTuple with:
-                    start: index of the first token
-                    end: index of the token following the last token
+                :obj:`TokenSpan` are NamedTuple with:
+
+                - start: index of the first token
+                - end: index of the token following the last token
         """
 
         if not self._encodings:
@@ -292,15 +298,18 @@ class BatchEncoding(UserDict):
         return TokenSpan(*(self._encodings[batch_index].word_to_tokens(word_index)))
 
     def token_to_chars(self, batch_or_token_index: int, token_index: Optional[int] = None) -> CharSpan:
-        """ Get the character span corresponding to an encoded token in a sequence of the batch.
+        """
+        Get the character span corresponding to an encoded token in a sequence of the batch.
 
-            Character spans are returned as a CharSpan NamedTuple with:
-                start: index of the first character in the original string associated to the token
-                end: index of the character following the last character in the original string associated to the token
+        Character spans are returned as a CharSpan NamedTuple with:
 
-            Can be called as:
-                - self.token_to_chars(token_index) if batch size is 1
-                - self.token_to_chars(batch_index, token_index) if batch size is greater or equal to 1
+        - start: index of the first character in the original string associated to the token
+        - end: index of the character following the last character in the original string associated to the token
+
+        Can be called as:
+
+        - ``self.token_to_chars(token_index)`` if batch size is 1
+        - ``self.token_to_chars(batch_index, token_index)`` if batch size is greater or equal to 1
 
         Args:
             batch_or_token_index (:obj:`int`):
@@ -311,12 +320,13 @@ class BatchEncoding(UserDict):
                 of the token or tokens in the sequence.
 
         Returns:
-            char_span (:obj:`CharSpan`):
+            :obj:`CharSpan`:
                 Span of characters in the original string.
 
-                CharSpan are NamedTuple with:
-                    start: index of the first character in the original string
-                    end: index of the character following the last character in the original string
+                :obj:`CharSpan` are NamedTuple with:
+
+                - start: index of the first character in the original string
+                - end: index of the character following the last character in the original string
         """
 
         if not self._encodings:
@@ -329,16 +339,18 @@ class BatchEncoding(UserDict):
         return CharSpan(*(self._encodings[batch_index].token_to_chars(token_index)))
 
     def char_to_token(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
-        """ Get the index of the token in the encoded output comprising a character
-            in the original string for a sequence of the batch.
+        """
+        Get the index of the token in the encoded output comprising a character
+        in the original string for a sequence of the batch.
 
-            Can be called as:
-                - self.char_to_token(char_index) if batch size is 1
-                - self.char_to_token(batch_index, char_index) if batch size is greater or equal to 1
+        Can be called as:
 
-            This method is particularly suited when the input sequences are provided as
-            pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-            to easily associate encoded tokens with provided tokenized words.
+        - ``self.char_to_token(char_index)`` if batch size is 1
+        - ``self.char_to_token(batch_index, char_index)`` if batch size is greater or equal to 1
+
+        This method is particularly suited when the input sequences are provided as
+        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
+        to easily associate encoded tokens with provided tokenized words.
 
         Args:
             batch_or_char_index (:obj:`int`):
@@ -350,8 +362,7 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-            token_index (:obj:`int`):
-                Index of the token.
+            :obj:`int`: Index of the token.
         """
 
         if not self._encodings:
@@ -364,16 +375,19 @@ class BatchEncoding(UserDict):
         return self._encodings[batch_index].char_to_token(char_index)
 
     def word_to_chars(self, batch_or_word_index: int, word_index: Optional[int] = None) -> CharSpan:
-        """ Get the character span in the original string corresponding to given word in a sequence
-            of the batch.
+        """
+        Get the character span in the original string corresponding to given word in a sequence
+        of the batch.
 
-            Character spans are returned as a CharSpan NamedTuple with:
-                start: index of the first character in the original string
-                end: index of the character following the last character in the original string
+        Character spans are returned as a CharSpan NamedTuple with:
 
-            Can be called as:
-                - self.word_to_chars(word_index) if batch size is 1
-                - self.word_to_chars(batch_index, word_index) if batch size is greater or equal to 1
+        - start: index of the first character in the original string
+        - end: index of the character following the last character in the original string
+
+        Can be called as:
+
+        - ``self.word_to_chars(word_index)`` if batch size is 1
+        - ``self.word_to_chars(batch_index, word_index)`` if batch size is greater or equal to 1
 
         Args:
             batch_or_word_index (:obj:`int`):
@@ -384,11 +398,12 @@ class BatchEncoding(UserDict):
                 of the word in the sequence.
 
         Returns:
-            char_span (:obj:`CharSpan` or :obj:`List[CharSpan]`):
+            :obj:`CharSpan` or :obj:`List[CharSpan]`:
                 Span(s) of the associated character or characters in the string.
                 CharSpan are NamedTuple with:
-                    start: index of the first character associated to the token in the original string
-                    end: index of the character following the last character associated to the token in the original string
+
+                - start: index of the first character associated to the token in the original string
+                - end: index of the character following the last character associated to the token in the original string
         """
 
         if not self._encodings:
@@ -401,16 +416,18 @@ class BatchEncoding(UserDict):
         return CharSpan(*(self._encodings[batch_index].word_to_chars(word_index)))
 
     def char_to_word(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
-        """ Get the word in the original string corresponding to a character in the original string of
-            a sequence of the batch.
+        """
+        Get the word in the original string corresponding to a character in the original string of
+        a sequence of the batch.
 
-            Can be called as:
-                - self.char_to_word(char_index) if batch size is 1
-                - self.char_to_word(batch_index, char_index) if batch size is greater than 1
+        Can be called as:
 
-            This method is particularly suited when the input sequences are provided as
-            pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-            to easily associate encoded tokens with provided tokenized words.
+        - ``self.char_to_word(char_index)`` if batch size is 1
+        - ``self.char_to_word(batch_index, char_index)`` if batch size is greater than 1
+
+        This method is particularly suited when the input sequences are provided as
+        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
+        to easily associate encoded tokens with provided tokenized words.
 
         Args:
             batch_or_char_index (:obj:`int`):
@@ -422,7 +439,7 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-            token_index (:obj:`int` or :obj:`List[int]`):
+            :obj:`int` or :obj:`List[int]`:
                 Index or indices of the associated encoded token(s).
         """
 

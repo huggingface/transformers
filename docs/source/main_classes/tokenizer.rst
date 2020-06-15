@@ -20,7 +20,7 @@ The base classes ``PreTrainedTokenizer`` and ``PreTrainedTokenizerFast`` impleme
     :members:
 
 ``PreTrainedTokenizerFast``
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizerFast
     :members:
