@@ -400,7 +400,12 @@ if is_torch_available():
 
     # Trainer
     from .trainer import Trainer, torch_distributed_zero_first
-    from .data.data_collator import default_data_collator, DataCollator, DataCollatorForLanguageModeling
+    from .data.data_collator import (
+        default_data_collator,
+        DataCollator,
+        DataCollatorForLanguageModeling,
+        DataCollatorForXLNetLanguageModeling,
+    )
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
     # Benchmarks

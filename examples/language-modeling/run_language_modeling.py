@@ -33,6 +33,7 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
+    DataCollatorForXLNetLanguageModeling,
     HfArgumentParser,
     LineByLineTextDataset,
     PreTrainedTokenizer,
@@ -101,6 +102,7 @@ class DataTrainingArguments:
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
+    max_gram: int = field(default=5, metadata={"help": "Maximum individual mask span length for XLNet training"})
 
     block_size: int = field(
         default=-1,
@@ -207,8 +209,8 @@ def main():
 
     if config.model_type in ["bert", "roberta", "distilbert", "camembert"] and not data_args.mlm:
         raise ValueError(
-            "BERT and RoBERTa-like models do not have LM heads but masked LM heads. They must be run using the --mlm "
-            "flag (masked language modeling)."
+            "BERT, RoBERTa and XLNet-like models do not have LM heads but masked LM heads. They must be run using the"
+            "--mlm flag (masked language modeling)."
         )
 
     if data_args.block_size <= 0:
@@ -221,9 +223,17 @@ def main():
 
     train_dataset = get_dataset(data_args, tokenizer=tokenizer) if training_args.do_train else None
     eval_dataset = get_dataset(data_args, tokenizer=tokenizer, evaluate=True) if training_args.do_eval else None
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability
-    )
+    if config.model_type == "xlnet":
+        data_collator = DataCollatorForXLNetLanguageModeling(
+            tokenizer=tokenizer,
+            mlm=data_args.mlm,
+            mlm_probability=data_args.mlm_probability,
+            max_gram=data_args.max_gram,
+        )
+    else:
+        data_collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability
+        )
 
     # Initialize our Trainer
     trainer = Trainer(
