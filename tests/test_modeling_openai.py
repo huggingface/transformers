@@ -28,7 +28,7 @@ if is_torch_available():
     from transformers import (
         OpenAIGPTConfig,
         OpenAIGPTModel,
-        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTLMHeadModel,
         OpenAIGPTDoubleHeadsModel,
     )
@@ -169,7 +169,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            loss, lm_logits, mc_logits = model(input_ids, token_type_ids=token_type_ids, lm_labels=input_ids)
+            loss, lm_logits, mc_logits = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
 
             result = {"loss": loss, "lm_logits": lm_logits}
 
@@ -218,7 +218,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = OpenAIGPTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

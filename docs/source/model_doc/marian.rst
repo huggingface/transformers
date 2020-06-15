@@ -6,11 +6,11 @@ file a `Github Issue <https://github.com/huggingface/transformers/issues/new?ass
 
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~
-- each model is about 298 MB on disk, there are 1,000+ models.
+- Each model is about 298 MB on disk, there are 1,000+ models.
 - The list of supported language pairs can be found `here <https://huggingface.co/Helsinki-NLP>`__.
 - The 1,000+ models were originally trained by `Jörg Tiedemann <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the `Marian <https://marian-nmt.github.io/>`_ C++ library, which supports fast training and translation.
 - All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented in a model card.
-- the 80 opus models that require BPE preprocessing are not supported.
+- The 80 opus models that require BPE preprocessing are not supported.
 - The modeling code is the same as ``BartForConditionalGeneration`` with a few minor modifications:
     - static (sinusoid) positional embeddings (``MarianConfig.static_position_embeddings=True``)
     - a new final_logits_bias (``MarianConfig.add_bias_logits=True``)
@@ -86,6 +86,19 @@ Code to see available pretrained models:
     suffix = [x.split('/')[1] for x in model_ids]
     multi_models = [f'{org}/{s}' for s in suffix if s != s.lower()]
 
+MarianConfig
+~~~~~~~~~~~~~~~~~~~
+.. autoclass:: transformers.MarianConfig
+    :members:
+
+
+MarianTokenizer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.MarianTokenizer
+    :members: prepare_translation_batch
+
+
 MarianMTModel
 ~~~~~~~~~~~~~
 
@@ -96,10 +109,3 @@ This class inherits all functionality from ``BartForConditionalGeneration``, see
 
 .. autoclass:: transformers.MarianMTModel
     :members:
-
-
-MarianTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.MarianTokenizer
-    :members: prepare_translation_batch

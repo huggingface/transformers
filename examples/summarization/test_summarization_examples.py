@@ -129,7 +129,7 @@ class TestBartExamples(unittest.TestCase):
         summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
         _dump_articles((tmp_dir / "train.source"), articles)
         _dump_articles((tmp_dir / "train.target"), summaries)
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
         max_len_source = max(len(tokenizer.encode(a)) for a in articles)
         max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
         trunc_target = 4
@@ -146,3 +146,34 @@ class TestBartExamples(unittest.TestCase):
             # show that targets were truncated
             self.assertEqual(batch["target_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
+
+
+class TestT5Examples(unittest.TestCase):
+    def test_t5_cli(self):
+        output_file_name = "output_t5_sum.txt"
+        score_file_name = "score_t5_sum.txt"
+        articles = ["New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+        tmp = Path(tempfile.gettempdir()) / "utest_generations_t5_sum.hypo"
+        with tmp.open("w", encoding="utf-8") as f:
+            f.write("\n".join(articles))
+
+        output_file_name = Path(tempfile.gettempdir()) / "utest_output_t5_sum.hypo"
+        score_file_name = Path(tempfile.gettempdir()) / "utest_score_t5_sum.hypo"
+
+        testargs = [
+            "evaluate_cnn.py",
+            str(tmp),
+            str(output_file_name),
+            "patrickvonplaten/t5-tiny-random",
+            "--reference_path",
+            str(tmp),
+            "--score_path",
+            str(score_file_name),
+        ]
+
+        with patch.object(sys, "argv", testargs):
+            run_generate()
+            self.assertTrue(Path(output_file_name).exists())
+            self.assertTrue(Path(score_file_name).exists())

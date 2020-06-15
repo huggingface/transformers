@@ -64,6 +64,8 @@ class S3Object:
         self.lastModified = lastModified
         self.size = size
         self.rfilename = rfilename
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 class ModelInfo:
@@ -78,7 +80,7 @@ class ModelInfo:
         author: Optional[str] = None,
         downloads: Optional[int] = None,
         tags: List[str] = [],
-        siblings: List[Dict] = [],  # list of files that constitute the model
+        siblings: Optional[List[Dict]] = None,  # list of files that constitute the model
         **kwargs
     ):
         self.modelId = modelId
@@ -86,7 +88,9 @@ class ModelInfo:
         self.author = author
         self.downloads = downloads
         self.tags = tags
-        self.siblings = [S3Object(**x) for x in siblings]
+        self.siblings = [S3Object(**x) for x in siblings] if siblings is not None else None
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 class HfApi:
