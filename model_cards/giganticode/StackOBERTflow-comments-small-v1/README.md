@@ -16,8 +16,8 @@ COMMENT = "You really should not do it this way, I would use <mask> instead."
 
 fill_mask = pipeline(
     "fill-mask",
-    model="./StackOBERTflow-comments-small-v1",
-    tokenizer="./StackOBERTflow-comments-small-v1"
+    model="giganticode/StackOBERTflow-comments-small-v1",
+    tokenizer="giganticode/StackOBERTflow-comments-small-v1"
 )
 
 pprint(fill_mask(COMMENT))
