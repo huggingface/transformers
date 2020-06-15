@@ -377,7 +377,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def get_input_embeddings(self):
-        return self.word_embedding.weight
+        return self.word_embedding
 
     def set_input_embeddings(self, value):
         self.word_embedding.weight = value

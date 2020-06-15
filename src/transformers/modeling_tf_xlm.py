@@ -289,7 +289,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                     self.prune_heads({int(layer): list(map(int, heads))})
 
     def get_input_embeddings(self):
-        return self.embeddings.weight
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.weight = value

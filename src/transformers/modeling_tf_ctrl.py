@@ -213,7 +213,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="layernorm")
 
     def get_input_embeddings(self):
-        return self.w.weight
+        return self.w
 
     def set_input_embeddings(self, value):
         self.w.weight = value

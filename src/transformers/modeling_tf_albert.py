@@ -497,7 +497,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         )
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value

@@ -208,7 +208,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value

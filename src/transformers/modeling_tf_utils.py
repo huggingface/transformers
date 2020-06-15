@@ -215,6 +215,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         base_model.vocab_size = new_num_tokens
         return base_model.get_input_embeddings()
 
+    def _get_word_embeddings(self, embeddings):
+        if hasattr(embeddings, "word_embeddings"):
+            # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+            return embeddings.word_embeddings
+        elif hasattr(embeddings, "weight"):
+            # TFSharedEmbeddings
+            return embeddings.weight
+        else:
+            raise ValueError("word embedding is not defined.")
+
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
         """ Build a resized Embedding Variable from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
@@ -227,14 +237,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 Reducing the size will remove vectors from the end
                 If not provided or None: return the provided token Embedding Module.
         Return: ``tf.Variable``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
+            Pointer to the resized word Embedding Module or the old Embedding Module if new_num_tokens is None
         """
+        word_embeddings = self._get_word_embeddings(old_embeddings)
         if new_num_tokens is None:
-            return old_embeddings
-
-        old_num_tokens, old_embedding_dim = old_embeddings.shape
+            return word_embeddings
+        old_num_tokens, old_embedding_dim = word_embeddings.shape
         if old_num_tokens == new_num_tokens:
-            return self.get_input_embeddings()
+            return word_embeddings
 
         # initialize new embeddings
         # todo: initializer range is not always passed in config.
@@ -249,7 +259,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        init_weights[:num_tokens_to_copy] = old_embeddings[:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
         new_embeddings.assign(init_weights)
 
         return new_embeddings

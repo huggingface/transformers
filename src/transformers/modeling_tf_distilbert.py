@@ -407,7 +407,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         self.transformer = TFTransformer(config, name="transformer")  # Encoder
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value

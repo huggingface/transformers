@@ -486,7 +486,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.pooler = TFBertPooler(config, name="pooler")
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value

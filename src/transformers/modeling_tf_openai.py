@@ -218,7 +218,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
 
     def get_input_embeddings(self):
-        return self.tokens_embed.weight
+        return self.tokens_embed
 
     def set_input_embeddings(self, value):
         self.tokens_embed.weight = value

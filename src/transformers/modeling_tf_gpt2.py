@@ -238,7 +238,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
 
     def get_input_embeddings(self):
-        return self.wte.weight
+        return self.wte
 
     def set_input_embeddings(self, value):
         self.wte.weight = value
