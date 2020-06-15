@@ -155,6 +155,14 @@ class BatchEncoding(UserDict):
 
         self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
 
+    @property
+    def is_fast(self):
+        """
+        Indicate if this BatchEncoding was generated from the result of a PreTrainedTokenizerFast
+        Returns: True if generated from subclasses of PreTrainedTokenizerFast, else otherwise
+        """
+        return self._encodings is not None
+
     def __getitem__(self, item: Union[int, str]) -> EncodingFast:
         """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
             If the key is an integer, get the EncodingFast for batch item with index `key`
