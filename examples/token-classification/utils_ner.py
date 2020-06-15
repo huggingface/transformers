@@ -119,7 +119,7 @@ if is_torch_available():
                         cls_token=tokenizer.cls_token,
                         cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
                         sep_token=tokenizer.sep_token,
-                        sep_token_extra=bool(model_type in ["roberta"]),
+                        sep_token_extra=False,
                         # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
                         pad_on_left=bool(tokenizer.padding_side == "left"),
                         pad_token=tokenizer.pad_token_id,
@@ -172,7 +172,7 @@ if is_tf_available():
                 cls_token=tokenizer.cls_token,
                 cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
                 sep_token=tokenizer.sep_token,
-                sep_token_extra=bool(model_type in ["roberta"]),
+                sep_token_extra=False,
                 # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
                 pad_on_left=bool(tokenizer.padding_side == "left"),
                 pad_token=tokenizer.pad_token_id,
