@@ -548,7 +548,7 @@ class MobileBertLMPredictionHead(nn.Module):
         self.decoder = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.bias = self.bias
+        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -812,6 +812,27 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
+    def tie_weights(self):
+        """
+        Tie the weights between the input embeddings and the output embeddings.
+        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning
+        the weights instead.
+        """
+        output_embeddings = self.get_output_embeddings()
+        input_embeddings = self.get_input_embeddings()
+
+        resized_dense = nn.Linear(
+            input_embeddings.num_embeddings, self.config.hidden_size - self.config.embedding_size, bias=False
+        )
+        kept_data = self.cls.predictions.dense.weight.data[
+            ..., : min(self.cls.predictions.dense.weight.data.shape[1], resized_dense.weight.data.shape[1])
+        ]
+        resized_dense.weight.data[..., : self.cls.predictions.dense.weight.data.shape[1]] = kept_data
+        self.cls.predictions.dense = resized_dense
+
+        if output_embeddings is not None:
+            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -898,11 +919,33 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         super().__init__(config)
         self.mobilebert = MobileBertModel(config)
         self.cls = MobileBertOnlyMLMHead(config)
+        self.config = config
 
         self.init_weights()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
+
+    def tie_weights(self):
+        """
+        Tie the weights between the input embeddings and the output embeddings.
+        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning
+        the weights instead.
+        """
+        output_embeddings = self.get_output_embeddings()
+        input_embeddings = self.get_input_embeddings()
+
+        resized_dense = nn.Linear(
+            input_embeddings.num_embeddings, self.config.hidden_size - self.config.embedding_size, bias=False
+        )
+        kept_data = self.cls.predictions.dense.weight.data[
+            ..., : min(self.cls.predictions.dense.weight.data.shape[1], resized_dense.weight.data.shape[1])
+        ]
+        resized_dense.weight.data[..., : self.cls.predictions.dense.weight.data.shape[1]] = kept_data
+        self.cls.predictions.dense = resized_dense
+
+        if output_embeddings is not None:
+            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
