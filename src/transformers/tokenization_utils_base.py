@@ -696,36 +696,28 @@ ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 If set to ``True``, the sequences will be encoded with the special tokens relative
                 to their model.
-            max_length (:obj:`int`, `optional`, defaults to :obj:`None`):
-                If set to a number, will limit the total sequence returned so that it has a maximum length.
-                If there are overflowing tokens, those will be added to the returned dictionary.
-                You can set it to the maximal input size of the model with `max_length = tokenizer.model_max_length`.
+            `padding` (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
+                Activate and control padding. Accepts the following values:
+
+                * `True` or `'longest'`: pad to the longest sequence in the batch (or no padding if only a single sequence if provided),
+                * `'max_length'`: pad to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`)
+                * `False` or `'do_not_pad'` (default): No padding (i.e. can output batch with sequences of uneven lengths)
+            `truncation` (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
+                Activate and control truncation. Accepts the following values:
+
+                * `True` or `'only_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will only truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided,
+                * `'only_second'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will only truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided,
+                * `'longest_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will truncate token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a batch of pairs) is provided,
+                * `False` or `'do_not_truncate'` (default): No truncation (i.e. can output batch with sequences length greater than the model max admissible input size)
+            `max_length` (:obj:`Union[int, None]`, `optional`, defaults to :obj:`None`):
+                Control the length for padding/truncation. Accepts the following values
+
+                * `None` (default): This will use the predefined model max length if required by one of the truncation/padding parameters. If the model has no specific max input length (e.g. XLNet) truncation/padding to max length is deactivated.
+                * `any integer value` (e.g. `42`): Use this specific maximum length value if required by one of the truncation/padding parameters.
             stride (:obj:`int`, `optional`, defaults to ``0``):
-                If set to a number along with max_length, the overflowing tokens returned will contain some tokens
-                from the main sequence returned. The value of this argument defines the number of additional tokens.
-            truncate (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Activate the truncation to a given `max_length` or the default max input length of the model
-                See `truncation_strategy` below to control the truncation when pairs of inputs are provided.
-            pad (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Activate batch padding default to the max sentence length in the batch.
-                See `padding_strategy` to select a different padding strategy.
-            truncation_strategy (:obj:`str`, `optional`, defaults to `no_truncation`):
-                String selected in the following options:
-
-                - 'only_first': Only truncate the first sequence when a pair of sequences is provided
-                - 'only_second': Only truncate the second sequence when a pair of sequences is provided
-                - 'longest_first' Iteratively reduce the inputs sequence until the input is under max_length
-                  starting from the longest sequence if a pair of inputs is provided.
-            padding_strategy: Select a strategy to pad the returned sequences (according to the model's padding side and padding index) among:
-
-                - 'longest' Pad to the longest sequence in the batch
-                - 'max_length': Pad to the max length
-                The tokenizer padding sides are defined in self.padding_side:
-                    - 'left': pads on the left of the sequences
-                    - 'right': pads on the right of the sequences
-            pad_to_max_length (deprecated, use `pad=True` and `padding_strategy=='max_length'` for this): $
-                if set to True, the returned sequences will be padded according to the model's padding side and
-                padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
+                If set to a number along with max_length, the overflowing tokens returned when `return_overflowing_tokens=True`
+                will contain some tokens from the end of the truncated sequence returned to provide some overlap between truncated and overflow ing sequences.
+                The value of this argument defines the number of overlapping tokens.
             is_pretokenized (:obj:`bool`, defaults to :obj:`False`):
                 Set to True to indicate the input is already tokenized
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
@@ -745,7 +737,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Set to True to return overflowing token information (default False).
+                Set to True to return overflowing token sequences (default False).
             return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Set to True to return special tokens mask information (default False).
             return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -761,8 +753,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                     input_ids: list[int],
                     token_type_ids: list[int] if return_token_type_ids is True (default)
                     attention_mask: list[int] if return_attention_mask is True (default)
-                    overflowing_tokens: list[int] if a ``max_length`` is specified and return_overflowing_tokens is True
-                    num_truncated_tokens: int if a ``max_length`` is specified and return_overflowing_tokens is True
+                    overflowing_tokens: list[int] if the tokenizer is a slow tokenize, else a List[List[int]] if a ``max_length`` is specified and ``return_overflowing_tokens=True``
                     special_tokens_mask: list[int] if ``add_special_tokens`` if set to ``True``
                     and return_special_tokens_mask is True
                 }
@@ -772,8 +763,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - ``input_ids``: list of token ids to be fed to a model
             - ``token_type_ids``: list of token type ids to be fed to a model
             - ``attention_mask``: list of indices specifying which tokens should be attended to by the model
-            - ``overflowing_tokens``: list of overflowing tokens if a max length is specified.
-            - ``num_truncated_tokens``: number of overflowing tokens a ``max_length`` is specified
+            - ``overflowing_tokens``: list of overflowing tokens sequences if a max length is specified and ``return_overflowing_tokens=True``.
             - ``special_tokens_mask``: if adding special tokens, this is a list of [0, 1], with 0 specifying special added
               tokens and 1 specifying sequence tokens.
 """
@@ -1634,7 +1624,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
-                - PaddingStrategy..MAX_LENGTH: Pad to the max length (default)
+                - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
                 - PaddingStrategy.DO_NOT_PAD: Do not pad
                 The tokenizer padding sides are defined in self.padding_side:
                     - 'left': pads on the left of the sequences

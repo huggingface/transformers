@@ -200,7 +200,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             except:  # noqa E722
                 raise ValueError(
                     "Unable to create tensor, you should probably activate truncation and/or padding "
-                    "with 'pad=True' 'truncation=True' to have batched tensors with the same length."
+                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
                 )
 
         return encoding_dict
@@ -439,7 +439,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             except:  # noqa E722
                 raise ValueError(
                     "Unable to stack tensor, you should probably activate truncation and/or padding "
-                    "with 'pad=True' 'truncation=True' to have batched tensors with the same length."
+                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
                 )
             # elif not return_tensors and len(stack) == 1:
             #     stack = stack[0]
