@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
 _all_bart_models = [
+    "facebook/bart-base",
     "facebook/bart-large",
     "facebook/bart-large-mnli",
     "facebook/bart-large-cnn",
