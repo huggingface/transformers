@@ -78,6 +78,7 @@ from .modeling_camembert import (
 from .modeling_ctrl import CTRLLMHeadModel, CTRLModel
 from .modeling_distilbert import (
     DistilBertForMaskedLM,
+    DistilBertForMultipleChoice,
     DistilBertForQuestionAnswering,
     DistilBertForSequenceClassification,
     DistilBertForTokenClassification,
@@ -314,6 +315,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (LongformerConfig, LongformerForMultipleChoice),
         (RobertaConfig, RobertaForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
+        (DistilBertConfig, DistilBertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
         (AlbertConfig, AlbertForMultipleChoice),
     ]
