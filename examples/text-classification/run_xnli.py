@@ -160,10 +160,16 @@ def train(args, train_dataset, model, tokenizer):
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
             inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
-            if args.model_type != "distilbert":
+            if args.model_type != "distilbert" and args.model_type != 'xlm':
                 inputs["token_type_ids"] = (
                     batch[2] if args.model_type in ["bert"] else None
                 )  # XLM and DistilBERT don't use segment_ids
+            if args.model_type == 'xlm':
+                # XLM model such as xlm-mlm-tlm-xnli15-1024 need lang parameter as well
+                inputs.update(
+                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * model.module.config.lang2id[
+                            args.train_language]).to(args.device)}
+                )
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -271,6 +277,12 @@ def evaluate(args, model, tokenizer, prefix=""):
                     inputs["token_type_ids"] = (
                         batch[2] if args.model_type in ["bert"] else None
                     )  # XLM and DistilBERT don't use segment_ids
+                if args.model_type == 'xlm':
+                # XLM model such as xlm-mlm-tlm-xnli15-1024 need langs as input as well
+                inputs.update(
+                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * model.module.config.lang2id[
+                            args.language]).to(args.device)}
+                )
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
@@ -340,6 +352,16 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+    if 'roberta' not in args.model_type:
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+    else:
+        # Just to avoid the error of not creating the token type ids tensor.
+        # Since Roberta is not trained with token_type_ids, one can run with just 0s. Else can train the embeddings but would have to create the type_token_ids here accordingly.
+        all_token_type_ids = []
+        for feature in features:
+            tmp_token_type_ids = [0 for i in len(feature.input_ids)]
+            all_token_type_ids.append(tmp_token_type_ids)
+        all_token_type_ids = torch.tensor(all_token_type_ids)
     all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
     if output_mode == "classification":
         all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
