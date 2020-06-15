@@ -294,16 +294,21 @@ def main(args, model=None):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
         model: BaseTransformer = SummarizationTrainer(args)
-    if args.logger == "default" or args.fast_dev_run:
+    if (
+        args.logger == "default"
+        or args.fast_dev_run
+        or str(args.output_dir).startswith("/tmp")
+        or str(args.output_dir).startswith("/var")
+    ):
         logger = True
     elif args.logger == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger()
+        logger = WandbLogger(name=model.output_dir.name)
     elif args.logger == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=args.output_dir, project="hf_summarization")
+        logger = WandbLogger(name=model.output_dir.name, project="hf_summarization")
     trainer: pl.Trainer = generic_train(
         model,
         args,
