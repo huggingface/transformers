@@ -51,7 +51,6 @@ class SummarizationDistiller(SummarizationTrainer):
         self.teacher = teacher
         use_task_specific_params(self.teacher, "summarization")
         freeze_params(self.teacher)
-        assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         self.sanity_check_gradients()
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -252,7 +251,7 @@ class SummarizationDistiller(SummarizationTrainer):
             )
         dec_mask = decoder_input_ids.eq(self.tokenizer.pad_token_id)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
-        if not self.hparams.freeze_decoder and self.alpha_hid > 0:
+        if self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
 
         blended_loss = (
@@ -309,9 +308,8 @@ class T5SummarizationDistiller(SummarizationDistiller):
         for d in [self.model.encoder, self.model.decoder]:
             freeze_params(d.embed_tokens)
 
-    def sanity_check_gradients(self, d_layers_to_copy):
+    def sanity_check_gradients(self):
         """T5"""
-        assert len(self.model.decoder.block) == len(d_layers_to_copy)
         assert_all_frozen(self.teacher)
         assert_all_frozen(self.model.decoder.embed_tokens)
         assert_all_frozen(self.model.encoder.embed_tokens)
@@ -375,7 +373,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
             )
 
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
-        if not self.hparams.freeze_decoder and self.alpha_hid > 0:
+        if self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
 
         blended_loss = (
@@ -449,7 +447,7 @@ def distill_main(args):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     model = create_module(args)
-    ft_main(args, model=model)
+    return ft_main(args, model=model)
 
 
 if __name__ == "__main__":
