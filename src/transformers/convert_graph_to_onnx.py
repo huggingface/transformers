@@ -9,9 +9,15 @@ from transformers.tokenization_utils import BatchEncoding
 
 
 SUPPORTED_PIPELINES = [
-    "feature-extraction", "ner", "sentiment-analysis",
-    "fill-mask", "question-answering", "text-generation",
-    "translation_en_to_fr", "translation_en_to_de", "translation_en_to_ro"
+    "feature-extraction",
+    "ner",
+    "sentiment-analysis",
+    "fill-mask",
+    "question-answering",
+    "text-generation",
+    "translation_en_to_fr",
+    "translation_en_to_de",
+    "translation_en_to_ro",
 ]
 
 
