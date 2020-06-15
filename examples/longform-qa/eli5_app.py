@@ -218,7 +218,7 @@ if generate_options:
         "Maximum generation length", min_value=64, max_value=512, value=256, step=16, format=None, key=None
     )
     if sampled == "beam":
-        n_beams = st.sidebar.slider("Beam size", min_value=1, max_value=32, value=8, step=None, format=None, key=None)
+        n_beams = st.sidebar.slider("Beam size", min_value=1, max_value=8, value=2, step=None, format=None, key=None)
     else:
         top_p = st.sidebar.slider(
             "Nucleus sampling p", min_value=0.1, max_value=1.0, value=0.95, step=0.01, format=None, key=None
