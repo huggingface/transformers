@@ -183,7 +183,7 @@ class ModelTesterMixin:
 
                 # loss is at first position
                 if "labels" in inputs_dict:
-                    correct_outlen += 1  # compute loss
+                    correct_outlen += 1  # loss is added to beginning
                     decoder_attention_idx += 1
                 # Question Answering model returns start_logits and end_logits
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
