@@ -789,7 +789,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         return model
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        return {"input_ids": input_ids}
+        return {"input_ids": input_ids, **kwargs}
 
     def prepare_logits_for_generation(self, logits, **kwargs):
         return logits
