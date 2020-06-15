@@ -126,27 +126,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return self.vocab_size + len(self.added_tokens_encoder)
 
     def add_tokens(self, new_tokens: Union[str, List[str]]) -> int:
-        """
-        Add a list of new tokens to the tokenizer class. If the new tokens are not in the
-        vocabulary, they are added to it with indices starting from length of the current vocabulary.
-
-        Args:
-            new_tokens: string or list of string. Each string is a token to add. Tokens are only added if they are not
-            already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
-
-        Returns:
-            Number of tokens added to the vocabulary.
-
-        Examples::
-
-            # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertModel.from_pretrained('bert-base-uncased')
-
-            num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-            print('We have added', num_added_toks, 'tokens')
-            model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-        """
         if not new_tokens:
             return 0
 
