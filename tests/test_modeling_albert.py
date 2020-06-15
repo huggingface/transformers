@@ -29,17 +29,30 @@ if is_torch_available():
         AlbertModel,
         AlbertForPreTraining,
         AlbertForMaskedLM,
+        AlbertForMultipleChoice,
         AlbertForSequenceClassification,
         AlbertForTokenClassification,
         AlbertForQuestionAnswering,
     )
-    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
 class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (AlbertModel, AlbertForPreTraining, AlbertForMaskedLM) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            AlbertModel,
+            AlbertForPreTraining,
+            AlbertForMaskedLM,
+            AlbertForMultipleChoice,
+            AlbertForSequenceClassification,
+            AlbertForTokenClassification,
+            AlbertForQuestionAnswering,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     class AlbertModelTester(object):
         def __init__(
@@ -162,7 +175,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids,
                 attention_mask=input_mask,
                 token_type_ids=token_type_ids,
-                masked_lm_labels=token_labels,
+                labels=token_labels,
                 sentence_order_label=sequence_labels,
             )
             result = {
@@ -183,7 +196,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -252,6 +265,29 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
+        def create_and_check_albert_for_multiple_choice(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = AlbertForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            loss, logits = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                token_type_ids=multiple_choice_token_type_ids,
+                labels=choice_labels,
+            )
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -285,6 +321,10 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_masked_lm(*config_and_inputs)
 
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_albert_for_multiple_choice(*config_and_inputs)
+
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_question_answering(*config_and_inputs)
@@ -295,6 +335,6 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = AlbertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

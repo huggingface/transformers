@@ -142,7 +142,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.tokenize("こんばんは こんばんにちは こんにちは"), ["こん", "##ばんは", "[UNK]", "こんにちは"])
 
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("bert-base-japanese")
+        tokenizer = self.tokenizer_class.from_pretrained("cl-tohoku/bert-base-japanese")
 
         text = tokenizer.encode("ありがとう。", add_special_tokens=False)
         text_2 = tokenizer.encode("どういたしまして。", add_special_tokens=False)
@@ -212,7 +212,7 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         self.assertListEqual(tokenizer.tokenize("こんにちほ"), ["こ", "ん", "に", "ち", "[UNK]"])
 
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("bert-base-japanese-char")
+        tokenizer = self.tokenizer_class.from_pretrained("cl-tohoku/bert-base-japanese-char")
 
         text = tokenizer.encode("ありがとう。", add_special_tokens=False)
         text_2 = tokenizer.encode("どういたしまして。", add_special_tokens=False)

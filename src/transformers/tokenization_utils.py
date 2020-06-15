@@ -21,7 +21,7 @@ import logging
 import re
 from typing import List, Optional, Tuple, Union
 
-from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -32,16 +32,12 @@ from .tokenization_utils_base import (
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
+    TensorType,
     TextInput,
     TextInputPair,
     TruncationStrategy,
 )
 
-
-if is_tf_available():
-    import tensorflow as tf
-if is_torch_available():
-    import torch
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +307,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -365,6 +361,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             max_length=max_length,
             stride=stride,
             return_tensors=return_tensors,
+            prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -388,7 +385,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_masks: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -454,43 +451,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_masks=return_special_tokens_masks,
             return_lengths=return_lengths,
-            return_tensors=None,  # We will convert the whole batch to tensors at the end
+            return_tensors=return_tensors,
             verbose=verbose,
         )
 
-        if return_tensors is not None:
-            self.convert_to_tensors_(batch_outputs, return_tensors, verbose=verbose)
-
         return BatchEncoding(batch_outputs)
-
-    def convert_to_tensors_(self, batch_outputs: dict, return_tensors: str, verbose: bool = True) -> None:
-        # Do the tensor conversion in batch
-        for key, value in batch_outputs.items():
-            if return_tensors == "tf" and is_tf_available():
-                try:
-                    batch_outputs[key] = tf.constant(value)
-                except ValueError:
-                    if None in [item for sequence in value for item in sequence]:
-                        raise ValueError(self.NO_PAD_TOKEN_FOR_BATCH_MSG)
-                    else:
-                        raise ValueError(self.UNEVEN_SEQUENCES_FOR_BATCH_MSG)
-            elif return_tensors == "pt" and is_torch_available():
-                try:
-                    batch_outputs[key] = torch.tensor(value)
-                except ValueError:
-                    raise ValueError(self.UNEVEN_SEQUENCES_FOR_BATCH_MSG)
-                except RuntimeError:
-                    if None in [item for sequence in value for item in sequence]:
-                        raise ValueError(self.NO_PAD_TOKEN_FOR_BATCH_MSG)
-                    else:
-                        raise
-
-            elif return_tensors is not None and verbose:
-                logger.warning(
-                    "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                        return_tensors
-                    )
-                )
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
@@ -545,6 +510,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return_special_tokens_mask=return_special_tokens_masks,
                 return_lengths=return_lengths,
                 return_tensors=None,  # We will convert the whole batch to tensors at the end
+                prepend_batch_axis=False,
                 verbose=verbose,
             )
 
@@ -552,6 +518,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
+
+        batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
         return batch_outputs
 
@@ -566,6 +534,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         return_tensors: Optional[str] = None,
+        prepend_batch_axis: bool = False,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -646,32 +615,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if return_lengths:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
-        # Prepare model inputs as tensors if asked
-        if return_tensors == "tf" and is_tf_available():
-            encoded_inputs["input_ids"] = tf.constant([encoded_inputs["input_ids"]])
+        batch_outputs = BatchEncoding(
+            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+        )
 
-            if "token_type_ids" in encoded_inputs:
-                encoded_inputs["token_type_ids"] = tf.constant([encoded_inputs["token_type_ids"]])
-
-            if "attention_mask" in encoded_inputs:
-                encoded_inputs["attention_mask"] = tf.constant([encoded_inputs["attention_mask"]])
-
-        elif return_tensors == "pt" and is_torch_available():
-            encoded_inputs["input_ids"] = torch.tensor([encoded_inputs["input_ids"]])
-
-            if "token_type_ids" in encoded_inputs:
-                encoded_inputs["token_type_ids"] = torch.tensor([encoded_inputs["token_type_ids"]])
-
-            if "attention_mask" in encoded_inputs:
-                encoded_inputs["attention_mask"] = torch.tensor([encoded_inputs["attention_mask"]])
-        elif return_tensors is not None and verbose:
-            logger.warning(
-                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                    return_tensors
-                )
-            )
-
-        return BatchEncoding(encoded_inputs)
+        return batch_outputs
 
     def prepare_for_tokenization(self, text: str, **kwargs) -> str:
         """ Performs any necessary transformations before tokenization """

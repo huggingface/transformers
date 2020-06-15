@@ -4,7 +4,7 @@ Longformer
 file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`_
 
 Overview
-~~~~~
+~~~~~~~~~
 The Longformer model was presented in `Longformer: The Long-Document Transformer <https://arxiv.org/pdf/2004.05150.pdf>`_ by Iz Beltagy, Matthew E. Peters, Arman Cohan.
 Here the abstract: 
 
@@ -13,7 +13,7 @@ Here the abstract:
 The Authors' code can be found `here <https://github.com/allenai/longformer>`_ .
 
 Longformer Self Attention
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 Longformer self attention employs self attention on both a "local" context and a "global" context.
 Most tokens only attend "locally" to each other meaning that each token attends to its :math:`\frac{1}{2} w` previous tokens and :math:`\frac{1}{2} w` succeding tokens with :math:`w` being the window length as defined in `config.attention_window`. Note that `config.attention_window` can be of type ``list`` to define a different :math:`w` for each layer. 
 A selecetd few tokens attend "globally" to all other tokens, as it is conventionally done for all tokens in *e.g.* `BertSelfAttention`.
@@ -21,7 +21,7 @@ A selecetd few tokens attend "globally" to all other tokens, as it is convention
 Note that "locally" and "globally" attending tokens are projected by different query, key and value matrices.
 Also note that every "locally" attending token not only attends to tokens within its window :math:`w`, but also to all "globally" attending tokens so that global attention is *symmetric*.
 
-The user can define which tokens are masked, which tokens attend "locally" and which tokens attend "globally" by setting the `config.attention_mask` `torch.Tensor` appropriately. In contrast to other models `Longformer` accepts the following values in `config.attention_mask`: `0` - the token is masked and not attended at all (as is done in other models), `1` - the token attends "locally", `2` - token attends "globally". For more information please also refer to :func:`~transformers.LongformerModel.forward` method.
+The user can define which tokens attend "locally" and which tokens attend "globally" by setting the tensor `global_attention_mask` at run-time appropriately. `Longformer` employs the following logic for `global_attention_mask`: `0` - the token attends "locally", `1` - token attends "globally". For more information please also refer to :func:`~transformers.LongformerModel.forward` method.
 
 Using Longformer self attention, the memory and time complexity of the query-key matmul operation, which usually represents the memory and time bottleneck, can be reduced from :math:`\mathcal{O}(n_s \times n_s)` to :math:`\mathcal{O}(n_s \times w)`, with :math:`n_s` being the sequence length and :math:`w` being the average window size. It is assumed that the number of "globally" attending tokens is insignificant as compared to the number of "locally" attending tokens.
 
@@ -55,6 +55,13 @@ LongformerTokenizer
     :members: 
 
 
+LongformerTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerTokenizerFast
+    :members: 
+
+
 LongformerModel
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -66,4 +73,32 @@ LongformerForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.LongformerForMaskedLM
+    :members:
+
+
+LongformerForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForSequenceClassification
+    :members:
+
+
+LongformerForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForMultipleChoice
+    :members:
+
+
+LongformerForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForTokenClassification
+    :members:
+
+
+LongformerForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForQuestionAnswering
     :members:

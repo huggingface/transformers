@@ -68,6 +68,20 @@ AlbertForSequenceClassification
     :members:
 
 
+AlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForMultipleChoice
+    :members:
+
+
+AlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForTokenClassification
+    :members:
+
+
 AlbertForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -93,4 +107,25 @@ TFAlbertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFAlbertForSequenceClassification
+    :members:
+
+
+TFAlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForMultipleChoice
+    :members:
+
+
+TFAlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForTokenClassification
+    :members:
+
+
+TFAlbertForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForQuestionAnswering
     :members:

@@ -18,6 +18,11 @@
 from transformers.modeling_bart import BartForConditionalGeneration
 
 
+MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all Marian models at https://huggingface.co/models?search=Helsinki-NLP
+]
+
+
 class MarianMTModel(BartForConditionalGeneration):
     r"""
     Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
@@ -40,8 +45,6 @@ class MarianMTModel(BartForConditionalGeneration):
         words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
 
     """
-
-    pretrained_model_archive_map = {}  # see https://huggingface.co/models?search=Helsinki-NLP
 
     def prepare_logits_for_generation(self, logits, cur_len, max_length):
         logits[:, self.config.pad_token_id] = float("-inf")

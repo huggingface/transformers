@@ -84,6 +84,7 @@ def keras_serializable(cls):
         else:
             raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
         self._transformers_config = config
+        self._kwargs = kwargs
 
     cls.__init__ = wrapped_init
 
@@ -94,6 +95,7 @@ def keras_serializable(cls):
         def get_config(self):
             cfg = super(cls, self).get_config()
             cfg["transformers_config"] = self._transformers_config.to_dict()
+            cfg.update(self._kwargs)
             return cfg
 
         cls.get_config = get_config
@@ -104,6 +106,44 @@ def keras_serializable(cls):
     return cls
 
 
+class TFQuestionAnsweringLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        start_loss = loss_fn(labels["start_position"], logits[0])
+        end_loss = loss_fn(labels["end_position"], logits[1])
+
+        return (start_loss + end_loss) / 2.0
+
+
+class TFTokenClassificationLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        active_loss = tf.reshape(labels, (-1,)) != -1
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+
+        return loss_fn(labels, reduced_logits)
+
+
+class TFSequenceClassificationLoss:
+    def compute_loss(self, labels, logits):
+        if shape_list(logits)[1] == 1:
+            loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+        else:
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+            )
+
+        return loss_fn(labels, logits)
+
+
+TFMultipleChoiceLoss = TFSequenceClassificationLoss
+
+
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
     r""" Base class for all TF models.
 
@@ -112,7 +152,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Class attributes (overridden by derived classes):
             - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-            - ``pretrained_model_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained weights as values.
             - ``load_tf_weights``: a python ``method`` for loading a TensorFlow checkpoint in a PyTorch model, taking as arguments:
 
                 - ``model``: an instance of the relevant subclass of :class:`~transformers.PreTrainedModel`,
@@ -122,7 +161,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
     """
     config_class = None
-    pretrained_model_archive_map = {}
     base_model_prefix = ""
 
     @property
@@ -338,9 +376,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
-            if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            elif os.path.isdir(pretrained_model_name_or_path):
+            if os.path.isdir(pretrained_model_name_or_path):
                 if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
@@ -364,8 +400,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     use_cdn=use_cdn,
                 )
 
-            # redirect to the cache, if necessary
             try:
+                # Load from URL or cache if already cached
                 resolved_archive_file = cached_path(
                     archive_file,
                     cache_dir=cache_dir,
@@ -373,20 +409,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     resume_download=resume_download,
                     proxies=proxies,
                 )
-            except EnvironmentError as e:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    logger.error("Couldn't reach server at '{}' to download pretrained weights.".format(archive_file))
-                else:
-                    logger.error(
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url but couldn't find any file "
-                        "associated to this path or url.".format(
-                            pretrained_model_name_or_path,
-                            ", ".join(cls.pretrained_model_archive_map.keys()),
-                            archive_file,
-                        )
-                    )
-                raise e
+                if resolved_archive_file is None:
+                    raise EnvironmentError
+            except EnvironmentError:
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {TF2_WEIGHTS_NAME}, {WEIGHTS_NAME}.\n\n"
+                )
+                raise EnvironmentError(msg)
             if resolved_archive_file == archive_file:
                 logger.info("loading weights file {}".format(archive_file))
             else:
@@ -1114,8 +1145,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
                 _scores = tf.reshape(_scores, (batch_size, num_beams * vocab_size))
 
-                next_tokens = tf.random.categorical(
-                    _scores, dtype=tf.int32, num_samples=2 * num_beams
+                next_tokens = sample_without_replacement(
+                    _scores, num_samples=2 * num_beams
                 )  # (batch_size, 2 * num_beams)
                 # Compute next scores
                 next_scores = tf.gather(_scores, next_tokens, batch_dims=1)  # (batch_size, 2 * num_beams)
@@ -1227,7 +1258,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
@@ -1540,6 +1571,16 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.
         Args:
@@ -1695,6 +1736,17 @@ def shape_list(x):
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
+def sample_without_replacement(logits, num_samples):
+    """
+        categorical sampling witouth replacement is currently not implemented
+        the gumbel-max trick will do for now
+        see https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    """
+    z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
+    _, indices = tf.nn.top_k(logits + z, num_samples)
+    return indices
+
+
 def get_initializer(initializer_range=0.02):
     """Creates a `tf.initializers.truncated_normal` with the given range.
     Args:
@@ -1703,3 +1755,24 @@ def get_initializer(initializer_range=0.02):
         TruncatedNormal initializer with stddev = `initializer_range`.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
+
+
+def cast_bool_to_primitive(bool_variable, default_tensor_to_true=False):
+    """Function arguments can be inserted as boolean tensor
+        and bool variables to cope with keras serialization
+        we need to cast `output_attentions` to correct bool
+        if it is a tensor
+
+    Args:
+        default_tensor_to_true: bool, if tensor should default to True
+        in case tensor has no numpy attribute
+    """
+    # if bool variable is tensor and has numpy value
+    if tf.is_tensor(bool_variable):
+        if hasattr(bool_variable, "numpy"):
+            return bool(bool_variable.numpy())
+        elif default_tensor_to_true:
+            return True
+
+    # else variable is bool
+    return bool_variable

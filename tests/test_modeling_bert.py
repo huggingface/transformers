@@ -27,6 +27,7 @@ if is_torch_available():
     from transformers import (
         BertConfig,
         BertModel,
+        BertLMHeadModel,
         BertForMaskedLM,
         BertForNextSentencePrediction,
         BertForPreTraining,
@@ -35,7 +36,7 @@ if is_torch_available():
         BertForTokenClassification,
         BertForMultipleChoice,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BertModelTester:
@@ -211,25 +212,7 @@ class BertModelTester:
         )
         self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
-    def create_and_check_bert_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = BertForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        loss, prediction_scores = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
-        )
-        result = {
-            "loss": loss,
-            "prediction_scores": prediction_scores,
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
-        )
-        self.check_loss_output(result)
-
-    def create_and_check_bert_model_for_masked_lm_as_decoder(
+    def create_and_check_bert_for_causal_lm(
         self,
         config,
         input_ids,
@@ -241,14 +224,59 @@ class BertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
+        model = BertLMHeadModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        loss, prediction_scores = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
+        )
+        result = {
+            "loss": loss,
+            "prediction_scores": prediction_scores,
+        }
+        self.parent.assertListEqual(
+            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+        )
+        self.check_loss_output(result)
+
+    def create_and_check_bert_for_masked_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         model = BertForMaskedLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        loss, prediction_scores = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
+        )
+        result = {
+            "loss": loss,
+            "prediction_scores": prediction_scores,
+        }
+        self.parent.assertListEqual(
+            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+        )
+        self.check_loss_output(result)
+
+    def create_and_check_bert_model_for_causal_lm_as_decoder(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        model = BertLMHeadModel(config=config)
         model.to(torch_device)
         model.eval()
         loss, prediction_scores = model(
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            masked_lm_labels=token_labels,
+            labels=token_labels,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
         )
@@ -256,7 +284,7 @@ class BertModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            masked_lm_labels=token_labels,
+            labels=token_labels,
             encoder_hidden_states=encoder_hidden_states,
         )
         result = {
@@ -294,7 +322,7 @@ class BertModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            masked_lm_labels=token_labels,
+            labels=token_labels,
             next_sentence_label=sequence_labels,
         )
         result = {
@@ -407,6 +435,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         (
             BertModel,
             BertForMaskedLM,
+            BertForMultipleChoice,
             BertForNextSentencePrediction,
             BertForPreTraining,
             BertForQuestionAnswering,
@@ -460,13 +489,17 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
             encoder_attention_mask,
         )
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_bert_for_causal_lm(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_masked_lm(*config_and_inputs)
 
-    def test_for_masked_lm_decoder(self):
+    def test_for_causal_lm_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_bert_model_for_masked_lm_as_decoder(*config_and_inputs)
+        self.model_tester.create_and_check_bert_model_for_causal_lm_as_decoder(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -494,6 +527,6 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

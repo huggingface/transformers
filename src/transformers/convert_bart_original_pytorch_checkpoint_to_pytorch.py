@@ -124,7 +124,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkp
         remove_ignore_keys_(state_dict)
         state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
         fairseq_output = bart.extract_features(tokens)
-        if hf_checkpoint_name == "bart-large":
+        if hf_checkpoint_name == "facebook/bart-large":
             model = BartModel(config).eval()
             model.load_state_dict(state_dict)
             new_model_outputs = model(tokens).model[0]

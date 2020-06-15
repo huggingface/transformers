@@ -34,7 +34,7 @@ The code above will output following list:
 ["negative","negative","positive","positive","neutral", "neutral"]
 ```
 
-## minimal working Sample
+## A minimal working Sample
 
 
 ```python
@@ -90,7 +90,7 @@ print(model.predict_sentiment(texts))
 
 ## Model and Data
 
-If you are interested in code and data that was used to train this model please have a look at [this repository](https://github.com/oliverguhr/german-sentiment) and our [paper](http://www.lrec-conf.org/proceedings/lrec2020/pdf/2020.lrec-1.201.pdf). Here is a table of the F1 scores that his model achieves on following datasets. Since we trained this model on a newer version of the transformer library, the results are slightly better than reported in the paper.
+If you are interested in code and data that was used to train this model please have a look at [this repository](https://github.com/oliverguhr/german-sentiment) and our [paper](http://www.lrec-conf.org/proceedings/lrec2020/pdf/2020.lrec-1.202.pdf). Here is a table of the F1 scores that his model achieves on following datasets. Since we trained this model on a newer version of the transformer library, the results are slightly better than reported in the paper.
 
 | Dataset                                                      | F1 micro Score |
 | :----------------------------------------------------------- | -------------: |
