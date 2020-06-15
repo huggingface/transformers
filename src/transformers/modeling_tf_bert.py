@@ -500,7 +500,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
 
-
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
         self.pooler = TFBertPooler(config, name="pooler")
