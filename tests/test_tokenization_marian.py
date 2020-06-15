@@ -51,8 +51,8 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = MarianTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
-    def get_tokenizer(self, max_len=None, **kwargs) -> MarianTokenizer:
-        return MarianTokenizer.from_pretrained(self.tmpdirname, model_max_length=max_len, **kwargs)
+    def get_tokenizer(self, **kwargs) -> MarianTokenizer:
+        return MarianTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         return (

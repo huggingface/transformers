@@ -27,10 +27,25 @@ from collections import UserDict
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
+import numpy as np
 from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
 
-from .file_utils import add_end_docstrings, cached_path, hf_bucket_url, is_remote_url, torch_required
+from .file_utils import (
+    add_end_docstrings,
+    cached_path,
+    hf_bucket_url,
+    is_remote_url,
+    is_tf_available,
+    is_torch_available,
+    torch_required,
+)
+
+
+if is_tf_available():
+    import tensorflow as tf
+if is_torch_available():
+    import torch
 
 
 logger = logging.getLogger(__name__)
@@ -54,7 +69,7 @@ FULL_TOKENIZER_FILE = "tokenizer.json"
 
 
 class ExplicitEnum(Enum):
-    """ With more explicit missing values error message.
+    """ Enum with more explicit error message for missing values.
     """
 
     @classmethod
@@ -76,6 +91,12 @@ class PaddingStrategy(ExplicitEnum):
     LONGEST = "longest"
     MAX_LENGTH = "max_length"
     DO_NOT_PAD = "do_not_pad"
+
+
+class TensorType(ExplicitEnum):
+    PYTORCH = "pt"
+    TENSORFLOW = "tf"
+    NUMPY = "np"
 
 
 class CharSpan(NamedTuple):
@@ -112,13 +133,18 @@ class BatchEncoding(UserDict):
             encoding (:obj:`EncodingFast`, :obj:`list(EncodingFast)`, `optional`, defaults to :obj:`None`):
                 If the tokenizer is a fast tokenizer which outputs additional informations like mapping from word/char space to token space
                 the `EncodingFast` instance or list of instance (for batches) hold these informations.
-
+            tensor_type (:obj:`Union[None, str, TensorType]`, `optional`, defaults to :obj:`None`):
+                You can give a tensor_type here to convert the lists of integers in PyTorch/TF/Numpy Tensors at initialization
+            prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Set to True to add a batch axis when converting in Tensors (see :obj:`tensor_type` above)
     """
 
     def __init__(
         self,
         data: Optional[Dict[str, Any]] = None,
         encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
+        tensor_type: Union[None, str, TensorType] = None,
+        prepend_batch_axis: bool = False,
     ):
         super().__init__(data)
 
@@ -126,6 +152,8 @@ class BatchEncoding(UserDict):
             encoding = [encoding]
 
         self._encodings = encoding
+
+        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
 
     def __getitem__(self, item: Union[int, str]) -> EncodingFast:
         """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
@@ -142,7 +170,10 @@ class BatchEncoding(UserDict):
             )
 
     def __getattr__(self, item: str):
-        return self.data[item]
+        try:
+            return self.data[item]
+        except KeyError:
+            raise AttributeError
 
     def keys(self):
         return self.data.keys()
@@ -403,6 +434,51 @@ class BatchEncoding(UserDict):
             batch_index = 0
             char_index = batch_or_char_index
         return self._encodings[batch_index].char_to_word(char_index)
+
+    def convert_to_tensors(self, tensor_type: Union[None, str, TensorType], prepend_batch_axis: bool = False):
+        if tensor_type is None:
+            return self
+
+        # Convert to TensorType
+        if not isinstance(tensor_type, TensorType):
+            tensor_type = TensorType(tensor_type)
+
+        # Get a function reference for the correct framework
+        if tensor_type == TensorType.TENSORFLOW and is_tf_available():
+            as_tensor = tf.constant
+        elif tensor_type == TensorType.PYTORCH and is_torch_available():
+            as_tensor = torch.tensor
+        elif tensor_type == TensorType.NUMPY:
+            as_tensor = np.asarray
+        else:
+            raise ImportError(
+                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
+                    tensor_type
+                )
+            )
+
+        # Do the tensor conversion in batch
+        for key, value in self.items():
+            try:
+                if prepend_batch_axis:
+                    value = [value]
+
+                tensor = as_tensor(value)
+
+                # at-least2d
+                if tensor.ndim > 2:
+                    tensor = tensor.squeeze(0)
+                elif tensor.ndim < 2:
+                    tensor = tensor[None, :]
+
+                self[key] = tensor
+            except:  # noqa E722
+                raise ValueError(
+                    "Unable to create tensor, you should probably activate truncation and/or padding "
+                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
+                )
+
+        return self
 
     @torch_required
     def to(self, device: str):
@@ -721,8 +797,8 @@ ENCODE_KWARGS_DOCSTRING = r"""
             is_pretokenized (:obj:`bool`, defaults to :obj:`False`):
                 Set to True to indicate the input is already tokenized
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
-                Can be set to 'tf' or 'pt' to return respectively TensorFlow :obj:`tf.constant`
-                or PyTorch :obj:`torch.Tensor` instead of a list of python integers.
+                Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
+                PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
 """
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -782,18 +858,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
 
     padding_side: str = "right"
-
-    NO_PAD_TOKEN_FOR_BATCH_MSG = (
-        "No padding token is set for this model, therefore no batch can be made with uneven "
-        "sequences. Set a padding token or adjust the lengths of the sequences building the "
-        "batch so that every sequence is of the same length."
-    )
-
-    UNEVEN_SEQUENCES_FOR_BATCH_MSG = (
-        "The sequences building the batch are not of the same size, no tensor "
-        "can be built. Set `pad_to_max_length=True` to pad the smaller sequences"
-        "up to the larger sequence's length."
-    )
 
     def __init__(self, model_max_length=None, **kwargs):
         super().__init__(**kwargs)
@@ -1141,7 +1205,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ):
         """
@@ -1290,7 +1354,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -1372,7 +1436,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -1432,7 +1496,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -1460,7 +1524,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_masks: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -1524,7 +1588,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_masks: Optional[bool] = None,
         return_overflowing_tokens: bool = False,

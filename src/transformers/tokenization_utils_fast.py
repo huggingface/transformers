@@ -26,7 +26,6 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
-from .file_utils import is_tf_available, is_torch_available
 from .tokenization_utils_base import (
     BatchEncoding,
     PaddingStrategy,
@@ -38,11 +37,6 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 
-
-if is_tf_available():
-    import tensorflow as tf
-if is_torch_available():
-    import torch
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +139,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def _convert_encoding(
         self,
         encoding: EncodingFast,
-        return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -158,8 +151,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             Overflowing tokens are converted to additional examples (like batches) so the output values of
             the dict are lists (overflows) of lists (tokens).
 
-            If return_tensors is not None, these lists of lists are converted to 2-D tensors
-            for input_ids, token_type_ids and attention_mask.
             Output shape: (overflows, sequence length)
         """
         if return_token_type_ids is None:
@@ -184,24 +175,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
             if return_offsets_mapping:
                 encoding_dict["offset_mapping"].append(e.offsets)
-
-        if return_tensors is not None:
-            try:
-                for key, value in encoding_dict.items():
-                    if return_tensors == "tf" and is_tf_available():
-                        encoding_dict[key] = tf.constant(value)
-                    elif return_tensors == "pt" and is_torch_available():
-                        encoding_dict[key] = torch.tensor(value)
-                    elif return_tensors is not None and verbose:
-                        logger.warning(
-                            "Unable to convert output to tensors format {}, "
-                            "PyTorch or TensorFlow is not available.".format(return_tensors)
-                        )
-            except:  # noqa E722
-                raise ValueError(
-                    "Unable to create tensor, you should probably activate truncation and/or padding "
-                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
-                )
 
         return encoding_dict
 
@@ -257,34 +230,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         if isinstance(new_tokens, str):
             new_tokens = [new_tokens]
-        tokens = []
-        for token in new_tokens:
-            if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
-                token = token.lower()
-            if token not in tokens:
-                tokens.append(token)
-        return self._tokenizer.add_tokens(tokens)
-
-    def add_special_tokens(self, special_tokens_dict: Dict[str, Union[str, List[str]]]) -> int:
-        # Map special tokens to class attributes (self.pad_token...)
-        num_added_tokens = super().add_special_tokens(special_tokens_dict)
-
-        # If the backend tokenizer the only specificities of special tokens are that
-        #    - they will never be processed by the model, and
-        #    - they will be removed while decoding.
-        # But they are not mapped to special attributes in the backend so we can just
-        # send a list.
-        tokens = []
-        for tok in special_tokens_dict.values():
-            if isinstance(tok, str):
-                tokens.append(tok)
-            elif isinstance(tok, (list, tuple)):
-                tokens += tok
-            else:
-                raise ValueError(f"Check special_tokens_dict input, {tok} should be str, list or tuple.")
-        self._tokenizer.add_special_tokens(tokens)
-
-        return num_added_tokens
+        # TODO This should be done in tokenizers to be really clean.
+        # Removing for now
+        # tokens = []
+        # for token in new_tokens:
+        #     if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
+        #         token = token.lower()
+        #     if token not in tokens:
+        #         tokens.append(token)
+        return self._tokenizer.add_tokens(new_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         return self._tokenizer.num_special_tokens_to_add(pair)
@@ -415,7 +369,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         tokens = [
             self._convert_encoding(
                 encoding=encoding,
-                return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
@@ -426,24 +379,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             for encoding in encodings
         ]
 
-        # Sanitize the output to have dict[list] from list[dict]
+        # Convert the output to have dict[list] from list[dict]
         sanitized = {}
         for key in tokens[0].keys():
             # To List[List[List[int]]] of shape (batch, overflows, sequence length)
             stack = [e for item in tokens for e in item[key]]
-            try:
-                if return_tensors == "tf":
-                    stack = tf.stack(stack, axis=0)
-                elif return_tensors == "pt":
-                    stack = torch.stack(stack, dim=0)
-            except:  # noqa E722
-                raise ValueError(
-                    "Unable to stack tensor, you should probably activate truncation and/or padding "
-                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
-                )
-            # elif not return_tensors and len(stack) == 1:
-            #     stack = stack[0]
-
             sanitized[key] = stack
 
         # If returning overflowing tokens, we need to return a mapping
@@ -454,7 +394,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 overflow_to_sample_mapping += [i] * len(enc["input_ids"])
             sanitized["overflow_to_sample_mapping"] = overflow_to_sample_mapping
 
-        return BatchEncoding(sanitized, encodings)
+        return BatchEncoding(sanitized, encodings, tensor_type=return_tensors)
 
     def _encode_plus(
         self,
@@ -497,7 +437,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # Return tensor is None, then we can remove the leading batch axis
         # Overfolwing tokens are returned as a batch of output so we keep them in this case
-        if not return_tensors and not return_overflowing_tokens:
+        if return_tensors is None and not return_overflowing_tokens:
             batched_output = BatchEncoding(
                 {
                     key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
