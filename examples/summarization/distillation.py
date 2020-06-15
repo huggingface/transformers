@@ -174,16 +174,12 @@ class SummarizationDistiller(SummarizationTrainer):
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         SummarizationTrainer.add_model_specific_args(parser, root_dir)
-        parser.add_argument(
-            "--teacher", default="facebook/bart-large-cnn", type=str,
-        )
+        parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
         # parser.add_argument("--alpha_cos", default=0.0, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
-        parser.add_argument(
-            "--alpha_hid", default=0.0, type=float, required=False,
-        )
+        parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
         parser.add_argument(
             "--student_decoder_layers", default=12, type=int, required=False,
         )
@@ -196,12 +192,6 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument(  # TODO: remove
             "--enc_only", action="store_true", default=False,
         )
-        parser.add_argument(  # TODO: remove
-            "--freeze_decoder", action="store_true",
-        )
-
-        parser.add_argument("--auto_scale_batch_size", default=False, action="store_true")
-
         return parser
 
     def _step(self, batch):
@@ -249,7 +239,7 @@ class SummarizationDistiller(SummarizationTrainer):
                 lm_labels=labels,
                 output_hidden_states=True,
             )
-        dec_mask = decoder_input_ids.eq(self.tokenizer.pad_token_id)
+        dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         if self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
@@ -330,7 +320,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
         labels = y[:, 1:].clone()
         labels[y[:, 1:] == pad_token_id] = -100
         # noinspection PyCallingNonCallable
-        dec_mask = decoder_input_ids.eq(self.tokenizer.pad_token_id)
+        dec_mask = decoder_input_ids.ne(pad_token_id)
 
         sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
             source_ids,

@@ -9,7 +9,6 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.loggers import WandbLogger
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
@@ -298,8 +297,12 @@ def main(args, model=None):
     if args.logger == "default" or args.fast_dev_run:
         logger = True
     elif args.logger == "wandb":
+        from pytorch_lightning.loggers import WandbLogger
+
         logger = WandbLogger()
     elif args.logger == "wandb_shared":
+        from pytorch_lightning.loggers import WandbLogger
+
         logger = WandbLogger(name=args.output_dir, project="hf_summarization")
     trainer: pl.Trainer = generic_train(
         model,
