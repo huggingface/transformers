@@ -16,10 +16,10 @@ import pickle
 import unittest
 from typing import Callable, Optional
 
-from transformers import PreTrainedTokenizer, TensorType, BertTokenizer, BertTokenizerFast, BatchEncoding
+from transformers import BatchEncoding, BertTokenizer, BertTokenizerFast, PreTrainedTokenizer, TensorType
 from transformers.tokenization_gpt2 import GPT2Tokenizer
 
-from .utils import slow, require_tf, require_torch
+from .utils import require_tf, require_torch, slow
 
 
 class TokenizerUtilsTest(unittest.TestCase):
