@@ -1386,16 +1386,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
 
         Args:
-            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``:
+            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``):
                 The sequence or batch of sequences to be encoded.
                 Each sequence can be a string or a list of strings (pre-tokenized string).
                 If the sequences are provided as list of strings (pretokenized), you must set `is_pretokenized=True`
                  (to lift the ambiguity with a batch of sequences)
-            text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``:
+            text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``):
                 The sequence or batch of sequences to be encoded.
                 Each sequence can be a string or a list of strings (pre-tokenized string).
                 If the sequences are provided as list of strings (pretokenized), you must set `is_pretokenized=True`
-                 (to lift the ambiguity with a batch of sequences)
+                (to lift the ambiguity with a batch of sequences)
         """
         is_batched = bool(
             (not is_pretokenized and isinstance(text, (list, tuple)))

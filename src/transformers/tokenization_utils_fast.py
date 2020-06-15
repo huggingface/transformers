@@ -97,6 +97,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         - ``additional_special_tokens``: (`Optional`) list: a list of additional special tokens.
             Adding all special tokens here ensure they won't be split by the tokenization process.
             Will be associated to ``self.additional_special_tokens`` and ``self.additional_special_tokens_ids``
+
+
+    .. automethod:: __call__
     """
 
     def __init__(self, tokenizer: BaseTokenizerFast, **kwargs):
