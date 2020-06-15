@@ -812,6 +812,52 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 else:
                     lprobs[i, previous_token] /= repetition_penalty
 
+    def finalize_generation_logscores(
+        self, next_token_logits, input_ids, batch_size, num_beams,
+        repetition_penalty, no_repeat_ngram_size, bad_words_ids,
+        cur_len, min_length, max_length, eos_token_id,
+        temperature, do_sample,
+    ):
+        # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+        if repetition_penalty != 1.0:
+            self.enforce_repetition_penalty_(
+                next_token_logits, batch_size, num_beams, input_ids, repetition_penalty,
+            )
+
+        if temperature != 1.0:
+            next_token_logits = next_token_logits / temperature
+
+        if self.config.is_encoder_decoder and do_sample is False:
+            # TODO (PVP) still a bit hacky here - there might be a better solution
+            next_token_logits = self.prepare_logits_for_generation(
+                next_token_logits, cur_len=cur_len, max_length=max_length
+            )
+
+        scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+
+        # set eos token prob to zero if min_length is not reached
+        if eos_token_id is not None and cur_len < min_length:
+            scores[:, eos_token_id] = -float("inf")
+
+        if no_repeat_ngram_size > 0:
+            # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+            num_batch_hypotheses = batch_size * num_beams
+            # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+            banned_batch_tokens = calc_banned_ngram_tokens(
+                input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
+            )
+            for i, banned_tokens in enumerate(banned_batch_tokens):
+                scores[i, banned_tokens] = -float("inf")
+
+        if bad_words_ids is not None:
+            # calculate a list of banned tokens according to bad words
+            banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
+
+            for i, banned_tokens in enumerate(banned_tokens):
+                scores[i, banned_tokens] = -float("inf")
+
+        return scores
+
     @torch.no_grad()
     def generate(
         self,
@@ -1310,7 +1356,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         for hypo_idx, hypo in enumerate(input_ids):
             decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
 
-        return decoded
+        return input_ids
 
     def _generate_beam_search(
         self,
@@ -1372,43 +1418,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
-            # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                self.enforce_repetition_penalty_(
-                    next_token_logits, batch_size, num_beams, input_ids, repetition_penalty,
-                )
-
-            if temperature != 1.0:
-                next_token_logits = next_token_logits / temperature
-
-            if self.config.is_encoder_decoder and do_sample is False:
-                # TODO (PVP) still a bit hacky here - there might be a better solution
-                next_token_logits = self.prepare_logits_for_generation(
-                    next_token_logits, cur_len=cur_len, max_length=max_length
-                )
-
-            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-
-            # set eos token prob to zero if min_length is not reached
-            if eos_token_id is not None and cur_len < min_length:
-                scores[:, eos_token_id] = -float("inf")
-
-            if no_repeat_ngram_size > 0:
-                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                num_batch_hypotheses = batch_size * num_beams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_batch_tokens = calc_banned_ngram_tokens(
-                    input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
-                )
-                for i, banned_tokens in enumerate(banned_batch_tokens):
-                    scores[i, banned_tokens] = -float("inf")
-
-            if bad_words_ids is not None:
-                # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-                for i, banned_tokens in enumerate(banned_tokens):
-                    scores[i, banned_tokens] = -float("inf")
+            scores = self.finalize_generation_logscores(
+                next_token_logits, input_ids, batch_size, num_beams,
+                repetition_penalty, no_repeat_ngram_size, bad_words_ids,
+                cur_len, min_length, max_length, eos_token_id,
+                temperature, do_sample,
+            )
 
             assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
                 scores.shape, (batch_size * num_beams, vocab_size)
