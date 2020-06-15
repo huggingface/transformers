@@ -490,18 +490,16 @@ class ModelTesterMixin:
             self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2], 2: [1, 2]})
 
     def test_hidden_states_output(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
+        def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs[-1]
-            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
 
+            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
                 if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
@@ -512,6 +510,18 @@ class ModelTesterMixin:
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
