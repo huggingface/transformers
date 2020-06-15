@@ -75,6 +75,13 @@ DistilBertForSequenceClassification
     :members:
 
 
+DistilBertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DistilBertForMultipleChoice
+    :members:
+
+
 DistilBertForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
