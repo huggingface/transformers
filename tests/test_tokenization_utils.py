@@ -94,17 +94,20 @@ class TokenizerUtilsTest(unittest.TestCase):
     def test_batch_encoding_pickle_tf(self):
         import tensorflow as tf
 
+        def tf_array_equals(t1, t2):
+            return tf.reduce_all(tf.equal(t1, t2))
+
         tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
         tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
 
         with self.subTest("BatchEncoding (Python, return_tensors=TENSORFLOW)"):
             self.assert_dump_and_restore(
-                tokenizer_p("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf.equal
+                tokenizer_p("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf_array_equals
             )
 
         with self.subTest("BatchEncoding (Rust, return_tensors=TENSORFLOW)"):
             self.assert_dump_and_restore(
-                tokenizer_r("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf.equal
+                tokenizer_r("Small example to encode", return_tensors=TensorType.TENSORFLOW), tf_array_equals
             )
 
     @require_torch
