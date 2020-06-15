@@ -62,9 +62,12 @@ PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
 
 
+# Slow tokenizers used to be saved in three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+
+# Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
 
 
@@ -556,6 +559,7 @@ class SpecialTokensMixin:
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
+                    setattr(self, key, value)
                 elif isinstance(value, AddedTokenFast):
                     setattr(self, key, str(value))
                 elif isinstance(value, str):
@@ -565,7 +569,7 @@ class SpecialTokensMixin:
                         "special token {} has to be either str or AddedTokenFast but got: {}".format(key, type(value))
                     )
 
-    def add_special_tokens(self, special_tokens_dict):
+    def add_special_tokens(self, special_tokens_dict: Dict[str, Union[str, List[str]]]) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
         to class attributes. If special tokens are NOT in the vocabulary, they are added
@@ -620,9 +624,30 @@ class SpecialTokensMixin:
 
         return added_tokens
 
-    def add_tokens(self, value):
-        """ To be overriden by derived class to add a token in the vocabulary. """
-        pass
+    def add_tokens(self, value: Union[str, List[str]]) -> int:
+        """
+        Add a list of new tokens to the tokenizer class. If the new tokens are not in the
+        vocabulary, they are added to it with indices starting from length of the current vocabulary.
+
+        Args:
+            new_tokens: string or list of string or AddedTokenFast. Each string is a token to add.
+            Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to let you personnalize it's behavior (Whether this token should only match against single word, whether this token should strip all potential whitespaces on the left side, Whether this token should strip all potential whitespaces on the right side...).
+            See details for AddedToken in HuggingFace tokenizers library.
+
+        Returns:
+            Number of tokens added to the vocabulary.
+
+        Examples::
+
+            # Let's see how to increase the vocabulary of Bert model and tokenizer
+            tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
+            model = BertModel.from_pretrained('bert-base-uncased')
+
+            num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
+            print('We have added', num_added_toks, 'tokens')
+            model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+        """
+        raise NotImplementedError()  # Implemented in derived classes
 
     def _maybe_update_backend(self, value):
         """ To be overriden by derived class if a backend tokenizer has to be updated. """
@@ -1055,8 +1080,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     "added_tokens_file": ADDED_TOKENS_FILE,
                     "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                    "full_tokenizer_file": FULL_TOKENIZER_FILE,
                 }
-                # Look for the tokenizer main vocabulary files + the additional tokens files
+                # Look for the tokenizer files
                 for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
                     if os.path.isdir(pretrained_model_name_or_path):
                         full_file_name = os.path.join(pretrained_model_name_or_path, file_name)

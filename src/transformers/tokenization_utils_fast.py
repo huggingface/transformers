@@ -209,33 +209,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return self._tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
     def add_tokens(self, new_tokens: List[Union[str, AddedTokenFast]]) -> int:
-        """
-        Add a list of new tokens to the tokenizer class. If the new tokens are not in the
-        vocabulary, they are added to it with indices starting from length of the current vocabulary.
-
-        Args:
-            new_tokens: string or list of string or :class:`~transformers.AddedTokenFast`. Each string is a token to add.
-                Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to
-                let you personnalize it's behavior (Whether this token should only match against single word, whether
-                this token should strip all potential whitespaces on the left side, Whether this token should strip
-                all potential whitespaces on the right side...).
-
-                See details for :class:`~transformers.AddedToken` in HuggingFace tokenizers library.
-
-        Returns:
-            Number of tokens added to the vocabulary.
-
-        Examples::
-
-            # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
-            model = BertModel.from_pretrained('bert-base-uncased')
-
-            num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-            print('We have added', num_added_toks, 'tokens')
-            model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-        """
-        if isinstance(new_tokens, str):
+        if isinstance(new_tokens, (str, AddedTokenFast)):
             new_tokens = [new_tokens]
         # TODO This should be done in tokenizers to be really clean.
         # Removing for now
