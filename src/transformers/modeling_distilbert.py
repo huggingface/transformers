@@ -865,6 +865,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
 
+
 @add_start_docstrings(
     """DistilBert Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -961,7 +962,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         pooled_output = self.dropout(pooled_output)  # (bs * num_choices, dim)
         logits = self.classifier(pooled_output)  # (bs * num_choices, 1)
 
-        reshaped_logits = logits.view(-1, num_choices) # (bs, num_choices)
+        reshaped_logits = logits.view(-1, num_choices)  # (bs, num_choices)
 
         outputs = (reshaped_logits,) + outputs[1:]  # add hidden states and attention if they are here
 
