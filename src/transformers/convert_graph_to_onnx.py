@@ -69,7 +69,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
                 seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
                 axes.update({dim: "sequence" for dim in seq_axes})
 
-        print("Found input {} with shape: {}".format(name, axes))
+        print("Found {} {} with shape: {}".format("input" if is_input else "output", name, axes))
         return axes
 
     tokens = nlp.tokenizer.encode_plus("This is a sample output", return_tensors=framework)
