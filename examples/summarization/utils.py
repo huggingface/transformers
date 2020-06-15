@@ -54,12 +54,12 @@ def encode_file(
     return examples
 
 
-
 def lmap(f, x):
     return list(map(f, x))
 
 
 T5_PREFIX = "summarize: "  # HACK, fixme
+
 
 def trim_batch(
     input_ids, pad_token_id, attention_mask=None,
