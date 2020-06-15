@@ -94,7 +94,6 @@ class RetriBertModel(RetriBertPreTrainedModel):
     def embed_sentences_checkpointed(
         self, input_ids, attention_mask, sent_encoder, checkpoint_batch_size=-1,
     ):
-        sent_encoder
         # reproduces BERT forward pass with checkpointing
         if checkpoint_batch_size < 0 or input_ids.shape[0] < checkpoint_batch_size:
             return sent_encoder(input_ids, attention_mask=attention_mask)[1]
