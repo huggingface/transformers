@@ -303,9 +303,7 @@ class TFTrainer:
             else:
                 approx = math.ceil
 
-            steps_per_epoch = approx(
-                self.num_train_examples / (self.args.train_batch_size * self.args.gradient_accumulation_steps)
-            )
+            steps_per_epoch = approx(self.num_train_examples / (self.args.train_batch_size * self.args.gradient_accumulation_steps))
             t_total = steps_per_epoch * self.args.num_train_epochs
 
         with self.args.strategy.scope():
