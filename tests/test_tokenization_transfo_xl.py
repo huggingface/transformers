@@ -56,7 +56,7 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs["lower_case"] = True
         return TransfoXLTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         input_text = "<unk> UNwanted , running"
         output_text = "<unk> unwanted, running"
         return input_text, output_text
