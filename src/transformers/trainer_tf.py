@@ -71,7 +71,8 @@ class TFTrainer:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
-        self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+        # self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+        self.num_train_examples = len(list(self.train_dataset.as_numpy_iterator()))
 
         if self.args.max_steps > 0:
             self.train_steps = self.args.max_steps
