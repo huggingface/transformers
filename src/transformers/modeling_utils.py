@@ -812,38 +812,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 else:
                     lprobs[i, previous_token] /= repetition_penalty
 
-    def finalize_generation_logscores(
+    def postprocess_next_token_scores(
         self,
-        next_token_logits,
+        scores,
         input_ids,
-        batch_size,
-        num_beams,
-        repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
         cur_len,
         min_length,
         max_length,
         eos_token_id,
-        temperature,
-        do_sample,
+        repetition_penalty,
+        batch_size,
+        num_beams,
     ):
         # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
         if repetition_penalty != 1.0:
             self.enforce_repetition_penalty_(
-                next_token_logits, batch_size, num_beams, input_ids, repetition_penalty,
+                scores, batch_size, num_beams, input_ids, repetition_penalty,
             )
-
-        if temperature != 1.0:
-            next_token_logits = next_token_logits / temperature
-
-        if self.config.is_encoder_decoder and do_sample is False:
-            # TODO (PVP) still a bit hacky here - there might be a better solution
-            next_token_logits = self.prepare_logits_for_generation(
-                next_token_logits, cur_len=cur_len, max_length=max_length
-            )
-
-        scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
         # set eos token prob to zero if min_length is not reached
         if eos_token_id is not None and cur_len < min_length:
@@ -1287,20 +1274,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
 
-            next_token_logscores = self.finalize_generation_logscores(
+            scores = self.postprocess_next_token_scores(
                 next_token_logits,
                 input_ids,
-                batch_size,
-                1,
-                repetition_penalty,
                 no_repeat_ngram_size,
                 bad_words_ids,
                 cur_len,
                 min_length,
                 max_length,
                 eos_token_id,
-                temperature,
-                do_sample,
+                repetition_penalty,
+                batch_size,
+                num_beams=1,
             )
 
             # if model has past, then set the past variable to speed up decoding
@@ -1308,8 +1293,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 past = outputs[1]
 
             if do_sample:
+                # Temperature (higher temperature => more likely to sample low probability tokens)
+                if temperature != 1.0:
+                    scores = scores / temperature
                 # Top-p/top-k filtering
-                next_token_logscores = top_k_top_p_filtering(next_token_logscores, top_k=top_k, top_p=top_p)
+                next_token_logscores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p)
                 # Sample
                 probs = F.softmax(next_token_logscores, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
@@ -1408,21 +1396,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
-            scores = self.finalize_generation_logscores(
-                next_token_logits,
+            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+
+            scores = self.postprocess_next_token_scores(
+                scores,
                 input_ids,
-                batch_size,
-                num_beams,
-                repetition_penalty,
                 no_repeat_ngram_size,
                 bad_words_ids,
                 cur_len,
                 min_length,
                 max_length,
                 eos_token_id,
-                temperature,
-                do_sample,
+                repetition_penalty,
+                batch_size,
+                num_beams,
             )
+
+            if self.config.is_encoder_decoder and do_sample is False:
+                # TODO (PVP) still a bit hacky here - there might be a better solution
+                scores = self.prepare_logits_for_generation(scores, cur_len=cur_len, max_length=max_length)
 
             assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
                 scores.shape, (batch_size * num_beams, vocab_size)
@@ -1430,6 +1422,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             if do_sample:
                 _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
+                # Temperature
+                if temperature != 1.0:
+                    _scores = _scores / temperature
                 # Top-p/top-k filtering
                 _scores = top_k_top_p_filtering(
                     _scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
