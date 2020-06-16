@@ -524,13 +524,13 @@ class MobileBertEncoder(nn.Module):
         self.layer = nn.ModuleList([MobileBertLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
-            self,
-            hidden_states,
-            attention_mask=None,
-            head_mask=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=False,
     ):
         all_hidden_states = ()
         all_attentions = ()
