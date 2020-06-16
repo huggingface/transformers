@@ -128,19 +128,6 @@ def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
 
-class ManualLayerNorm(nn.Module):
-    def __init__(self, feat_size, eps=1e-6):
-        super().__init__()
-        self.bias = nn.Parameter(torch.zeros(feat_size))
-        self.weight = nn.Parameter(torch.ones(feat_size))
-        self.eps = eps
-
-    def forward(self, input_tensor):
-        mean = input_tensor.mean(-1, keepdim=True)
-        std = input_tensor.std(-1, keepdim=True)
-        return self.weight * (input_tensor - mean) / (std + self.eps) + self.bias
-
-
 class NoNorm(nn.Module):
     def __init__(self, feat_size, eps=None):
         super().__init__()
@@ -152,7 +139,7 @@ class NoNorm(nn.Module):
 
 
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
-NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm, "manual_layer_norm": ManualLayerNorm}
+NORM2FN = {"layer_norm": torch.nn.LayerNorm, "no_norm": NoNorm}
 
 
 class MobileBertEmbeddings(nn.Module):
@@ -192,6 +179,13 @@ class MobileBertEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
 
         if self.trigram_input:
+            # From the paper MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited
+            # Devices (https://arxiv.org/abs/2004.02984)
+            #
+            # The embedding table in BERT models accounts for a substantial proportion of model size. To compress
+            # the embedding layer, we reduce the embedding dimension to 128 in MobileBERT.
+            # Then, we apply a 1D convolution with kernel size 3 on the raw token embedding to produce a 512
+            # dimensional output.
             inputs_embeds = torch.cat(
                 [
                     F.pad(inputs_embeds[:, 1:], [0, 0, 0, 1, 0, 0], value=0),
@@ -279,7 +273,7 @@ class MobileBertSelfOutput(nn.Module):
         self.use_bottleneck = config.use_bottleneck
         self.dense = nn.Linear(config.true_hidden_size, config.true_hidden_size)
         self.LayerNorm = NORM2FN[config.normalization_type](config.true_hidden_size, eps=config.layer_norm_eps)
-        if self.use_bottleneck:
+        if not self.use_bottleneck:
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, residual_tensor):
@@ -408,6 +402,22 @@ class Bottleneck(nn.Module):
             self.attention = BottleneckLayer(config)
 
     def forward(self, hidden_states):
+        # This method can return three different tuples of values. These different values make use of bottlenecks,
+        # which are linear layers used to project the hidden states to a lower-dimensional vector, reducing memory
+        # usage. These linear layer have weights that are learned during training.
+        #
+        # If `config.use_bottleneck_attention`, it will return the result of the bottleneck layer four times for the
+        # key, query, value, and "layer input" to be used by the attention layer.
+        # This bottleneck is used to project the hidden. This last layer input will be used as a residual tensor
+        # in the attention self output, after the attention scores have been computed.
+        #
+        # If not `config.use_bottleneck_attention` and `config.key_query_shared_bottleneck`, this will return
+        # four values, three of which have been passed through a bottleneck: the query and key, passed through the same
+        # bottleneck, and the residual layer to be applied in the attention self output, through another bottleneck.
+        #
+        # Finally, in the last case, the values for the query, key and values are the hidden states without bottleneck,
+        # and the residual layer will be this value passed through a bottleneck.
+
         bottlenecked_hidden_states = self.input(hidden_states)
         if self.use_bottleneck_attention:
             return (bottlenecked_hidden_states,) * 4
@@ -453,7 +463,7 @@ class MobileBertLayer(nn.Module):
         self.output = MobileBertOutput(config)
         if self.use_bottleneck:
             self.bottleneck = Bottleneck(config)
-        if config.num_feedforward_networks != 1:
+        if config.num_feedforward_networks > 1:
             self.ffn = nn.ModuleList([FFNLayer(config) for _ in range(config.num_feedforward_networks - 1)])
 
     def forward(
@@ -507,10 +517,50 @@ class MobileBertLayer(nn.Module):
         return outputs
 
 
-class MobileBertEncoder(BertEncoder):
+class MobileBertEncoder(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
+        self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([MobileBertLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(
+            self,
+            hidden_states,
+            attention_mask=None,
+            head_mask=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            output_attentions=False,
+    ):
+        all_hidden_states = ()
+        all_attentions = ()
+        for i, layer_module in enumerate(self.layer):
+            if self.output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,
+                encoder_attention_mask,
+                output_attentions,
+            )
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        # Add last layer
+        if self.output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        outputs = (hidden_states,)
+        if self.output_hidden_states:
+            outputs = outputs + (all_hidden_states,)
+        if output_attentions:
+            outputs = outputs + (all_attentions,)
+        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
 class MobileBertPooler(nn.Module):
@@ -534,8 +584,19 @@ class MobileBertPooler(nn.Module):
 
 class MobileBertPredictionHeadTransform(BertPredictionHeadTransform):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
         self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
 
 
 class MobileBertLMPredictionHead(nn.Module):
@@ -557,16 +618,26 @@ class MobileBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
-class MobileBertOnlyMLMHead(BertOnlyMLMHead):
+class MobileBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.predictions = MobileBertLMPredictionHead(config)
 
+    def forward(self, sequence_output):
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
 
-class MobileBertPreTrainingHeads(BertPreTrainingHeads):
+
+class MobileBertPreTrainingHeads(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
         self.predictions = MobileBertLMPredictionHead(config)
+        self.seq_relationship = nn.Linear(config.hidden_size, 2)
+
+    def forward(self, sequence_output, pooled_output):
+        prediction_scores = self.predictions(sequence_output)
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return prediction_scores, seq_relationship_score
 
 
 class MobileBertPreTrainedModel(PreTrainedModel):
@@ -585,7 +656,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, (nn.LayerNorm, NoNorm, ManualLayerNorm)):
+        elif isinstance(module, (nn.LayerNorm, NoNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
@@ -847,7 +918,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         output_attentions=None,
     ):
         r"""
-        masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels

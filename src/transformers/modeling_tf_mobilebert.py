@@ -55,23 +55,6 @@ class TFLayerNorm(tf.keras.layers.LayerNormalization):
         super().__init__(*args, **kwargs)
 
 
-class TFManualLayerNorm(tf.keras.layers.Layer):
-    def __init__(self, feat_size, epsilon=1e-6, **kwargs):
-        super().__init__(**kwargs)
-        self.feat_size = feat_size
-        self.epsilon = epsilon
-
-    def build(self, input_shape):
-        self.bias = self.add_weight("bias", shape=[self.feat_size], initializer="zeros")
-
-        self.weight = self.add_weight("weight", shape=[self.feat_size], initializer="ones")
-
-    def call(self, inputs: tf.Tensor):
-        mean = tf.reduce_mean(inputs, axis=-1, keepdims=True)
-        std = tf.math.reduce_std(inputs, axis=-1, keepdims=True)
-        return self.weight * (inputs - mean) / (std + self.epsilon) + self.bias
-
-
 class TFNoNorm(tf.keras.layers.Layer):
     def __init__(self, feat_size, epsilon=None, **kwargs):
         super().__init__(**kwargs)
@@ -79,7 +62,6 @@ class TFNoNorm(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight("bias", shape=[self.feat_size], initializer="zeros")
-
         self.weight = self.add_weight("weight", shape=[self.feat_size], initializer="ones")
 
     def call(self, inputs: tf.Tensor):
@@ -92,7 +74,7 @@ ACT2FN = {
     "swish": tf.keras.layers.Activation(swish),
     "gelu_new": tf.keras.layers.Activation(gelu_new),
 }
-NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm, "manual_layer_norm": TFManualLayerNorm}
+NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
 class TFMobileBertEmbeddings(tf.keras.layers.Layer):
@@ -182,6 +164,13 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             inputs_embeds = tf.gather(self.word_embeddings, input_ids)
 
         if self.trigram_input:
+            # From the paper MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited
+            # Devices (https://arxiv.org/abs/2004.02984)
+            #
+            # The embedding table in BERT models accounts for a substantial proportion of model size. To compress
+            # the embedding layer, we reduce the embedding dimension to 128 in MobileBERT.
+            # Then, we apply a 1D convolution with kernel size 3 on the raw token embedding to produce a 512
+            # dimensional output.
             inputs_embeds = tf.concat(
                 [
                     tf.pad(inputs_embeds[:, 1:], ((0, 0), (0, 1), (0, 0))),
@@ -306,7 +295,7 @@ class TFMobileBertSelfOutput(tf.keras.layers.Layer):
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.true_hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
-        if self.use_bottleneck:
+        if not self.use_bottleneck:
             self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, inputs, training=False):
@@ -413,6 +402,22 @@ class TFBottleneck(tf.keras.layers.Layer):
             self.attention = TFBottleneckLayer(config, name="attention")
 
     def call(self, hidden_states):
+        # This method can return three different tuples of values. These different values make use of bottlenecks,
+        # which are linear layers used to project the hidden states to a lower-dimensional vector, reducing memory
+        # usage. These linear layer have weights that are learned during training.
+        #
+        # If `config.use_bottleneck_attention`, it will return the result of the bottleneck layer four times for the
+        # key, query, value, and "layer input" to be used by the attention layer.
+        # This bottleneck is used to project the hidden. This last layer input will be used as a residual tensor
+        # in the attention self output, after the attention scores have been computed.
+        #
+        # If not `config.use_bottleneck_attention` and `config.key_query_shared_bottleneck`, this will return
+        # four values, three of which have been passed through a bottleneck: the query and key, passed through the same
+        # bottleneck, and the residual layer to be applied in the attention self output, through another bottleneck.
+        #
+        # Finally, in the last case, the values for the query, key and values are the hidden states without bottleneck,
+        # and the residual layer will be this value passed through a bottleneck.
+
         bottlenecked_hidden_states = self.bottleneck_input(hidden_states)
         if self.use_bottleneck_attention:
             return (bottlenecked_hidden_states,) * 4
@@ -461,7 +466,7 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
 
         if self.use_bottleneck:
             self.bottleneck = TFBottleneck(config, name="bottleneck")
-        if config.num_feedforward_networks != 1:
+        if config.num_feedforward_networks > 1:
             self.ffn = [
                 TFFFNLayer(config, name="ffn.{}".format(i)) for i in range(config.num_feedforward_networks - 1)
             ]
@@ -500,10 +505,39 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
         return outputs
 
 
-class TFMobileBertEncoder(TFBertEncoder):
+class TFMobileBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
+        self.output_hidden_states = config.output_hidden_states
         self.layer = [TFMobileBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+
+    def call(self, inputs, training=False):
+        hidden_states, attention_mask, head_mask, output_attentions = inputs
+
+        all_hidden_states = ()
+        all_attentions = ()
+        for i, layer_module in enumerate(self.layer):
+            if self.output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = layer_module(
+                [hidden_states, attention_mask, head_mask[i], output_attentions], training=training
+            )
+            hidden_states = layer_outputs[0]
+
+            if cast_bool_to_primitive(output_attentions) is True:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        # Add last layer
+        if self.output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        outputs = (hidden_states,)
+        if self.output_hidden_states:
+            outputs = outputs + (all_hidden_states,)
+        if cast_bool_to_primitive(output_attentions) is True:
+            outputs = outputs + (all_attentions,)
+        return outputs  # outputs, (hidden states), (attentions)
 
 
 class TFMobileBertPooler(tf.keras.layers.Layer):
@@ -529,10 +563,23 @@ class TFMobileBertPooler(tf.keras.layers.Layer):
             return pooled_output
 
 
-class TFMobileBertPredictionHeadTransform(TFBertPredictionHeadTransform):
+class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
         self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm")
+
+    def call(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
 
 
 class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
