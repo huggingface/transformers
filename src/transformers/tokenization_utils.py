@@ -409,6 +409,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -461,6 +462,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
@@ -487,6 +489,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -541,6 +544,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -561,6 +565,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -587,6 +592,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=False,  # we pad in batch afterward
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
@@ -623,6 +629,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         prepend_batch_axis: bool = False,
         return_token_type_ids: Optional[bool] = None,
@@ -654,8 +661,35 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         encoded_inputs = {}
 
-        # Truncation: Handle max sequence length
+        # Compute the total size of the returned encodings
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+
+        # Manage padding as multiple of provided integer
+        if pad_to_multiple_of is not None:
+            target_length = ((total_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
+
+            # Warn the user about new max_length value
+            if max_length is not None:
+                logger.info(
+                    "Overriding max_length {} to {} parameter to satisfy constraint pad_to_multiple_of {}",
+                    max_length,
+                    target_length,
+                    pad_to_multiple_of,
+                )
+
+            # Warn the user about new padding_strategy
+            if padding_strategy is not PaddingStrategy.MAX_LENGTH:
+                logger.info(
+                    "Overriding padding_strategy from {} to {} as required by pad_to_multiple_of={}",
+                    padding_strategy,
+                    PaddingStrategy.MAX_LENGTH,
+                    pad_to_multiple_of,
+                )
+            # max_length becomes multiple of provided integer
+            max_length = target_length
+            padding_strategy = PaddingStrategy.MAX_LENGTH
+
+        # Truncation: Handle max sequence length
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
