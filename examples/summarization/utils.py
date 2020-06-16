@@ -3,8 +3,6 @@ import os
 import torch
 from torch.utils.data import Dataset
 
-from transformers.tokenization_utils import trim_batch
-
 
 def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt"):
     examples = []
@@ -15,6 +13,17 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
             )
             examples.append(tokenized)
     return examples
+
+
+def trim_batch(
+    input_ids, pad_token_id, attention_mask=None,
+):
+    """Remove columns that are populated exclusively by pad_token_id"""
+    keep_column_mask = input_ids.ne(pad_token_id).any(dim=0)
+    if attention_mask is None:
+        return input_ids[:, keep_column_mask]
+    else:
+        return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
 
 
 class SummarizationDataset(Dataset):

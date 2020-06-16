@@ -65,7 +65,7 @@ class NERTransformer(BaseTransformer):
                     cls_token=self.tokenizer.cls_token,
                     cls_token_segment_id=2 if self.config.model_type in ["xlnet"] else 0,
                     sep_token=self.tokenizer.sep_token,
-                    sep_token_extra=bool(self.config.model_type in ["roberta"]),
+                    sep_token_extra=False,
                     pad_on_left=bool(self.config.model_type in ["xlnet"]),
                     pad_token=self.tokenizer.pad_token_id,
                     pad_token_segment_id=self.tokenizer.pad_token_type_id,
