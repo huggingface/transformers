@@ -340,7 +340,7 @@ class TFTrainer:
         for epoch_iter in range(epochs_trained, int(epochs + 1)):
             for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
                 self.global_step = iterations.numpy()
-                self.epoch_logging = epoch_iter - 1 + (step + 1) / self.train_steps
+                self.epoch_logging = epoch_iter - 1 + (step + 1) / math.ceil(self.num_train_examples / self.args.train_batch_size)
 
                 if self.args.debug:
                     logs = {}
