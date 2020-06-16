@@ -435,7 +435,7 @@ class LongformerSelfAttention(nn.Module):
 
 LONGFORMER_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
@@ -467,7 +467,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also have
-            global attention. Please refer to the Longformer paper https://arxiv.org/abs/2004.05150 for more details.
+            global attention. Please refer to the `Longformer paper <https://arxiv.org/abs/2004.05150>`__ for more details.
             Mask values selected in ``[0, 1]``:
             ``0`` for local attention (a sliding window attention),
             ``1`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -500,7 +500,7 @@ class LongformerModel(RobertaModel):
     """
     This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
     long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
-    <https://arxiv.org/abs/2004.05150>`_ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
+    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
     combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
     memory and compute.
 
