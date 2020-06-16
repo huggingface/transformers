@@ -31,6 +31,8 @@ def load_models():
     if MODEL_TYPE == "bart":
         s2s_tokenizer = AutoTokenizer.from_pretrained("yjernite/bart_eli5")
         s2s_model = AutoModelForSeq2SeqLM.from_pretrained("yjernite/bart_eli5").to("cuda:0")
+        save_dict = torch.load("seq2seq_models/eli5_bart_model_blm_2.pth")
+        s2s_model.load_state_dict(save_dict["model"])
         _ = s2s_model.eval()
     else:
         s2s_tokenizer, s2s_model = make_qa_s2s_model(
@@ -104,23 +106,24 @@ def make_support(question, source="wiki40b", method="dense", n_results=10):
 
 @st.cache(hash_funcs={torch.Tensor: (lambda _: None), transformers.tokenization_bart.BartTokenizer: (lambda _: None)})
 def answer_question(
-    question_doc, s2s_model, s2s_tokenizer, min_len=64, max_len=256, sampling=False, n_beams=4, top_p=0.95, temp=0.8
+    question_doc, s2s_model, s2s_tokenizer, min_len=64, max_len=256, sampling=False, n_beams=2, top_p=0.95, temp=0.8
 ):
-    answer = qa_s2s_generate(
-        question_doc,
-        s2s_model,
-        s2s_tokenizer,
-        num_answers=1,
-        num_beams=n_beams,
-        min_len=min_len,
-        max_len=max_len,
-        do_sample=sampling,
-        temp=temp,
-        top_p=top_p,
-        top_k=None,
-        max_input_length=512,
-        device="cuda:0",
-    )[0]
+    with torch.no_grad():
+        answer = qa_s2s_generate(
+            question_doc,
+            s2s_model,
+            s2s_tokenizer,
+            num_answers=1,
+            num_beams=n_beams,
+            min_len=min_len,
+            max_len=max_len,
+            do_sample=sampling,
+            temp=temp,
+            top_p=top_p,
+            top_k=None,
+            max_input_length=1024,
+            device="cuda:0",
+        )[0]
     return (answer, support_list)
 
 
@@ -195,7 +198,7 @@ else:
     index_type = "dense"
 
 sampled = "beam"
-n_beams = 8
+n_beams = 2
 min_len = 64
 max_len = 256
 top_p = None
