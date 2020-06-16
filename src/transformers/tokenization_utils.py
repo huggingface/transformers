@@ -668,7 +668,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if pad_to_multiple_of is not None:
             if self.pad_token is None:
                 logger.warning(
-                    "No padding token set, pad_to_multiple_of={} will not be used".format(pad_to_multiple_of)
+                    "No padding token set, pad_to_multiple_of=%d will not be used",
+                    pad_to_multiple_of
                 )
 
             target_length = ((total_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
@@ -676,7 +677,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             # Warn the user about new max_length value
             if max_length is not None:
                 logger.info(
-                    "Overriding max_length {} to {} parameter to satisfy constraint pad_to_multiple_of {}",
+                    "Overriding max_length %s to %s parameter to satisfy constraint pad_to_multiple_of %d",
                     max_length,
                     target_length,
                     pad_to_multiple_of,
@@ -685,7 +686,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             # Warn the user about new padding_strategy
             if padding_strategy is not PaddingStrategy.MAX_LENGTH:
                 logger.info(
-                    "Overriding padding_strategy from {} to {} as required by pad_to_multiple_of={}",
+                    "Overriding padding_strategy from %s to %s as required by pad_to_multiple_of=%d",
                     padding_strategy.name,
                     PaddingStrategy.MAX_LENGTH.name,
                     pad_to_multiple_of,
