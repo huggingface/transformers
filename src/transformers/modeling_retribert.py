@@ -146,6 +146,35 @@ class RetriBertModel(RetriBertPreTrainedModel):
     def forward(
         self, input_ids_query, attention_mask_query, input_ids_doc, attention_mask_doc, checkpoint_batch_size=-1
     ):
+        r"""
+    Args:
+        input_ids_query (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary for the queries in a batch.
+
+            Indices can be obtained using :class:`transformers.RetriBertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask_query (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on queries padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        input_ids_doc (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary for the documents in a batch.
+        attention_mask_doc (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on documents padding token indices.
+
+        checkpoint_batch_size (:obj:`int`, `optional`, defaults to `:obj:`-1`):
+            If greater than 0, uses gradient checkpointing to only compute sequence representation on checkpoint_batch_size examples at a time
+            on the GPU. All query representations are still compared to all document representations in the batch.
+
+    Return:
+        :obj:`torch.FloatTensor` the bi-directional cross-entropy loss obtained while trying to match each query to its corresponding document
+        and each cocument to its corresponding query in the batch
+        """
         device = input_ids_query.device
         q_reps = self.embed_questions(input_ids_query, attention_mask_query, checkpoint_batch_size)
         a_reps = self.embed_answers(input_ids_doc, attention_mask_doc, checkpoint_batch_size)

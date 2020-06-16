@@ -1,11 +1,11 @@
-import numpy as np
-import torch
-
 import faiss
 import nlp
+import numpy as np
 import streamlit as st
-import transformers
+import torch
 from elasticsearch import Elasticsearch
+
+import transformers
 from eli5_utils import (
     embed_questions_for_retrieval,
     make_qa_s2s_model,
