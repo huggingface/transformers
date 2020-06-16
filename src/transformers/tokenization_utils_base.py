@@ -1076,12 +1076,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         for args_name, file_path in resolved_vocab_files.items():
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
-        if special_tokens_map_file is not None:
-            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = json.load(special_tokens_map_handle)
-            for key, value in special_tokens_map.items():
-                if key not in init_kwargs:
-                    init_kwargs[key] = value
 
         # Instantiate tokenizer.
         try:
@@ -1096,18 +1090,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         tokenizer.init_inputs = init_inputs
         tokenizer.init_kwargs = init_kwargs
 
-        # update unique_added_tokens_encoder with special tokens for correct tokenization
-        if hasattr(tokenizer, "unique_added_tokens_encoder"):
-            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.all_special_tokens))
-
         # Add supplementary tokens.
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
-            added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
-            tokenizer.added_tokens_encoder.update(added_tok_encoder)
-            tokenizer.added_tokens_decoder.update(added_tok_decoder)
-            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.added_tokens_encoder.keys()))
+            for i, (token, tok_index) in enumerate(sorted(added_tok_encoder.items())):
+                assert i == len(tokenizer), f"Unable to reload special tokens in tokenizer. List in not continuous, check file {added_tokens_file}."
+                tokenizer.add_tokens(added_tok_encoder[tok_index])
+
+        # Map special tokens
+        if special_tokens_map_file is not None:
+            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
+                special_tokens_map = json.load(special_tokens_map_handle)
+            tokenizer.add_special_tokens(special_tokens_map)
 
         return tokenizer
 
