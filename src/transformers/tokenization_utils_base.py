@@ -1094,10 +1094,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
-            initial_length = len(tokenizer)
-            for i, (token, tok_index) in enumerate(sorted(added_tok_encoder.items())):
-                assert i + initial_length == len(tokenizer), f"Unable to reload special tokens in tokenizer. List in not continuous, check file {added_tokens_file}."
-                tokenizer.add_tokens(added_tok_encoder[tok_index])
+            for token, tok_index in sorted(added_tok_encoder.items(), key=lambda x: x[1]):
+                assert tok_index == len(tokenizer), f"Unable to reload special tokens in tokenizer. List in not continuous, check file {added_tokens_file}."
+                tokenizer.add_tokens(token)
 
         # Map special tokens
         if special_tokens_map_file is not None:
