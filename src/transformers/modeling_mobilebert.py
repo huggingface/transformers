@@ -30,13 +30,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.modeling_bert import (
-    BertEncoder,
-    BertIntermediate,
-    BertOnlyMLMHead,
-    BertPredictionHeadTransform,
-    BertPreTrainingHeads,
-)
+from transformers.modeling_bert import BertIntermediate
 
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig
@@ -582,7 +576,7 @@ class MobileBertPooler(nn.Module):
             return pooled_output
 
 
-class MobileBertPredictionHeadTransform(BertPredictionHeadTransform):
+class MobileBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)

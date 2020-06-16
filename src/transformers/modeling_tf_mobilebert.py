@@ -22,7 +22,7 @@ import tensorflow as tf
 
 from . import MobileBertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_bert import TFBertEncoder, TFBertIntermediate, TFBertPredictionHeadTransform, gelu, gelu_new, swish
+from .modeling_tf_bert import TFBertIntermediate, gelu, gelu_new, swish
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
