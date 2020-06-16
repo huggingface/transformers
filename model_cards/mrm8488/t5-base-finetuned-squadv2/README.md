@@ -1,6 +1,7 @@
 ---
 language: english
-thumbnail:
+datasets:
+- squad_v2
 ---
 
 # T5-base fine-tuned on SQuAD v2
