@@ -1,6 +1,7 @@
 ---
 language: english
-thumbnail:
+datasets:
+- squad_v2
 ---
 
 # Longformer-base-4096 fine-tuned on SQuAD v2
