@@ -10,25 +10,12 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available
 from .training_args_tf import TFTrainingArguments
 
 
-try:
+if is_wandb_available():
     import wandb
-
-    wandb.ensure_configured()
-    if wandb.api.api_key is None:
-        _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
-    else:
-        _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except (ImportError, AttributeError):
-    _has_wandb = False
-
-
-def is_wandb_available():
-    return _has_wandb
 
 
 logger = logging.getLogger(__name__)
