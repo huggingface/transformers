@@ -890,10 +890,10 @@ class TokenizerTesterMixin:
                 empty_tokens = tokenizer("", pad_to_multiple_of=8)
                 normal_tokens = tokenizer("This is a sample input", pad_to_multiple_of=8)
 
-                for key, value in empty_tokens:
+                for key, value in empty_tokens.items():
                     self.assertEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
 
-                for key, value in normal_tokens:
+                for key, value in normal_tokens.items():
                     self.assertEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
 
     def test_encode_plus_with_padding(self):
