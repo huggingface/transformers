@@ -14,7 +14,7 @@ from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Conf
 
 
 try:
-    from .finetune import SummarizationTrainer
+    from .finetune import SummarizationModule
     from .initialization_utils import init_student, copy_layers
     from .utils import (
         use_task_specific_params,
@@ -26,7 +26,7 @@ try:
     )
     from .finetune import main as ft_main
 except ImportError:
-    from finetune import SummarizationTrainer
+    from finetune import SummarizationModule
     from finetune import main as ft_main
     from initialization_utils import init_student, copy_layers
     from utils import (
@@ -39,7 +39,7 @@ except ImportError:
     )
 
 
-class SummarizationDistiller(SummarizationTrainer):
+class SummarizationDistiller(SummarizationModule):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
     def __init__(self, hparams):
@@ -173,7 +173,7 @@ class SummarizationDistiller(SummarizationTrainer):
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
-        SummarizationTrainer.add_model_specific_args(parser, root_dir)
+        SummarizationModule.add_model_specific_args(parser, root_dir)
         parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
@@ -379,7 +379,7 @@ def create_module(args):
     t5 = "t5" in args.model_name_or_path
     if args.no_teacher:
         assert not args.enc_only
-        module_cls = SummarizationTrainer
+        module_cls = SummarizationModule
     elif t5:
         module_cls = T5SummarizationDistiller
     elif args.enc_only:

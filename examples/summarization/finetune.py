@@ -47,7 +47,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class SummarizationTrainer(BaseTransformer):
+class SummarizationModule(BaseTransformer):
     mode = "summarization"
     loss_names = ["loss"]
 
@@ -293,7 +293,7 @@ def main(args, model=None):
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
-        model: BaseTransformer = SummarizationTrainer(args)
+        model: BaseTransformer = SummarizationModule(args)
     if (
         args.logger == "default"
         or args.fast_dev_run
@@ -332,7 +332,7 @@ def main(args, model=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser = SummarizationTrainer.add_model_specific_args(parser, os.getcwd())
+    parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     main(args)
