@@ -379,7 +379,7 @@ class TFTrainer:
                     ckpt_save_path = self.model.ckpt_manager.save()
                     logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
 
-                if self.global_step % self.max_steps == 0:
+                if self.global_step % self.args.max_steps == 0:
                     break
 
     def _training_steps(self, ds, optimizer):
