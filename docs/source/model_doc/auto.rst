@@ -30,35 +30,35 @@ Instantiating one of ``AutoModel``, ``AutoConfig`` and ``AutoTokenizer`` will di
 
 
 ``AutoModelForPreTraining``
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoModelForPreTraining
     :members:
 
 
 ``AutoModelWithLMHead``
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoModelWithLMHead
     :members:
 
 
 ``AutoModelForSequenceClassification``
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoModelForSequenceClassification
     :members:
 
 
 ``AutoModelForQuestionAnswering``
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoModelForQuestionAnswering
     :members:
 
 
 ``AutoModelForTokenClassification``
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AutoModelForTokenClassification
     :members:

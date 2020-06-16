@@ -100,6 +100,7 @@ class AutoTokenizer:
         The `from_pretrained()` method takes care of returning the correct tokenizer class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: T5Tokenizer (T5 model)
             - `distilbert`: DistilBertTokenizer (DistilBert model)
             - `albert`: AlbertTokenizer (ALBERT model)
@@ -133,6 +134,7 @@ class AutoTokenizer:
         The tokenizer class to instantiate is selected
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: T5Tokenizer (T5 model)
             - `distilbert`: DistilBertTokenizer (DistilBert model)
             - `albert`: AlbertTokenizer (ALBERT model)

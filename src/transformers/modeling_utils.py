@@ -530,6 +530,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             config: (`optional`) one of:
                 - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
                 - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
+
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
                     - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
                     - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.

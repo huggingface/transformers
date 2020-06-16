@@ -131,6 +131,7 @@ class AutoConfig:
         The configuration class to instantiate is selected
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5Config` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertConfig` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertConfig` (ALBERT model)

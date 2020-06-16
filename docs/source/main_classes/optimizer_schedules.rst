@@ -17,7 +17,6 @@ The ``.optimization`` module provides:
 ~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AdamWeightDecay
-    :members:
 
 .. autofunction:: transformers.create_optimizer
 
