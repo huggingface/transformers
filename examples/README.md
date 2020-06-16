@@ -27,7 +27,7 @@ This is still a work-in-progress – in particular documentation is still sparse
 | [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/summarization)     | CNN/Daily Mail    | -  | -  | -  | -
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/translation)         | WMT               | -  | -  | -  | -
 | [**`bertology`**](https://github.com/huggingface/transformers/tree/master/examples/bertology)             | -                 | -  | -  | -  | -
-| [**`adversarial`**](https://github.com/huggingface/transformers/tree/master/examples/adversarial)         | HANS              | -  | -  | -  | -
+| [**`adversarial`**](https://github.com/huggingface/transformers/tree/master/examples/adversarial)         | HANS              | ✅ | -  | -  | -
 
 
 <br>

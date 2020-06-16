@@ -23,7 +23,9 @@ from functools import lru_cache
 import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import BatchEncoding
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -346,3 +348,24 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             **kwargs,
         )
+        self.add_prefix_space = add_prefix_space
+
+    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+
+        is_pretokenized = kwargs.get("is_pretokenized", False)
+        assert self.add_prefix_space or not is_pretokenized, (
+            "You need to instantiate GPT2TokenizerFast with add_prefix_space=False "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._batch_encode_plus(*args, **kwargs)
+
+    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+
+        is_pretokenized = kwargs.get("is_pretokenized", False)
+        assert self.add_prefix_space or not is_pretokenized, (
+            "You need to instantiate GPT2TokenizerFast with add_prefix_space=False "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._encode_plus(*args, **kwargs)

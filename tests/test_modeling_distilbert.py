@@ -28,30 +28,11 @@ if is_torch_available():
         DistilBertConfig,
         DistilBertModel,
         DistilBertForMaskedLM,
+        DistilBertForMultipleChoice,
         DistilBertForTokenClassification,
         DistilBertForQuestionAnswering,
         DistilBertForSequenceClassification,
     )
-
-
-@require_torch
-class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
-
-    all_model_classes = (
-        (
-            DistilBertModel,
-            DistilBertForMaskedLM,
-            DistilBertForQuestionAnswering,
-            DistilBertForSequenceClassification,
-            DistilBertForTokenClassification,
-        )
-        if is_torch_available()
-        else None
-    )
-    test_pruning = True
-    test_torchscript = True
-    test_resize_embeddings = True
-    test_head_masking = True
 
     class DistilBertModelTester(object):
         def __init__(
@@ -218,14 +199,54 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
+        def create_and_check_distilbert_for_multiple_choice(
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = DistilBertForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            loss, logits = model(
+                multiple_choice_inputs_ids, attention_mask=multiple_choice_input_mask, labels=choice_labels,
+            )
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask, sequence_labels, token_labels, choice_labels) = config_and_inputs
             inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
             return config, inputs_dict
 
+
+@require_torch
+class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
+
+    all_model_classes = (
+        (
+            DistilBertModel,
+            DistilBertForMaskedLM,
+            DistilBertForMultipleChoice,
+            DistilBertForQuestionAnswering,
+            DistilBertForSequenceClassification,
+            DistilBertForTokenClassification,
+        )
+        if is_torch_available()
+        else None
+    )
+    test_pruning = True
+    test_torchscript = True
+    test_resize_embeddings = True
+    test_head_masking = True
+
     def setUp(self):
-        self.model_tester = DistilBertModelTest.DistilBertModelTester(self)
+        self.model_tester = DistilBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DistilBertConfig, dim=37)
 
     def test_config(self):
@@ -250,6 +271,10 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_distilbert_for_multiple_choice(*config_and_inputs)
 
     # @slow
     # def test_model_from_pretrained(self):
