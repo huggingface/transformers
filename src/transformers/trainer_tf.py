@@ -287,7 +287,9 @@ class TFTrainer:
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
         else:
-            t_total = math.ceil(self.num_train_examples / self.args.gradient_accumulation_steps * self.args.num_train_epochs)
+            t_total = math.ceil(
+                self.num_train_examples / self.args.gradient_accumulation_steps * self.args.num_train_epochs
+            )
 
         with self.args.strategy.scope():
             optimizer, lr_scheduler = self.get_optimizers(num_training_steps=t_total)
@@ -333,14 +335,18 @@ class TFTrainer:
         logger.info("  Num examples = %d", self.num_train_examples)
         logger.info("  Num Epochs = %d", epochs)
         logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
-        logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", self.args.train_batch_size)
+        logger.info(
+            "  Total train batch size (w. parallel, distributed & accumulation) = %d", self.args.train_batch_size
+        )
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
 
         for epoch_iter in range(epochs_trained, int(epochs + 1)):
             for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
                 self.global_step = iterations.numpy()
-                self.epoch_logging = epoch_iter - 1 + (step + 1) / math.ceil(self.num_train_examples / self.args.train_batch_size)
+                self.epoch_logging = (
+                    epoch_iter - 1 + (step + 1) / math.ceil(self.num_train_examples / self.args.train_batch_size)
+                )
 
                 if self.args.debug:
                     logs = {}
@@ -357,7 +363,11 @@ class TFTrainer:
                 if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                     self.evaluate()
 
-                if self.global_step % self.args.logging_steps == 0 or self.global_step == 1 and self.args.logging_first_step:
+                if (
+                    self.global_step % self.args.logging_steps == 0
+                    or self.global_step == 1
+                    and self.args.logging_first_step
+                ):
                     logs = {}
                     logs["loss"] = training_loss.numpy()
                     logs["learning_rate"] = lr_scheduler(self.global_step).numpy()
@@ -369,7 +379,7 @@ class TFTrainer:
                     ckpt_save_path = self.model.ckpt_manager.save()
                     logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
 
-                if self.global_step % self.train_steps == 0:
+                if self.global_step % self.max_steps == 0:
                     break
 
     def _training_steps(self, ds, optimizer):
