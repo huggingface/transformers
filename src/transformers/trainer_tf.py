@@ -357,11 +357,12 @@ class TFTrainer:
                 if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                     self.evaluate()
 
-                if self.global_step % self.args.logging_steps == 0:
+                if self.global_step % self.args.logging_steps == 0 or self.global_step == 1 and self.args.logging_first_step:
                     logs = {}
                     logs["loss"] = training_loss.numpy()
                     logs["learning_rate"] = lr_scheduler(self.global_step).numpy()
                     logs["epoch"] = self.epoch_logging
+
                     self._log(logs)
 
                 if self.global_step % self.args.save_steps == 0:
