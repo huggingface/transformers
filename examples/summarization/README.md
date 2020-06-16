@@ -44,9 +44,14 @@ export me=`git config user.name`
 ```
 
 Tips:
-- 1 epoch at batch size 1 for bart-large takes 24 hours, requires 13GB GPU RAM with fp16.
-- try --freeze_encoder or --freeze_embeds for faster training/larger batch size.  (3hr/epoch with bs=8, see below)
-- fp16 opt level O1 is best
+- 1 epoch at batch size 1 for bart-large takes 24 hours, requires 13GB GPU RAM with fp16. 
+- try `bart-base`, `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr/epoch with bs=8, see below)
+- `fp16_opt_level=O1` (the default works best).
+- If you are finetuning on your own dataset, start from `bart-large-cnn` if you want long summaries and `bart-large-xsum` if you want short summaries.
+(It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
+- In addition to the pytorch-lightning .ckpt checkpoint, a transformers checkpoint will be saved.
+Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_tfmr)`.
+- At the moment, `--do_predict` does not work in a multi-gpu setting. You need to use `evaluate_checkpoint` or the `run_eval.py` code.   
 
 ### Shared Task
 Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
