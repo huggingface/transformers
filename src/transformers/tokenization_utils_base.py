@@ -155,6 +155,14 @@ class BatchEncoding(UserDict):
 
         self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
 
+    @property
+    def is_fast(self):
+        """
+        Indicate if this BatchEncoding was generated from the result of a PreTrainedTokenizerFast
+        Returns: True if generated from subclasses of PreTrainedTokenizerFast, else otherwise
+        """
+        return self._encodings is not None
+
     def __getitem__(self, item: Union[int, str]) -> EncodingFast:
         """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
             If the key is an integer, get the EncodingFast for batch item with index `key`
@@ -174,6 +182,16 @@ class BatchEncoding(UserDict):
             return self.data[item]
         except KeyError:
             raise AttributeError
+
+    def __getstate__(self):
+        return {"data": self.data, "encodings": self._encodings}
+
+    def __setstate__(self, state):
+        if "data" in state:
+            self.data = state["data"]
+
+        if "encodings" in state:
+            self._encodings = state["encodings"]
 
     def keys(self):
         return self.data.keys()
@@ -197,7 +215,7 @@ class BatchEncoding(UserDict):
         """
         return self._encodings
 
-    def tokens(self, batch_index: int = 0) -> List[int]:
+    def tokens(self, batch_index: int = 0) -> List[str]:
         if not self._encodings:
             raise ValueError("tokens() is not available when using Python based tokenizers")
         return self._encodings[batch_index].tokens
