@@ -34,27 +34,6 @@ if is_torch_available():
         DistilBertForSequenceClassification,
     )
 
-
-@require_torch
-class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
-
-    all_model_classes = (
-        (
-            DistilBertModel,
-            DistilBertForMaskedLM,
-            DistilBertForMultipleChoice,
-            DistilBertForQuestionAnswering,
-            DistilBertForSequenceClassification,
-            DistilBertForTokenClassification,
-        )
-        if is_torch_available()
-        else None
-    )
-    test_pruning = True
-    test_torchscript = True
-    test_resize_embeddings = True
-    test_head_masking = True
-
     class DistilBertModelTester(object):
         def __init__(
             self,
@@ -245,8 +224,29 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
             return config, inputs_dict
 
+
+@require_torch
+class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
+
+    all_model_classes = (
+        (
+            DistilBertModel,
+            DistilBertForMaskedLM,
+            DistilBertForMultipleChoice,
+            DistilBertForQuestionAnswering,
+            DistilBertForSequenceClassification,
+            DistilBertForTokenClassification,
+        )
+        if is_torch_available()
+        else None
+    )
+    test_pruning = True
+    test_torchscript = True
+    test_resize_embeddings = True
+    test_head_masking = True
+
     def setUp(self):
-        self.model_tester = DistilBertModelTest.DistilBertModelTester(self)
+        self.model_tester = DistilBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DistilBertConfig, dim=37)
 
     def test_config(self):
