@@ -37,8 +37,8 @@ class TFTrainer:
         self,
         model: TFPreTrainedModel,
         args: TFTrainingArguments,
-        train_dataset: Optional[tf.data.Dataset] = None,
-        eval_dataset: Optional[tf.data.Dataset] = None,
+        train_sized_dataset: Optional[Tuple[tf.data.Dataset, int]] = None,
+        eval_sized_dataset: Optional[Tuple[tf.data.Dataset, int]] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
         tb_writer: Optional[tf.summary.SummaryWriter] = None,
@@ -46,8 +46,10 @@ class TFTrainer:
     ):
         self.model = model
         self.args = args
-        self.train_dataset = train_dataset
-        self.eval_dataset = eval_dataset
+        self.train_dataset = train_sized_dataset[0]
+        self.num_train_examples = train_sized_dataset[1]
+        self.eval_dataset = eval_sized_dataset[0]
+        self.num_eval_examples = eval_sized_dataset[1]
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
         self.optimizers = optimizers
@@ -70,11 +72,12 @@ class TFTrainer:
     def get_train_tfdataset(self) -> tf.data.Dataset:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
-
+        """
         # self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
         self.num_train_examples = 0
         for ex in self.train_dataset:
             self.num_train_examples += 1
+        """
 
         if self.args.max_steps > 0:
             self.train_steps = self.args.max_steps
