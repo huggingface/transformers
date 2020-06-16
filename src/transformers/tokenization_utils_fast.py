@@ -211,14 +211,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def add_tokens(self, new_tokens: List[Union[str, AddedTokenFast]]) -> int:
         if isinstance(new_tokens, (str, AddedTokenFast)):
             new_tokens = [new_tokens]
-        # TODO This should be done in tokenizers to be really clean.
-        # Removing for now
-        # tokens = []
-        # for token in new_tokens:
-        #     if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
-        #         token = token.lower()
-        #     if token not in tokens:
-        #         tokens.append(token)
+
+        # Until we have a simpler serialization for Fast tokenizers
+        # We keep the added_tokens_encoder for easy serialization/reloading
+        # To remove later when Fast tokenizers serialization is ok
+        super().add_tokens(new_tokens)
         return self._tokenizer.add_tokens(new_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:

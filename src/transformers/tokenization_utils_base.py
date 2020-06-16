@@ -555,15 +555,18 @@ class SpecialTokensMixin:
         self._additional_special_tokens = []
         self.verbose = verbose
 
+        # We directly set the hidden value to allow initialization with special tokens
+        # which are not yet in the vocabulary. Necesssary for serialization/de-serialization
+        # TODO clean this up at some point (probably by sitching to fast tokenizers)
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
-                    setattr(self, key, value)
+                    setattr(self, '_' + key, value)
                 elif isinstance(value, AddedTokenFast):
-                    setattr(self, key, str(value))
+                    setattr(self, '_' + key, str(value))
                 elif isinstance(value, str):
-                    setattr(self, key, value)
+                    setattr(self, '_' + key, value)
                 else:
                     raise TypeError(
                         "special token {} has to be either str or AddedTokenFast but got: {}".format(key, type(value))
@@ -624,7 +627,7 @@ class SpecialTokensMixin:
 
         return added_tokens
 
-    def add_tokens(self, value: Union[str, List[str]]) -> int:
+    def add_tokens(self, new_tokens: Union[str, List[str]]) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -647,7 +650,33 @@ class SpecialTokensMixin:
             print('We have added', num_added_toks, 'tokens')
             model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         """
-        raise NotImplementedError()  # Implemented in derived classes
+        if not new_tokens:
+            return 0
+
+        if not isinstance(new_tokens, list):
+            new_tokens = [new_tokens]
+
+        tokens_to_add = []
+        for token in new_tokens:
+            assert isinstance(token, str)
+            if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
+                token = token.lower()
+            if (
+                token != self.unk_token
+                and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
+                and token not in tokens_to_add
+            ):
+                tokens_to_add.append(token)
+                if self.verbose:
+                    logger.info("Adding %s to the vocabulary", token)
+
+        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
+        added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
+        self.added_tokens_encoder.update(added_tok_encoder)
+        self.unique_added_tokens_encoder = set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
+        self.added_tokens_decoder.update(added_tok_decoder)
+
+        return len(tokens_to_add)
 
     def _maybe_update_backend(self, value):
         """ To be overriden by derived class if a backend tokenizer has to be updated. """
@@ -712,41 +741,49 @@ class SpecialTokensMixin:
     @bos_token.setter
     def bos_token(self, value):
         self._bos_token = value
+        self.add_tokens([value])
         self._maybe_update_backend([value])
 
     @eos_token.setter
     def eos_token(self, value):
         self._eos_token = value
+        self.add_tokens([value])
         self._maybe_update_backend([value])
 
     @unk_token.setter
     def unk_token(self, value):
         self._unk_token = value
+        self.add_tokens([value])
         self._maybe_update_backend([value])
 
     @sep_token.setter
     def sep_token(self, value):
         self._sep_token = value
+        self.add_tokens([value])
         self._maybe_update_backend([value])
 
     @pad_token.setter
     def pad_token(self, value):
         self._pad_token = value
+        self.add_tokens([value])
         self._maybe_update_backend([value])
 
     @cls_token.setter
     def cls_token(self, value):
         self._cls_token = value
+        self.add_tokens([value])
         self._maybe_update_backend([value])
 
     @mask_token.setter
     def mask_token(self, value):
         self._mask_token = value
+        self.add_tokens([value])
         self._maybe_update_backend([value])
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
+        self.add_tokens(value)
         self._maybe_update_backend(value)
 
     @property
@@ -919,11 +956,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     padding_side: str = "right"
 
-    def __init__(self, model_max_length=None, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, **kwargs):
+        # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
+        self.init_inputs = ()
+        self.init_kwargs = kwargs
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
-        model_max_length = model_max_length if model_max_length is not None else kwargs.pop("max_len", None)
+        model_max_length = kwargs.pop('model_max_length', kwargs.pop("max_len", None))
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
         # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
@@ -934,9 +973,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
-        # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
-        self.init_inputs = ()
-        self.init_kwargs = {}
+        # Added tokens - We store this for both slow and fast tokenizers
+        # until the serialization of Fast tokenizers is updated
+        self.added_tokens_encoder = {}
+        self.unique_added_tokens_encoder = set()
+        self.added_tokens_decoder = {}
+
+        super().__init__(**kwargs)
 
     @property
     def max_len(self) -> int:
@@ -1175,12 +1218,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         for args_name, file_path in resolved_vocab_files.items():
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
-        if special_tokens_map_file is not None:
-            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = json.load(special_tokens_map_handle)
-            for key, value in special_tokens_map.items():
-                if key not in init_kwargs:
-                    init_kwargs[key] = value
 
         # Instantiate tokenizer.
         try:
@@ -1193,20 +1230,25 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Save inputs and kwargs for saving and re-loading with ``save_pretrained``
         tokenizer.init_inputs = init_inputs
-        tokenizer.init_kwargs = init_kwargs
-
-        # update unique_added_tokens_encoder with special tokens for correct tokenization
-        if hasattr(tokenizer, "unique_added_tokens_encoder"):
-            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.all_special_tokens))
+        tokenizer.init_kwargs.update(init_kwargs)
 
         # Add supplementary tokens.
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
-            added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
-            tokenizer.added_tokens_encoder.update(added_tok_encoder)
-            tokenizer.added_tokens_decoder.update(added_tok_decoder)
-            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.added_tokens_encoder.keys()))
+            for token, token_index in added_tok_encoder.items():
+                assert token_index == len(tokenizer), f"Added token file {added_tokens_file} contains a not-contiguous rang of tokens."
+                tokenizer.add_tokens(token)
+
+        # Map special tokens.
+        if special_tokens_map_file is not None:
+            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
+                special_tokens_map = json.load(special_tokens_map_handle)
+            for attr, value in special_tokens_map.items():
+                # Set the hidden value to allow initialization with special tokens
+                # which are not yet in the vocabulary. Necesssary for serialization/de-serialization
+                # TODO clean this up at some point (probably by sitching to fast tokenizers)
+                setattr(tokenizer, '_' + attr, value)
 
         return tokenizer
 

@@ -20,10 +20,10 @@ import re
 import shutil
 import tempfile
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Dict, Tuple, Union, List
+from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
 from tests.utils import require_tf, require_torch
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast, PreTrainedTokenizerBase
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 
 
 if TYPE_CHECKING:
@@ -162,30 +162,55 @@ class TokenizerTesterMixin:
                 self.assertNotEqual(tokenizer.max_len, 42)
 
         # Now let's start the test
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                # Isolate this from the other tests because we save additional tokens/etc
+                tmpdirname = tempfile.mkdtemp()
+
+                sample_text = " He is very happy, UNwant\u00E9d,running"
+                before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
+                before_vocab = tokenizer.get_vocab()
+                tokenizer.save_pretrained(tmpdirname)
+
+                after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
+                after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
+                after_vocab = after_tokenizer.get_vocab()
+                self.assertListEqual(before_tokens, after_tokens)
+                self.assertDictEqual(before_vocab, after_vocab)
+
+                shutil.rmtree(tmpdirname)
+
+        # Now let's start the test
         tokenizers = self.get_tokenizers(model_max_length=42)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                sample_text = "He is very happy, UNwant\u00E9d,running"
+                # Isolate this from the other tests because we save additional tokens/etc
+                tmpdirname = tempfile.mkdtemp()
+
+                sample_text = " He is very happy, UNwant\u00E9d,running"
                 tokenizer.add_tokens(["bim", "bambam"])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
-                tokenizer.add_special_tokens({'additional_special_tokens': additional_special_tokens})
+                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
-                tokenizer.save_pretrained(self.tmpdirname)
+                tokenizer.save_pretrained(tmpdirname)
 
-                tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
-                after_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
-                after_vocab = tokenizer.get_vocab()
+                after_tokenizer = tokenizer.__class__.from_pretrained(tmpdirname)
+                after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
+                after_vocab = after_tokenizer.get_vocab()
                 self.assertListEqual(before_tokens, after_tokens)
                 self.assertDictEqual(before_vocab, after_vocab)
                 self.assertIn("bim", after_vocab)
                 self.assertIn("bambam", after_vocab)
-                self.assertIn("new_additional_special_token", tokenizer.additional_special_tokens)
-                self.assertEqual(tokenizer.model_max_length, 42)
+                self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+                self.assertEqual(after_tokenizer.model_max_length, 42)
 
-                tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, model_max_length=43)
+                tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
                 self.assertEqual(tokenizer.model_max_length, 43)
+
+                shutil.rmtree(tmpdirname)
 
     def test_pickle_tokenizer(self):
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""

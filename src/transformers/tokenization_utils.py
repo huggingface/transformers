@@ -102,10 +102,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Added tokens
-        self.added_tokens_encoder = {}
-        self.unique_added_tokens_encoder = set()
-        self.added_tokens_decoder = {}
+        # Nothing special for now.
+        # When Fast tokenizers will have a simpler serialization
+        # We will move self.added_tokens_encoder, self.unique_added_tokens_encoder and self.added_tokens_decoder here
 
     @property
     def is_fast(self) -> bool:
@@ -123,56 +122,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def __len__(self):
         """ Size of the full vocabulary with the added tokens """
         return self.vocab_size + len(self.added_tokens_encoder)
-
-    def add_tokens(self, new_tokens: Union[str, List[str]]) -> int:
-        """
-        Add a list of new tokens to the tokenizer class. If the new tokens are not in the
-        vocabulary, they are added to it with indices starting from length of the current vocabulary.
-
-        Args:
-            new_tokens: string or list of string. Each string is a token to add. Tokens are only added if they are not
-                already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
-
-        Returns:
-            Number of tokens added to the vocabulary.
-
-        Examples::
-
-            # Let's see how to increase the vocabulary of Bert model and tokenizer
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertModel.from_pretrained('bert-base-uncased')
-
-            num_added_toks = tokenizer.add_tokens(['new_tok1', 'my_new-tok2'])
-            print('We have added', num_added_toks, 'tokens')
-            model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-        """
-        if not new_tokens:
-            return 0
-
-        if not isinstance(new_tokens, list):
-            new_tokens = [new_tokens]
-
-        tokens_to_add = []
-        for token in new_tokens:
-            assert isinstance(token, str)
-            if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
-                token = token.lower()
-            if (
-                token != self.unk_token
-                and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
-                and token not in tokens_to_add
-            ):
-                tokens_to_add.append(token)
-                if self.verbose:
-                    logger.info("Adding %s to the vocabulary", token)
-
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
-        added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
-        self.added_tokens_encoder.update(added_tok_encoder)
-        self.unique_added_tokens_encoder = set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
-        self.added_tokens_decoder.update(added_tok_decoder)
-
-        return len(tokens_to_add)
 
     def num_special_tokens_to_add(self, pair=False):
         """
