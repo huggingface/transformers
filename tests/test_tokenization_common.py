@@ -883,6 +883,19 @@ class TokenizerTesterMixin:
                 assert sequence_length == padded_sequence_right_length
                 assert encoded_sequence == padded_sequence_right
 
+    def test_padding_to_multiple_of(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                empty_tokens = tokenizer("", pad_to_multiple_of=8)
+                normal_tokens = tokenizer("This is a sample input", pad_to_multiple_of=8)
+
+                for key, value in empty_tokens:
+                    self.assertEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
+
+                for key, value in normal_tokens:
+                    self.assertEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
+
     def test_encode_plus_with_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
