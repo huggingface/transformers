@@ -320,8 +320,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if pad_to_multiple_of is not None and padding_strategy != PaddingStrategy.MAX_LENGTH:
             logger.info(
                 "Overriding padding_strategy from {} to {} as required by pad_to_multiple_of={}",
-                padding_strategy,
-                PaddingStrategy.MAX_LENGTH,
+                padding_strategy.name,
+                PaddingStrategy.MAX_LENGTH.name,
                 pad_to_multiple_of
             )
 
