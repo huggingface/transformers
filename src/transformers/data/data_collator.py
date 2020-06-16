@@ -45,7 +45,7 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
             batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
         elif "label_ids" in first:
             dtype = torch.long if type(first["label_ids"][0]) is int else torch.float
-            batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+            batch["labels"] = torch.stack([torch.tensor(f["label_ids"], dtype=dtype) for f in features])
 
         # Handling of all other possible keys.
         # Again, we will use the first element to figure out which key/values are not None for this model.
@@ -62,13 +62,13 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
             batch["labels"] = torch.tensor([f.label for f in features], dtype=dtype)
         elif getattr(first, "label_ids", None) is not None:
             dtype = torch.long if type(first.label_ids[0]) is int else torch.float
-            batch["labels"] = torch.tensor([f.label_ids for f in features], dtype=dtype)
+            batch["labels"] = torch.stack([torch.tensor(f.label_ids, dtype=dtype) for f in features])
 
         # Handling of all other possible attributes.
         # Again, we will use the first element to figure out which key/values are not None for this model.
         for k, v in vars(first).items():
             if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
-                batch[k] = torch.tensor([getattr(f, k) for f in features], dtype=torch.long)
+                batch[k] = torch.stack([torch.tensor(getattr(f, k), dtype=torch.long) for f in features])
 
     return batch
 
