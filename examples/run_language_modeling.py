@@ -102,7 +102,7 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
     )
-    lazy_loading: bool = field(
+    lazy_line_by_line: bool = field(
         default=False,
         metadata={"help": "Whether data file should be loaded lazily rather than loading all into memory up-front."},
     )
