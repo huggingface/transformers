@@ -24,7 +24,6 @@ from transformers.tokenization_marian import MarianTokenizer, save_json, vocab_f
 from transformers.tokenization_utils import BatchEncoding
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import slow
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
