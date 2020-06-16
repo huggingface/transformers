@@ -320,7 +320,6 @@ if st.button("Show me!"):
         st.markdown("##### Its answers were: \n\n {}".format("\n".join(answers_st)))
 
 
-
 disclaimer = """
 ---  
 
