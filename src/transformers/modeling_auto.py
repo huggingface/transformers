@@ -274,7 +274,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
-        (MobileBertConfig, MobileBertForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
@@ -293,7 +292,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
-        (MobileBertConfig, MobileBertForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (BartConfig, BartForQuestionAnswering),
