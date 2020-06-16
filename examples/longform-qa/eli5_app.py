@@ -318,3 +318,15 @@ if st.button("Show me!"):
             if i == 0 or sc > 2
         ]
         st.markdown("##### Its answers were: \n\n {}".format("\n".join(answers_st)))
+
+
+
+disclaimer = """
+---  
+
+**Disclaimer**  
+*The intent of this app is to provide some (hopefully entertaining) insights into the behavior of a current LFQA system.
+Evaluating biases of such a model and ensuring factual generations are still very much open research problems.
+Therefore, until some significant progress is achieved, we caution against using the generated answers for practical purposes.*
+"""
+st.sidebar.markdown(disclaimer, unsafe_allow_html=True)
