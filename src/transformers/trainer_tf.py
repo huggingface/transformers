@@ -3,6 +3,7 @@
 import logging
 import math
 import os
+import random
 from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
@@ -19,6 +20,12 @@ if is_wandb_available():
 
 
 logger = logging.getLogger(__name__)
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
 
 
 class TFTrainer:
@@ -59,6 +66,7 @@ class TFTrainer:
             self.tb_writer = tb_writer
         else:
             self.tb_writer = tf.summary.create_file_writer(self.args.logging_dir)
+
         if is_wandb_available():
             self._setup_wandb()
         else:
@@ -67,6 +75,8 @@ class TFTrainer:
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
             )
 
+        set_seed(self.args.seed)
+
     def get_train_tfdataset(self) -> tf.data.Dataset:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
@@ -74,9 +84,9 @@ class TFTrainer:
         self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
 
         if self.args.max_steps > 0:
-            self.train_steps = self.args.max_steps
+            self.train_steps: int = self.args.max_steps
         else:
-            self.train_steps: int = math.ceil(self.num_train_examples / self.args.train_batch_size)
+            self.train_steps: int = math.ceil(self.num_train_examples / self.args.gradient_accumulation_steps * self.args.num_train_epochs)
 
         ds = (
             self.train_dataset.cache()
@@ -238,13 +248,17 @@ class TFTrainer:
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def _log(self, logs: Dict[str, float]) -> None:
+        logs["epoch"] = self.epoch_logging
+
         if self.tb_writer:
             with self.tb_writer.as_default():
                 for k, v in logs.items():
                     tf.summary.scalar(k, v, step=self.global_step)
             self.tb_writer.flush()
+
         if is_wandb_available():
             wandb.log(logs, step=self.global_step)
+
         output = {**logs, **{"step": self.global_step}}
         logger.info(output)
 
@@ -259,7 +273,7 @@ class TFTrainer:
         output = self._prediction_loop(eval_ds, description="Evaluation")
 
         logs = {**output.metrics}
-        logs["epoch"] = self.epoch_logging
+
         self._log(logs)
 
         return output.metrics
@@ -278,22 +292,29 @@ class TFTrainer:
         with self.args.strategy.scope():
             optimizer, lr_scheduler = self.get_optimizers()
             iterations = optimizer.iterations
+            self.global_step = iterations.numpy()
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
             ckpt = tf.train.Checkpoint(optimizer=optimizer, model=self.model)
             self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=self.args.save_total_limit)
 
             if self.model.ckpt_manager.latest_checkpoint:
+                epochs_trained = self.global_step // (self.num_train_examples // self.args.gradient_accumulation_steps)
+                steps_trained_in_current_epoch = self.global_step % (
+                    self.num_train_examples // self.args.gradient_accumulation_steps
+                )
+
+                logger.info("  Continuing training from checkpoint, will skip to saved global_step")
+                logger.info("  Continuing training from epoch %d", epochs_trained)
+                logger.info("  Continuing training from global step %d", self.global_step)
+                logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+
                 logger.info(
                     "Checkpoint file %s found and restoring from checkpoint", self.model.ckpt_manager.latest_checkpoint
                 )
 
                 ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
-
-        if iterations.numpy() > 0:
-            logger.info("Start the training from the last checkpoint")
-            start_epoch = (iterations.numpy() // self.train_steps) + 1
-        else:
-            start_epoch = 1
+            else:
+                epochs_trained = 1
 
         tf.summary.experimental.set_step(iterations)
 
@@ -311,9 +332,12 @@ class TFTrainer:
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", self.num_train_examples)
         logger.info("  Num Epochs = %d", epochs)
+        logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
+        logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", self.args.train_batch_size)
+        logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", self.train_steps)
 
-        for epoch_iter in range(start_epoch, int(epochs + 1)):
+        for epoch_iter in range(epochs_trained, int(epochs + 1)):
             for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
                 self.global_step = iterations.numpy()
                 self.epoch_logging = epoch_iter - 1 + (step + 1) / self.train_steps
