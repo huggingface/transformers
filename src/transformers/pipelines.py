@@ -323,6 +323,7 @@ class Pipeline(_ScikitCompat):
 
     Base class implementing pipelined operations.
     Pipeline workflow is defined as a sequence of the following operations:
+
         Input -> Tokenization -> Model Inference -> Post-Processing (Task dependent) -> Output
 
     Pipeline supports running on CPU or GPU through the device argument. Users can specify

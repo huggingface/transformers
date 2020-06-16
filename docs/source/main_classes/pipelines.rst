@@ -7,7 +7,7 @@ Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction an
 
 There are two categories of pipeline abstractions to be aware about:
 
-- The :class:`~transformers.pipeline` which is the most powerful object encapsulating all other pipelines
+- The :func:`~transformers.pipeline` which is the most powerful object encapsulating all other pipelines
 - The other task-specific pipelines, such as :class:`~transformers.TokenClassificationPipeline`
   or :class:`~transformers.QuestionAnsweringPipeline`
 
@@ -17,8 +17,7 @@ The pipeline abstraction
 The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any
 other pipeline but requires an additional argument which is the `task`.
 
-.. autoclass:: transformers.pipeline
-    :members:
+... autofunction:: transformers.pipeline
 
 
 The task specific pipelines

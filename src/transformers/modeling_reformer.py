@@ -1451,14 +1451,10 @@ class ReformerPreTrainedModel(PreTrainedModel):
 
 
 REFORMER_START_DOCSTRING = r"""
-    Reformer was proposed in
-    `Reformer: The Efficient Transformer`_
+    Reformer was proposed in `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.0445>`__
     by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
 
-    .. _`Reformer: The Efficient Transformer`:
-        https://arxiv.org/abs/2001.04451
-
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
