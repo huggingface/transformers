@@ -32,6 +32,7 @@ from .configuration_auto import (
     LongformerConfig,
     OpenAIGPTConfig,
     ReformerConfig,
+    RetriBertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -55,6 +56,7 @@ from .tokenization_longformer import LongformerTokenizer
 from .tokenization_marian import MarianTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -68,6 +70,7 @@ logger = logging.getLogger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, None)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, None)),

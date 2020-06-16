@@ -36,6 +36,7 @@ from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
@@ -130,6 +131,7 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -354,6 +356,12 @@ if is_torch_available():
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
+
+    from .modeling_retribert import (
+        RetriBertPreTrainedModel,
+        RetriBertModel,
+        RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     # Optimization

@@ -111,3 +111,4 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/reformer
     model_doc/marian
     model_doc/longformer
+    model_doc/retribert
