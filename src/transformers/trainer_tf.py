@@ -83,11 +83,6 @@ class TFTrainer:
 
         self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
 
-        if self.args.max_steps > 0:
-            self.train_steps: int = self.args.max_steps
-        else:
-            self.train_steps: int = math.ceil(self.num_train_examples / self.args.gradient_accumulation_steps * self.args.num_train_epochs)
-
         ds = (
             self.train_dataset.cache()
             .shuffle(self.num_train_examples)
@@ -119,7 +114,7 @@ class TFTrainer:
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_optimizers(
-        self,
+        self, num_training_steps: int,
     ) -> Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]:
         """
         Setup the optimizer and the learning rate scheduler.
@@ -133,7 +128,7 @@ class TFTrainer:
 
         optimizer, scheduler = create_optimizer(
             self.args.learning_rate,
-            self.train_steps,
+            num_training_steps,
             self.args.warmup_steps,
             adam_epsilon=self.args.adam_epsilon,
             weight_decay_rate=self.args.weight_decay,
@@ -289,8 +284,13 @@ class TFTrainer:
 
         self.gradient_accumulator.reset()
 
+        if self.args.max_steps > 0:
+            t_total = self.args.max_steps
+        else:
+            t_total = math.ceil(self.num_train_examples / self.args.gradient_accumulation_steps * self.args.num_train_epochs)
+
         with self.args.strategy.scope():
-            optimizer, lr_scheduler = self.get_optimizers()
+            optimizer, lr_scheduler = self.get_optimizers(num_training_steps=t_total)
             iterations = optimizer.iterations
             self.global_step = iterations.numpy()
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
