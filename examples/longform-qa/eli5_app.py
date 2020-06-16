@@ -321,9 +321,10 @@ if st.button("Show me!"):
 
 
 disclaimer = """
----  
+---
 
-**Disclaimer**  
+**Disclaimer**
+
 *The intent of this app is to provide some (hopefully entertaining) insights into the behavior of a current LFQA system.
 Evaluating biases of such a model and ensuring factual generations are still very much open research problems.
 Therefore, until some significant progress is achieved, we caution against using the generated answers for practical purposes.*
