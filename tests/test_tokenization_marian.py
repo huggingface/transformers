@@ -15,6 +15,7 @@
 
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from shutil import copyfile
@@ -60,10 +61,15 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "This is a test",
         )
 
-    @slow
     def test_tokenizer_equivalence_en_de(self):
         en_de_tokenizer = MarianTokenizer.from_pretrained(f"{ORG_NAME}opus-mt-en-de")
         batch = en_de_tokenizer.prepare_translation_batch(["I am a small frog"], return_tensors=None)
         self.assertIsInstance(batch, BatchEncoding)
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, batch.input_ids[0])
+
+        save_dir = tempfile.mkdtemp()
+        en_de_tokenizer.save_pretrained(save_dir)
+        contents = [x.name for x in Path(save_dir).glob("*")]
+        self.assertIn("source.spm", contents)
+        MarianTokenizer.from_pretrained(save_dir)
