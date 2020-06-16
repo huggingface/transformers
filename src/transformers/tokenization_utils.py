@@ -671,29 +671,29 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     "No padding token set, pad_to_multiple_of=%d will not be used",
                     pad_to_multiple_of
                 )
+            else:
+                target_length = ((total_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-            target_length = ((total_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
+                # Warn the user about new max_length value
+                if max_length is not None:
+                    logger.info(
+                        "Overriding max_length %s to %s parameter to satisfy constraint pad_to_multiple_of %d",
+                        max_length,
+                        target_length,
+                        pad_to_multiple_of,
+                    )
 
-            # Warn the user about new max_length value
-            if max_length is not None:
-                logger.info(
-                    "Overriding max_length %s to %s parameter to satisfy constraint pad_to_multiple_of %d",
-                    max_length,
-                    target_length,
-                    pad_to_multiple_of,
-                )
-
-            # Warn the user about new padding_strategy
-            if padding_strategy is not PaddingStrategy.MAX_LENGTH:
-                logger.info(
-                    "Overriding padding_strategy from %s to %s as required by pad_to_multiple_of=%d",
-                    padding_strategy.name,
-                    PaddingStrategy.MAX_LENGTH.name,
-                    pad_to_multiple_of,
-                )
-            # max_length becomes multiple of provided integer
-            max_length = target_length
-            padding_strategy = PaddingStrategy.MAX_LENGTH
+                # Warn the user about new padding_strategy
+                if padding_strategy is not PaddingStrategy.MAX_LENGTH:
+                    logger.info(
+                        "Overriding padding_strategy from %s to %s as required by pad_to_multiple_of=%d",
+                        padding_strategy.name,
+                        PaddingStrategy.MAX_LENGTH.name,
+                        pad_to_multiple_of,
+                    )
+                # max_length becomes multiple of provided integer
+                max_length = target_length
+                padding_strategy = PaddingStrategy.MAX_LENGTH
 
         # Truncation: Handle max sequence length
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
