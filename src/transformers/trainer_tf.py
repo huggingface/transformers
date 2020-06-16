@@ -108,7 +108,7 @@ class TFTrainer:
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 
-    def get_optimizers(
+    def set_optimizers(
         self,
     ) -> Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]:
         """
@@ -118,18 +118,14 @@ class TFTrainer:
         If you want to use something else, you can pass a tuple in the Trainer's init,
         or override this method in a subclass.
         """
-        if self.optimizers is not None:
-            return self.optimizers
-
-        optimizer, scheduler = create_optimizer(
-            self.args.learning_rate,
-            self.train_steps,
-            self.args.warmup_steps,
-            adam_epsilon=self.args.adam_epsilon,
-            weight_decay_rate=self.args.weight_decay,
-        )
-
-        return optimizer, scheduler
+        if self.optimizers is None:
+            self.optimizers = create_optimizer(
+                self.args.learning_rate,
+                self.train_steps,
+                self.args.warmup_steps,
+                adam_epsilon=self.args.adam_epsilon,
+                weight_decay_rate=self.args.weight_decay,
+            )
 
     def _setup_wandb(self):
         """
@@ -276,10 +272,10 @@ class TFTrainer:
         self.gradient_accumulator.reset()
 
         with self.args.strategy.scope():
-            optimizer, lr_scheduler = self.get_optimizers()
-            iterations = optimizer.iterations
+            self.set_optimizers()
+            iterations = self.optimizers[0].iterations
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
-            ckpt = tf.train.Checkpoint(optimizer=optimizer, model=self.model)
+            ckpt = tf.train.Checkpoint(optimizer=self.optimizers[0], model=self.model)
             self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=self.args.save_total_limit)
 
             if self.model.ckpt_manager.latest_checkpoint:
@@ -314,7 +310,7 @@ class TFTrainer:
         logger.info("  Total optimization steps = %d", self.train_steps)
 
         for epoch_iter in range(start_epoch, int(epochs + 1)):
-            for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
+            for step, training_loss in enumerate(self._training_steps(train_ds)):
                 self.global_step = iterations.numpy()
                 self.epoch_logging = epoch_iter - 1 + (step + 1) / self.train_steps
 
@@ -336,7 +332,7 @@ class TFTrainer:
                 if self.global_step % self.args.logging_steps == 0:
                     logs = {}
                     logs["loss"] = training_loss.numpy()
-                    logs["learning_rate"] = lr_scheduler(self.global_step).numpy()
+                    logs["learning_rate"] = self.optimizers[1](self.global_step).numpy()
                     logs["epoch"] = self.epoch_logging
                     self._log(logs)
 
@@ -347,21 +343,21 @@ class TFTrainer:
                 if self.global_step % self.train_steps == 0:
                     break
 
-    def _training_steps(self, ds, optimizer):
+    def _training_steps(self, ds):
         """
         Returns a generator over training steps (i.e. parameters update).
         """
         for i, loss in enumerate(self._accumulate_next_gradients(ds)):
             if i % self.args.gradient_accumulation_steps == 0:
-                self._apply_gradients(optimizer)
+                self._apply_gradients()
                 yield loss
 
     @tf.function
-    def _apply_gradients(self, optimizer):
+    def _apply_gradients(self):
         """Applies the gradients (cross-replica)."""
-        self.args.strategy.experimental_run_v2(self._step, args=(optimizer,))
+        self.args.strategy.experimental_run_v2(self._step)
 
-    def _step(self, optimizer):
+    def _step(self):
         """Applies gradients and resets accumulation."""
         gradient_scale = self.gradient_accumulator.step * self.args.strategy.num_replicas_in_sync
         gradients = [
@@ -369,7 +365,7 @@ class TFTrainer:
         ]
         gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
 
-        optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+        self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
         self.gradient_accumulator.reset()
 
     def _accumulate_next_gradients(self, ds):
