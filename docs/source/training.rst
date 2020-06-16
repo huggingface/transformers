@@ -32,7 +32,7 @@ meaning that you can use them just as you would any model in PyTorch for
 both inference and optimization.
 
 Let's consider the common task of fine-tuning a masked language model like
-BERT on a sequence classification task. When we instantiate a model with
+BERT on a sequence classification dataset. When we instantiate a model with
 :func:`~transformers.PreTrainedModel.from_pretrained`, the model
 configuration and pre-trained weights
 of the specified model are used to initialize the model. The
@@ -42,79 +42,103 @@ pre-trained model. For example, instantiating a model with
 ``BertForSequenceClassification.from_pretrained('bert-base-uncased', num_classes=2)``
 will create a BERT model instance with encoder weights copied from the
 ``bert-base-uncased`` model and a randomly initialized sequence
-classification head on top of the encoder with an output size of 2.
+classification head on top of the encoder with an output size of 2. Models
+are initialized in ``eval`` mode by default. To train, we can call
+``model.train()`` to put it in train mode
+
+.. code-block:: python
+
+    from transformers import BertForSequenceClassification
+    model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    model.train()
 
 This is useful because it allows us to make use of the pre-trained BERT
 encoder and easily train it on whatever sequence classification dataset we
-choose. Models are initialized in ``eval`` mode by default. To train, be sure
-to first call ``model.train()``. When we call the model with the target labels
-as a tensor, the first returned element is the Cross Entropy loss between the
-classifier predictions and the passed labels. The following demonstrates
-how you could instantiate a pre-trained model and perform a single update on
-a dummy sentiment classification batch:
+choose. We can use any PyTorch optimizer, but our library also provides the
+:func:`~transformers.AdamW` optimizer which implements gradient bias
+correction as well as weight decay.
 
 .. code-block:: python
 
-    from transformers import BertTokenizer, BertForSequenceClassification, AdamW
+    from transformers import AdamW
+    optimizer = AdamW(model.parameters(), lr=1e-5)
 
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
-    model.train()
-    optimizer = AdamW(model.parameters(), lr=5e-5) # any PT optimizer works
-
-    text_batch = ["I love Pixar.", "I don't care for Pixar."]
-    labels = torch.tensor([1,0]).unsqueeze(0)
-    encoding = tokenizer.batch_encode_plus(text_batch, return_tensors='pt',
-                                           pad_to_max_length=True)
-    input_ids = encoding['input_ids']
-    attention_mask = encoding['attention_mask']
-
-    outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-    loss = outputs[0]
-    loss.backward()
-    optimizer.step()
-
-Of course, you can train on GPU by calling ``to('cuda')`` on the model and
-inputs as usual.
-
-We also provide a few tools to make it easier to apply more complex
-fine-tuning procedures. Here's an example using weight decay and learning
-rate scheduling (omitting the data preparation steps for brevity):
+The optimizer allows us to apply different hyperpameters for specific
+parameter groups. For example, we can apply weight decay to all parameters
+other than bias and layer normalization terms:
 
 .. code-block:: python
 
-    from transformers import get_linear_schedule_with_warmup
-
-    device = torch.device('cuda')
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased').to(device)
-    model.train()
-
-    # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5)
+    
+Now we can set up a simple dummy training batch using
+:func:`~transformers.PreTrainedTokenizer.batch_encode_plus`. This returns a
+:func:`~transformers.BatchEncoding` instance which
+prepares everything we might need to pass to the model.
+
+.. code-block:: python
+
+    from transformers import BertTokenizer
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    text_batch = ["I love Pixar.", "I don't care for Pixar."]
+    encoding = tokenizer(text_batch, return_tensors='pt', padding=True, truncation=True)
+    input_ids = encoding['input_ids']
+    attention_mask = encoding['attention_mask']
+
+When we call a classification model with the ``labels`` argument, the first
+returned element is the Cross Entropy loss between the predictions and the
+passed labels. Having already set up our optimizer, we can then do a
+backwards pass and update the weights:
+
+.. code-block:: python
+
+    labels = torch.tensor([1,0]).unsqueeze(0)
+    outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
+    loss = outputs[0]
+    loss.backward()
+    optimizer.step()
+
+Alternatively, you can just get the logits and calculate the loss yourself.
+The following is equivalent to the previous example:
+
+.. code-block:: python
+
+    from torch.nn import functional as F
+    labels = torch.tensor([1,0]).unsqueeze(0)
+    outputs = model(input_ids, attention_mask=attention_mask)
+    loss = F.cross_entropy(labels, outputs[0])
+    loss.backward()
+    optimizer.step()
+
+Of course, you can train on GPU by calling ``to('cuda')`` on the model and
+inputs as usual.
+
+We also provide a few learning rate scheduling tools. With the following, we
+can set up a scheduler which warms up for ``num_warmup_steps`` and then
+linearly decays to 0 by the end of training.
+
+.. code-block:: python
+
+    from transformers import get_linear_schedule_with_warmup
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_train_steps)
 
-    # iterate over batches of preprocessed training data
-    for batch in train_loader:
-        optimizer.zero_grad()
-        
-        input_ids = batch.input_ids.to(device)
-        attention_mask = batch.attention_mask.to(device)
-        labels = batch.labels.to(device)
+Then all we have to do is call ``scheduler.step()`` after ``optimizer.step()``.
 
-        outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs[0]
-        loss.backward()
-        optimizer.step()
-        scheduler.step()
+.. code-block:: python
 
-We highly recommend using :func:`~transformers.Trainer`, discussed below, which conveniently
-handles the moving parts of training Transformers models with features like
-mixed precision and easy tensorboard logging.
+    ...
+    loss.backward()
+    optimizer.step()
+    scheduler.step()
+
+We highly recommend using :func:`~transformers.Trainer`, discussed below,
+which conveniently handles the moving parts of training Transformers models
+with features like mixed precision and easy tensorboard logging.
 
 
 Freezing the encoder
@@ -124,7 +148,7 @@ In some cases, you might be interested in keeping the weights of the
 pre-trained encoder frozen and optimizing only the weights of the head
 layers. To do so, simply set the ``requires_grad`` attribute to ``False`` on
 the encoder parameters, which can be accessed with the ``base_model``
-submodule:
+submodule on any task-specific model in the library:
 
 .. code-block:: python
    
@@ -137,51 +161,49 @@ submodule:
 Fine-tuning in native TensorFlow 2
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-TensorFlow models can also be trained natively in TF2. Just as with PyTorch,
+Models can also be trained natively in TensorFlow 2. Just as with PyTorch,
 TensorFlow models can be instantiated with
 :func:`~transformers.PreTrainedModel.from_pretrained` to load the weights of
-the encoder from a pretrained model. The model can then be trained using the
-Keras ``fit`` method. Here's an example of fine-tuning a sequence classifier
-with a pre-trained encoder on MRPC:
+the encoder from a pretrained model.
+
+.. code-block:: python
+
+    from transformers import TFBertForSequenceClassification
+    model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased')
+
+Let's use ``tensorflow_datasets`` to load in the `MRPC dataset
+<https://www.tensorflow.org/datasets/catalog/glue#gluemrpc>`_ from GLUE. We
+can then use our built-in
+:func:`~transformers.data.processors.glue.glue_convert_examples_to_features`
+to tokenize MRPC and convert it to a TensorFlow ``Dataset`` object. Note that
+tokenizers are framework-agnostic, so there is no need to prepend ``TF`` to
+the pretrained tokenizer name.
+
+.. code-block:: python
+
+    from transformers import BertTokenizer, glue_convert_examples_to_features
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    data = tensorflow_datasets.load('glue/mrpc')
+    train_dataset = glue_convert_examples_to_features(data['train'], tokenizer, max_length=128, task='mrpc')
+    train_dataset = train_dataset.shuffle(100).batch(32).repeat(2)
+
+The model can then be compiled and trained as any Keras model:
 
 .. code-block:: python
     
-    import tensorflow as tf
-    import tensorflow_datasets
-    from transformers import TFBertForSequenceClassification, BertTokenizer, glue_convert_examples_to_features
-
-    # Load dataset, tokenizer, model from pretrained model/vocabulary
-    tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
-    model = TFBertForSequenceClassification.from_pretrained('bert-base-cased')
-    data = tensorflow_datasets.load('glue/mrpc')
-
-    # Prepare dataset for GLUE as a tf.data.Dataset instance
-    train_dataset = glue_convert_examples_to_features(data['train'], tokenizer, max_length=128, task='mrpc')
-    valid_dataset = glue_convert_examples_to_features(data['validation'], tokenizer, max_length=128, task='mrpc')
-    train_dataset = train_dataset.shuffle(100).batch(32).repeat(2)
-    valid_dataset = valid_dataset.batch(64)
-
-    # Prepare training: Compile tf.keras model with optimizer, loss and learning rate schedule
     optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5)
     loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
     model.compile(optimizer=optimizer, loss=loss)
-
-    # Train and evaluate using tf.keras.Model.fit()
-    history = model.fit(train_dataset, epochs=2, steps_per_epoch=115,
-                        validation_data=valid_dataset, validation_steps=7)
-
-This example uses the built-in
-:func:`~transformers.data.processors.glue.glue_convert_examples_to_features`
-to tokenize MRPC and convert it to a TF ``Dataset`` object which can be
-passed to ``model.fit()``.
+    model.fit(train_dataset, epochs=2, steps_per_epoch=115)
 
 With the tight interoperability between TensorFlow and PyTorch models, you
-can even save the model and then reload it as a PyTorch model:
+can even save the model and then reload it as a PyTorch model (or vice-versa):
 
 .. code-block:: python
 
-    model.save_pretrained('./save/')
-    pytorch_model = BertForSequenceClassification.from_pretrained('./save/', from_tf=True)
+    from transformers import BertForSequenceClassification
+    model.save_pretrained('./my_mrpc_model/')
+    pytorch_model = BertForSequenceClassification.from_pretrained('./my_mrpc_model/', from_tf=True)
 
 
 .. _trainer:
