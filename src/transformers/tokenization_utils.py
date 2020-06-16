@@ -667,10 +667,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # Manage padding as multiple of provided integer
         if pad_to_multiple_of is not None:
             if self.pad_token is None:
-                logger.warning(
-                    "No padding token set, pad_to_multiple_of=%d will not be used",
-                    pad_to_multiple_of
-                )
+                logger.warning("No padding token set, pad_to_multiple_of=%d will not be used", pad_to_multiple_of)
             else:
                 target_length = ((total_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
 

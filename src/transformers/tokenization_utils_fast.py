@@ -322,7 +322,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "Overriding padding_strategy from %s to %s as required by pad_to_multiple_of=%d",
                 padding_strategy.name,
                 PaddingStrategy.MAX_LENGTH.name,
-                pad_to_multiple_of
+                pad_to_multiple_of,
             )
 
             padding_strategy = PaddingStrategy.MAX_LENGTH
@@ -333,7 +333,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of
+            pad_to_multiple_of=pad_to_multiple_of,
         )
 
         # Avoid thread overhead if only one example.
