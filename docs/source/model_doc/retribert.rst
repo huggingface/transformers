@@ -25,7 +25,7 @@ RetriBertTokenizer
     :members:
 
 
-DistilBertTokenizerFast
+RetriBertTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RetriBertTokenizerFast
