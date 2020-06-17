@@ -363,7 +363,6 @@ class TFTrainer:
         """Applies the gradients (cross-replica)."""
         self.args.strategy.experimental_run_v2(self._step)
 
-    @tf.function
     def _step(self):
         """Applies gradients and resets accumulation."""
         gradient_scale = self.gradient_accumulator.step * self.args.strategy.num_replicas_in_sync
@@ -372,7 +371,7 @@ class TFTrainer:
         ]
         gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
 
-        self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+        self.optimizers[0].apply_gradients(zip(gradients, self.model.trainable_variables))
         self.gradient_accumulator.reset()
 
     def _accumulate_next_gradients(self, ds):
