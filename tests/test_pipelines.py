@@ -10,6 +10,7 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 VALID_INPUTS = ["A simple string", ["list of strings"]]
 
 NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
+GROUPED_NER_FINETUNED_MODELS = ["mrm8488/bert-spanish-cased-finetuned-ner"]
 
 # xlnet-base-cased disabled for now, since it crashes TF2
 FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased"]
@@ -38,6 +39,15 @@ expected_fill_mask_result = [
         {"sequence": "<s>The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
     ],
 ]
+
+expected_grouped_ner_result = [
+    [
+        {"entity_group": "B-PER", "score": 0.9710702640669686, "word": "Consuelo Araújo Noguera"},
+        {"entity_group": "B-PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
+        {"entity_group": "B-ORG", "score": 0.8589080572128296, "word": "Farc"},
+    ]
+]
+
 SUMMARIZATION_KWARGS = dict(num_beams=2, min_length=2, max_length=5)
 
 
@@ -166,9 +176,19 @@ class MonoColumnInputTestCase(unittest.TestCase):
     @require_torch
     def test_ner_grouped(self):
         mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
+        valid_inputs = [
+            "Consuelo Araújo Noguera, ministra de cultura del presidente Andrés Pastrana (1998.2002) fue asesinada por las Farc luego de haber permanecido secuestrada por algunos meses."
+        ]
+        expected_check_keys = ["entity_group", "word"]
+        for model_name in GROUPED_NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
+            self._test_mono_column_pipeline(
+                nlp,
+                valid_inputs,
+                mandatory_keys,
+                expected_multi_result=expected_grouped_ner_result,
+                expected_check_keys=expected_check_keys,
+            )
 
     @require_tf
     def test_tf_ner(self):
@@ -180,9 +200,19 @@ class MonoColumnInputTestCase(unittest.TestCase):
     @require_tf
     def test_tf_ner_grouped(self):
         mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
+        valid_inputs = [
+            "Consuelo Araújo Noguera, ministra de cultura del presidente Andrés Pastrana (1998.2002) fue asesinada por las Farc luego de haber permanecido secuestrada por algunos meses."
+        ]
+        expected_check_keys = ["entity_group", "word"]
+        for model_name in GROUPED_NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
+            self._test_mono_column_pipeline(
+                nlp,
+                valid_inputs,
+                mandatory_keys,
+                expected_multi_result=expected_grouped_ner_result,
+                expected_check_keys=expected_check_keys,
+            )
 
     @require_torch
     def test_torch_sentiment_analysis(self):
@@ -343,6 +373,54 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
 
 QA_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]
+
+
+class QAPipelineTests(unittest.TestCase):
+    def _test_qa_pipeline(self, nlp):
+        output_keys = {"score", "answer", "start", "end"}
+        valid_inputs = [
+            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
+            {
+                "question": "In what field is HuggingFace working ?",
+                "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+            },
+        ]
+        invalid_inputs = [
+            {"question": "", "context": "This is a test to try empty question edge case"},
+            {"question": None, "context": "This is a test to try empty question edge case"},
+            {"question": "What is does with empty context ?", "context": ""},
+            {"question": "What is does with empty context ?", "context": None},
+        ]
+        self.assertIsNotNone(nlp)
+
+        mono_result = nlp(valid_inputs[0])
+        self.assertIsInstance(mono_result, dict)
+
+        for key in output_keys:
+            self.assertIn(key, mono_result)
+
+        multi_result = nlp(valid_inputs)
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], dict)
+
+        for result in multi_result:
+            for key in output_keys:
+                self.assertIn(key, result)
+        for bad_input in invalid_inputs:
+            self.assertRaises(Exception, nlp, bad_input)
+        self.assertRaises(Exception, nlp, invalid_inputs)
+
+    @require_torch
+    def test_torch_question_answering(self):
+        for model_name in QA_FINETUNED_MODELS:
+            nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name)
+            self._test_qa_pipeline(nlp)
+
+    @require_tf
+    def test_tf_question_answering(self):
+        for model_name in QA_FINETUNED_MODELS:
+            nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_qa_pipeline(nlp)
 
 
 class QAPipelineTests(unittest.TestCase):
