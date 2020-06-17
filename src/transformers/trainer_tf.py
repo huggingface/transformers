@@ -84,10 +84,15 @@ class TFTrainer:
         else:
             self.train_steps: int = math.ceil(self.num_train_examples / self.args.train_batch_size)
 
+        batch_size = self.args.train_batch_size
+
+        if self.args.is_tpu_available():
+            batch_size *= self.args.gradient_accumulation_steps
+
         ds = (
             self.train_dataset.cache()
             .shuffle(self.num_train_examples)
-            .batch(self.args.train_batch_size, drop_remainder=self.args.dataloader_drop_last)
+            .batch(batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 

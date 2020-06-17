@@ -54,14 +54,19 @@ class TFTrainingArguments(TrainingArguments):
             else:
                 raise ValueError("Cannot find the proper strategy please check your environment properties.")
 
-        return strategy
+        return strategy, (tpu is not None)
+
+    @property
+    @tf_required
+    def is_tpu_available(self) -> bool:
+        return self._setup_strategy[1]
 
     @property
     @tf_required
     def strategy(self) -> "tf.distribute.Strategy":
-        return self._setup_strategy
+        return self._setup_strategy[0]
 
     @property
     @tf_required
     def n_gpu(self) -> int:
-        return self._setup_strategy.num_replicas_in_sync
+        return self._setup_strategy[0].num_replicas_in_sync
