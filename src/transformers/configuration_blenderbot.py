@@ -11,7 +11,7 @@ class BlenderbotConfig(PretrainedConfig):
         This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotModel`.
         It is used to instantiate an Blenderbot model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the BERT `blenderbot <https://huggingface.co/blenderbot>`__ architecture.
+        the `blenderbot <https://huggingface.co/blenderbot>`__ architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
@@ -47,7 +47,7 @@ class BlenderbotConfig(PretrainedConfig):
     model_type = "blenderbot"
 
     def __init__(self,
-                 hidden_size=512,
+                 d_model=512,
                  dropout=0.1,
                  encoder_ffn_dim=2048,
                  encoder_layers=8,
@@ -72,13 +72,14 @@ class BlenderbotConfig(PretrainedConfig):
                  scale_embedding=False,
                  normalize_embedding=True,
                  static_position_embeddings=False,
+                 is_encoder_decoder=True,
                  **kwargs):
         super().__init__(pad_token_id=0,
                         bos_token_id=1,
                         eos_token_id=2,
                         unk_token_id=3,
                         **kwargs)
-        self.d_model =hidden_size
+        self.d_model = d_model
         self.max_position_embeddings = max_position_embeddings
         self.static_position_embeddings = static_position_embeddings
         self.vocab_size = vocab_size
@@ -105,10 +106,21 @@ class BlenderbotConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding
         self.normalize_embedding = normalize_embedding
         self.add_final_layer_norm = add_final_layer_norm
+        self.is_encoder_decoder = is_encoder_decoder
         
         self.pad_token_id = pad_token_id
         self.bos_token_id =bos_token_id
         self.eos_token_id = eos_token_id
         self.unk_token_id = unk_token_id
         
+        @property
+        def num_attention_heads(self) -> int:
+            return self.encoder_attention_heads
+    
+        @property
+        def hidden_size(self) -> int:
+            return self.d_model
+        
+        
+            
         
