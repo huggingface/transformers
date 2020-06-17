@@ -24,6 +24,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -120,6 +121,7 @@ from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
+from .tokenization_blenderbot import BlenderbotTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -329,6 +331,10 @@ if is_torch_available():
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
+    from .modeling_blenderbot import (
+        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotConditionalGeneration
     )
 
     # Optimization

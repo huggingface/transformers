@@ -23,6 +23,7 @@ from .configuration_auto import (
     AutoConfig,
     BartConfig,
     BertConfig,
+    BlenderbotConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -45,6 +46,7 @@ from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
+from .tokenization_blenderbot import BlenderbotTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -87,6 +89,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (BlenderbotConfig, (BlenderbotTokenizer, None))
     ]
 )
 
