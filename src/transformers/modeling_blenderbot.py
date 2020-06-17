@@ -211,7 +211,6 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
             "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
-
     def get_input_embeddings(self):
         return self.shared
 
