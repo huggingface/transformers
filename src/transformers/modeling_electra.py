@@ -815,10 +815,11 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         model = ElectraForQuestionAnswering.from_pretrained('google/electra-base-discriminator')
 
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_ids = tokenizer.encode(question, text)
-        start_scores, end_scores = model(torch.tensor([input_ids]))
+        encoding = tokenizer.encode_plus(question, text, return_tensors='pt')
+        input_ids, token_type_ids = encoding['input_ids'], encoding['token_type_ids']
+        start_scores, end_scores = model(input_ids, token_type_ids=token_type_ids)
 
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids.squeeze(0))
         answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
 
         """
