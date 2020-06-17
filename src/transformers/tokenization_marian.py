@@ -82,11 +82,11 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def _setup_normalizer(self):
         try:
-            from mosestokenizer import MosesPunctuationNormalizer
+            from sacremoses import MosesPunctNormalizer
 
-            self.punc_normalizer = MosesPunctuationNormalizer(self.source_lang)
-        except ImportError:
-            warnings.warn("Recommended: pip install mosestokenizer")
+            self.punc_normalizer = MosesPunctNormalizer(self.source_lang).normalize
+        except (ImportError, FileNotFoundError):
+            warnings.warn("Recommended: pip install sacremoses.")
             self.punc_normalizer = lambda x: x
 
     def normalize(self, x: str) -> str:
