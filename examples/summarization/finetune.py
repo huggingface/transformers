@@ -302,14 +302,14 @@ def main(args, model=None) -> SummarizationModule:
 
         # TODO: separate LB for CNN, we should use Path(args.data_dir).name to determine the correct LB.
         logger = WandbLogger(name=model.output_dir.name, project="hf_summarization")
-        trainer: pl.Trainer = generic_train(
-            model,
-            args,
-            logging_callback=Seq2SeqLoggingCallback(),
-            checkpoint_callback=get_rouge2_checkpoint_callback(args.output_dir),
-            logger=logger,
-            # TODO: early stopping callback seems messed up
-        )
+    trainer: pl.Trainer = generic_train(
+        model,
+        args,
+        logging_callback=Seq2SeqLoggingCallback(),
+        checkpoint_callback=get_rouge2_checkpoint_callback(args.output_dir),
+        logger=logger,
+        # TODO: early stopping callback seems messed up
+    )
     if not args.do_predict:
         return model
 
