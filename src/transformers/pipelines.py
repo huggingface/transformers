@@ -1391,6 +1391,10 @@ class SummarizationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
+    def __init__(self, task: str = "summarization", **kwargs):
+        kwargs.update(task=task)
+        super().__init__(**kwargs)
+
     def __call__(
         self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
