@@ -35,7 +35,7 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
     # on the whole batch.
     if not isinstance(features[0], dict):
         features = [vars(f) for f in features]
-    
+
     first = features[0]
     batch = {}
 
