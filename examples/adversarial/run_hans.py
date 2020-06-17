@@ -216,6 +216,7 @@ def main():
         output_eval_file = os.path.join(training_args.output_dir, "hans_predictions.txt")
         if trainer.is_world_master():
             with open(output_eval_file, "w") as writer:
+                writer.write("pairID,gold_label\n")
                 for pid, pred in zip(pair_ids, preds):
                     writer.write("ex" + str(pid) + "," + label_list[int(pred)] + "\n")
 
