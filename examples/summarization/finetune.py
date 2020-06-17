@@ -268,23 +268,17 @@ class SummarizationModule(BaseTransformer):
         )
         parser.add_argument(
             "--data_dir",
-            default=None,
             type=str,
             required=True,
-            help="The input data dir. Should contain Should contain train.source, train.target, val.source, val.target, test.source, test.target",
+            help="The input data dir. Should contain train.source, train.target, val.source, val.target, test.source, test.target",
         )
-        parser.add_argument(
-            "--freeze_encoder", action="store_true",
-        )
-        parser.add_argument(
-            "--freeze_embeds", action="store_true",
-        )
+        parser.add_argument("--freeze_encoder", action="store_true")
+        parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
         parser.add_argument("--logger", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=500, required=False)
         parser.add_argument("--n_test", type=int, default=-1, required=False)
-
         return parser
 
 

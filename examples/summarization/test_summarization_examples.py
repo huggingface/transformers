@@ -179,7 +179,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertEqual(len(new_transformer_ckpts), 1)
         examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
         out_path = tempfile.mktemp()
-        generate_summaries(examples, out_path, model_name=new_transformer_ckpts[0].parent)
+        generate_summaries(examples, out_path, new_transformer_ckpts[0].parent)
         self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
