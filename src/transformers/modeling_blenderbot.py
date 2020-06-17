@@ -53,7 +53,7 @@ class PretrainedBlenderbotModel(PretrainedBartModel):
         :return:
         """
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):

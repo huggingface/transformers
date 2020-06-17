@@ -114,8 +114,8 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         model.to(torch_device)
         model.eval()
         self.assertTrue((model.encoder.embed_tokens.weight == model.shared.weight).all().item())
-        self.assertAlmostEqual(torch.std(model.encoder.embed_tokens.weight).item(), config.initializer_range, 2)
-        self.assertAlmostEqual(torch.std(model.encoder.embed_positions.weight).item(), config.initializer_range, 2)   
+        self.assertAlmostEqual(torch.std(model.encoder.embed_tokens.weight).item(), config.init_std, 2)
+        self.assertAlmostEqual(torch.std(model.encoder.embed_positions.weight).item(), config.init_std, 2)   
 
 @require_torch
 class BlenderbotIntegrationTests(unittest.TestCase):
