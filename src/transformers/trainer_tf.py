@@ -365,14 +365,15 @@ class TFTrainer:
 
     def _step(self):
         """Applies gradients and resets accumulation."""
-        gradient_scale = self.gradient_accumulator.step * self.args.strategy.num_replicas_in_sync
-        gradients = [
-            gradient / tf.cast(gradient_scale, gradient.dtype) for gradient in self.gradient_accumulator.gradients
-        ]
-        gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
+        with self.args.strategy.scope():
+            gradient_scale = self.gradient_accumulator.step * self.args.strategy.num_replicas_in_sync
+            gradients = [
+                gradient / tf.cast(gradient_scale, gradient.dtype) for gradient in self.gradient_accumulator.gradients
+            ]
+            gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
 
-        self.optimizers[0].apply_gradients(zip(gradients, self.model.trainable_variables))
-        self.gradient_accumulator.reset()
+            self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+            self.gradient_accumulator.reset()
 
     def _accumulate_next_gradients(self, ds):
         """Accumulates the gradients from the next element in dataset."""
