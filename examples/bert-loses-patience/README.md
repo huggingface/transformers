@@ -62,6 +62,15 @@ where `patience` can be a list of patience settings, separated by a comma. It wi
 
 When evaluating on a regression task (STS-B), you may add `--regression_threshold 0.1` to define the regression threshold.
 
+## Results
+On the GLUE dev set:
+
+| Model        | \#Param | Speed  | CoLA  | MNLI  | MRPC  | QNLI  | QQP   | RTE   | SST\-2 | STS\-B |
+|--------------|---------|--------|-------|-------|-------|-------|-------|-------|--------|--------|
+| ALBERT\-base | 12M     | 1\.00x | 58\.9 | 84\.6 | 89\.5 | 91\.7 | 89\.6 | 78\.6 | 92\.8  | 89\.5  |
+| \+PABEE      | 12M     | 1\.57x | 61\.2 | 85\.1 | 90\.0 | 91\.8 | 89\.6 | 80\.1 | 93\.0  | 90\.1  |
+
+
 ## Citation
 If you find this resource useful, please consider citing the following paper:
 ```bibtex
