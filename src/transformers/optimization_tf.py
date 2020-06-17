@@ -97,13 +97,13 @@ def create_optimizer(
 
 class AdamWeightDecay(tf.keras.optimizers.Adam):
     """Adam enables L2 weight decay and clip_by_global_norm on gradients.
-  Just adding the square of the weights to the loss function is *not* the
-  correct way of using L2 regularization/weight decay with Adam, since that will
-  interact with the m and v parameters in strange ways.
-  Instead we want ot decay the weights in a manner that doesn't interact with
-  the m/v parameters. This is equivalent to adding the square of the weights to
-  the loss with plain (non-momentum) SGD.
-  """
+    Just adding the square of the weights to the loss function is *not* the
+    correct way of using L2 regularization/weight decay with Adam, since that will
+    interact with the m and v parameters in strange ways.
+    Instead we want ot decay the weights in a manner that doesn't interact with
+    the m/v parameters. This is equivalent to adding the square of the weights to
+    the loss with plain (non-momentum) SGD.
+    """
 
     def __init__(
         self,
@@ -198,11 +198,11 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
 # Extracted from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
 class GradientAccumulator(object):
     """Gradient accumulation utility.
-  When used with a distribution strategy, the accumulator should be called in a
-  replica context. Gradients will be accumulated locally on each replica and
-  without synchronization. Users should then call ``.gradients``, scale the
-  gradients if required, and pass the result to ``apply_gradients``.
-  """
+    When used with a distribution strategy, the accumulator should be called in a
+    replica context. Gradients will be accumulated locally on each replica and
+    without synchronization. Users should then call ``.gradients``, scale the
+    gradients if required, and pass the result to ``apply_gradients``.
+    """
 
     # We use the ON_READ synchronization policy so that no synchronization is
     # performed on assignment. To get the value, we call .value() which returns the

@@ -336,6 +336,11 @@ ELECTRA_INPUTS_DOCSTRING = r"""
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
+        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`__
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
@@ -348,7 +353,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
 
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
@@ -403,12 +408,11 @@ class TFElectraModel(TFElectraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """
-Electra model with a binary classification head on top as used during pre-training for identifying generated
-tokens.
+    """Electra model with a binary classification head on top as used during pre-training for identifying generated
+    tokens.
 
-Even though both the discriminator and generator may be loaded into this model, the discriminator is
-the only model of the two to have the correct classification head to be used for this model.""",
+    Even though both the discriminator and generator may be loaded into this model, the discriminator is
+    the only model of the two to have the correct classification head to be used for this model.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForPreTraining(TFElectraPreTrainedModel):
@@ -496,11 +500,10 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """
-Electra model with a language modeling head on top.
+    """Electra model with a language modeling head on top.
 
-Even though both the discriminator and generator may be loaded into this model, the generator is
-the only model of the two to have been trained for the masked language modeling task.""",
+    Even though both the discriminator and generator may be loaded into this model, the generator is
+    the only model of the two to have been trained for the masked language modeling task.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForMaskedLM(TFElectraPreTrainedModel):
@@ -583,10 +586,9 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """
-Electra model with a token classification head on top.
+    """Electra model with a token classification head on top.
 
-Both the discriminator and generator may be loaded into this model.""",
+    Both the discriminator and generator may be loaded into this model.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassificationLoss):

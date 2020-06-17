@@ -221,7 +221,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
@@ -746,9 +746,10 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ELECTRA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
-    ELECTRA_INPUTS_DOCSTRING,
+    """
+    ELECTRA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
+    ELECTRA_START_DOCSTRING,
 )
 class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     config_class = ElectraConfig
@@ -815,10 +816,11 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         model = ElectraForQuestionAnswering.from_pretrained('google/electra-base-discriminator')
 
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_ids = tokenizer.encode(question, text)
-        start_scores, end_scores = model(torch.tensor([input_ids]))
+        encoding = tokenizer.encode_plus(question, text, return_tensors='pt')
+        input_ids, token_type_ids = encoding['input_ids'], encoding['token_type_ids']
+        start_scores, end_scores = model(input_ids, token_type_ids=token_type_ids)
 
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids.squeeze(0))
         answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
 
         """

@@ -35,7 +35,8 @@ from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
 from .file_utils import cached_path, is_torch_available
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 if is_torch_available():
@@ -113,7 +114,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.delimiter = delimiter
         self.vocab_file = vocab_file
         self.never_split = never_split
-        self.punctuation_symbols = '!"#$%&()*+,-./\:;<=>?@[\\]^_`{|}~'  # noqa: W605
+        self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
 
@@ -140,7 +141,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _compile_space_around_punctuation_pattern(self):
         look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
-        look_ahead_to_match_all_except_space = "(?=[^\s])"  # noqa: W605
+        look_ahead_to_match_all_except_space = r"(?=[^\s])"
         return re.compile(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space)
 
     def count_file(self, path, verbose=False, add_eos=False):

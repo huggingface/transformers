@@ -42,20 +42,14 @@ pip install recommonmark
 
 ## Building the documentation
 
-Make sure that there is a symlink from the `example` file (in /examples) inside the source folder. Run the following
-command to generate it:
-
-```bash
-ln -s ../../examples/README.md examples.md
-```
-
 Once you have setup `sphinx`, you can build the documentation by running the following command in the `/docs` folder:
 
 ```bash
 make html
 ```
 
-A folder called ``_build/html`` should have been created. You can now open the file ``_build/html/index.html`` in your browser. 
+A folder called ``_build/html`` should have been created. You can now open the file ``_build/html/index.html`` in your
+browser. 
 
 ---
 **NOTE**
@@ -132,8 +126,8 @@ XXXConfig
     :members:
 ```
 
-This will include every public method of the configuration. If for some reason you wish for a method not to be displayed
-in the documentation, you can do so by specifying which methods should be in the docs:
+This will include every public method of the configuration. If for some reason you wish for a method not to be
+displayed in the documentation, you can do so by specifying which methods should be in the docs:
 
 ```
 XXXTokenizer
@@ -147,8 +141,8 @@ XXXTokenizer
 
 ### Writing source documentation
 
-Values that should be put in `code` should either be surrounded by double backticks: \`\`like so\`\` or be written as an object
-using the :obj: syntax: :obj:\`like so\`.
+Values that should be put in `code` should either be surrounded by double backticks: \`\`like so\`\` or be written as
+an object using the :obj: syntax: :obj:\`like so\`.
 
 When mentionning a class, it is recommended to use the :class: syntax as the mentioned class will be automatically
 linked by Sphinx: :class:\`transformers.XXXClass\`

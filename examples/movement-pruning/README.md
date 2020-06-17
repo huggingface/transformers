@@ -140,7 +140,7 @@ Regularization based pruning methods (soft movement pruning and L0 regularizatio
 To obtain the effective sparsity level in the encoder, we simply count the number of activated (non-null) weights:
 
 ```bash
-python examples/movement-pruning/count_parameters.py \
+python examples/movement-pruning/counts_parameters.py \
     --pruning_method sigmoied_threshold \
     --threshold 0.1 \
     --serialization_dir $SERIALIZATION_DIR

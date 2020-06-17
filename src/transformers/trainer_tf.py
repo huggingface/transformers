@@ -10,8 +10,12 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available
 from .training_args_tf import TFTrainingArguments
+
+
+if is_wandb_available():
+    import wandb
 
 
 logger = logging.getLogger(__name__)
@@ -27,7 +31,7 @@ class TFTrainer:
     tb_writer: Optional[tf.summary.SummaryWriter] = None
     optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = None
     global_step: Optional[int] = None
-    epoch: Optional[float] = None
+    epoch_logging: Optional[float] = None
 
     def __init__(
         self,
@@ -48,11 +52,20 @@ class TFTrainer:
         self.prediction_loss_only = prediction_loss_only
         self.optimizers = optimizers
         self.gradient_accumulator = GradientAccumulator()
+        self.global_step = 0
+        self.epoch_logging = 0
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
         else:
             self.tb_writer = tf.summary.create_file_writer(self.args.logging_dir)
+        if is_wandb_available():
+            self._setup_wandb()
+        else:
+            logger.info(
+                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
+                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
         if self.train_dataset is None:
@@ -117,6 +130,22 @@ class TFTrainer:
         )
 
         return optimizer, scheduler
+
+    def _setup_wandb(self):
+        """
+        Setup the optional Weights & Biases (`wandb`) integration.
+
+        One can override this method to customize the setup if needed.  Find more information at https://docs.wandb.com/huggingface
+        You can also override the following environment variables:
+
+        Environment:
+            WANDB_PROJECT:
+                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project
+            WANDB_DISABLED:
+                (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
+        """
+        logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
+        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
 
     @tf.function
     def _evaluate_steps(self, per_replica_features, per_replica_labels):
@@ -208,6 +237,17 @@ class TFTrainer:
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
+    def _log(self, logs: Dict[str, float]) -> None:
+        if self.tb_writer:
+            with self.tb_writer.as_default():
+                for k, v in logs.items():
+                    tf.summary.scalar(k, v, step=self.global_step)
+            self.tb_writer.flush()
+        if is_wandb_available():
+            wandb.log(logs, step=self.global_step)
+        output = {**logs, **{"step": self.global_step}}
+        logger.info(output)
+
     def evaluate(
         self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None
     ) -> Dict[str, float]:
@@ -217,6 +257,10 @@ class TFTrainer:
         eval_ds = self.get_eval_tfdataset(eval_dataset)
 
         output = self._prediction_loop(eval_ds, description="Evaluation")
+
+        logs = {**output.metrics}
+        logs["epoch"] = self.epoch_logging
+        self._log(logs)
 
         return output.metrics
 
@@ -269,44 +313,38 @@ class TFTrainer:
         logger.info("  Num Epochs = %d", epochs)
         logger.info("  Total optimization steps = %d", self.train_steps)
 
-        for epoch in range(start_epoch, int(epochs + 1)):
-            for training_loss in self._training_steps(train_ds, optimizer):
-                step = iterations.numpy()
+        for epoch_iter in range(start_epoch, int(epochs + 1)):
+            for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
+                self.global_step = iterations.numpy()
+                self.epoch_logging = epoch_iter - 1 + (step + 1) / self.train_steps
 
                 if self.args.debug:
-                    with self.tb_writer.as_default():
-                        tf.summary.scalar("loss", training_loss, step=step)
-
-                if step == 1 and self.args.debug:
-                    with self.tb_writer.as_default():
-                        tf.summary.trace_export(name="training", step=step, profiler_outdir=self.args.logging_dir)
-
-                if self.args.evaluate_during_training and step % self.args.eval_steps == 0:
                     logs = {}
-                    results = self.evaluate()
+                    logs["loss"] = training_loss.numpy()
+                    logs["epoch"] = self.epoch_logging
+                    self._log(logs)
 
-                    for key, value in results.items():
-                        eval_key = "eval_{}".format(key)
-                        logs[eval_key] = value
-
-                    logs["learning_rate"] = lr_scheduler(step).numpy()
-
-                    logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, step, logs))
-
+                if self.global_step == 1 and self.args.debug:
                     with self.tb_writer.as_default():
-                        for k, v in logs.items():
-                            tf.summary.scalar(k, v, step=step)
+                        tf.summary.trace_export(
+                            name="training", step=self.global_step, profiler_outdir=self.args.logging_dir
+                        )
 
-                    self.tb_writer.flush()
+                if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                    self.evaluate()
 
-                if step % self.args.logging_steps == 0:
-                    logger.info("Epoch {} Step {} Train Loss {:.4f}".format(epoch, step, training_loss.numpy()))
+                if self.global_step % self.args.logging_steps == 0:
+                    logs = {}
+                    logs["loss"] = training_loss.numpy()
+                    logs["learning_rate"] = lr_scheduler(self.global_step).numpy()
+                    logs["epoch"] = self.epoch_logging
+                    self._log(logs)
 
-                if step % self.args.save_steps == 0:
+                if self.global_step % self.args.save_steps == 0:
                     ckpt_save_path = self.model.ckpt_manager.save()
-                    logger.info("Saving checkpoint for step {} at {}".format(step, ckpt_save_path))
+                    logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
 
-                if step % self.train_steps == 0:
+                if self.global_step % self.train_steps == 0:
                     break
 
     def _training_steps(self, ds, optimizer):
