@@ -1,12 +1,12 @@
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_bart import BartConfig
 import os
 
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "blenderbot": os.path.abspath(os.path.expanduser('blenderbot-90M-config.json'))
+    "blenderbot": os.path.abspath(os.path.expanduser('blenderbot-90M-config.json')) # shold be changed after uploading config file on S3
 }
 
 
-class BlenderbotConfig(PretrainedConfig):
+class BlenderbotConfig(BartConfig):
     """
         This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotModel`.
         It is used to instantiate an Blenderbot model according to the specified arguments, defining the model
@@ -47,7 +47,7 @@ class BlenderbotConfig(PretrainedConfig):
     model_type = "blenderbot"
 
     def __init__(self,
-                 d_model=512,
+                 hidden_size=512,
                  dropout=0.1,
                  encoder_ffn_dim=2048,
                  encoder_layers=8,
@@ -61,7 +61,7 @@ class BlenderbotConfig(PretrainedConfig):
                  max_position_embeddings=512,
                  vocab_size=54944,
                  activation_dropout=0.0,
-                 initializer_range=0.02,
+                 init_std=0.02,
                  pad_token_id=0,
                  bos_token_id=1,
                  eos_token_id=2,
@@ -74,12 +74,12 @@ class BlenderbotConfig(PretrainedConfig):
                  static_position_embeddings=False,
                  is_encoder_decoder=True,
                  **kwargs):
-        super().__init__(pad_token_id=0,
-                        bos_token_id=1,
-                        eos_token_id=2,
-                        unk_token_id=3,
+        super().__init__(pad_token_id=pad_token_id,
+                        bos_token_id=bos_token_id,
+                        eos_token_id=eos_token_id,
+                        unk_token_id=unk_token_id,
                         **kwargs)
-        self.d_model = d_model
+        self.d_model = hidden_size
         self.max_position_embeddings = max_position_embeddings
         self.static_position_embeddings = static_position_embeddings
         self.vocab_size = vocab_size
@@ -101,7 +101,7 @@ class BlenderbotConfig(PretrainedConfig):
         
         self.activation_function = activation_function
         
-        self.initializer_range = initializer_range
+        self.init_std = init_std
         self.normalize_before = normalize_before
         self.scale_embedding = scale_embedding
         self.normalize_embedding = normalize_embedding
@@ -113,13 +113,7 @@ class BlenderbotConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
         self.unk_token_id = unk_token_id
         
-        @property
-        def num_attention_heads(self) -> int:
-            return self.encoder_attention_heads
-    
-        @property
-        def hidden_size(self) -> int:
-            return self.d_model
+        
         
         
             
