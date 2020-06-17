@@ -34,6 +34,7 @@ from .configuration_auto import (
     LongformerConfig,
     OpenAIGPTConfig,
     ReformerConfig,
+    RetriBertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -111,6 +112,7 @@ from .modeling_longformer import (
 from .modeling_marian import MarianMTModel
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
+from .modeling_retribert import RetriBertModel
 from .modeling_roberta import (
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
@@ -151,6 +153,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, RetriBertModel),
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
         (AlbertConfig, AlbertModel),
@@ -174,6 +177,7 @@ MODEL_MAPPING = OrderedDict(
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForPreTraining),
@@ -389,6 +393,7 @@ class AutoModel:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5Model` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertModel` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertModel` (ALBERT model)
@@ -542,6 +547,7 @@ class AutoModelForPreTraining:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
@@ -694,6 +700,7 @@ class AutoModelWithLMHead:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
@@ -841,6 +848,7 @@ class AutoModelForCausalLM:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
             - `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
             - `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
@@ -978,6 +986,7 @@ class AutoModelForMaskedLM:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
             - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
@@ -1114,6 +1123,7 @@ class AutoModelForSeq2SeqLM:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
             - `bart`: :class:`~transformers.BartForConditionalGeneration` (Bert model)
             - `marian`: :class:`~transformers.MarianMTModel` (Marian model)
@@ -1252,6 +1262,7 @@ class AutoModelForSequenceClassification:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: :class:`~transformers.DistilBertForSequenceClassification` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForSequenceClassification` (ALBERT model)
             - `camembert`: :class:`~transformers.CamembertForSequenceClassification` (CamemBERT model)
@@ -1398,6 +1409,7 @@ class AutoModelForQuestionAnswering:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: :class:`~transformers.DistilBertForQuestionAnswering` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForQuestionAnswering` (ALBERT model)
             - `bert`: :class:`~transformers.BertForQuestionAnswering` (Bert model)
@@ -1543,6 +1555,7 @@ class AutoModelForTokenClassification:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: :class:`~transformers.DistilBertForTokenClassification` (DistilBERT model)
             - `xlm`: :class:`~transformers.XLMForTokenClassification` (XLM model)
             - `xlm-roberta`: :class:`~transformers.XLMRobertaForTokenClassification` (XLM-RoBERTa?Para model)

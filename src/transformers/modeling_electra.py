@@ -745,9 +745,10 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ELECTRA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
-    ELECTRA_INPUTS_DOCSTRING,
+    """
+    ELECTRA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
+    ELECTRA_START_DOCSTRING,
 )
 class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     config_class = ElectraConfig

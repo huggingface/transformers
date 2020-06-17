@@ -408,12 +408,11 @@ class TFElectraModel(TFElectraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """
-Electra model with a binary classification head on top as used during pre-training for identifying generated
-tokens.
+    """Electra model with a binary classification head on top as used during pre-training for identifying generated
+    tokens.
 
-Even though both the discriminator and generator may be loaded into this model, the discriminator is
-the only model of the two to have the correct classification head to be used for this model.""",
+    Even though both the discriminator and generator may be loaded into this model, the discriminator is
+    the only model of the two to have the correct classification head to be used for this model.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForPreTraining(TFElectraPreTrainedModel):
@@ -501,11 +500,10 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """
-Electra model with a language modeling head on top.
+    """Electra model with a language modeling head on top.
 
-Even though both the discriminator and generator may be loaded into this model, the generator is
-the only model of the two to have been trained for the masked language modeling task.""",
+    Even though both the discriminator and generator may be loaded into this model, the generator is
+    the only model of the two to have been trained for the masked language modeling task.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForMaskedLM(TFElectraPreTrainedModel):
@@ -588,10 +586,9 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
 
 
 @add_start_docstrings(
-    """
-Electra model with a token classification head on top.
+    """Electra model with a token classification head on top.
 
-Both the discriminator and generator may be loaded into this model.""",
+    Both the discriminator and generator may be loaded into this model.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassificationLoss):

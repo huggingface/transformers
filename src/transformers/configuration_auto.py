@@ -32,6 +32,7 @@ from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from .configuration_marian import MarianConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_reformer import ReformerConfig
+from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
@@ -64,6 +65,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -71,6 +73,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
+        ("retribert", RetriBertConfig,),
         ("t5", T5Config,),
         ("distilbert", DistilBertConfig,),
         ("albert", AlbertConfig,),
@@ -131,6 +134,7 @@ class AutoConfig:
         The configuration class to instantiate is selected
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5Config` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertConfig` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertConfig` (ALBERT model)
