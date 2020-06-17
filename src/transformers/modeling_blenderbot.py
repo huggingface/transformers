@@ -7,13 +7,16 @@ from .modeling_bart import (BartDecoder,
                             BartEncoder, 
                             PretrainedBartModel, 
                             _prepare_bart_decoder_inputs,
-                            _reorder_buffer)
+                            _reorder_buffer,
+                            _filter_out_falsey_values)
 from .modeling_utils import PretrainedConfig
 from .configuration_blenderbot import BlenderbotConfig
 from .file_utils import add_start_docstrings_to_callable
 
 
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_MAP = {"blenderbot": "https://cdn.huggingface.co/"}
+BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    'facebook/blenderbot-90M'
+]
 
 
 class BlenderEncoder(BartEncoder):
@@ -95,9 +98,9 @@ class BlenderbotConditionalGeneration(PretrainedBlenderbotModel):
     def __init__(self, config:BlenderbotConfig):
         super().__init__(config)
         #self.config = config
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)        
-        self.encoder = BlenderEncoder(config, self.embed_tokens)
-        self.decoder = BlenderbotDecoder(config, self.embed_tokens)
+        self.shared = nn.Embedding(config.vocab_size, config.d_model, config.pad_token_id)        
+        self.encoder = BlenderEncoder(config, self.shared)
+        self.decoder = BlenderbotDecoder(config, self.shared)
         self.init_weights()
         
     @add_start_docstrings_to_callable(BLENDERBOT_INPUTS_DOCSTRING)
@@ -108,30 +111,35 @@ class BlenderbotConditionalGeneration(PretrainedBlenderbotModel):
                 attention_mask=None,
                 decodeer_attention_mask=None,
                 labels=None,
-                decoder_cached_state=None,
+                decoder_cached_states=None,
                 use_cache=False
                 ):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids,attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
         if use_cache:
-            decoder_input_ids, casual_mask = None, None
+            decoder_padding_mask, casual_mask = None, None
         else:
-            decoder_input_ids, decoder_pading_mask, casual_mask = _prepare_bart_decoder_inputs(self.config,
+            decoder_input_ids, decoder_padding_mask, casual_mask = _prepare_bart_decoder_inputs(self.config,
                                                                                                 input_ids,
                                                                                                 decoder_input_ids=decoder_input_ids,
-                                                                                                causal_mask_dtype=self.embed_tokens.weight.dtype,
+                                                                                                causal_mask_dtype=self.shared.weight.dtype,
                                                                                                 decoder_padding_mask=decodeer_attention_mask
                                                                                             )
         assert decoder_input_ids is not None
         decoder_outputs = self.decoder(decoder_input_ids, encoder_outputs[0],attention_mask,
-                                       decoder_pading_mask, decoder_casual_mask=casual_mask,
-                                       decoder_cashed_state=decoder_cached_state,
+                                       decoder_padding_mask, decoder_causal_mask=casual_mask,
+                                       decoder_cashed_states=decoder_cached_states,
                                        use_cache=use_cache)
-        scores = F.linear(decoder_outputs[0], self.embed_tokens.weight)
+        decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
+        assert isinstance(decoder_outputs[0], torch.Tensor)
+        encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
+        outputs = decoder_outputs + encoder_outputs
+        scores = F.linear(outputs[0], self.shared.weight)
+        scores = (scores,)+ outputs[1:]
         if labels is not None:
             loss_fc = nn.CrossEntropyLoss()
-            loss = loss_fc(scores.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = loss_fc(scores[0].view(-1, self.config.vocab_size), labels.view(-1))
             scores = (loss,) + scores
         return scores
         
@@ -156,6 +164,23 @@ class BlenderbotConditionalGeneration(PretrainedBlenderbotModel):
             "attention_mask": attention_mask,
             "use_cache": use_cache, 
         }
+    
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, value):
+        self.shared = value
+        self.encoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = self.shared
+
+    def get_output_embeddings(self):
+        vocab_size, embed_dim = self.shared.weight.shape
+        lin_layer = nn.Linear(vocab_size, embed_dim, bias=False)
+        lin_layer.weight.data = self.shared.weight.data
+        return lin_layer
+    
+    def get_encoder(self):
+        return self.encoder
         
     @staticmethod
     def _reorder_cache(past, beam_idx):

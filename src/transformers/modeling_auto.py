@@ -24,6 +24,7 @@ from .configuration_auto import (
     AutoConfig,
     BartConfig,
     BertConfig,
+    BlenderbotConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -69,6 +70,9 @@ from .modeling_bert import (
     BertForTokenClassification,
     BertLMHeadModel,
     BertModel,
+)
+from .modeling_blenderbot import (
+        BlenderbotConditionalGeneration
 )
 from .modeling_camembert import (
     CamembertForMaskedLM,
