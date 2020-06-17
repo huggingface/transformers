@@ -1139,11 +1139,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
-        # first step
-        if len(past) < 2:
-            encoder_outputs, decoder_past_key_value_states = past, None
-        else:
-            encoder_outputs, decoder_past_key_value_states = past[0], past[1]
+        encoder_outputs, decoder_past_key_value_states = past
 
         return {
             "decoder_input_ids": input_ids,
@@ -1156,7 +1152,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if len(past) < 2:
+        if past[1] is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past
 
