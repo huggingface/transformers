@@ -29,6 +29,8 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
+from pabee.modeling_pabee_albert import AlbertForSequenceClassification
+from pabee.modeling_pabee_bert import BertForSequenceClassification
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -38,8 +40,6 @@ from transformers import (
     BertTokenizer,
     get_linear_schedule_with_warmup,
 )
-from pabee.modeling_pabee_albert import AlbertForSequenceClassification
-from pabee.modeling_pabee_bert import BertForSequenceClassification
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import glue_output_modes as output_modes
