@@ -23,10 +23,18 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers.configuration_albert import AlbertConfig
-from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
+from transformers.modeling_bert import (
+    ACT2FN,
+    BertEmbeddings,
+    BertSelfAttention,
+    prune_linear_layer,
+)
 from transformers.modeling_utils import PreTrainedModel
 
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.file_utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -373,10 +381,15 @@ class AlbertTransformer(nn.Module):
         # Index of the layer inside the group
         layer_idx = int(current_layer - group_idx * layers_per_group)
 
-        layer_group_output = self.albert_layer_groups[group_idx](hidden_states, attention_mask, head_mask[group_idx * layers_per_group:(group_idx + 1) * layers_per_group])
+        layer_group_output = self.albert_layer_groups[group_idx](
+            hidden_states,
+            attention_mask,
+            head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
+        )
         hidden_states = layer_group_output[0]
 
         return (hidden_states,)
+
 
 class AlbertPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
@@ -488,7 +501,7 @@ class AlbertModel(AlbertPreTrainedModel):
 
     def log_stats(self):
         avg_inf_layers = self.inference_layers_num / self.inference_instances_num
-        message = f'*** Patience = {self.patience} Avg. Inference Layers = {avg_inf_layers:.2f} Speed Up = {1 - avg_inf_layers / self.config.num_hidden_layers:.2f} ***'
+        message = f"*** Patience = {self.patience} Avg. Inference Layers = {avg_inf_layers:.2f} Speed Up = {1 - avg_inf_layers / self.config.num_hidden_layers:.2f} ***"
         print(message)
 
     def get_input_embeddings(self):
@@ -532,7 +545,7 @@ class AlbertModel(AlbertPreTrainedModel):
         inputs_embeds=None,
         output_dropout=None,
         output_layers=None,
-        regression=False
+        regression=False,
     ):
         r"""
     Return:
@@ -607,26 +620,22 @@ class AlbertModel(AlbertPreTrainedModel):
             head_mask = [None] * self.config.num_hidden_layers
 
         embedding_output = self.embeddings(
-            input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+            input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
         )
         encoder_outputs = embedding_output
 
         if self.training:
             res = []
             for i in range(self.config.num_hidden_layers):
-                encoder_outputs = self.encoder.adaptive_forward(encoder_outputs,
-                                                                current_layer=i,
-                                                                attention_mask=extended_attention_mask,
-                                                                head_mask=head_mask
-                                                                )
+                encoder_outputs = self.encoder.adaptive_forward(
+                    encoder_outputs, current_layer=i, attention_mask=extended_attention_mask, head_mask=head_mask,
+                )
 
                 pooled_output = self.pooler_activation(self.pooler(encoder_outputs[0][:, 0]))
                 logits = output_layers[i](output_dropout(pooled_output))
                 res.append(logits)
         elif self.patience == 0:  # Use all layers for inference
-            encoder_outputs = self.encoder(encoder_outputs,
-                                           extended_attention_mask,
-                                           head_mask=head_mask)
+            encoder_outputs = self.encoder(encoder_outputs, extended_attention_mask, head_mask=head_mask)
             pooled_output = self.pooler_activation(self.pooler(encoder_outputs[0][:, 0]))
             res = [output_layers[self.config.num_hidden_layers - 1](pooled_output)]
         else:
@@ -635,11 +644,9 @@ class AlbertModel(AlbertPreTrainedModel):
             calculated_layer_num = 0
             for i in range(self.config.num_hidden_layers):
                 calculated_layer_num += 1
-                encoder_outputs = self.encoder.adaptive_forward(encoder_outputs,
-                                              current_layer=i,
-                                              attention_mask=extended_attention_mask,
-                                              head_mask=head_mask
-                                              )
+                encoder_outputs = self.encoder.adaptive_forward(
+                    encoder_outputs, current_layer=i, attention_mask=extended_attention_mask, head_mask=head_mask,
+                )
 
                 pooled_output = self.pooler_activation(self.pooler(encoder_outputs[0][:, 0]))
                 logits = output_layers[i](pooled_output)
@@ -776,7 +783,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
         if masked_lm_labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1),)
             outputs = (masked_lm_loss,) + outputs
 
         return outputs
@@ -794,7 +801,9 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
 
         self.albert = AlbertModel(config)
         self.dropout = nn.Dropout(config.classifier_dropout_prob)
-        self.classifiers = nn.ModuleList([nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)])
+        self.classifiers = nn.ModuleList(
+            [nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)]
+        )
 
         self.init_weights()
 
@@ -857,7 +866,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_dropout=self.dropout,
             output_layers=self.classifiers,
-            regression=self.num_labels == 1
+            regression=self.num_labels == 1,
         )
 
         outputs = (logits[-1],)

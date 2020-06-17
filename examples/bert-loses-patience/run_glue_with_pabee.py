@@ -90,7 +90,7 @@ def train(args, train_dataset, model, tokenizer):
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
 
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
@@ -150,7 +150,9 @@ def train(args, train_dataset, model, tokenizer):
         logger.info("  Continuing training from checkpoint, will skip to saved global_step")
         logger.info("  Continuing training from epoch %d", epochs_trained)
         logger.info("  Continuing training from global step %d", global_step)
-        logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+        logger.info(
+            "  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch,
+        )
 
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
@@ -169,7 +171,11 @@ def train(args, train_dataset, model, tokenizer):
 
             model.train()
             batch = tuple(t.to(args.device) for t in batch)
-            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+            inputs = {
+                "input_ids": batch[0],
+                "attention_mask": batch[1],
+                "labels": batch[3],
+            }
             inputs["token_type_ids"] = batch[2]
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
@@ -251,9 +257,9 @@ def train(args, train_dataset, model, tokenizer):
 def evaluate(args, model, tokenizer, prefix=""):
 
     # Adaptive ALBERT STATS
-    if args.model_type == 'albert':
+    if args.model_type == "albert":
         model.albert.reset_stats()
-    elif args.model_type == 'bert':
+    elif args.model_type == "bert":
         model.bert.reset_stats()
     else:
         raise NotImplementedError()
@@ -291,7 +297,11 @@ def evaluate(args, model, tokenizer, prefix=""):
             batch = tuple(t.to(args.device) for t in batch)
 
             with torch.no_grad():
-                inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+                inputs = {
+                    "input_ids": batch[0],
+                    "attention_mask": batch[1],
+                    "labels": batch[3],
+                }
                 inputs["token_type_ids"] = batch[2]
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
@@ -322,9 +332,9 @@ def evaluate(args, model, tokenizer, prefix=""):
                 writer.write("%s = %s\n" % (key, str(result[key])))
 
     if args.eval_all_checkpoints:
-        if args.model_type == 'albert':
+        if args.model_type == "albert":
             model.albert.log_stats()
-        elif args.model_type == 'bert':
+        elif args.model_type == "bert":
             model.bert.log_stats()
         else:
             raise NotImplementedError()
@@ -361,11 +371,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
         )
         features = convert_examples_to_features(
-            examples,
-            tokenizer,
-            label_list=label_list,
-            max_length=args.max_seq_length,
-            output_mode=output_mode,
+            examples, tokenizer, label_list=label_list, max_length=args.max_seq_length, output_mode=output_mode,
         )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -427,16 +433,10 @@ def main():
         help="The output directory where the model predictions and checkpoints will be written.",
     )
     parser.add_argument(
-        "--patience",
-        default='0',
-        type=str,
-        required=False,
+        "--patience", default="0", type=str, required=False,
     )
     parser.add_argument(
-        "--regression_threshold",
-        default=0,
-        type=float,
-        required=False,
+        "--regression_threshold", default=0, type=float, required=False,
     )
 
     # Other parameters
@@ -483,7 +483,9 @@ def main():
         default=1,
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
-    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument(
+        "--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.",
+    )
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
@@ -499,7 +501,9 @@ def main():
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
-    parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
+    parser.add_argument(
+        "--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.",
+    )
     parser.add_argument(
         "--eval_all_checkpoints",
         action="store_true",
@@ -526,7 +530,9 @@ def main():
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-    parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
+    parser.add_argument(
+        "--local_rank", type=int, default=-1, help="For distributed training: local_rank",
+    )
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     args = parser.parse_args()
@@ -619,11 +625,13 @@ def main():
 
     model.to(args.device)
 
-    print('Total Model Parameters:', sum(param.numel() for param in model.parameters()))
+    print("Total Model Parameters:", sum(param.numel() for param in model.parameters()))
     output_layers_param_num = sum(param.numel() for param in model.classifiers.parameters())
-    print('Output Layers Parameters:', output_layers_param_num)
+    print("Output Layers Parameters:", output_layers_param_num)
     single_output_layer_param_num = sum(param.numel() for param in model.classifiers[0].parameters())
-    print('Added Output Layers Parameters:', output_layers_param_num - single_output_layer_param_num)
+    print(
+        "Added Output Layers Parameters:", output_layers_param_num - single_output_layer_param_num,
+    )
 
     logger.info("Training/evaluation parameters %s", args)
 
@@ -659,7 +667,7 @@ def main():
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        patience_list = [int(x) for x in args.patience.split(',')]
+        patience_list = [int(x) for x in args.patience.split(",")]
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
@@ -677,12 +685,12 @@ def main():
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
 
-            print(f'Evaluation for checkpoint {prefix}')
+            print(f"Evaluation for checkpoint {prefix}")
             for patience in patience_list:
-                if args.model_type == 'albert':
+                if args.model_type == "albert":
                     model.albert.set_regression_threshold(args.regression_threshold)
                     model.albert.set_patience(patience)
-                elif args.model_type == 'bert':
+                elif args.model_type == "bert":
                     model.bert.set_regression_threshold(args.regression_threshold)
                     model.bert.set_patience(patience)
                 else:

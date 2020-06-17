@@ -643,7 +643,7 @@ class BertModel(BertPreTrainedModel):
 
     def log_stats(self):
         avg_inf_layers = self.inference_layers_num / self.inference_instances_num
-        message = f'*** Patience = {self.patience} Avg. Inference Layers = {avg_inf_layers:.2f} Speed Up = {1 - avg_inf_layers / self.config.num_hidden_layers:.2f} ***'
+        message = f"*** Patience = {self.patience} Avg. Inference Layers = {avg_inf_layers:.2f} Speed Up = {1 - avg_inf_layers / self.config.num_hidden_layers:.2f} ***"
         print(message)
 
     def get_input_embeddings(self):
@@ -673,7 +673,7 @@ class BertModel(BertPreTrainedModel):
         encoder_attention_mask=None,
         output_dropout=None,
         output_layers=None,
-        regression=False
+        regression=False,
     ):
         r"""
     Return:
@@ -818,19 +818,15 @@ class BertModel(BertPreTrainedModel):
         if self.training:
             res = []
             for i in range(self.config.num_hidden_layers):
-                encoder_outputs = self.encoder.adaptive_forward(encoder_outputs,
-                                                                current_layer=i,
-                                                                attention_mask=extended_attention_mask,
-                                                                head_mask=head_mask
-                                                                )
+                encoder_outputs = self.encoder.adaptive_forward(
+                    encoder_outputs, current_layer=i, attention_mask=extended_attention_mask, head_mask=head_mask
+                )
 
                 pooled_output = self.pooler(encoder_outputs)
                 logits = output_layers[i](output_dropout(pooled_output))
                 res.append(logits)
         elif self.patience == 0:  # Use all layers for inference
-            encoder_outputs = self.encoder(encoder_outputs,
-                                           extended_attention_mask,
-                                           head_mask=head_mask)
+            encoder_outputs = self.encoder(encoder_outputs, extended_attention_mask, head_mask=head_mask)
             pooled_output = self.pooler(encoder_outputs[0])
             res = [output_layers[self.config.num_hidden_layers - 1](pooled_output)]
         else:
@@ -839,11 +835,9 @@ class BertModel(BertPreTrainedModel):
             calculated_layer_num = 0
             for i in range(self.config.num_hidden_layers):
                 calculated_layer_num += 1
-                encoder_outputs = self.encoder.adaptive_forward(encoder_outputs,
-                                                                current_layer=i,
-                                                                attention_mask=extended_attention_mask,
-                                                                head_mask=head_mask
-                                                                )
+                encoder_outputs = self.encoder.adaptive_forward(
+                    encoder_outputs, current_layer=i, attention_mask=extended_attention_mask, head_mask=head_mask
+                )
 
                 pooled_output = self.pooler(encoder_outputs)
                 logits = output_layers[i](pooled_output)
@@ -1187,7 +1181,9 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifiers = nn.ModuleList([nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)])
+        self.classifiers = nn.ModuleList(
+            [nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)]
+        )
 
         self.init_weights()
 
@@ -1252,7 +1248,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_dropout=self.dropout,
             output_layers=self.classifiers,
-            regression=self.num_labels == 1
+            regression=self.num_labels == 1,
         )
 
         outputs = (logits[-1],)
