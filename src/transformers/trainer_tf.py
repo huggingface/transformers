@@ -287,9 +287,14 @@ class TFTrainer:
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
         else:
-            t_total = math.ceil(
-                self.num_train_examples / self.args.gradient_accumulation_steps * self.args.num_train_epochs
-            )
+            if self.args.dataloader_drop_last:
+                approx = math.floor
+            else:
+                approx = math.ceil
+
+            t_total = approx(
+                self.num_train_examples / (self.args.train_batch_size * self.args.gradient_accumulation_steps)
+            ) * self.args.num_train_epochs
 
         with self.args.strategy.scope():
             optimizer, lr_scheduler = self.get_optimizers(num_training_steps=t_total)
