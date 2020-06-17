@@ -3,9 +3,8 @@
 🤗 Transformers is tested on Python 3.6+, and PyTorch 1.1.0+ or TensorFlow 2.0+.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're
-unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
-
-Create a virtual environment with the version of Python you're going to use and activate it.
+unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going 
+to use and activate it.
 
 Now, if you want to use 🤗 Transformers, you can install it with pip. If you'd like to play with the examples, you
 must install it from source.
