@@ -74,11 +74,11 @@ while this model uses a regular classification layer with softmax activation on 
 At word level, this model achieves a precision of 0.7742, a recall of 0.8536 and a F1-score of 0.8093.
 
 ### Model usage in inference
+Use the pipeline:
 ````python
 from transformers import pipeline
 
-text = "Mouse thymus was used as a source of glucocorticoid " \
-       "receptor from normal CS lymphocytes."
+text = "Mouse thymus was used as a source of glucocorticoid receptor from normal CS lymphocytes."
 
 nlp_ner = pipeline("ner",
                    model='fran-martinez/scibert_scivocab_cased_ner_jnlpba',
@@ -109,4 +109,49 @@ nlp_ner(text)
 # 'score': 0.9898491501808167, 
 # 'entity': 'I-cell_type'}
 # ]
+````
+Or load model and tokenizer as follows:
+````python
+import torch
+from transformers import AutoTokenizer, AutoModelForTokenClassification
+
+# Example
+text = "Mouse thymus was used as a source of glucocorticoid receptor from normal CS lymphocytes."
+
+# Load model
+tokenizer = AutoTokenizer.from_pretrained("fran-martinez/scibert_scivocab_cased_ner_jnlpba")
+model = AutoModelForTokenClassification.from_pretrained("fran-martinez/scibert_scivocab_cased_ner_jnlpba")
+
+# Get input for BERT
+input_ids = torch.tensor(tokenizer.encode(text)).unsqueeze(0)
+
+# Predict
+with torch.no_grad():
+  outputs = model(input_ids)
+
+# From the output let's take the first element of the tuple.
+# Then, let's get rid of [CLS] and [SEP] tokens (first and last)
+predictions = outputs[0].argmax(axis=-1)[0][1:-1]
+
+# Map label class indexes to string labels.
+for token, pred in zip(tokenizer.tokenize(text), predictions):
+  print(token, '->', model.config.id2label[pred.numpy().item()])
+
+# Output:
+#---------------------------
+# mouse -> O
+# thymus -> O
+# was -> O
+# used -> O
+# as -> O
+# a -> O
+# source -> O
+# of -> O
+# glucocorticoid -> B-protein
+# receptor -> I-protein
+# from -> O
+# normal -> B-cell_type
+# cs -> I-cell_type
+# lymphocytes -> I-cell_type
+# . -> O
 ````
