@@ -437,10 +437,14 @@ class CombinedModel(nn.Module):
 
         # get the generator's predicted value on each masked position
         fake_logits = self.gather_positions(generator_output, masked_lm_positions)
-        fake_argmaxes = fake_logits.argmax(-1)
+        fake_softmaxed = torch.softmax(fake_logits, dim=-1)
+        fake_sampled = fake_softmaxed\
+            .view(fake_logits.shape[0] * fake_logits.shape[1], fake_logits.shape[2])\
+            .multinomial(1)\
+            .view(fake_logits.shape[:-1])
 
         # create a tensor containing the predicted tokens
-        fake_tokens = input_ids.scatter(-1, masked_lm_positions, fake_argmaxes)
+        fake_tokens = input_ids.scatter(-1, masked_lm_positions, fake_sampled)
         fake_tokens[:, 0] = input_ids[:, 0]
         discriminator_labels = (labels != fake_tokens).int()
 
@@ -461,7 +465,7 @@ class CombinedModel(nn.Module):
         return (
             total_loss,
             (generator_output, discriminator_output),
-            (masked_input_ids, fake_argmaxes),
+            (masked_input_ids, fake_sampled),
             (discriminator_labels, discriminator_predictions),
         )
 

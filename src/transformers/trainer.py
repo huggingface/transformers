@@ -71,6 +71,8 @@ try:
         _has_wandb = False if os.getenv("WANDB_DISABLED") else True
 except ImportError:
     _has_wandb = False
+except AttributeError:
+    _has_wandb = False
 
 
 def is_wandb_available():
