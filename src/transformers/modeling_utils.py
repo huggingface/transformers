@@ -1276,16 +1276,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             next_token_logits = outputs[0][:, -1, :]
 
             scores = self.postprocess_next_token_scores(
-                next_token_logits,
-                input_ids,
-                no_repeat_ngram_size,
-                bad_words_ids,
-                cur_len,
-                min_length,
-                max_length,
-                eos_token_id,
-                repetition_penalty,
-                batch_size,
+                scores=next_token_logits,
+                input_ids=input_ids,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                cur_len=cur_len,
+                min_length=min_length,
+                max_length=max_length,
+                eos_token_id=eos_token_id,
+                repetition_penalty=repetition_penalty,
+                batch_size=batch_size,
                 num_beams=1,
             )
 
@@ -1400,17 +1400,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             scores = self.postprocess_next_token_scores(
-                scores,
-                input_ids,
-                no_repeat_ngram_size,
-                bad_words_ids,
-                cur_len,
-                min_length,
-                max_length,
-                eos_token_id,
-                repetition_penalty,
-                batch_size,
-                num_beams,
+                scores=scores,
+                input_ids=input_ids,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                cur_len=cur_len,
+                min_length=min_length,
+                max_length=max_length,
+                eos_token_id=eos_token_id,
+                repetition_penalty=repetition_penalty,
+                batch_size=batch_size,
+                num_beams=num_beams,
             )
 
             if self.config.is_encoder_decoder and do_sample is False:
