@@ -11,7 +11,7 @@ export HANS_DIR=path-to-hans
 export MODEL_TYPE=type-of-the-model-e.g.-bert-roberta-xlnet-etc
 export MODEL_PATH=path-to-the-model-directory-that-is-trained-on-NLI-e.g.-by-using-run_glue.py
 
-python examples/adversarial/test_hans.py \
+python run_hans.py \
         --task_name hans \
         --model_type $MODEL_TYPE \
         --do_eval \
