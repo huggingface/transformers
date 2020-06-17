@@ -19,9 +19,15 @@ python examples/adversarial/test_hans.py \
         --model_name_or_path $MODEL_PATH \
         --max_seq_length 128 \
         --output_dir $MODEL_PATH \
+        --overwrite_cache
 ```
+Remove the `--overwrite_cache` flag after running this command once.
 
 This will create the hans_predictions.txt file in MODEL_PATH, which can then be evaluated using hans/evaluate_heur_output.py from the HANS dataset.
+
+```bash
+python3 evaluate_heur_output.py /path/to/hans_predictions.txt
+```
 
 The results of the BERT-base model that is trained on MNLI using batch size 8 and the random seed 42 on the HANS dataset is as follows:
 
