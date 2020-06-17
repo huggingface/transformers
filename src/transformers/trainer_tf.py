@@ -351,7 +351,7 @@ class TFTrainer:
                 if self.args.debug:
                     logs = {}
                     logs["loss"] = training_loss.numpy()
-                    logs["epoch"] = self.epoch_logging
+
                     self._log(logs)
 
                 if self.global_step == 1 and self.args.debug:
@@ -371,7 +371,6 @@ class TFTrainer:
                     logs = {}
                     logs["loss"] = training_loss.numpy()
                     logs["learning_rate"] = lr_scheduler(self.global_step).numpy()
-                    logs["epoch"] = self.epoch_logging
 
                     self._log(logs)
 
