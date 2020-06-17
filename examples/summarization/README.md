@@ -44,7 +44,7 @@ export me=`git config user.name`
 ```
 
 Tips:
-- 1 epoch at batch size 1 for bart-large takes 24 hours, requires 13GB GPU RAM with fp16. 
+- 1 epoch at batch size 1 for bart-large takes 24 hours, requires 13GB GPU RAM with fp16 on an NVIDIA-V100. 
 - try `bart-base`, `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr/epoch with bs=8, see below)
 - `fp16_opt_level=O1` (the default works best).
 - If you are finetuning on your own dataset, start from `bart-large-cnn` if you want long summaries and `bart-large-xsum` if you want short summaries.
