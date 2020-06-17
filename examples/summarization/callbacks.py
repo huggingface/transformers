@@ -22,7 +22,7 @@ class Seq2SeqLoggingCallback(pl.Callback):
     def _write_logs(
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
     ) -> None:
-        logger.info(f"***** {type_path} results *****")
+        logger.info(f"***** {type_path} results at step {trainer.global_step:05d} *****")
         if not pl_module.is_logger():
             return
         metrics = trainer.callback_metrics
@@ -30,11 +30,13 @@ class Seq2SeqLoggingCallback(pl.Callback):
         # Log results
         od = Path(pl_module.hparams.output_dir)
         if type_path == "test":
-            output_val_results_file = od / f"{type_path}_results.txt"
+            results_file = od / "test_results.txt"
+            generations_file = od / "test_generations.txt"
         else:
-            output_val_results_file = od / f"{type_path}_{trainer.global_step}_results.txt"
+            results_file = od / f"{type_path}_results_{trainer.global_step:05d}.txt"
+            generations_file = od / f"{type_path}_generations_{trainer.global_step:05d}.txt"
 
-        with open(output_val_results_file, "a+") as writer:
+        with open(results_file, "a+") as writer:
             for key in sorted(metrics):
                 if key in ["log", "progress_bar", "preds"]:
                     continue
@@ -42,15 +44,11 @@ class Seq2SeqLoggingCallback(pl.Callback):
                 if isinstance(val, torch.Tensor):
                     val = val.item()
                 msg = f"{key}: {val:.6f}\n"
-                # logger.info(msg)
                 writer.write(msg)
 
         if not save_generations:
             return
-        if type_path == "val":
-            generations_file = od / f"{type_path}_generations_{trainer.global_step}.txt"
-        else:
-            generations_file = od / f"{type_path}_generations.txt"
+
         if "preds" in metrics:
             content = "\n".join(metrics["preds"])
             generations_file.open("w+").write(content)
@@ -63,6 +61,7 @@ class Seq2SeqLoggingCallback(pl.Callback):
             npars = pl_module.model.num_parameters()
 
         n_trainable_pars = count_trainable_parameters(pl_module)
+        # mp stands for million parameters
         trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
 
     @rank_zero_only
@@ -75,12 +74,12 @@ class Seq2SeqLoggingCallback(pl.Callback):
 
 
 def get_rouge2_checkpoint_callback(output_dir):
+    """Saves the best model by validation ROUGE2 score."""
     checkpoint_callback = ModelCheckpoint(
         filepath=os.path.join(output_dir, "{val_avg_rouge2:.4f}-{step_count}"),
         monitor="val_rouge",
         mode="max",
         save_top_k=1,
-        save_weights_only=False,
-        period=0,  # everytime val is run, save a checkpoint
+        period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.
     )
     return checkpoint_callback

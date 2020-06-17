@@ -51,9 +51,10 @@ Tips:
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
 - In addition to the pytorch-lightning .ckpt checkpoint, a transformers checkpoint will be saved.
 Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_tfmr)`.
-- At the moment, `--do_predict` does not work in a multi-gpu setting. You need to use `evaluate_checkpoint` or the `run_eval.py` code.   
+- At the moment, `--do_predict` does not work in a multi-gpu setting. You need to use `evaluate_checkpoint` or the `run_eval.py` code.
+- If you want to run experiments on improving the summarization finetuning process, try the XSUM Shared Task (below). It's faster to train than CNNDM because the summaries are shorter.    
 
-### Shared Task
+### XSUM Shared Task
 Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
 Here is an example command
 ```bash

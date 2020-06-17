@@ -63,14 +63,14 @@ class SummarizationModule(BaseTransformer):
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            # overwrite_cache=self.hparams.no_cache,
             prefix=self.model.config.prefix or "",
         )
-        base_nobs = {
+        n_observations_per_split = {
             "train": self.hparams.n_train,
             "val": self.hparams.n_val,
             "test": self.hparams.n_test,
         }
+        self.n_obs = {k: v if v >= 0 else None for k, v in n_observations_per_split.items()}
 
         self.target_lens = {
             "train": self.hparams.max_target_length,
@@ -79,15 +79,16 @@ class SummarizationModule(BaseTransformer):
         }
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
-        self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
+
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
         if self.hparams.freeze_encoder:
-            freeze_params(self.model.model.encoder)
+            freeze_params(self.model.model.encoder)  # TODO: this will break for t5
         self.hparams.git_sha = get_git_info()["repo_sha"]
-        self.num_workers = 4 if self.hparams.gpus <= 1 else None
+        self.num_workers = 4 if self.hparams.gpus <= 1 else None  # passing num_workers breaks lightning for multigpu
 
     def freeze_embeds(self):
+        """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
         if self.model.config.model_type == "bart":
             freeze_params(self.model.model.shared)
             for d in [self.model.model.encoder, self.model.model.decoder]:
@@ -129,18 +130,15 @@ class SummarizationModule(BaseTransformer):
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time"]}
-        rouge: torch.FloatTensor = torch.tensor(rouges["rouge2"]).type_as(loss)
+        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time", "summ_len"]}
+        rouge_tensor: torch.FloatTensor = torch.tensor(rouges["rouge2"]).type_as(loss)
         rouges.update({k: v.item() for k, v in losses.items()})
         losses.update(rouges)
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         metrics["step_count"] = self.step_count
-        self.save_metrics(metrics, prefix)
+        self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-        ret_dict = {"log": metrics, "preds": preds}
-        ret_dict[f"{prefix}_loss"] = loss
-        ret_dict[f"{prefix}_rouge"] = rouge
-        return ret_dict
+        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_rouge": rouge_tensor}
 
     def save_metrics(self, metrics, prefix) -> None:
         self.metrics[prefix].append(metrics)
@@ -254,7 +252,7 @@ class SummarizationModule(BaseTransformer):
         )
         parser.add_argument(
             "--val_max_target_length",
-            default=142,
+            default=142,  # these defaults are optimized for CNNDM. For xsum, see README.md.
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
@@ -276,13 +274,13 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
         parser.add_argument("--logger", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
-        parser.add_argument("--n_train", type=int, default=-1, required=False)
-        parser.add_argument("--n_val", type=int, default=500, required=False)
-        parser.add_argument("--n_test", type=int, default=-1, required=False)
+        parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
+        parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
+        parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         return parser
 
 
-def main(args, model=None):
+def main(args, model=None) -> SummarizationModule:
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
@@ -294,7 +292,7 @@ def main(args, model=None):
         or str(args.output_dir).startswith("/tmp")
         or str(args.output_dir).startswith("/var")
     ):
-        logger = True
+        logger = True  # don't pollute wandb logs unnecessarily
     elif args.logger == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
@@ -302,15 +300,16 @@ def main(args, model=None):
     elif args.logger == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
+        # TODO: separate LB for CNN, we should use Path(args.data_dir).name to determine the correct LB.
         logger = WandbLogger(name=model.output_dir.name, project="hf_summarization")
-    trainer: pl.Trainer = generic_train(
-        model,
-        args,
-        early_stopping_callback=True,
-        logging_callback=Seq2SeqLoggingCallback(),
-        checkpoint_callback=get_rouge2_checkpoint_callback(args.output_dir),
-        logger=logger,
-    )
+        trainer: pl.Trainer = generic_train(
+            model,
+            args,
+            logging_callback=Seq2SeqLoggingCallback(),
+            checkpoint_callback=get_rouge2_checkpoint_callback(args.output_dir),
+            logger=logger,
+            # TODO: early stopping callback seems messed up
+        )
     if not args.do_predict:
         return model
 
@@ -320,7 +319,7 @@ def main(args, model=None):
         model.hparams.test_checkpoint = checkpoints[-1]
         trainer.resume_from_checkpoint = checkpoints[-1]
     trainer.logger.log_hyperparams(model.hparams)
-    trainer.test(model)  # NOTE(SS): this will break in DDP, known lightning issue. See evaluate_checkpoint
+    trainer.test(model)  # this breaks in DDP, known lightning issue. See evaluate_checkpoint to recover metrics.
     return model
 
 
