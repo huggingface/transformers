@@ -142,6 +142,7 @@ conversion utilities for the following models:
     converting_tensorflow_models
     migration
     torchscript
+    contributing
 
 .. toctree::
     :maxdepth: 2
