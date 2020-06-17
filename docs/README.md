@@ -42,11 +42,13 @@ pip install recommonmark
 
 ## Building the documentation
 
-Make sure that there is a symlink from the `example` file (in /examples) inside the source folder. Run the following
-command to generate it:
+Make sure that there is a symlink from the `example` file (in /examples) and from the `CONTRIBUTING` guide (in the 
+root folder) inside the docs source folder. You shouldn't need to, but in case they are missing, run the following 
+commands to generate them:
 
 ```bash
 ln -s ../../examples/README.md examples.md
+ln -s ../../CONTRIBUTING.md contributing.md
 ```
 
 Once you have setup `sphinx`, you can build the documentation by running the following command in the `/docs` folder:
