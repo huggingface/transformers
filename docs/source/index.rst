@@ -118,16 +118,17 @@ conversion utilities for the following models:
     :maxdepth: 2
     :caption: Get started
 
+    quicktour
     installation
-    quickstart
+    philosophy
     glossary
 
 .. toctree::
     :maxdepth: 2
     :caption: Using Transformers
 
-    usage
-    summary
+    task_summary
+    model_summary
     serialization
     model_sharing
     multilingual
