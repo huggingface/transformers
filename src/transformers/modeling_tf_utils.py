@@ -356,6 +356,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
@@ -368,6 +369,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
                 **kwargs,
             )
         else:
@@ -405,8 +408,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     archive_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
                 )
                 if resolved_archive_file is None:
                     raise EnvironmentError
