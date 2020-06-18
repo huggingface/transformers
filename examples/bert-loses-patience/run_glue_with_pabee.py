@@ -29,7 +29,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from pabee.modeling_pabee_albert import AlbertForSequenceClassification
+from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
 from pabee.modeling_pabee_bert import BertForSequenceClassification
 from transformers import (
     WEIGHTS_NAME,
@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
-    "albert": (AlbertConfig, AlbertForSequenceClassification, AlbertTokenizer),
+    "albert": (AlbertConfig, AlbertForSequenceClassificationWithPabee, AlbertTokenizer),
 }
 
 
