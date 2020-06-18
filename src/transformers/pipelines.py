@@ -1392,7 +1392,7 @@ class SummarizationPipeline(Pipeline):
     """
 
     def __init__(self, task: str = "summarization", **kwargs):
-        kwargs.update(task=task)
+        kwargs.update(task='summarization')
         super().__init__(**kwargs)
 
     def __call__(
