@@ -14,7 +14,7 @@ export GLUE_DIR=/path/to/glue_data
 export TASK_NAME=MRPC
 
 python ./run_glue_with_pabee.py \
-  --model_type bert/albert \
+  --model_type albert \
   --model_name_or_path bert-base-uncased/albert-base-v2 \
   --task_name $TASK_NAME \
   --do_train \
@@ -41,17 +41,15 @@ export GLUE_DIR=/path/to/glue_data
 export TASK_NAME=MRPC
 
 python ./run_glue_with_pabee.py \
-  --model_type bert/albert \
+  --model_type albert \
   --model_name_or_path /path/to/save/ \
   --task_name $TASK_NAME \
   --do_eval \
   --do_lower_case \
   --data_dir "$GLUE_DIR/$TASK_NAME" \
   --max_seq_length 128 \
-  --per_gpu_train_batch_size 32 \
   --per_gpu_eval_batch_size 1 \
   --learning_rate 2e-5 \
-  --save_steps 50 \
   --logging_steps 50 \
   --num_train_epochs 15 \
   --output_dir /path/to/save/ \

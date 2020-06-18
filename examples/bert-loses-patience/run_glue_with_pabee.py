@@ -256,7 +256,7 @@ def train(args, train_dataset, model, tokenizer):
 
 def evaluate(args, model, tokenizer, prefix=""):
 
-    # Adaptive ALBERT STATS
+    # PABEE STATS
     if args.model_type == "albert":
         model.albert.reset_stats()
     elif args.model_type == "bert":
