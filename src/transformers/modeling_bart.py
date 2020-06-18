@@ -903,7 +903,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-            
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
