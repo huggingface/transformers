@@ -208,7 +208,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if kwargs:
-            raise ValueError("Keyword arguments {} not recognized.")
+            raise ValueError(f"Keyword arguments {kwargs} not recognized.")
 
         # TODO: should this be in the base class?
         def lowercase_text(t):
@@ -325,14 +325,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
-                tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
+                tokens = self.tokenize(text, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_pretokenized:
                     tokens = list(
                         itertools.chain(
                             *(
-                                self.tokenize(t, add_special_tokens=False, add_prefix_space=True, **kwargs)
+                                self.tokenize(t, is_pretokenized=True, **kwargs)
                                 for t in text
                             )
                         )
@@ -395,24 +395,24 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         is_pretokenized: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
-        return_attention_masks: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
-        return_special_tokens_masks: bool = False,
+        return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_lengths: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
-                tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
+                tokens = self.tokenize(text, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_pretokenized:
                     tokens = list(
                         itertools.chain(
                             *(
-                                self.tokenize(t, add_special_tokens=False, add_prefix_space=True, **kwargs)
+                                self.tokenize(t, is_pretokenized=True, **kwargs)
                                 for t in text
                             )
                         )
@@ -454,11 +454,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            return_attention_masks=return_attention_masks,
+            return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_masks=return_special_tokens_masks,
-            return_lengths=return_lengths,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_length=return_length,
             return_tensors=return_tensors,
             verbose=verbose,
         )
@@ -476,10 +476,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         stride: int = 0,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
-        return_attention_masks: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
-        return_special_tokens_masks: bool = False,
-        return_lengths: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
         """ Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
@@ -512,11 +512,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 stride=stride,
-                return_attention_mask=return_attention_masks,
+                return_attention_mask=return_attention_mask,
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_masks,
-                return_length=return_lengths,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_length=return_length,
                 return_tensors=None,  # We will convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
@@ -629,11 +629,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         return batch_outputs
 
-    def prepare_for_tokenization(self, text: str, **kwargs) -> (str, dict):
+    def prepare_for_tokenization(self, text: str, is_pretokenized=False, **kwargs) -> (str, dict):
         """ Performs any necessary transformations before tokenization.
 
-            This method should pop the used arguments from kwargs and return kwargs as well.
-            We test kwargs at the end of the process to be sure all the arguments have been used.
+            This method should pop the arguments from kwargs and return kwargs as well.
+            We test kwargs at the end of the encoding process to be sure all the arguments have been used.
         """
         return (text, kwargs)
 

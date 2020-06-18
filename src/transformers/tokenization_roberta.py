@@ -135,6 +135,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
+        add_prefix_space=True,
         **kwargs
     ):
         super().__init__(
@@ -148,6 +149,7 @@ class RobertaTokenizer(GPT2Tokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -231,12 +233,11 @@ class RobertaTokenizer(GPT2Tokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def prepare_for_tokenization(self, text, add_special_tokens=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", add_special_tokens)
-        if add_prefix_space and not text[0].isspace():
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if is_pretokenized or add_prefix_space:
             text = " " + text
         return (text, kwargs)
-
 
 class RobertaTokenizerFast(GPT2TokenizerFast):
     """

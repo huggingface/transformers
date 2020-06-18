@@ -328,7 +328,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         else:
             return symbols
 
-    def prepare_for_tokenization(self, text, **kwargs):
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
         # add spaces before punctuation symbols as should be done in transfo-xl
         add_space_before_punct_symbol = kwargs.pop("add_space_before_punct_symbol", False)
         if add_space_before_punct_symbol:

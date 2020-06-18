@@ -124,7 +124,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
 
         # Testing encoder arguments
-        encoded = tokenizer.encode(sequence, add_special_tokens=False)
+        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)
         first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
         self.assertNotEqual(first_char, space_encoding)
 
@@ -135,7 +135,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.add_special_tokens({"bos_token": "<s>"})
         encoded = tokenizer.encode(sequence, add_special_tokens=True)
         first_char = tokenizer.convert_ids_to_tokens(encoded[1])[0]
-        self.assertEqual(first_char, space_encoding)
+        self.assertNotEqual(first_char, space_encoding)
 
         # Testing spaces after special tokenss
         mask = "<mask>"

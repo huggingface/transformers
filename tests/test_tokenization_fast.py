@@ -341,6 +341,14 @@ class CommonFastTokenizerTest(unittest.TestCase):
             "return_special_tokens_mask": True,
             "return_offsets_mapping": False,  # Not implemented in python tokenizers
         }
+        batch_kwargs = {
+            "is_pretokenized": True,
+            "return_token_type_ids": True,
+            "return_attention_mask": True,  # we have an 's' here
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": True,  # we have an 's' here
+            "return_offsets_mapping": False,  # Not implemented in python tokenizers
+        }
         # Test encode_plus for pretokenized inputs
         output_r = tokenizer_r.encode_plus(pretokenized_input_simple, **kwargs)
         output_p = tokenizer_p.encode_plus(pretokenized_input_simple, **kwargs)
@@ -349,8 +357,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
         # Test batch_encode_plus for pretokenized inputs
         input_batch = ([pretokenized_input_simple] * 2) + [pretokenized_input_simple + pretokenized_input_pair]
-        output_r = tokenizer_r.batch_encode_plus(input_batch, **kwargs)
-        output_p = tokenizer_p.batch_encode_plus(input_batch, **kwargs)
+        output_r = tokenizer_r.batch_encode_plus(input_batch, **batch_kwargs)
+        output_p = tokenizer_p.batch_encode_plus(input_batch, **batch_kwargs)
         for key in output_p.keys():
             self.assertEqual(output_p[key], output_r[key])
 
@@ -370,8 +378,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
             pretokenized_input_simple + pretokenized_input_pair,
             pretokenized_input_pair,
         ]
-        output_r = tokenizer_r.batch_encode_plus(input_batch_pair, **kwargs)
-        output_p = tokenizer_p.batch_encode_plus(input_batch_pair, **kwargs)
+        output_r = tokenizer_r.batch_encode_plus(input_batch_pair, **batch_kwargs)
+        output_p = tokenizer_p.batch_encode_plus(input_batch_pair, **batch_kwargs)
         for key in output_p.keys():
             self.assertEqual(output_p[key], output_r[key])
 

@@ -1395,7 +1395,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_lengths: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -1432,11 +1432,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 is_pretokenized=is_pretokenized,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
-                return_attention_masks=return_attention_mask,
+                return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_masks=return_special_tokens_mask,
+                return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
-                return_lengths=return_lengths,
+                return_length=return_length,
                 verbose=verbose,
                 **kwargs,
             )
@@ -1456,7 +1456,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
-                return_length=return_lengths,
+                return_length=return_length,
                 verbose=verbose,
                 **kwargs,
             )
@@ -1563,11 +1563,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         is_pretokenized: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
-        return_attention_masks: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
-        return_special_tokens_masks: bool = False,
+        return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_lengths: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -1600,11 +1600,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             is_pretokenized=is_pretokenized,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
-            return_attention_masks=return_attention_masks,
+            return_attention_mask=return_attention_mask,
             return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_masks=return_special_tokens_masks,
+            return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
-            return_lengths=return_lengths,
+            return_length=return_length,
             verbose=verbose,
             **kwargs,
         )
@@ -1627,11 +1627,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         is_pretokenized: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
-        return_attention_masks: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
-        return_special_tokens_masks: bool = False,
+        return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_lengths: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -1639,7 +1639,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def pad(
         self,
-        encoded_inputs: Union[BatchEncoding, List[BatchEncoding], Dict[str, EncodedInput], Dict[str, List[EncodedInput]], List[Dict[str, EncodedInput]]],
+        encoded_inputs: Union[
+            BatchEncoding,
+            List[BatchEncoding],
+            Dict[str, EncodedInput],
+            Dict[str, List[EncodedInput]],
+            List[Dict[str, EncodedInput]],
+        ],
         padding: Union[bool, str] = True,
         max_length: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,

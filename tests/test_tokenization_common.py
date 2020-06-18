@@ -390,7 +390,7 @@ class TokenizerTesterMixin:
                 seq_1 = "With these inputs."
 
                 sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=False)
-                attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True, add_prefix_space=False)
+                attached_sequences = tokenizer.encode(seq_0, seq_1, add_special_tokens=True)
 
                 # Method is implemented (e.g. not GPT-2)
                 if len(attached_sequences) != 2:
@@ -416,7 +416,7 @@ class TokenizerTesterMixin:
                     stride=stride,
                     truncation="longest_first",
                     return_overflowing_tokens=True,
-                    add_prefix_space=False,
+                    # add_prefix_space=False,
                 )
 
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
@@ -468,7 +468,7 @@ class TokenizerTesterMixin:
 
                 # We are not using the special tokens - a bit too hard to test all the tokenizers with this
                 # TODO try this again later
-                sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=False, add_prefix_space=False)
+                sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=False)  # , add_prefix_space=False)
                 truncated_first_sequence = tokenizer.encode(seq_0, add_special_tokens=False)[:-2] + tokenizer.encode(
                     seq_1, add_special_tokens=False
                 )
@@ -499,7 +499,7 @@ class TokenizerTesterMixin:
                     stride=stride,
                     truncation="longest_first",
                     return_overflowing_tokens=True,
-                    add_prefix_space=False,
+                    # add_prefix_space=False,
                 )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
                 if isinstance(tokenizer, PreTrainedTokenizerFast):
@@ -531,7 +531,7 @@ class TokenizerTesterMixin:
                     stride=stride,
                     truncation=True,
                     return_overflowing_tokens=True,
-                    add_prefix_space=False,
+                    # add_prefix_space=False,
                 )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
                 if isinstance(tokenizer, PreTrainedTokenizerFast):
@@ -562,7 +562,7 @@ class TokenizerTesterMixin:
                     stride=stride,
                     truncation="only_second",
                     return_overflowing_tokens=True,
-                    add_prefix_space=False,
+                    # add_prefix_space=False,
                 )
                 # Overflowing tokens are handled quite differently in slow and fast tokenizers
                 if isinstance(tokenizer, PreTrainedTokenizerFast):
@@ -638,7 +638,7 @@ class TokenizerTesterMixin:
                 # Testing single inputs
                 encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    sequence_0, add_special_tokens=True, return_special_tokens_mask=True, add_prefix_space=False
+                    sequence_0, add_special_tokens=True, return_special_tokens_mask=True  #, add_prefix_space=False
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
@@ -660,7 +660,7 @@ class TokenizerTesterMixin:
                     sequence_1,
                     add_special_tokens=True,
                     return_special_tokens_mask=True,
-                    add_prefix_space=False,
+                    # add_prefix_space=False,
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
