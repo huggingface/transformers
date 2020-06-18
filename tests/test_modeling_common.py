@@ -66,12 +66,16 @@ class ModelTesterMixin:
 
     def _prepare_for_class(self, inputs_dict, model_class):
         if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+            if "lengths" in inputs_dict:
+                del inputs_dict["lengths"]
+
             return {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-                if isinstance(v, torch.Tensor) and v.ndim != 0
+                if isinstance(v, torch.Tensor) and v.ndim != 0 and k != "lengths"
                 else v
                 for k, v in inputs_dict.items()
             }
+
         return inputs_dict
 
     def test_save_load(self):
