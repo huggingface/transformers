@@ -126,11 +126,11 @@ class TensorflowBenchmark(Benchmark):
 
         @run_with_tf_optimizations(self.args.eager_mode, self.args.use_xla)
         def encoder_decoder_forward():
-            model(input_ids, decoder_input_ids=input_ids, training=False)
+            return model(input_ids, decoder_input_ids=input_ids, training=False)
 
         @run_with_tf_optimizations(self.args.eager_mode, self.args.use_xla)
         def encoder_forward():
-            model(input_ids, training=False)
+            return model(input_ids, training=False)
 
         _inference = encoder_decoder_forward if config.is_encoder_decoder else encoder_forward
 
