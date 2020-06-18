@@ -993,7 +993,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def prepare_logits_for_generation(self, logits, cur_len, max_length):
+    def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1:
             self._force_token_ids_generation(logits, self.config.bos_token_id)
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
