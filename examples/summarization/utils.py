@@ -85,7 +85,7 @@ class SummarizationDataset(Dataset):
         prefix="",
     ):
         super().__init__()
-        tok_name = tokenizer.__class__.__name__.lower().rstrip('tokenizer')
+        tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
         # encode split.source
         self.source = encode_file(
             tokenizer,
@@ -97,7 +97,7 @@ class SummarizationDataset(Dataset):
         )
         # encode split.target
         tgt_path = os.path.join(data_dir, type_path + ".target")
-        if hasattr(tokenizer, 'set_lang'):
+        if hasattr(tokenizer, "set_lang"):
             tokenizer.set_lang("ro_RO")
         self.target = encode_file(
             tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
@@ -106,7 +106,6 @@ class SummarizationDataset(Dataset):
             self.source = self.source[:n_obs]
             self.target = self.target[:n_obs]
         self.pad_token_id = tokenizer.pad_token_id
-
 
     def __len__(self):
         return len(self.source)

@@ -10,16 +10,15 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import DataLoader
 
-from transformers import BartTokenizer
+from transformers import AutoTokenizer, BartTokenizer
+from transformers.tokenization_bart import MBartTokenizer
+from transformers.tokenization_marian import MarianTokenizer
 
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
 from .run_eval import generate_summaries, run_generate
 from .utils import SummarizationDataset, lmap, pickle_load
 
-from transformers.tokenization_bart import MBartTokenizer
-from transformers.tokenization_marian import MarianTokenizer
-from transformers import AutoTokenizer
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -85,6 +84,7 @@ def _dump_articles(path: Path, articles: list):
 BDIR = Path("~/transformers_fork/examples/summarization/bart/").absolute()
 articles = [" Sam ate lunch today", "Sams lunch ingredients"]
 summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+
 
 def make_test_data_dir():
     tmp_dir = Path(tempfile.gettempdir())
@@ -303,7 +303,7 @@ class TestBartExamples(unittest.TestCase):
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
             data_dir=tmp_dir,
-            tokenizer_name='facebook/mbart-large-en-ro',
+            tokenizer_name="facebook/mbart-large-en-ro",
             train_batch_size=2,
             eval_batch_size=2,
             gpus=0,
@@ -319,7 +319,7 @@ class TestBartExamples(unittest.TestCase):
 
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
-        mname = 'Helsinki-NLP/opus-mt-de-en'
+        mname = "Helsinki-NLP/opus-mt-de-en"
         args_d.update(
             data_dir=tmp_dir,
             tokenizer_name=mname,
@@ -335,7 +335,7 @@ class TestBartExamples(unittest.TestCase):
         main(args)
 
     def test_mbart_summarization_dataset(self):
-        tokenizer = AutoTokenizer.from_pretrained('facebook/mbart-large-en-ro')
+        tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-en-ro")
         tmp_dir = make_test_data_dir()
         max_len_source = max(len(tokenizer.encode(a)) for a in articles)
         max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
@@ -353,11 +353,13 @@ class TestBartExamples(unittest.TestCase):
             # show that targets were truncated
             self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
 
     def test_marian_summarization_dataset(self):
 
-        tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-de-en')
+        tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-de-en")
         tmp_dir = make_test_data_dir()
         max_len_source = max(len(tokenizer.encode(a)) for a in articles)
         max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
@@ -377,7 +379,7 @@ class TestBartExamples(unittest.TestCase):
             self.assertGreater(max_len_target, trunc_target)  # Truncated
 
     def test_summarization_dataset(self):
-        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
 
         tmp_dir = make_test_data_dir()
         max_len_source = max(len(tokenizer.encode(a)) for a in articles)

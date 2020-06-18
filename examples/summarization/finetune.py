@@ -89,7 +89,6 @@ class SummarizationModule(BaseTransformer):
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-
         try:
             freeze_params(self.model.model.shared)
             for d in [self.model.model.encoder, self.model.model.decoder]:
