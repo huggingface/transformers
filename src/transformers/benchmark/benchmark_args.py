@@ -34,11 +34,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PyTorchBenchmarkArguments(BenchmarkArguments):
-    no_cuda: bool = field(default=False, metadata={"help": "Whether to run on available cuda devices"})
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
-    no_tpu: bool = field(default=False, metadata={"help": "Whether to run on available tpu devices"})
-    fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
-    tpu_print_metrics: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
+    torch_xla_tpu_print_metrics: bool = field(default=False, metadata={"help": "Print Xla/PyTorch tpu metrics"})
+    fp16_opt_level: str = field(
+        default="O1",
+        metadata={
+            "help": (
+                "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+                "See details at https://nvidia.github.io/apex/amp.html"
+            )
+        },
+    )
 
     @cached_property
     @torch_required
@@ -56,8 +62,13 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
         return device, n_gpu
 
     @property
+    def is_tpu(self):
+        return is_torch_tpu_available() and not self.no_tpu
+
+    @property
     @torch_required
     def device_idx(self) -> int:
+        # TODO(PVP): currently only single GPU is supported
         return torch.cuda.current_device()
 
     @property
@@ -69,3 +80,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
     @torch_required
     def n_gpu(self):
         return self._setup_devices[1]
+
+    @property
+    def is_gpu(self):
+        return self.n_gpu > 0
