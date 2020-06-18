@@ -199,6 +199,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             raise NotImplementedError
 
+    def set_input_embeddings(self, value):
+        """
+        Set model's input embeddings
+
+        Args:
+            value (:obj:`tf.keras.layers.Layer`):
+                A module mapping vocabulary to hidden states.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            base_model.set_input_embeddings(value)
+        else:
+            raise NotImplementedError
+
     def get_output_embeddings(self):
         """
         Returns the model's output embeddings.
@@ -208,40 +222,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
-
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Variable from a provided token Embedding Module.
-            Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end
-
-        Args:
-            new_num_tokens: (`optional`) int
-                New number of tokens in the embedding matrix.
-                Increasing the size will add newly initialized vectors at the end
-                Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
-        Return: ``tf.Variable``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
-        """
-        # if new_num_tokens is None:
-        #     return old_embeddings
-
-        # old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
-        # if old_num_tokens == new_num_tokens:
-        #     return old_embeddings
-
-        # # Build new embeddings
-        # new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        # new_embeddings.to(old_embeddings.weight.device)
-
-        # # initialize all new embeddings (in particular added tokens)
-        # self._init_weights(new_embeddings)
-
-        # # Copy token embeddings from the previous weights
-        # num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        # new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
-
-        # return new_embeddings
 
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
@@ -256,7 +236,71 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        raise NotImplementedError
+        model_embeds = self._resize_token_embeddings(new_num_tokens)
+        if new_num_tokens is None:
+            return model_embeds
+
+        return model_embeds
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
+        base_model = getattr(self, self.base_model_prefix, self)
+        old_embeddings = base_model.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        base_model.set_input_embeddings(new_embeddings)
+        # Update base model and current model config
+        self.config.vocab_size = new_num_tokens
+        base_model.vocab_size = new_num_tokens
+        return base_model.get_input_embeddings()
+
+    def _get_word_embeddings(self, embeddings):
+        if hasattr(embeddings, "word_embeddings"):
+            # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+            return embeddings.word_embeddings
+        elif hasattr(embeddings, "weight"):
+            # TFSharedEmbeddings
+            return embeddings.weight
+        else:
+            raise ValueError("word embedding is not defined.")
+
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Variable from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end.
+
+        Args:
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``tf.Variable``
+            Pointer to the resized word Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        word_embeddings = self._get_word_embeddings(old_embeddings)
+        if new_num_tokens is None:
+            return word_embeddings
+        old_num_tokens, old_embedding_dim = word_embeddings.shape
+        if old_num_tokens == new_num_tokens:
+            return word_embeddings
+
+        # initialize new embeddings
+        # todo: initializer range is not always passed in config.
+        init_range = getattr(self.config, "initializer_range", 0.02)
+        new_embeddings = self.add_weight(
+            "weight",
+            shape=[new_num_tokens, old_embedding_dim],
+            initializer=get_initializer(init_range),
+            dtype=tf.float32,
+        )
+        init_weights = new_embeddings.numpy()
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        new_embeddings.assign(init_weights)
+
+        return new_embeddings
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.

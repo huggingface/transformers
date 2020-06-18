@@ -235,8 +235,9 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.wte
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, value):
+        self.wte.weight = value
+        self.wte.vocab_size = self.wte.weight.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.

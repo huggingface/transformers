@@ -422,8 +422,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError

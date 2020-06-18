@@ -306,6 +306,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embeddings
 
+    def set_input_embeddings(self, value):
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = value.shape[0]
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
