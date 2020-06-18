@@ -72,7 +72,7 @@ model would change. The :doc:`task summary </task_summary>` tutorial summarizes 
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 Now, to download the models and tokenizer we found previously, we just have to use the ``from_pretrained`` method 
-(feel free to replace ``model_name`` by any other model):
+(feel free to replace ``model_name`` by any other model from the community):
 
 ::
 
@@ -88,3 +88,4 @@ This pipeline can now deal with texts in English, French, but also Dutch, German
 Using the model directly
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+Let's now see what happens beneath the hood when using those pipelines.
