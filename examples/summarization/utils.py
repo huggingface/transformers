@@ -13,8 +13,6 @@ from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 
-from transformers import BartTokenizer
-
 
 def encode_file(
     tokenizer,

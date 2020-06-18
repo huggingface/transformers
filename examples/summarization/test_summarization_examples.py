@@ -10,9 +10,7 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import DataLoader
 
-from transformers import AutoTokenizer, BartTokenizer
-from transformers.tokenization_bart import MBartTokenizer
-from transformers.tokenization_marian import MarianTokenizer
+from transformers import BartTokenizer, MarianTokenizer, MBartTokenizer
 
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
@@ -335,7 +333,7 @@ class TestBartExamples(unittest.TestCase):
         main(args)
 
     def test_mbart_summarization_dataset(self):
-        tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-en-ro")
+        tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
         tmp_dir = make_test_data_dir()
         max_len_source = max(len(tokenizer.encode(a)) for a in articles)
         max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
