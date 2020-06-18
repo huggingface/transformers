@@ -101,9 +101,6 @@ class TFRobertaMainLayer(TFBertMainLayer):
         super().__init__(config, **kwargs)
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
-    def get_input_embeddings(self):
-        return self.embeddings
-
 
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and

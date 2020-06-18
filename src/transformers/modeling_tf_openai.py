@@ -227,8 +227,9 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.tokens_embed
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, value):
+        self.tokens_embed.weight = value
+        self.tokens_embed.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
