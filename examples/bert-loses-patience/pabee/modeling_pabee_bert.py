@@ -23,12 +23,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from transformers.modeling_bert import (
-    BertEncoder,
-    BertForSequenceClassification,
-    BertModel,
-    BertPreTrainedModel,
-)
+from transformers.modeling_bert import BertEncoder, BertForSequenceClassification, BertModel, BertPreTrainedModel
 
 
 logger = logging.getLogger(__name__)
