@@ -1391,8 +1391,8 @@ class SummarizationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    def __init__(self, task: str = "summarization", **kwargs):
-        kwargs.update(task='summarization')
+    def __init__(self, **kwargs):
+        kwargs.update(task="summarization")
         super().__init__(**kwargs)
 
     def __call__(
