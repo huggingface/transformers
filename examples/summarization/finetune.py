@@ -89,12 +89,13 @@ class SummarizationModule(BaseTransformer):
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        if self.model.config.model_type == "bart":
+
+        try:
             freeze_params(self.model.model.shared)
             for d in [self.model.model.encoder, self.model.model.decoder]:
                 freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
-        else:
+        except AttributeError:
             freeze_params(self.model.shared)
             for d in [self.model.encoder, self.model.decoder]:
                 freeze_params(d.embed_tokens)

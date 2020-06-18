@@ -17,6 +17,9 @@ from .finetune import main
 from .run_eval import generate_summaries, run_generate
 from .utils import SummarizationDataset, lmap, pickle_load
 
+from transformers.tokenization_bart import MBartTokenizer
+from transformers.tokenization_marian import MarianTokenizer
+from transformers import AutoTokenizer
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -293,13 +296,71 @@ class TestBartExamples(unittest.TestCase):
         args = argparse.Namespace(**args_d)
         main(args)
 
+    def test_mbart_finetune(self):
+        args_d: dict = CHEAP_ARGS.copy()
+
+        tmp_dir = make_test_data_dir()
+        output_dir = tempfile.mkdtemp(prefix="output_")
+        args_d.update(
+            data_dir=tmp_dir,
+            tokenizer_name='facebook/mbart-large-en-ro',
+            train_batch_size=2,
+            eval_batch_size=2,
+            gpus=0,
+            output_dir=output_dir,
+            do_predict=True,
+        )
+        assert "n_train" in args_d
+        args = argparse.Namespace(**args_d)
+        main(args)
+
+    def test_marian_finetune(self):
+        args_d: dict = CHEAP_ARGS.copy()
+
+        tmp_dir = make_test_data_dir()
+        output_dir = tempfile.mkdtemp(prefix="output_")
+        mname = 'Helsinki-NLP/opus-mt-de-en'
+        args_d.update(
+            data_dir=tmp_dir,
+            tokenizer_name=mname,
+            model_name_or_path=mname,
+            train_batch_size=2,
+            eval_batch_size=2,
+            gpus=0,
+            output_dir=output_dir,
+            do_predict=True,
+        )
+        assert "n_train" in args_d
+        args = argparse.Namespace(**args_d)
+        main(args)
 
     def test_mbart_summarization_dataset(self):
-        from transformers.tokenization_bart import MBartTokenizer
-        tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro')
+        tokenizer = AutoTokenizer.from_pretrained('facebook/mbart-large-en-ro')
         tmp_dir = make_test_data_dir()
-        max_len_source = max(len(tokenizer.encode(a)) for a in articles) - 1
-        max_len_target = max(len(tokenizer.encode(a)) for a in summaries) -1
+        max_len_source = max(len(tokenizer.encode(a)) for a in articles)
+        max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
+        trunc_target = 4
+        train_dataset = SummarizationDataset(
+            tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
+        )
+        dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
+        for batch in dataloader:
+            self.assertEqual(batch["attention_mask"].shape, batch["input_ids"].shape)
+            # show that articles were trimmed.
+            self.assertEqual(batch["input_ids"].shape[1], max_len_source)
+            self.assertGreater(20, batch["input_ids"].shape[1])  # trimmed significantly
+
+            # show that targets were truncated
+            self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
+            self.assertGreater(max_len_target, trunc_target)  # Truncated
+            import ipdb; ipdb.set_trace()
+
+    def test_marian_summarization_dataset(self):
+
+        tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-de-en')
+        tmp_dir = make_test_data_dir()
+        max_len_source = max(len(tokenizer.encode(a)) for a in articles)
+        max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
         trunc_target = 4
         train_dataset = SummarizationDataset(
             tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
@@ -315,9 +376,9 @@ class TestBartExamples(unittest.TestCase):
             self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
 
-
     def test_summarization_dataset(self):
         tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+
         tmp_dir = make_test_data_dir()
         max_len_source = max(len(tokenizer.encode(a)) for a in articles)
         max_len_target = max(len(tokenizer.encode(a)) for a in summaries)

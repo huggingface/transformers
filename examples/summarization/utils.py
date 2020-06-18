@@ -102,8 +102,6 @@ class SummarizationDataset(Dataset):
         self.target = encode_file(
             tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
         )
-        self.source = encode_file(tokenizer, os.path.join(data_dir, type_path + ".source"), max_source_length)
-        self.target = encode_file(tokenizer, os.path.join(data_dir, type_path + ".target"), max_target_length)
         if n_obs is not None:
             self.source = self.source[:n_obs]
             self.target = self.target[:n_obs]
