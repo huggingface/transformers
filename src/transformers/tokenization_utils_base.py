@@ -1639,63 +1639,78 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def pad(
         self,
-        encoding_or_batch: Dict[str, Union[List[EncodedInput], EncodedInput]],
+        encoded_inputs: Union[BatchEncoding, List[BatchEncoding], Dict[str, EncodedInput], Dict[str, List[EncodedInput]], List[Dict[str, EncodedInput]]],
         padding: Union[bool, str] = True,
         max_length: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
-    ) -> dict:
-        """ Pad encoded inputs (on left/right and up to predefined legnth or max length in the batch)
+    ) -> BatchEncoding:
+        """ Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length in the batch.
+
+            Padding side (left/right) padding token ids are defined at the tokenizer level
+            (with ``self.padding_side``, ``self.pad_token_id`` and ``self.pad_token_type_id``)
 
         Args:
-            batch_ids: Dictionary of batch of tokenized inputs (`List[List[int]]`).
-            max_length: maximum length of the returned list and optionally padding length (see below).
-                Will truncate by taking into account the special tokens.
+            encoded_inputs: Dictionary of tokenized inputs (`Dict[str, List[int]]`) or batch of tokenized inputs.
+                Batch of tokenized inputs can be given as dicts of lists or lists of dicts, both work so you can
+                use ``tokenizer.pad()`` during pre-processing as well as in a PyTorch Dataloader collate function.
+                (`Dict[str, List[List[int]]]` or `List[Dict[str, List[int]]]`).
             padding: Boolean or specific strategy to use for padding.
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding index) among:
                 - 'longest' (or `True`) Pad to the longest sequence in the batch
                 - 'max_length': Pad to the max length (default)
                 - 'do_not_pad' (or `False`): Do not pad
-                The tokenizer padding sides are defined in self.padding_side:
-                    - 'left': pads on the left of the sequences
-                    - 'right': pads on the right of the sequences
+            max_length: maximum length of the returned list and optionally padding length (see below).
+                Will truncate by taking into account the special tokens.
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
+                Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
+                PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
+            verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Set to ``False`` to avoid printing infos and warnings. 
         """
-        assert "input_ids" in encoding_or_batch, (
-            "You should supply an encoding to this method (a dict of lists/batch of int). "
-            "This is the output of encode/encode_plus/batch_encode_plus/__call__. "
+        # If we have a list of dicts, let's convert it in a dict of lists
+        if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
+            encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
+
+        assert "input_ids" in encoded_inputs, (
+            "You should supply an encoding or a list of encodings to this method. "
+            "An encoding is the output of one the encoding methods of the tokenizer, i.e. "
+            "__call__/encode_plus/batch_encode_plus. "
         )
 
-        if not encoding_or_batch["input_ids"]:
+        if not encoded_inputs["input_ids"]:
             if return_attention_mask:
-                encoding_or_batch["attention_mask"] = []
-            return encoding_or_batch
+                encoded_inputs["attention_mask"] = []
+            return encoded_inputs
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
             padding=padding, max_length=max_length, verbose=verbose
         )
 
-        if encoding_or_batch["input_ids"] and not isinstance(encoding_or_batch["input_ids"][0], (list, tuple)):
-            return self._pad(
-                encoding_or_batch,
+        if encoded_inputs["input_ids"] and not isinstance(encoded_inputs["input_ids"][0], (list, tuple)):
+            encoded_inputs = self._pad(
+                encoded_inputs,
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 return_attention_mask=return_attention_mask,
             )
+            return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
-        batch_size = len(encoding_or_batch["input_ids"])
+        batch_size = len(encoded_inputs["input_ids"])
         assert all(
-            len(v) == batch_size for v in encoding_or_batch.values()
+            len(v) == batch_size for v in encoded_inputs.values()
         ), "Some items in the output dictionnary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(len(inputs) for inputs in encoding_or_batch["input_ids"])
+            max_length = max(len(inputs) for inputs in encoded_inputs["input_ids"])
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in encoding_or_batch.items())
+            inputs = dict((k, v[i]) for k, v in encoded_inputs.items())
             outputs = self._pad(
                 inputs,
                 max_length=max_length,
@@ -1708,11 +1723,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
 
-        return batch_outputs
+        return BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
     def _pad(
         self,
-        encoded_inputs: Dict[str, EncodedInput],
+        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         return_attention_mask: Optional[bool] = None,
