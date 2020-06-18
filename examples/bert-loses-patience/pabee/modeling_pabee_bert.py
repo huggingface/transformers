@@ -29,7 +29,6 @@ from transformers.modeling_bert import (
     BertEncoder,
     BertForSequenceClassification,
     BertModel,
-    BertPreTrainedModel,
 )
 
 
