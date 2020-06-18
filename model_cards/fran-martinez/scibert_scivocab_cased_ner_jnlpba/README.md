@@ -86,29 +86,31 @@ nlp_ner = pipeline("ner",
 
 nlp_ner(text)
 
-# Output:
-#---------------------------
-# [
-# {'word': 'glucocorticoid', 
-# 'score': 0.9894881248474121, 
-# 'entity': 'B-protein'}, 
-# 
-# {'word': 'receptor', 
-# 'score': 0.989505410194397, 
-# 'entity': 'I-protein'}, 
-# 
-# {'word': 'normal', 
-# 'score': 0.7680378556251526, 
-# 'entity': 'B-cell_type'}, 
-# 
-# {'word': 'cs', 
-# 'score': 0.5176806449890137, 
-# 'entity': 'I-cell_type'}, 
-# 
-# {'word': 'lymphocytes', 
-# 'score': 0.9898491501808167, 
-# 'entity': 'I-cell_type'}
-# ]
+"""
+Output:
+---------------------------
+[
+{'word': 'glucocorticoid', 
+'score': 0.9894881248474121, 
+'entity': 'B-protein'}, 
+ 
+{'word': 'receptor', 
+'score': 0.989505410194397, 
+'entity': 'I-protein'}, 
+
+{'word': 'normal', 
+'score': 0.7680378556251526, 
+'entity': 'B-cell_type'}, 
+
+{'word': 'cs', 
+'score': 0.5176806449890137, 
+'entity': 'I-cell_type'}, 
+
+{'word': 'lymphocytes', 
+'score': 0.9898491501808167, 
+'entity': 'I-cell_type'}
+]
+"""
 ````
 Or load model and tokenizer as follows:
 ````python
@@ -137,21 +139,23 @@ predictions = outputs[0].argmax(axis=-1)[0][1:-1]
 for token, pred in zip(tokenizer.tokenize(text), predictions):
   print(token, '->', model.config.id2label[pred.numpy().item()])
 
-# Output:
-#---------------------------
-# mouse -> O
-# thymus -> O
-# was -> O
-# used -> O
-# as -> O
-# a -> O
-# source -> O
-# of -> O
-# glucocorticoid -> B-protein
-# receptor -> I-protein
-# from -> O
-# normal -> B-cell_type
-# cs -> I-cell_type
-# lymphocytes -> I-cell_type
-# . -> O
+"""
+Output:
+---------------------------
+mouse -> O
+thymus -> O
+was -> O
+used -> O
+as -> O
+a -> O
+source -> O
+of -> O
+glucocorticoid -> B-protein
+receptor -> I-protein
+from -> O
+normal -> B-cell_type
+cs -> I-cell_type
+lymphocytes -> I-cell_type
+. -> O
+"""
 ````
