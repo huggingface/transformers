@@ -135,6 +135,5 @@ class BartConfig(PretrainedConfig):
         return False
 
 
-class MbartConfig(BartConfig):
-    useless_int = 4
+class MBartConfig(BartConfig):
     model_type = "mbart"
