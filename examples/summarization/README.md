@@ -20,6 +20,14 @@ export XSUM_DIR=${PWD}/xsum
 ```
 
 
+WMT16 English-Romanian Translation Data:
+```bash
+cd examples/summarization
+wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
+tar -xzvf wmt_en_ro.tar.gz
+export ENRO_DIR=${PWD}/wmt_en_ro
+```
+
 ### Evaluation
 
 To create summaries for each article in dataset, run:
