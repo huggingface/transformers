@@ -596,6 +596,9 @@ def main():
     label_list = processor.get_labels()
     num_labels = len(label_list)
 
+    if args.patience != "0" and args.per_gpu_eval_batch_size != 1:
+        raise ValueError("The eval batch size must be 1 with PABEE inference on.")
+
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
