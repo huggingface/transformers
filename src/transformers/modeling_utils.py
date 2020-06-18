@@ -1416,8 +1416,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 num_beams=num_beams,
             )
 
-
-
             assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
                 scores.shape, (batch_size * num_beams, vocab_size)
             )
