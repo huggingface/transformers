@@ -205,7 +205,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 **kwargs (:obj: `dict`): Arguments passed to the model-specific `prepare_for_tokenization` preprocessing method.
         """
         all_special_tokens = self.all_special_tokens
-        text = self.prepare_for_tokenization(text, **kwargs)
+        text, kwargs = self.prepare_for_tokenization(text, **kwargs)
+
+        if kwargs:
+            raise ValueError("Keyword arguments {} not recognized.")
 
         # TODO: should this be in the base class?
         def lowercase_text(t):
@@ -626,9 +629,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         return batch_outputs
 
-    def prepare_for_tokenization(self, text: str, **kwargs) -> str:
-        """ Performs any necessary transformations before tokenization """
-        return text
+    def prepare_for_tokenization(self, text: str, **kwargs) -> (str, dict):
+        """ Performs any necessary transformations before tokenization.
+
+            This method should pop the used arguments from kwargs and return kwargs as well.
+            We test kwargs at the end of the process to be sure all the arguments have been used.
+        """
+        return (text, kwargs)
 
     def truncate_sequences(
         self,

@@ -330,8 +330,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(self, text, **kwargs):
         # add spaces before punctuation symbols as should be done in transfo-xl
-
-        if "add_space_before_punct_symbol" in kwargs and kwargs["add_space_before_punct_symbol"]:
+        add_space_before_punct_symbol = kwargs.pop("add_space_before_punct_symbol", False)
+        if add_space_before_punct_symbol:
             text = self.punctuation_with_space_around_pattern.sub(r" ", text)
         elif self.punction_without_space_before_pattern.search(text):
             # searches until the first occurence of a punctuation symbol without surrounding spaces
@@ -339,7 +339,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
             )
 
-        return text
+        return (text, kwargs)
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):

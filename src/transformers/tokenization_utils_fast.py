@@ -343,6 +343,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
             )
 
+        if kwargs:
+            raise ValueError("Keyword arguments {} not recognized.")
+
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
             padding_strategy=padding_strategy,

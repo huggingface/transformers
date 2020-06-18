@@ -274,9 +274,10 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return vocab_file, merge_file
 
     def prepare_for_tokenization(self, text, **kwargs):
-        if "add_prefix_space" in kwargs and kwargs["add_prefix_space"]:
-            return " " + text
-        return text
+        add_prefix_space = kwargs.pop("add_prefix_space", False)
+        if add_prefix_space:
+            text = " " + text
+        return (text, kwargs)
 
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):

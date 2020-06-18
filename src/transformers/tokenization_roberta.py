@@ -232,13 +232,10 @@ class RobertaTokenizer(GPT2Tokenizer):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def prepare_for_tokenization(self, text, add_special_tokens=False, **kwargs):
-        if "add_prefix_space" in kwargs:
-            add_prefix_space = kwargs["add_prefix_space"]
-        else:
-            add_prefix_space = add_special_tokens
+        add_prefix_space = kwargs.pop("add_prefix_space", add_special_tokens)
         if add_prefix_space and not text[0].isspace():
             text = " " + text
-        return text
+        return (text, kwargs)
 
 
 class RobertaTokenizerFast(GPT2TokenizerFast):
