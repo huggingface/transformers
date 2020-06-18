@@ -1810,7 +1810,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
             "Please use a slow (full python) tokenizer to activate this argument."
             "Or set `return_special_token_mask=True` when calling the encoding method "
-            "to get the special tokens mask in any tokenizer. ")
+            "to get the special tokens mask in any tokenizer. "
+        )
 
         all_special_ids = self.all_special_ids  # cache the property
 
