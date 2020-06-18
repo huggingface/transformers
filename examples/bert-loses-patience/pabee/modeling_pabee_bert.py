@@ -27,12 +27,28 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from transformers.activations import gelu, gelu_new, swish
 from transformers.configuration_bert import BertConfig
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.modeling_bert import (
+    ACT2FN,
+    BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    BertAttention,
+    BertEmbeddings,
+    BertEncoder,
+    BertForSequenceClassification,
+    BertIntermediate,
+    BertLayer,
+    BertLayerNorm,
+    BertModel,
+    BertOutput,
+    BertPooler,
+    BertPredictionHeadTransform,
+    BertPreTrainedModel,
+    BertSelfAttention,
+    BertSelfOutput,
+    load_tf_weights_in_bert,
+    mish,
+)
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
-from transformers.modeling_bert import BertEmbeddings, BertSelfAttention, BertSelfOutput, BertOutput, BertLayer, \
-    BertAttention, BertIntermediate, BertOutput, BERT_PRETRAINED_MODEL_ARCHIVE_LIST, load_tf_weights_in_bert, mish, \
-    ACT2FN, BertLayerNorm, BertEncoder, BertPooler, BertPredictionHeadTransform, BertPreTrainedModel, BertModel, \
-    BertForSequenceClassification
 
 logger = logging.getLogger(__name__)
 
