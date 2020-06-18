@@ -1456,6 +1456,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
+                return_length=return_lengths,
                 verbose=verbose,
                 **kwargs,
             )
@@ -1477,7 +1478,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_lengths: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -1516,7 +1517,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
-            return_lengths=return_lengths,
+            return_length=return_length,
             verbose=verbose,
             **kwargs,
         )
@@ -1537,6 +1538,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:

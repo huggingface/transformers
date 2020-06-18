@@ -147,6 +147,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        return_lengths: bool = False,
         verbose: bool = True,
     ) -> Dict[str, Any]:
         """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
@@ -178,6 +179,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
             if return_offsets_mapping:
                 encoding_dict["offset_mapping"].append(e.offsets)
+            if return_lengths:
+                encoding_dict["length"].append(len(e.ids))
 
         return encoding_dict
 
@@ -381,6 +384,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
+                return_lengths=return_lengths,
                 verbose=verbose,
             )
             for encoding in encodings
@@ -419,6 +423,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -438,6 +443,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
+            return_lengths=return_length,
             verbose=verbose,
             **kwargs,
         )

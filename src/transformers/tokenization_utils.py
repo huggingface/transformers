@@ -316,6 +316,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -369,6 +370,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
+            return_length=return_length,
             verbose=verbose,
         )
 
@@ -511,7 +513,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_masks,
-                return_lengths=return_lengths,
+                return_length=return_lengths,
                 return_tensors=None,  # We will convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
@@ -542,7 +544,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
-        return_lengths: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
         """ Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
@@ -615,7 +617,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return_attention_mask=return_attention_mask,
         )
 
-        if return_lengths:
+        if return_length:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
