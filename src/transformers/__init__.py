@@ -333,6 +333,7 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
+        ElectraForMultipleChoice,
         ElectraForSequenceClassification,
         ElectraForQuestionAnswering,
         ElectraModel,
