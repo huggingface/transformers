@@ -31,6 +31,7 @@ if is_torch_available():
     from transformers import (
         AutoModel,
         AutoModelForSequenceClassification,
+        AutoModelForSeq2SeqLM,
         AutoTokenizer,
         BartModel,
         BartForConditionalGeneration,
@@ -38,7 +39,6 @@ if is_torch_available():
         BartForQuestionAnswering,
         BartConfig,
         BartTokenizer,
-        MBartTokenizer,
         BatchEncoding,
         pipeline,
     )
@@ -217,8 +217,8 @@ class MBartIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "facebook/mbart-large-en-ro"
-        cls.tokenizer = MBartTokenizer.from_pretrained(checkpoint_name)
+        checkpoint_name = "sshleifer/mbart-large-en-ro"
+        cls.tokenizer = AutoTokenizer.from_pretrained(checkpoint_name)
         cls.pad_token_id = 1
         return cls
 
@@ -226,7 +226,7 @@ class MBartIntegrationTests(unittest.TestCase):
     def model(self):
         """Only load the model if needed."""
 
-        model = BartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro").to(torch_device)
+        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro").to(torch_device)
         if "cuda" in torch_device:
             model = model.half()
         return model
