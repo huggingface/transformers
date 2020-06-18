@@ -462,6 +462,13 @@ class TFModelTesterMixin:
                 # # check that the the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
                 self.assertEqual(new_embeddings.shape[0], assert_size)
+                # check that weights remain the same after resizing
+                emd_old_weights = model._get_word_embeddings(emb_old)
+                models_equal = True
+                for p1, p2 in zip(emd_old_weights.numpy(), new_embeddings.numpy()):
+                    if np.sum(abs(p1 - p2)) > 0:
+                        models_equal = False
+                self.assertTrue(models_equal)
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
