@@ -307,7 +307,7 @@ def main(args, model=None) -> SummarizationModule:
 
         # TODO: separate LB for CNN, we should use
 
-        logger = WandbLogger(name=model.output_dir.name, project=f"hf_{args.dataset}")
+        logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
     trainer: pl.Trainer = generic_train(
         model,
         args,
