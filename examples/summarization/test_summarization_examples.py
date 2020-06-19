@@ -79,7 +79,7 @@ def _dump_articles(path: Path, articles: list):
         f.write("\n".join(articles))
 
 
-BDIR = Path("~/transformers_fork/examples/summarization/bart/").absolute()
+MSG = "These won't pass until hidden_states kwarg is merged."
 
 
 def make_test_data_dir():
@@ -92,7 +92,6 @@ def make_test_data_dir():
     return tmp_dir
 
 
-@unittest.skip("These wont' pass until hidden_states kwarg is merged.")
 class TestSummarizationDistiller(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -108,6 +107,8 @@ class TestSummarizationDistiller(unittest.TestCase):
             freeze_encoder=True,
             gpus=2,
             sortish_sampler=False,
+            fp16_opt_level="O1",
+            fp16=FP16_EVER,
         )
         self._bart_distiller_cli(updates)
 
@@ -124,7 +125,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
-    @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
+    @unittest.skip(MSG)
     def test_bdc_t5_eval_fp16(self):
         updates = dict(
             fp16=FP16_EVER,
@@ -138,7 +139,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         )
         self._bart_distiller_cli(updates, check_contents=False)
 
-    @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
+    @unittest.skip(MSG)
     def test_bdc_t5_train_fp16(self):
         updates = dict(
             fp16=FP16_EVER,
@@ -156,10 +157,12 @@ class TestSummarizationDistiller(unittest.TestCase):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True,)
         self._bart_distiller_cli(updates)
 
+    @unittest.skip(MSG)
     def test_bdc_yes_teacher(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
         self._bart_distiller_cli(updates)
 
+    @unittest.skip(MSG)
     def test_bdc_checkpointing(self):
 
         updates = dict(
@@ -184,6 +187,7 @@ class TestSummarizationDistiller(unittest.TestCase):
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
+    @unittest.skip(MSG)
     def test_bdc_t5(self):
         updates = dict(
             student_encoder_layers=1,
@@ -196,6 +200,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
+    @unittest.skip(MSG)
     def test_bdc_t5_eval(self):
         updates = dict(
             model_type="t5",
@@ -237,10 +242,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertIn(ckpt_name, contents)
         self.assertIn("metrics.pkl", contents)
         self.assertIn("test_generations.txt", contents)
-        self.assertIn("val_generations_1.txt", contents)
-        self.assertIn("val_1_results.txt", contents)
+        self.assertIn("val_generations_00001.txt", contents)
+        self.assertIn("val_results_00001.txt", contents)
         self.assertIn("test_results.txt", contents)
-        # self.assertEqual(len(contents), 15)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
         import pandas as pd
