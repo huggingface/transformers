@@ -259,30 +259,24 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 text (:obj:`string`): The sequence to be encoded.
                 **kwargs (:obj: `dict`): Arguments passed to the model-specific `prepare_for_tokenization` preprocessing method.
         """
-        all_special_tokens_extended = (
-            self.all_special_tokens_extended
-        )  # Cache to avoid recomputing the property everytime
+        # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
+        all_special_tokens_extended = dict((str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken))
+
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if kwargs:
             raise ValueError(f"Keyword arguments {kwargs} not recognized.")
 
         # TODO: should this be in the base class?
-        def lowercase_text(t):
-            # convert non-special tokens to lowercase
-            escaped_special_toks = [re.escape(str(s_tok)) for s_tok in all_special_tokens_extended]
-            pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
-            return re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), t)
-
         if self.init_kwargs.get("do_lower_case", False):
-            text = lowercase_text(text)
+            # convert non-special tokens to lowercase
+            escaped_special_toks = [re.escape(s_tok) for s_tok in self.all_special_tokens]
+            pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
+            text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
         def split_on_token(tok, text):
             result = []
-            if tok in all_special_tokens_extended:
-                tok_extended = all_special_tokens_extended[all_special_tokens_extended.index(tok)]
-            else:
-                tok_extended = None
+            tok_extended = all_special_tokens_extended.get(tok, None)
             split_text = text.split(tok)
             full_word = ""
             for i, sub_text in enumerate(split_text):
@@ -291,7 +285,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 # Cf. https://github.com/huggingface/transformers/pull/2778
                 # and https://github.com/huggingface/transformers/issues/3788
                 if isinstance(tok_extended, AddedToken):
-                    if tok_extended._single_word:
+                    if tok_extended.single_word:
                         # Try to avoid splitting on token
                         if (
                             i < len(split_text) - 1
@@ -306,12 +300,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                             full_word = ""
                             continue
                     # Strip white spaces on the right
-                    if tok_extended._rstrip and i > 0:
+                    if tok_extended.rstrip and i > 0:
                         # A bit counter-intuitive but we strip the left of the string
-                        # since tok_extended._rstrip means the special token is eating all white spaces on its right
+                        # since tok_extended.rstrip means the special token is eating all white spaces on its right
                         sub_text = sub_text.lstrip()
                     # Strip white spaces on the left
-                    if tok_extended._lstrip and i < len(split_text) - 1:
+                    if tok_extended.lstrip and i < len(split_text) - 1:
                         sub_text = sub_text.rstrip()  # Opposite here
                 else:
                     # We strip left and right by default

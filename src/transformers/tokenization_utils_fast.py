@@ -207,14 +207,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def convert_tokens_to_string(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
         return self._tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
-    def add_tokens(self, new_tokens: List[Union[str, AddedToken, AddedTokenFast]], special_token=False) -> int:
+    def add_tokens(self, new_tokens: List[Union[str, AddedToken]], special_token=False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens: string or list of string or :class:`~transformers.AddedTokenFast`. Each string is a token to add.
-                Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to
+            new_tokens: string or list of string or :class:`~transformers.AddedToken`. Each string is a token to add.
+                Tokens are only added if they are not already in the vocabulary. AddedToken wrap a string token to
                 let you personnalize it's behavior (Whether this token should only match against single word, whether
                 this token should strip all potential whitespaces on the left side, Whether this token should strip
                 all potential whitespaces on the right side...).
@@ -237,19 +237,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
 
-        # Convert AddedToken in AddedTokenFast
-        converted_tokens = []
-        for tok in new_tokens:
-            if isinstance(tok, AddedToken):
-                tok = AddedTokenFast(
-                    content=str(tok), single_word=tok._single_word, lstrip=tok._lstrip, rstrip=tok._rstrip
-                )
-            converted_tokens.append(tok)
+        # # Convert AddedToken in AddedTokenFast
+        # converted_tokens = []
+        # for tok in new_tokens:
+        #     # if isinstance(tok, AddedToken):
+        #     #     tok = AddedTokenFast(
+        #     #         content=str(tok), single_word=tok._single_word, lstrip=tok._lstrip, rstrip=tok._rstrip
+        #     #     )
+        #     converted_tokens.append(tok)
 
         if special_token:
-            return self._tokenizer.add_special_tokens(converted_tokens)
+            return self._tokenizer.add_special_tokens(new_tokens)
 
-        return self._tokenizer.add_tokens(converted_tokens)
+        return self._tokenizer.add_tokens(new_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         return self._tokenizer.num_special_tokens_to_add(pair)

@@ -28,7 +28,7 @@ from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
-from tokenizers import AddedToken as AddedTokenFast
+from tokenizers import AddedToken
 from tokenizers import Encoding as EncodingFast
 
 from .file_utils import (
@@ -522,41 +522,41 @@ class BatchEncoding(UserDict):
         return self
 
 
-class AddedToken(UserString):
-    """ AddedToken represents a token to be added to a Tokenizer
+# class AddedToken(UserString):
+#     """ AddedToken represents a token to be added to a Tokenizer
 
-        An AddedToken can have special options defining the way it should behave.
+#         An AddedToken can have special options defining the way it should behave.
 
-        Args:
-            content: str:
-                The content of the token
+#         Args:
+#             content: str:
+#                 The content of the token
 
-            single_word: bool
-                Whether this token should only match against single word. If True,
-                this token will never match inside of a word.
+#             single_word: bool
+#                 Whether this token should only match against single word. If True,
+#                 this token will never match inside of a word.
 
-            lstrip: bool
-                Whether this token should strip all potential whitespaces on the left side.
-                If True, this token will greedily match any whitespace on the left and then strip
-                them out.
+#             lstrip: bool
+#                 Whether this token should strip all potential whitespaces on the left side.
+#                 If True, this token will greedily match any whitespace on the left and then strip
+#                 them out.
 
-            rstrip: bool
-                Whether this token should strip all potential whitespaces on the right side.
-                If True, this token will greedily match any whitespace on the right and then strip
-                them out.
-    """
+#             rstrip: bool
+#                 Whether this token should strip all potential whitespaces on the right side.
+#                 If True, this token will greedily match any whitespace on the right and then strip
+#                 them out.
+#     """
 
-    def __init__(
-        self, data: str, single_word: bool = False, lstrip: bool = False, rstrip: bool = False,
-    ):
-        super().__init__(data)
+#     def __init__(
+#         self, data: str, single_word: bool = False, lstrip: bool = False, rstrip: bool = False,
+#     ):
+#         super().__init__(data)
 
-        self._single_word = single_word
-        self._lstrip = lstrip
-        self._rstrip = rstrip
+#         self._single_word = single_word
+#         self._lstrip = lstrip
+#         self._rstrip = rstrip
 
-    def lower(self):
-        return AddedToken(self.data.lower(), self._single_word, self._lstrip, self._rstrip)
+#     def lower(self):
+#         return AddedToken(self.data.lower(), self._single_word, self._lstrip, self._rstrip)
 
 
 class SpecialTokensMixin:
@@ -593,13 +593,13 @@ class SpecialTokensMixin:
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
-                elif isinstance(value, AddedTokenFast):
-                    setattr(self, key, str(value))
+                # elif isinstance(value, AddedTokenFast):
+                #     setattr(self, key, str(value))
                 elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
                 else:
                     raise TypeError(
-                        "special token {} has to be either str, AddedToken or AddedTokenFast but got: {}".format(
+                        "special token {} has to be either str or AddedToken but got: {}".format(
                             key, type(value)
                         )
                     )
@@ -678,56 +678,64 @@ class SpecialTokensMixin:
         """ Beginning of sentence token (string). Log an error if used while not having been set. """
         if self._bos_token is None and self.verbose:
             logger.error("Using bos_token, but it is not set yet.")
-        return self._bos_token
+            return None
+        return str(self._bos_token)
 
     @property
     def eos_token(self):
         """ End of sentence token (string). Log an error if used while not having been set. """
         if self._eos_token is None and self.verbose:
             logger.error("Using eos_token, but it is not set yet.")
-        return self._eos_token
+            return None
+        return str(self._eos_token)
 
     @property
     def unk_token(self):
         """ Unknown token (string). Log an error if used while not having been set. """
         if self._unk_token is None and self.verbose:
             logger.error("Using unk_token, but it is not set yet.")
-        return self._unk_token
+            return None
+        return str(self._unk_token)
 
     @property
     def sep_token(self):
         """ Separation token (string). E.g. separate context and query in an input sequence. Log an error if used while not having been set. """
         if self._sep_token is None and self.verbose:
             logger.error("Using sep_token, but it is not set yet.")
-        return self._sep_token
+            return None
+        return str(self._sep_token)
 
     @property
     def pad_token(self):
         """ Padding token (string). Log an error if used while not having been set. """
         if self._pad_token is None and self.verbose:
             logger.error("Using pad_token, but it is not set yet.")
-        return self._pad_token
+            return None
+        return str(self._pad_token)
 
     @property
     def cls_token(self):
         """ Classification token (string). E.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model. Log an error if used while not having been set. """
         if self._cls_token is None and self.verbose:
             logger.error("Using cls_token, but it is not set yet.")
-        return self._cls_token
+            return None
+        return str(self._cls_token)
 
     @property
     def mask_token(self):
         """ Mask token (string). E.g. when training a model with masked-language modeling. Log an error if used while not having been set. """
         if self._mask_token is None and self.verbose:
             logger.error("Using mask_token, but it is not set yet.")
-        return self._mask_token
+            return None
+        return str(self._mask_token)
 
     @property
     def additional_special_tokens(self):
         """ All the additional special tokens you may want to use (list of strings). Log an error if used while not having been set. """
         if self._additional_special_tokens is None and self.verbose:
             logger.error("Using additional_special_tokens, but it is not set yet.")
-        return self._additional_special_tokens
+            return None
+        return [str(tok) for tok in self._additional_special_tokens]
 
     @bos_token.setter
     def bos_token(self, value):
@@ -810,6 +818,23 @@ class SpecialTokensMixin:
     def special_tokens_map(self):
         """ A dictionary mapping special token class attribute (cls_token, unk_token...) to their
             values ('<unk>', '<cls>'...)
+            Convert tokens of AddedToken type in string.
+            All returned tokens are strings
+        """
+        set_attr = {}
+        for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
+            attr_value = getattr(self, "_" + attr)
+            if attr_value:
+                set_attr[attr] = str(attr_value)
+        return set_attr
+
+    @property
+    def special_tokens_map_extended(self):
+        """ A dictionary mapping special token class attribute (cls_token, unk_token...) to their
+            values ('<unk>', '<cls>'...)
+            Keep the tokens as AddedToken if they are of this type.
+
+            AddedToken can be used to control more finely how special tokens are tokenized.
         """
         set_attr = {}
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
@@ -822,7 +847,7 @@ class SpecialTokensMixin:
     def all_special_tokens(self):
         """ List all the special tokens ('<unk>', '<cls>'...) mapped to class attributes
             Convert tokens of AddedToken type in string.
-            All returned tokens are thus strings
+            All returned tokens are strings
             (cls_token, unk_token...).
         """
         all_toks = [str(s) for s in self.all_special_tokens_extended]
@@ -836,7 +861,7 @@ class SpecialTokensMixin:
             AddedToken can be used to control more finely how special tokens are tokenized.
         """
         all_toks = []
-        set_attr = self.special_tokens_map
+        set_attr = self.special_tokens_map_extended
         for attr_value in set_attr.values():
             all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
         all_toks = list(set(all_toks))
@@ -1268,13 +1293,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             write_dict = {}
-            for key, value in self.special_tokens_map.items():
+            for key, value in self.special_tokens_map_extended.items():
                 if isinstance(value, AddedToken):
                     write_dict[key] = {
-                        "data": value.data,
-                        "single_word": value._single_word,
-                        "lstrip": value._lstrip,
-                        "rstrip": value._rstrip,
+                        "content": value.content,
+                        "single_word": value.single_word,
+                        "lstrip": value.lstrip,
+                        "rstrip": value.rstrip,
                     }
                 else:
                     write_dict[key] = value
