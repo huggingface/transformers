@@ -88,10 +88,12 @@ def _is_end_of_word(text):
     last_char = text[-1]
     return bool(_is_control(last_char) | _is_punctuation(last_char) | _is_whitespace(last_char))
 
+
 def _is_start_of_word(text):
     """Checks whether the first character in text is one of a punctuation, control or whitespace character."""
     first_char = text[0]
     return bool(_is_control(first_char) | _is_punctuation(first_char) | _is_whitespace(first_char))
+
 
 class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """ Base class for all slow tokenizers.
@@ -220,7 +222,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
-        self.unique_added_tokens_encoder = list(set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens)))
+        self.unique_added_tokens_encoder = list(
+            set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
+        )
         self.added_tokens_decoder.update(added_tok_decoder)
 
         return len(tokens_to_add)
@@ -255,7 +259,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 text (:obj:`string`): The sequence to be encoded.
                 **kwargs (:obj: `dict`): Arguments passed to the model-specific `prepare_for_tokenization` preprocessing method.
         """
-        all_special_tokens_extended = self.all_special_tokens_extended  # Cache to avoid recomputing the property everytime
+        all_special_tokens_extended = (
+            self.all_special_tokens_extended
+        )  # Cache to avoid recomputing the property everytime
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if kwargs:
@@ -287,7 +293,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if isinstance(tok_extended, AddedToken):
                     if tok_extended._single_word:
                         # Try to avoid splitting on token
-                        if i < len(split_text) - 1 and not _is_end_of_word(sub_text) and not _is_start_of_word(split_text[i+1]):
+                        if (
+                            i < len(split_text) - 1
+                            and not _is_end_of_word(sub_text)
+                            and not _is_start_of_word(split_text[i + 1])
+                        ):
                             # Don't extract the special token
                             full_word += sub_text + tok
                         elif full_word:
@@ -414,14 +424,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_pretokenized:
-                    tokens = list(
-                        itertools.chain(
-                            *(
-                                self.tokenize(t, is_pretokenized=True, **kwargs)
-                                for t in text
-                            )
-                        )
-                    )
+                    tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
                     return self.convert_tokens_to_ids(tokens)
                 else:
                     return self.convert_tokens_to_ids(text)
@@ -494,14 +497,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_pretokenized:
-                    tokens = list(
-                        itertools.chain(
-                            *(
-                                self.tokenize(t, is_pretokenized=True, **kwargs)
-                                for t in text
-                            )
-                        )
-                    )
+                    tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
                     return self.convert_tokens_to_ids(tokens)
                 else:
                     return self.convert_tokens_to_ids(text)

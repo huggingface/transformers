@@ -638,7 +638,7 @@ class TokenizerTesterMixin:
                 # Testing single inputs
                 encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    sequence_0, add_special_tokens=True, return_special_tokens_mask=True  #, add_prefix_space=False
+                    sequence_0, add_special_tokens=True, return_special_tokens_mask=True  # , add_prefix_space=False
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
@@ -1065,7 +1065,7 @@ class TokenizerTesterMixin:
     def test_pretokenized_inputs(self):
         # Test when inputs are pretokenized
 
-        tokenizers = self.get_tokenizers(do_lower_case=False)  #, add_prefix_space=True)
+        tokenizers = self.get_tokenizers(do_lower_case=False)  # , add_prefix_space=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 

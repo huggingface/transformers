@@ -18,11 +18,10 @@
 import logging
 from typing import List, Optional
 
-from tokenizers import AddedToken as AddedTokenFast
 from tokenizers.processors import RobertaProcessing
 
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_utils import PreTrainedTokenizer, AddedToken
+from .tokenization_utils import AddedToken, PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -245,6 +244,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         if is_pretokenized or add_prefix_space:
             text = " " + text
         return (text, kwargs)
+
 
 class RobertaTokenizerFast(GPT2TokenizerFast):
     """

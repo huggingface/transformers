@@ -241,7 +241,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         converted_tokens = []
         for tok in new_tokens:
             if isinstance(tok, AddedToken):
-                tok = AddedTokenFast(content=str(tok), single_word=tok._single_word, lstrip = tok._lstrip, rstrip=tok._rstrip)
+                tok = AddedTokenFast(
+                    content=str(tok), single_word=tok._single_word, lstrip=tok._lstrip, rstrip=tok._rstrip
+                )
             converted_tokens.append(tok)
 
         if special_token:

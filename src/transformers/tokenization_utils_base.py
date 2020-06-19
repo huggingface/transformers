@@ -547,11 +547,7 @@ class AddedToken(UserString):
     """
 
     def __init__(
-        self,
-        data: str,
-        single_word: bool = False,
-        lstrip: bool = False,
-        rstrip: bool = False,
+        self, data: str, single_word: bool = False, lstrip: bool = False, rstrip: bool = False,
     ):
         super().__init__(data)
 
@@ -603,7 +599,9 @@ class SpecialTokensMixin:
                     setattr(self, key, value)
                 else:
                     raise TypeError(
-                        "special token {} has to be either str, AddedToken or AddedTokenFast but got: {}".format(key, type(value))
+                        "special token {} has to be either str, AddedToken or AddedTokenFast but got: {}".format(
+                            key, type(value)
+                        )
                     )
 
     def sanitize_special_tokens(self):
@@ -1272,7 +1270,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             write_dict = {}
             for key, value in self.special_tokens_map.items():
                 if isinstance(value, AddedToken):
-                    write_dict[key] = {'data': value.data, 'single_word': value._single_word, 'lstrip': value._lstrip, 'rstrip': value._rstrip}
+                    write_dict[key] = {
+                        "data": value.data,
+                        "single_word": value._single_word,
+                        "lstrip": value._lstrip,
+                        "rstrip": value._rstrip,
+                    }
                 else:
                     write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
@@ -1735,7 +1738,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
                 PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
             verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Set to ``False`` to avoid printing infos and warnings. 
+                Set to ``False`` to avoid printing infos and warnings.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):

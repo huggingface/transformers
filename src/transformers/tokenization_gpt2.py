@@ -277,7 +277,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if (is_pretokenized or add_prefix_space):
+        if is_pretokenized or add_prefix_space:
             text = " " + text
         return (text, kwargs)
 
