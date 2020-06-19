@@ -9,7 +9,7 @@ import torch
 from filelock import FileLock
 from torch.utils.data.dataset import Dataset
 
-from ...tokenization_bart import BartTokenizer
+from ...tokenization_bart import BartTokenizer, BartTokenizerFast
 from ...tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_xlm_roberta import XLMRobertaTokenizer
@@ -94,6 +94,7 @@ class GlueDataset(Dataset):
             RobertaTokenizerFast,
             XLMRobertaTokenizer,
             BartTokenizer,
+            BartTokenizerFast,
         ):
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]
