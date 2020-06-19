@@ -34,6 +34,7 @@ from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
+from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
@@ -129,6 +130,7 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
@@ -186,6 +188,21 @@ if is_torch_available():
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+    )
+
+    from .modeling_mobilebert import (
+        MobileBertPreTrainedModel,
+        MobileBertModel,
+        MobileBertForPreTraining,
+        MobileBertForSequenceClassification,
+        MobileBertForQuestionAnswering,
+        MobileBertForMaskedLM,
+        MobileBertForNextSentencePrediction,
+        MobileBertForMultipleChoice,
+        MobileBertForTokenClassification,
+        load_tf_weights_in_mobilebert,
+        MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MobileBertLayer,
     )
 
     from .modeling_bert import (
@@ -493,6 +510,20 @@ if is_tf_available():
         TFGPT2MainLayer,
         TFGPT2Model,
         TFGPT2PreTrainedModel,
+    )
+
+    from .modeling_tf_mobilebert import (
+        TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFMobileBertModel,
+        TFMobileBertPreTrainedModel,
+        TFMobileBertForPreTraining,
+        TFMobileBertForSequenceClassification,
+        TFMobileBertForQuestionAnswering,
+        TFMobileBertForMaskedLM,
+        TFMobileBertForNextSentencePrediction,
+        TFMobileBertForMultipleChoice,
+        TFMobileBertForTokenClassification,
+        TFMobileBertMainLayer,
     )
 
     from .modeling_tf_openai import (
