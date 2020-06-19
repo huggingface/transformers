@@ -31,7 +31,7 @@ Training
 
 T5 is an encoder-decoder model and converts all NLP problems into a text-to-text format. It is trained using teacher forcing.
 This means that for training we always need an input sequence and a target sequence. 
-The input sequence is fed to the model using ``input_ids``. The target sequence is shifted to the right, *i.e.* prepended by a start-sequence token and fed to the decoder using the `decoder_input_ids`. In teacher-forcing style, the target sequence is then appended by the EOS token and corresponds to the ``lm_labels``. The PAD token is hereby used as the start-sequence token.
+The input sequence is fed to the model using ``input_ids``. The target sequence is shifted to the right, *i.e.* prepended by a start-sequence token and fed to the decoder using the `decoder_input_ids`. In teacher-forcing style, the target sequence is then appended by the EOS token and corresponds to the ``labels``. The PAD token is hereby used as the start-sequence token.
 T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
 
 - Unsupervised denoising training
@@ -44,9 +44,9 @@ T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
 ::
 
   input_ids = tokenizer.encode('The <extra_id_1> walks in <extra_id_2> park', return_tensors='pt')
-  lm_labels = tokenizer.encode('<extra_id_1> cute dog <extra_id_2> the <extra_id_3> </s>', return_tensors='pt')
+  labels = tokenizer.encode('<extra_id_1> cute dog <extra_id_2> the <extra_id_3> </s>', return_tensors='pt')
   # the forward function automatically creates the correct decoder_input_ids
-  model(input_ids=input_ids, lm_labels=lm_labels)
+  model(input_ids=input_ids, labels=labels)
 
 - Supervised training
 
@@ -57,9 +57,9 @@ T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
 ::
 
   input_ids = tokenizer.encode('translate English to German: The house is wonderful. </s>', return_tensors='pt')
-  lm_labels = tokenizer.encode('Das Haus ist wunderbar. </s>', return_tensors='pt')
+  labels = tokenizer.encode('Das Haus ist wunderbar. </s>', return_tensors='pt')
   # the forward function automatically creates the correct decoder_input_ids
-  model(input_ids=input_ids, lm_labels=lm_labels)
+  model(input_ids=input_ids, labels=labels)
 
 
 T5Config

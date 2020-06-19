@@ -468,6 +468,9 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.word_emb
 
+    def set_input_embeddings(self, value):
+        raise NotImplementedError
+
     def _resize_token_embeddings(self, new_num_tokens):
         return self.word_emb
 
@@ -692,7 +695,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 

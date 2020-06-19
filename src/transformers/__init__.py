@@ -37,6 +37,7 @@ from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
@@ -119,7 +120,7 @@ from .pipelines import (
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from .tokenization_bart import BartTokenizer, MBartTokenizer
+from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -132,16 +133,20 @@ from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFas
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
-from .tokenization_utils import (
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import (
     BatchEncoding,
-    PreTrainedTokenizer,
-    PreTrainedTokenizerFast,
+    CharSpan,
+    PreTrainedTokenizerBase,
     SpecialTokensMixin,
     TensorType,
+    TokenSpan,
 )
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
@@ -285,6 +290,7 @@ if is_torch_available():
         DistilBertPreTrainedModel,
         DistilBertForMaskedLM,
         DistilBertModel,
+        DistilBertForMultipleChoice,
         DistilBertForSequenceClassification,
         DistilBertForQuestionAnswering,
         DistilBertForTokenClassification,
@@ -344,6 +350,7 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
+        ElectraForMultipleChoice,
         ElectraForSequenceClassification,
         ElectraForQuestionAnswering,
         ElectraModel,
@@ -369,6 +376,12 @@ if is_torch_available():
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
+    from .modeling_retribert import (
+        RetriBertPreTrainedModel,
+        RetriBertModel,
+        RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
+
     # Optimization
     from .optimization import (
         AdamW,
@@ -381,7 +394,7 @@ if is_torch_available():
 
     # Trainer
     from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
-    from .data.data_collator import DefaultDataCollator, DataCollator, DataCollatorForLanguageModeling
+    from .data.data_collator import default_data_collator, DataCollator, DataCollatorForLanguageModeling
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
     # Benchmarks

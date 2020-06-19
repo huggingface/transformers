@@ -306,6 +306,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embeddings
 
+    def set_input_embeddings(self, value):
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = value.shape[0]
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -585,7 +589,7 @@ XLM_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 

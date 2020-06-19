@@ -213,6 +213,10 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.w
 
+    def set_input_embeddings(self, value):
+        self.w.weight = value
+        self.w.vocab_size = value.shape[0]
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -464,7 +468,7 @@ CTRL_INPUTS_DOCSTRING = r"""
         training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 

@@ -199,6 +199,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             raise NotImplementedError
 
+    def set_input_embeddings(self, value):
+        """
+        Set model's input embeddings
+
+        Args:
+            value (:obj:`tf.keras.layers.Layer`):
+                A module mapping vocabulary to hidden states.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            base_model.set_input_embeddings(value)
+        else:
+            raise NotImplementedError
+
     def get_output_embeddings(self):
         """
         Returns the model's output embeddings.
@@ -208,40 +222,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
-
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Variable from a provided token Embedding Module.
-            Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end
-
-        Args:
-            new_num_tokens: (`optional`) int
-                New number of tokens in the embedding matrix.
-                Increasing the size will add newly initialized vectors at the end
-                Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
-        Return: ``tf.Variable``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
-        """
-        # if new_num_tokens is None:
-        #     return old_embeddings
-
-        # old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
-        # if old_num_tokens == new_num_tokens:
-        #     return old_embeddings
-
-        # # Build new embeddings
-        # new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        # new_embeddings.to(old_embeddings.weight.device)
-
-        # # initialize all new embeddings (in particular added tokens)
-        # self._init_weights(new_embeddings)
-
-        # # Copy token embeddings from the previous weights
-        # num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        # new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
-
-        # return new_embeddings
 
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
@@ -256,7 +236,71 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        raise NotImplementedError
+        model_embeds = self._resize_token_embeddings(new_num_tokens)
+        if new_num_tokens is None:
+            return model_embeds
+
+        return model_embeds
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
+        base_model = getattr(self, self.base_model_prefix, self)
+        old_embeddings = base_model.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        base_model.set_input_embeddings(new_embeddings)
+        # Update base model and current model config
+        self.config.vocab_size = new_num_tokens
+        base_model.vocab_size = new_num_tokens
+        return base_model.get_input_embeddings()
+
+    def _get_word_embeddings(self, embeddings):
+        if hasattr(embeddings, "word_embeddings"):
+            # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+            return embeddings.word_embeddings
+        elif hasattr(embeddings, "weight"):
+            # TFSharedEmbeddings
+            return embeddings.weight
+        else:
+            raise ValueError("word embedding is not defined.")
+
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Variable from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end.
+
+        Args:
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``tf.Variable``
+            Pointer to the resized word Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        word_embeddings = self._get_word_embeddings(old_embeddings)
+        if new_num_tokens is None:
+            return word_embeddings
+        old_num_tokens, old_embedding_dim = word_embeddings.shape
+        if old_num_tokens == new_num_tokens:
+            return word_embeddings
+
+        # initialize new embeddings
+        # todo: initializer range is not always passed in config.
+        init_range = getattr(self.config, "initializer_range", 0.02)
+        new_embeddings = self.add_weight(
+            "weight",
+            shape=[new_num_tokens, old_embedding_dim],
+            initializer=get_initializer(init_range),
+            dtype=tf.float32,
+        )
+        init_weights = new_embeddings.numpy()
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        new_embeddings.assign(init_weights)
+
+        return new_embeddings
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
@@ -294,7 +338,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Parameters:
             pretrained_model_name_or_path: either:
-
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
@@ -306,11 +349,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             config: (`optional`) one of:
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
                     - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
-                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
-                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
-                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+                    - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                    - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                    - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             from_pt: (`optional`) boolean, default False:
                 Load the model weights from a PyTorch state_dict save file (see docstring of pretrained_model_name_or_path argument).
@@ -357,6 +400,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
@@ -369,6 +413,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
                 **kwargs,
             )
         else:
@@ -406,8 +452,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     archive_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
                 )
                 if resolved_archive_file is None:
                     raise EnvironmentError
@@ -1216,9 +1263,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     if len(next_sent_beam) == num_beams:
                         break
 
-                # Check if were done so that we can save a pad step if all(done)
+                # Check if we are done so that we can save a pad step if all(done)
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    tf.reduce_max(next_scores[batch_idx]).numpy(), cur_len=cur_len
+                    tf.reduce_max(next_scores[batch_idx]).numpy(), cur_len
                 )
 
                 # update next beam content
@@ -1506,7 +1553,7 @@ class BeamHypotheses(object):
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs, cur_len=None):
+    def is_done(self, best_sum_logprobs, cur_len):
         """
         If there are enough hypotheses and that none of the hypotheses being generated
         can become better than the worst one in the heap, then we are done with this sentence.
@@ -1517,8 +1564,6 @@ class BeamHypotheses(object):
         elif self.early_stopping:
             return True
         else:
-            if cur_len is None:
-                cur_len = self.max_length
             cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret

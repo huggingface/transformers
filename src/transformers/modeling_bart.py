@@ -59,7 +59,7 @@ BART_GENERATION_EXAMPLE = r"""
     Examples::
 
         from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
-        # see ``examples/summarization/bart/evaluate_cnn.py`` for a longer example
+        # see ``examples/summarization/bart/run_eval.py`` for a longer example
         model = BartForConditionalGeneration.from_pretrained('bart-large-cnn')
         tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
         ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
@@ -90,7 +90,7 @@ BART_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
@@ -983,11 +983,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
-        # first step, decoder_cached_states are empty
-        if not past[1]:
-            encoder_outputs, decoder_cached_states = past, None
-        else:
-            encoder_outputs, decoder_cached_states = past
+        encoder_outputs, decoder_cached_states = past
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
@@ -997,7 +993,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def prepare_logits_for_generation(self, logits, cur_len, max_length):
+    def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1:
             self._force_token_ids_generation(logits, self.config.bos_token_id)
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:

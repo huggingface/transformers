@@ -298,7 +298,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # first step
         if type(past) is tuple:
-            encoder_outputs = past
+            encoder_outputs, _ = past
         else:
             encoder_outputs = (past,)
 

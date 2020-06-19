@@ -17,12 +17,14 @@ The base classes ``PreTrainedTokenizer`` and ``PreTrainedTokenizerFast`` impleme
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizer
+    :special-members: __call__
     :members:
 
 ``PreTrainedTokenizerFast``
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizerFast
+    :special-members: __call__
     :members:
 
 ``BatchEncoding``

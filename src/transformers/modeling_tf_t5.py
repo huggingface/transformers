@@ -772,19 +772,15 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         return dummy_inputs
 
 
-T5_START_DOCSTRING = r"""    The T5 model was proposed in
-    `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`_
-    by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
+T5_START_DOCSTRING = r"""
+    The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
+    <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
+    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
     It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
 
-    This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
-    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
-
-    .. _`Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`:
-        https://arxiv.org/abs/1910.10683
-
-    .. _`tf.keras.Model`:
-        https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
+    This model is a `tf.keras.Model <https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model>`__
+    sub-class. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
+    general usage and behavior.
 
     Note on the model inputs:
         TF 2.0 models accepts two formats as inputs:
@@ -796,7 +792,7 @@ T5_START_DOCSTRING = r"""    The T5 model was proposed in
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
 
-        - a single Tensor with inputs only and nothing else: `model(inputs_ids)
+        - a single Tensor with inputs only and nothing else: `model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
             `model([inputs, attention_mask])` or `model([inputs, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associaed to the input names given in the docstring:
@@ -818,7 +814,7 @@ T5_INPUTS_DOCSTRING = r"""
             the right or the left.
             Indices can be obtained using :class:`transformers.T5Tokenizer`.
             To know more on how to prepare :obj:`inputs` for pre-training take a look at
-            `T5 Training <./t5.html#training>`_ .
+            `T5 Training <./t5.html#training>`__.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -850,12 +846,12 @@ T5_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
             To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
-            `T5 Training <./t5.html#training>`_ .
+            `T5 Training <./t5.html#training>`__.
         head_mask: (:obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
@@ -888,6 +884,16 @@ class TFT5Model(TFT5PreTrainedModel):
     def get_output_embeddings(self):
         return self.shared
 
+    def set_input_embeddings(self, new_embeddings):
+        self.shared.weight = new_embeddings
+        self.shared.vocab_size = self.shared.weight.shape[0]
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
+
     def get_encoder(self):
         return self.encoder
 
@@ -897,8 +903,8 @@ class TFT5Model(TFT5PreTrainedModel):
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
             If `decoder_past_key_value_states` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
@@ -1015,6 +1021,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     def get_output_embeddings(self):
         return self.shared
 
+    def set_input_embeddings(self, new_embeddings):
+        self.shared.weight = new_embeddings
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
+
     def get_encoder(self):
         return self.encoder
 
@@ -1024,8 +1039,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
         loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
             Classification loss (cross entropy).
         prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)

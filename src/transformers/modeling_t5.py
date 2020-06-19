@@ -775,19 +775,14 @@ class T5Stack(T5PreTrainedModel):
         return outputs  # last-layer hidden state, (presents,) (all hidden states), (all attentions)
 
 
-T5_START_DOCSTRING = r"""    The T5 model was proposed in
-    `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`_
-    by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
+T5_START_DOCSTRING = r"""
+    The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
+    <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
+    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
     It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
 
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
-
-    .. _`Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`:
-        https://arxiv.org/abs/1910.10683
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#module>`__ sub-class. Use it as a
+    regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
@@ -804,7 +799,7 @@ T5_INPUTS_DOCSTRING = r"""
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
             To know more on how to prepare :obj:`input_ids` for pre-training take a look at
-            `T5 Training <./t5.html#training>`_ .
+            `T5 Training <./t5.html#training>`__.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -817,7 +812,7 @@ T5_INPUTS_DOCSTRING = r"""
             Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
             If `decoder_past_key_value_states` is used, optionally only the last `decoder_input_ids` have to be input (see `decoder_past_key_value_states`).
             To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
-            `T5 Training <./t5.html#training>`_ .
+            `T5 Training <./t5.html#training>`__.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
         decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
@@ -841,7 +836,7 @@ T5_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
@@ -902,8 +897,8 @@ class T5Model(T5PreTrainedModel):
         output_attentions=None,
     ):
         r"""
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
             If `decoder_past_key_value_states` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
@@ -925,13 +920,13 @@ class T5Model(T5PreTrainedModel):
 
     Examples::
 
-            from transformers import T5Tokenizer, T5Model
+        from transformers import T5Tokenizer, T5Model
 
-            tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            model = T5Model.from_pretrained('t5-small')
-            input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
-            last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        model = T5Model.from_pretrained('t5-small')
+        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
 
@@ -1030,15 +1025,15 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-                Labels for computing the sequence classification/regression loss.
-                Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
-                All labels set to ``-100`` are ignored (masked), the loss is only
-                computed for labels in ``[0, ..., config.vocab_size]``
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
+            All labels set to ``-100`` are ignored (masked), the loss is only
+            computed for labels in ``[0, ..., config.vocab_size]``
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-                Used to hide legacy arguments that have been deprecated.
+            Used to hide legacy arguments that have been deprecated.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss (cross entropy).
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
@@ -1144,11 +1139,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
-        # first step
-        if len(past) < 2:
-            encoder_outputs, decoder_past_key_value_states = past, None
-        else:
-            encoder_outputs, decoder_past_key_value_states = past[0], past[1]
+        encoder_outputs, decoder_past_key_value_states = past
 
         return {
             "decoder_input_ids": input_ids,
@@ -1161,7 +1152,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if len(past) < 2:
+        if past[1] is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past
 
