@@ -80,7 +80,8 @@ def _dump_articles(path: Path, articles: list):
 
 
 MSG = "These won't pass until hidden_states kwarg is merged."
-T5_TINY="patrickvonplaten/t5-tiny-random"
+T5_TINY = "patrickvonplaten/t5-tiny-random"
+
 
 def make_test_data_dir():
     tmp_dir = Path(tempfile.gettempdir())
