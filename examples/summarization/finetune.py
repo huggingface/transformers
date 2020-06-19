@@ -277,6 +277,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
+        parser.add_argument("--task", type=int, default='summarization', required=False, help="# examples. -1 means use all.")
         return parser
 
 
@@ -286,6 +287,7 @@ def main(args, model=None) -> SummarizationModule:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
         model: BaseTransformer = SummarizationModule(args)
+    dataset = Path(args.data_dir).name
     if (
         args.logger == "default"
         or args.fast_dev_run
@@ -295,13 +297,14 @@ def main(args, model=None) -> SummarizationModule:
         logger = True  # don't pollute wandb logs unnecessarily
     elif args.logger == "wandb":
         from pytorch_lightning.loggers import WandbLogger
+        logger = WandbLogger(name=model.output_dir.name, project=dataset)
 
-        logger = WandbLogger(name=model.output_dir.name)
     elif args.logger == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        # TODO: separate LB for CNN, we should use Path(args.data_dir).name to determine the correct LB.
-        logger = WandbLogger(name=model.output_dir.name, project="hf_summarization")
+        # TODO: separate LB for CNN, we should use
+
+        logger = WandbLogger(name=model.output_dir.name, project=f"hf_{args.dataset}")
     trainer: pl.Trainer = generic_train(
         model,
         args,
