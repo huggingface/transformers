@@ -188,7 +188,13 @@ class BertModelWithPabee(BertModel):
                 logits = output_layers[i](output_dropout(pooled_output))
                 res.append(logits)
         elif self.patience == 0:  # Use all layers for inference
-            encoder_outputs = self.encoder(encoder_outputs, extended_attention_mask, head_mask=head_mask)
+            encoder_outputs = self.encoder(
+                embedding_output,
+                attention_mask=extended_attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_extended_attention_mask,
+            )
             pooled_output = self.pooler(encoder_outputs[0])
             res = [output_layers[self.config.num_hidden_layers - 1](pooled_output)]
         else:
