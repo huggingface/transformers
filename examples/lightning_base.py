@@ -119,7 +119,7 @@ class BaseTransformer(pl.LightningModule):
     def test_step(self, batch, batch_nb):
         return self.validation_step(batch, batch_nb)
 
-    def test_end(self, outputs):
+    def test_epoch_end(self, outputs):
         return self.validation_end(outputs)
 
     def train_dataloader(self):
