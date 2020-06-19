@@ -20,6 +20,7 @@
 
 import logging
 import timeit
+from typing import Callable, Optional
 
 from transformers import (
     MODEL_MAPPING,
@@ -29,7 +30,14 @@ from transformers import (
     is_torch_available,
 )
 
-from .benchmark_utils import Benchmark, Memory, measure_peak_memory_cpu, start_memory_tracing, stop_memory_tracing
+from .benchmark_utils import (
+    Benchmark,
+    Memory,
+    MemorySummary,
+    measure_peak_memory_cpu,
+    start_memory_tracing,
+    stop_memory_tracing,
+)
 
 
 if is_torch_available():
@@ -54,23 +62,27 @@ class PyTorchBenchmark(Benchmark):
     def framework_version(self):
         return torch.__version__
 
-    def _inference_speed(self, model_name, batch_size, sequence_length):
+    def _inference_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         _inference = self._prepare_inference_func(model_name, batch_size, sequence_length)
         return self._measure_speed(_inference)
 
-    def _inference_memory(self, model_name, batch_size, sequence_length):
+    def _inference_memory(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> [Memory, Optional[MemorySummary]]:
         _inference = self._prepare_inference_func(model_name, batch_size, sequence_length)
         return self._measure_memory(_inference)
 
-    def _train_speed(self, model_name, batch_size, sequence_length):
+    def _train_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         _train = self._prepare_train_func(model_name, batch_size, sequence_length)
         return self._measure_speed(_train)
 
-    def _train_memory(self, model_name, batch_size, sequence_length):
+    def _train_memory(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> [Memory, Optional[MemorySummary]]:
         _train = self._prepare_train_func(model_name, batch_size, sequence_length)
         return self._measure_memory(_train)
 
-    def _prepare_inference_func(self, model_name, batch_size, sequence_length):
+    def _prepare_inference_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
 
         if self.args.torchscript:
@@ -113,7 +125,7 @@ class PyTorchBenchmark(Benchmark):
         _forward = encoder_decoder_forward if config.is_encoder_decoder else encoder_forward
         return _forward
 
-    def _prepare_train_func(self, model_name, batch_size, sequence_length):
+    def _prepare_train_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
         model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
 
@@ -154,7 +166,7 @@ class PyTorchBenchmark(Benchmark):
         )
         return _train
 
-    def _measure_speed(self, func):
+    def _measure_speed(self, func) -> float:
         try:
             if self.args.is_tpu or self.args.torchscript:
                 # run additional 10 times to stabilize compilation for tpu and torchscript
@@ -176,7 +188,7 @@ class PyTorchBenchmark(Benchmark):
             self.print_fn("Doesn't fit on GPU. {}".format(e))
             return "N/A"
 
-    def _measure_memory(self, func):
+    def _measure_memory(self, func: Callable[[], None]) -> [Memory, MemorySummary]:
         try:
             if self.args.trace_memory_line_by_line:
                 trace = start_memory_tracing("transformers")

@@ -22,6 +22,7 @@ import logging
 import random
 import timeit
 from functools import wraps
+from typing import Callable, Optional
 
 from transformers import (
     TF_MODEL_MAPPING,
@@ -31,7 +32,14 @@ from transformers import (
     is_tf_available,
 )
 
-from .benchmark_utils import Benchmark, Memory, measure_peak_memory_cpu, start_memory_tracing, stop_memory_tracing
+from .benchmark_utils import (
+    Benchmark,
+    Memory,
+    MemorySummary,
+    measure_peak_memory_cpu,
+    start_memory_tracing,
+    stop_memory_tracing,
+)
 
 
 if is_tf_available():
@@ -45,20 +53,20 @@ if is_py3nvml_available():
 logger = logging.getLogger(__name__)
 
 
-def run_with_tf_optimizations(do_eager_mode, do_xla):
+def run_with_tf_optimizations(do_eager_mode: bool, use_xla: bool):
     def run_func(func):
         @wraps(func)
         def run_in_eager_mode(*args, **kwargs):
             return func(*args, **kwargs)
 
         @wraps(func)
-        @tf.function(experimental_compile=do_xla)
+        @tf.function(experimental_compile=use_xla)
         def run_in_graph_mode(*args, **kwargs):
             return func(*args, **kwargs)
 
         if do_eager_mode is True:
             assert (
-                do_xla is False
+                use_xla is False
             ), "Cannot run model in XLA, if `args.eager_mode` is set to `True`. Please set `args.eager_mode=False`."
             return run_in_eager_mode
         else:
@@ -67,7 +75,7 @@ def run_with_tf_optimizations(do_eager_mode, do_xla):
     return run_func
 
 
-def random_input_ids(batch_size, sequence_length, vocab_size):
+def random_input_ids(batch_size: int, sequence_length: int, vocab_size: int) -> ["tf.Tensor"]:
     rng = random.Random()
     values = [rng.randint(0, vocab_size - 1) for i in range(batch_size * sequence_length)]
     return tf.constant(values, shape=(batch_size, sequence_length), dtype=tf.int32)
@@ -83,7 +91,7 @@ class TensorflowBenchmark(Benchmark):
     def framework_version(self):
         return tf.__version__
 
-    def _inference_speed(self, model_name, batch_size, sequence_length):
+    def _inference_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         # initialize GPU on separate process
         strategy = self.args.strategy
         assert strategy is not None, "A device strategy has to be initialized before using Tensorflow."
@@ -95,7 +103,9 @@ class TensorflowBenchmark(Benchmark):
             "Training is currently not really implemented." "Wait for TFTrainer to support CLM and MLM."
         )
 
-    def _inference_memory(self, model_name, batch_size, sequence_length):
+    def _inference_memory(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> [Memory, Optional[MemorySummary]]:
         # initialize GPU on separate process
         if self.args.is_gpu:
             tf.config.experimental.set_memory_growth(self.args.gpu_list[self.args.device_idx], True)
@@ -109,7 +119,7 @@ class TensorflowBenchmark(Benchmark):
             "Training is currently not really implemented. Wait for TFTrainer to support CLM and MLM."
         )
 
-    def _prepare_inference_func(self, model_name, batch_size, sequence_length):
+    def _prepare_inference_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
 
         if self.args.fp16:
@@ -136,7 +146,7 @@ class TensorflowBenchmark(Benchmark):
 
         return _inference
 
-    def _measure_speed(self, func):
+    def _measure_speed(self, func) -> float:
         with self.args.strategy.scope():
             try:
                 if self.args.is_tpu or self.args.use_xla:
@@ -151,7 +161,7 @@ class TensorflowBenchmark(Benchmark):
             except ResourceExhaustedError as e:
                 self.print_fn("Doesn't fit on GPU. {}".format(e))
 
-    def _measure_memory(self, func):
+    def _measure_memory(self, func: Callable[[], None]) -> [Memory, MemorySummary]:
         logger.info(
             "Note that Tensorflow allocates more memory than"
             "it might need to speed up computation."

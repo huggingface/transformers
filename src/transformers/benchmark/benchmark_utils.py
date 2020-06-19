@@ -61,11 +61,23 @@ BenchmarkOutput = namedtuple(
 )
 
 
-def separate_process_wrapper_fn(func, do_multi_processing):
+def separate_process_wrapper_fn(func: Callable[[], None], do_multi_processing: bool) -> Callable[[], None]:
+    """
+        This function wraps another function into its own separated process.
+        In order to ensure accurate memory measurements it is important that the function
+        is executed in a separate process
+
+        Args:
+            - `func`: (`callable`): function() -> ...
+                generic function which will be executed in its own separate process
+            - `do_multi_processing`: (`bool`)
+                Whether to run function on separate process or not
+    """
+
     def multi_process_func(*args, **kwargs):
         # run function in an individual
         # process to get correct memory
-        def wrapper_func(queue, *args):
+        def wrapper_func(queue: Queue, *args):
             try:
                 result = func(*args)
             except Exception as e:
@@ -82,7 +94,7 @@ def separate_process_wrapper_fn(func, do_multi_processing):
         return result
 
     if do_multi_processing:
-        logging.info("Use multiprocessing...")
+        logging.info("fFunction {func} is executed in its own process...")
         return multi_process_func
     else:
         return func
@@ -590,31 +602,35 @@ class Benchmark(ABC):
         pass
 
     @abstractmethod
-    def _inference_speed(self, model_name, batch_size, sequence_length):
+    def _inference_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         pass
 
     @abstractmethod
-    def _train_speed(self, model_name, batch_size, sequence_length):
+    def _train_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         pass
 
     @abstractmethod
-    def _inference_memory(self, model_name, batch_size, sequence_length):
+    def _inference_memory(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> [Memory, Optional[MemorySummary]]:
         pass
 
     @abstractmethod
-    def _train_memory(self, model_name, batch_size, sequence_length):
+    def _train_memory(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> [Memory, Optional[MemorySummary]]:
         pass
 
-    def inference_speed(self, *args, **kwargs):
+    def inference_speed(self, *args, **kwargs) -> float:
         return separate_process_wrapper_fn(self._inference_speed, self.args.do_multi_processing)(*args, **kwargs)
 
-    def train_speed(self, *args, **kwargs):
+    def train_speed(self, *args, **kwargs) -> float:
         return separate_process_wrapper_fn(self._train_speed, self.args.do_multi_processing)(*args, **kwargs)
 
-    def inference_memory(self, *args, **kwargs):
+    def inference_memory(self, *args, **kwargs) -> [Memory, Optional[MemorySummary]]:
         return separate_process_wrapper_fn(self._inference_memory, self.args.do_multi_processing)(*args, **kwargs)
 
-    def train_memory(self, *args, **kwargs):
+    def train_memory(self, *args, **kwargs) -> [Memory, Optional[MemorySummary]]:
         return separate_process_wrapper_fn(self._train_memory, self.args.do_multi_processing)(*args, **kwargs)
 
     def run(self):
