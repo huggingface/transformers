@@ -47,9 +47,7 @@ class TensorflowBenchmarkArguments(BenchmarkArguments):
 
     @cached_property
     @tf_required
-    def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", "tf.distribute.cluster_resolver.TPUClusterResolver"]:
-        logger.info("Tensorflow: setting up strategy")
-
+    def _setup_tpu(self) -> Tuple["tf.distribute.cluster_resolver.TPUClusterResolver"]:
         if not self.no_tpu:
             try:
                 if self.tpu_name:
@@ -58,14 +56,16 @@ class TensorflowBenchmarkArguments(BenchmarkArguments):
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             except ValueError:
                 tpu = None
-        else:
-            tpu = None
+        return tpu
 
-        if tpu is not None:
-            tf.config.experimental_connect_to_cluster(tpu)
-            tf.tpu.experimental.initialize_tpu_system(tpu)
+    @cached_property
+    @tf_required
+    def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", "tf.distribute.cluster_resolver.TPUClusterResolver"]:
+        if self.is_tpu:
+            tf.config.experimental_connect_to_cluster(self._setup_tpu)
+            tf.tpu.experimental.initialize_tpu_system(self._setup_tpu)
 
-            strategy = tf.distribute.experimental.TPUStrategy(tpu)
+            strategy = tf.distribute.experimental.TPUStrategy(self._setup_tpu)
         else:
             # currently no multi gpu is allowed
             if self.is_gpu:
@@ -76,18 +76,17 @@ class TensorflowBenchmarkArguments(BenchmarkArguments):
                 tf.config.experimental.set_visible_devices([], "GPU")  # disable GPU
                 strategy = tf.distribute.OneDeviceStrategy(device=f"/cpu:{self.device_idx}")
 
-        return strategy, tpu
+        return strategy
 
     @property
     @tf_required
     def is_tpu(self) -> bool:
-        tpu = self._setup_strategy[1]
-        return tpu is not None and not self.no_tpu
+        return self._setup_tpu is not None
 
     @property
     @tf_required
     def strategy(self) -> "tf.distribute.Strategy":
-        return self._setup_strategy[0]
+        return self._setup_strategy
 
     @property
     @tf_required

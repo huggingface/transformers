@@ -102,11 +102,13 @@ class PyTorchBenchmark(Benchmark):
 
         def encoder_decoder_forward():
             with torch.no_grad():
-                inference_model(input_ids, decoder_input_ids=input_ids)
+                outputs = inference_model(input_ids, decoder_input_ids=input_ids)
+            return outputs
 
         def encoder_forward():
             with torch.no_grad():
-                inference_model(input_ids)
+                outputs = inference_model(input_ids)
+            return outputs
 
         _forward = encoder_decoder_forward if config.is_encoder_decoder else encoder_forward
         return _forward
