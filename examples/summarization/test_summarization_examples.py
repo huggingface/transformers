@@ -24,6 +24,7 @@ logger = logging.getLogger()
 FP16_EVER = False
 CHEAP_ARGS = {
     "logger": "default",
+    "task": "summarization",
     "alpha_hid": 0,
     "freeze_embeds": True,
     "enc_only": False,
@@ -316,7 +317,7 @@ class TestBartExamples(unittest.TestCase):
 
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
-        mname = "Helsinki-NLP/opus-mt-de-en"
+        mname = "Helsinki-NLP/opus-mt-en-ro"
         args_d.update(
             data_dir=tmp_dir,
             tokenizer_name=mname,
@@ -326,6 +327,9 @@ class TestBartExamples(unittest.TestCase):
             gpus=0,
             output_dir=output_dir,
             do_predict=True,
+            learning_rate=0,
+            task='translation',
+            num_train_epochs=2,
         )
         assert "n_train" in args_d
         args = argparse.Namespace(**args_d)

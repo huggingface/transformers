@@ -73,11 +73,17 @@ class Seq2SeqLoggingCallback(pl.Callback):
         return self._write_logs(trainer, pl_module, "test")
 
 
-def get_rouge2_checkpoint_callback(output_dir):
+def get_checkpoint_callback(output_dir, metric):
     """Saves the best model by validation ROUGE2 score."""
+    if metric == 'rouge':
+        exp = "{val_avg_rouge2:.4f}-{step_count}"
+    else:
+        assert metric =='bleu'
+        exp = "{val_avg_bleu:.4f}-{step_count}"
+
     checkpoint_callback = ModelCheckpoint(
-        filepath=os.path.join(output_dir, "{val_avg_rouge2:.4f}-{step_count}"),
-        monitor="val_rouge",
+        filepath=os.path.join(output_dir, exp),
+        monitor=f"val_{metric}",
         mode="max",
         save_top_k=1,
         period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.

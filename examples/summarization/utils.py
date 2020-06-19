@@ -45,19 +45,21 @@ def encode_file(
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
             add_prefix_space=True,
+            truncation=False,
+            padding=True,
             return_tensors=return_tensors,
         )
         examples.append(tokenized)
     torch.save(lmap(dict, examples), cache_path.open("wb"))
     return examples
 
-
-def lmap(f, x):
+from typing import Callable, Iterable
+from sacrebleu import corpus_bleu
+def lmap(f: Callable, x: Iterable) -> List:
+    """list(map(f, x))"""
     return list(map(f, x))
-
-
-T5_PREFIX = "summarize: "  # HACK, fixme
-
+def calculate_bleu_score(output_lns, refs_lns) -> float:
+    return corpus_bleu(output_lns, [refs_lns]).score
 
 def trim_batch(
     input_ids, pad_token_id, attention_mask=None,
