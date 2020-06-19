@@ -13,8 +13,6 @@ from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 
-from transformers import BartTokenizer
-
 
 def encode_file(
     tokenizer,
@@ -85,7 +83,7 @@ class SummarizationDataset(Dataset):
         prefix="",
     ):
         super().__init__()
-        tok_name = tokenizer.__class__.__name__.lower().rstrip('tokenizer')
+        tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
         self.source = encode_file(
             tokenizer,
             os.path.join(data_dir, type_path + ".source"),
