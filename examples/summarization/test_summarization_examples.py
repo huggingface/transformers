@@ -80,7 +80,7 @@ def _dump_articles(path: Path, articles: list):
 
 
 MSG = "These won't pass until hidden_states kwarg is merged."
-
+T5_TINY="patrickvonplaten/t5-tiny-random"
 
 def make_test_data_dir():
     tmp_dir = Path(tempfile.gettempdir())
@@ -112,26 +112,13 @@ class TestSummarizationDistiller(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
-    @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
-    def test_bdc_fp16(self):
-        updates = dict(
-            student_encoder_layers=2,
-            student_decoder_layers=1,
-            alpha_hid=3.0,
-            freeze_encoder=True,
-            gpus=1,
-            fp16=FP16_EVER,
-            fp16_opt_level="O1",
-        )
-        self._bart_distiller_cli(updates)
-
     @unittest.skip(MSG)
     def test_bdc_t5_eval_fp16(self):
         updates = dict(
             fp16=FP16_EVER,
             gpus=1,
             model_type="t5",
-            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            model_name_or_path=T5_TINY,
             do_train=False,
             do_predict=True,
             tokenizer_name=None,
@@ -145,10 +132,10 @@ class TestSummarizationDistiller(unittest.TestCase):
             fp16=FP16_EVER,
             gpus=1,
             model_type="t5",
-            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            model_name_or_path=T5_TINY,
             do_train=True,
             do_predict=True,
-            tokenizer_name="patrickvonplaten/t5-tiny-random",
+            tokenizer_name=T5_TINY,
             no_teacher=True,
         )
         self._bart_distiller_cli(updates)
@@ -164,7 +151,6 @@ class TestSummarizationDistiller(unittest.TestCase):
 
     @unittest.skip(MSG)
     def test_bdc_checkpointing(self):
-
         updates = dict(
             student_encoder_layers=2,
             student_decoder_layers=1,
@@ -193,10 +179,10 @@ class TestSummarizationDistiller(unittest.TestCase):
             student_encoder_layers=1,
             student_decoder_layers=1,
             alpha_hid=2.0,
-            teacher="patrickvonplaten/t5-tiny-random",
+            teacher=T5_TINY,
             model_type="t5",
-            model_name_or_path="patrickvonplaten/t5-tiny-random",
-            tokenizer_name="patrickvonplaten/t5-tiny-random",
+            model_name_or_path=T5_TINY,
+            tokenizer_name=T5_TINY,
         )
         self._bart_distiller_cli(updates)
 
@@ -204,10 +190,10 @@ class TestSummarizationDistiller(unittest.TestCase):
     def test_bdc_t5_eval(self):
         updates = dict(
             model_type="t5",
-            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            model_name_or_path=T5_TINY,
             do_train=False,
             do_predict=True,
-            tokenizer_name="patrickvonplaten/t5-tiny-random",
+            tokenizer_name=T5_TINY,
             no_teacher=True,
         )
         self._bart_distiller_cli(updates, check_contents=False)
@@ -286,8 +272,8 @@ class TestBartExamples(unittest.TestCase):
         args_d.update(
             data_dir=tmp_dir,
             model_type="t5",
-            model_name_or_path="patrickvonplaten/t5-tiny-random",
-            tokenizer_name=None,  # "patrickvonplaten/t5-tiny-random",
+            model_name_or_path=T5_TINY,
+            tokenizer_name=None,  # T5_TINY,
             train_batch_size=2,
             eval_batch_size=2,
             gpus=0,
