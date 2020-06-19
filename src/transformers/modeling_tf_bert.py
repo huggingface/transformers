@@ -497,6 +497,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
 
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
@@ -506,8 +507,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.

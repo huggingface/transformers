@@ -60,6 +60,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
+        self.vocab_size = config.vocab_size
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             config.embedding_size,
@@ -514,6 +515,10 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
     def get_input_embeddings(self):
         return self.embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError

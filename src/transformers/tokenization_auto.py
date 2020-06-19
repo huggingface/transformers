@@ -30,6 +30,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    MBartConfig,
     OpenAIGPTConfig,
     ReformerConfig,
     RetriBertConfig,
@@ -43,7 +44,7 @@ from .configuration_auto import (
 from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
-from .tokenization_bart import BartTokenizer
+from .tokenization_bart import BartTokenizer, MBartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -75,6 +76,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
+        (MBartConfig, (MBartTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
