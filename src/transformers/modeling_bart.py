@@ -60,8 +60,8 @@ BART_GENERATION_EXAMPLE = r"""
 
         from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
         # see ``examples/summarization/bart/run_eval.py`` for a longer example
-        model = BartForConditionalGeneration.from_pretrained('bart-large-cnn')
-        tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
+        model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
         ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
         # Generate Summary
