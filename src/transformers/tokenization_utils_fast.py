@@ -27,6 +27,7 @@ from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
 from .tokenization_utils_base import (
+    AddedToken,
     BatchEncoding,
     PaddingStrategy,
     PreTokenizedInput,
@@ -134,11 +135,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def decoder(self) -> DecoderFast:
         return self._tokenizer._tokenizer.decoder
 
-    def _maybe_update_backend(self, value):
-        """ Update the backend fast tokenizer.
-            Override method from base class SpecialTokensMixin """
-        self._tokenizer.add_special_tokens(value)
-
     def _convert_encoding(
         self,
         encoding: EncodingFast,
@@ -211,7 +207,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def convert_tokens_to_string(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
         return self._tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
-    def add_tokens(self, new_tokens: List[Union[str, AddedTokenFast]]) -> int:
+    def add_tokens(self, new_tokens: List[Union[str, AddedToken, AddedTokenFast]], special_token=False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -238,17 +234,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             print('We have added', num_added_toks, 'tokens')
             model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         """
-        if isinstance(new_tokens, str):
+        if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
-        # TODO This should be done in tokenizers to be really clean.
-        # Removing for now
-        # tokens = []
-        # for token in new_tokens:
-        #     if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
-        #         token = token.lower()
-        #     if token not in tokens:
-        #         tokens.append(token)
-        return self._tokenizer.add_tokens(new_tokens)
+
+        # Convert AddedToken in AddedTokenFast
+        converted_tokens = []
+        for tok in new_tokens:
+            if isinstance(tok, AddedToken):
+                tok = AddedTokenFast(content=str(tok), single_word=tok._single_word, lstrip = tok._lstrip, rstrip=tok._rstrip)
+            converted_tokens.append(tok)
+
+        if special_token:
+            return self._tokenizer.add_special_tokens(converted_tokens)
+
+        return self._tokenizer.add_tokens(converted_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         return self._tokenizer.num_special_tokens_to_add(pair)

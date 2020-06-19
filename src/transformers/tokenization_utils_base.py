@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import warnings
-from collections import UserDict
+from collections import UserDict, UserString
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -522,6 +522,47 @@ class BatchEncoding(UserDict):
         return self
 
 
+class AddedToken(UserString):
+    """ AddedToken represents a token to be added to a Tokenizer
+
+        An AddedToken can have special options defining the way it should behave.
+
+        Args:
+            content: str:
+                The content of the token
+
+            single_word: bool
+                Whether this token should only match against single word. If True,
+                this token will never match inside of a word.
+
+            lstrip: bool
+                Whether this token should strip all potential whitespaces on the left side.
+                If True, this token will greedily match any whitespace on the left and then strip
+                them out.
+
+            rstrip: bool
+                Whether this token should strip all potential whitespaces on the right side.
+                If True, this token will greedily match any whitespace on the right and then strip
+                them out.
+    """
+
+    def __init__(
+        self,
+        data: str,
+        single_word: bool = False,
+        lstrip: bool = False,
+        rstrip: bool = False,
+    ):
+        super().__init__(data)
+
+        self._single_word = single_word
+        self._lstrip = lstrip
+        self._rstrip = rstrip
+
+    def lower(self):
+        return AddedToken(self.data.lower(), self._single_word, self._lstrip, self._rstrip)
+
+
 class SpecialTokensMixin:
     """ SpecialTokensMixin is derived by ``PreTrainedTokenizer`` and ``PreTrainedTokenizerFast`` and
         handles specific behaviors related to special tokens. In particular, this class hold the
@@ -558,12 +599,21 @@ class SpecialTokensMixin:
                     assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
                 elif isinstance(value, AddedTokenFast):
                     setattr(self, key, str(value))
-                elif isinstance(value, str):
+                elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
                 else:
                     raise TypeError(
-                        "special token {} has to be either str or AddedTokenFast but got: {}".format(key, type(value))
+                        "special token {} has to be either str, AddedToken or AddedTokenFast but got: {}".format(key, type(value))
                     )
+
+    def sanitize_special_tokens(self):
+        """ Make sure that all the special tokens attributes of the tokenizer (tokenizer.mask_token, tokenizer.cls_token, ...)
+            are in the vocabulary. Add the missing ones to the vocabulary if needed.
+
+            Return:
+                Number of tokens added in the vocaulary during the operation.
+        """
+        return self.add_tokens(self.all_special_tokens_extended, special_token=True)
 
     def add_special_tokens(self, special_tokens_dict):
         """
@@ -608,24 +658,21 @@ class SpecialTokensMixin:
         added_tokens = 0
         for key, value in special_tokens_dict.items():
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES
-            if key == "additional_special_tokens":
-                assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
-                added_tokens += self.add_tokens(value)
-            else:
-                assert isinstance(value, str)
-                added_tokens += self.add_tokens([value])
             if self.verbose:
                 logger.info("Assigning %s to the %s key of the tokenizer", value, key)
             setattr(self, key, value)
 
+            if key == "additional_special_tokens":
+                assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
+                added_tokens += self.add_tokens(value, special_token=True)
+            else:
+                assert isinstance(value, str)
+                added_tokens += self.add_tokens([value], special_token=True)
+
         return added_tokens
 
-    def add_tokens(self, value):
+    def add_tokens(self, value, special_token=False):
         """ To be overriden by derived class to add a token in the vocabulary. """
-        pass
-
-    def _maybe_update_backend(self, value):
-        """ To be overriden by derived class if a backend tokenizer has to be updated. """
         pass
 
     @property
@@ -687,42 +734,34 @@ class SpecialTokensMixin:
     @bos_token.setter
     def bos_token(self, value):
         self._bos_token = value
-        self._maybe_update_backend([value])
 
     @eos_token.setter
     def eos_token(self, value):
         self._eos_token = value
-        self._maybe_update_backend([value])
 
     @unk_token.setter
     def unk_token(self, value):
         self._unk_token = value
-        self._maybe_update_backend([value])
 
     @sep_token.setter
     def sep_token(self, value):
         self._sep_token = value
-        self._maybe_update_backend([value])
 
     @pad_token.setter
     def pad_token(self, value):
         self._pad_token = value
-        self._maybe_update_backend([value])
 
     @cls_token.setter
     def cls_token(self, value):
         self._cls_token = value
-        self._maybe_update_backend([value])
 
     @mask_token.setter
     def mask_token(self, value):
         self._mask_token = value
-        self._maybe_update_backend([value])
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
-        self._maybe_update_backend(value)
 
     @property
     def bos_token_id(self):
@@ -784,7 +823,19 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens(self):
         """ List all the special tokens ('<unk>', '<cls>'...) mapped to class attributes
+            Convert tokens of AddedToken type in string.
+            All returned tokens are thus strings
             (cls_token, unk_token...).
+        """
+        all_toks = [str(s) for s in self.all_special_tokens_extended]
+        return all_toks
+
+    @property
+    def all_special_tokens_extended(self):
+        """ List all the special tokens ('<unk>', '<cls>'...) mapped to class attributes
+            Keep the tokens as AddedToken if they are of this type.
+
+            AddedToken can be used to control more finely how special tokens are tokenized.
         """
         all_toks = []
         set_attr = self.special_tokens_map
@@ -1153,6 +1204,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
             for key, value in special_tokens_map.items():
+                if isinstance(value, dict):
+                    value = AddedToken(**value)
                 if key not in init_kwargs:
                     init_kwargs[key] = value
 
@@ -1171,7 +1224,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # update unique_added_tokens_encoder with special tokens for correct tokenization
         if hasattr(tokenizer, "unique_added_tokens_encoder"):
-            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.all_special_tokens))
+            union = set(tokenizer.unique_added_tokens_encoder).union(tokenizer.all_special_tokens)
+            tokenizer.unique_added_tokens_encoder = list(union)
 
         # Add supplementary tokens.
         if added_tokens_file is not None:
@@ -1180,7 +1234,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
             tokenizer.added_tokens_encoder.update(added_tok_encoder)
             tokenizer.added_tokens_decoder.update(added_tok_decoder)
-            tokenizer.unique_added_tokens_encoder.update(set(tokenizer.added_tokens_encoder.keys()))
+            union = set(tokenizer.unique_added_tokens_encoder).union(tokenizer.added_tokens_encoder.keys())
+            tokenizer.unique_added_tokens_encoder = list(union)
 
         return tokenizer
 
@@ -1214,7 +1269,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
 
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.special_tokens_map, ensure_ascii=False))
+            write_dict = {}
+            for key, value in self.special_tokens_map.items():
+                if isinstance(value, AddedToken):
+                    write_dict[key] = {'data': value.data, 'single_word': value._single_word, 'lstrip': value._lstrip, 'rstrip': value._rstrip}
+                else:
+                    write_dict[key] = value
+            f.write(json.dumps(write_dict, ensure_ascii=False))
 
         if hasattr(self, "added_tokens_encoder") and len(self.added_tokens_encoder) > 0:
             with open(added_tokens_file, "w", encoding="utf-8") as f:

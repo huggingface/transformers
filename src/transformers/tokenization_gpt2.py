@@ -357,7 +357,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
         is_pretokenized = kwargs.get("is_pretokenized", False)
         assert self.add_prefix_space or not is_pretokenized, (
-            "You need to instantiate GPT2TokenizerFast with add_prefix_space=False "
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
             "to use it with pretokenized inputs."
         )
 
@@ -367,7 +367,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
 
         is_pretokenized = kwargs.get("is_pretokenized", False)
         assert self.add_prefix_space or not is_pretokenized, (
-            "You need to instantiate GPT2TokenizerFast with add_prefix_space=False "
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
             "to use it with pretokenized inputs."
         )
 

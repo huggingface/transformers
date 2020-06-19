@@ -1065,7 +1065,7 @@ class TokenizerTesterMixin:
     def test_pretokenized_inputs(self):
         # Test when inputs are pretokenized
 
-        tokenizers = self.get_tokenizers(do_lower_case=False, add_prefix_space=True)
+        tokenizers = self.get_tokenizers(do_lower_case=False)  #, add_prefix_space=True)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
 
