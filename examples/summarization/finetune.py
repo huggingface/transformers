@@ -44,7 +44,7 @@ except ImportError:
         ROUGE_KEYS,
         calculate_bleu_score,
     )
-    from callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
+    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 
 logger = logging.getLogger(__name__)
 
