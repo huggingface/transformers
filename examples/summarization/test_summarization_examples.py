@@ -328,7 +328,7 @@ class TestBartExamples(unittest.TestCase):
             output_dir=output_dir,
             do_predict=True,
             learning_rate=0,
-            task='translation',
+            task="translation",
             num_train_epochs=2,
         )
         assert "n_train" in args_d

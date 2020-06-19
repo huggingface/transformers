@@ -3,12 +3,13 @@ import json
 import os
 import pickle
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Callable, Dict, Iterable, List
 
 import git
 import numpy as np
 import torch
 from rouge_score import rouge_scorer, scoring
+from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
@@ -53,13 +54,17 @@ def encode_file(
     torch.save(lmap(dict, examples), cache_path.open("wb"))
     return examples
 
-from typing import Callable, Iterable
-from sacrebleu import corpus_bleu
+
+
+
 def lmap(f: Callable, x: Iterable) -> List:
     """list(map(f, x))"""
     return list(map(f, x))
+
+
 def calculate_bleu_score(output_lns, refs_lns) -> float:
     return corpus_bleu(output_lns, [refs_lns]).score
+
 
 def trim_batch(
     input_ids, pad_token_id, attention_mask=None,

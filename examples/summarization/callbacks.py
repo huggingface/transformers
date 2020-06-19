@@ -75,10 +75,10 @@ class Seq2SeqLoggingCallback(pl.Callback):
 
 def get_checkpoint_callback(output_dir, metric):
     """Saves the best model by validation ROUGE2 score."""
-    if metric == 'rouge':
+    if metric == "rouge":
         exp = "{val_avg_rouge2:.4f}-{step_count}"
     else:
-        assert metric =='bleu'
+        assert metric == "bleu"
         exp = "{val_avg_bleu:.4f}-{step_count}"
 
     checkpoint_callback = ModelCheckpoint(

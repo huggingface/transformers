@@ -53,7 +53,7 @@ class SummarizationModule(BaseTransformer):
     mode = "summarization"
     loss_names = ["loss"]
     metric_names = ROUGE_KEYS
-    val_metric = 'rouge2'
+    val_metric = "rouge2"
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
@@ -147,7 +147,6 @@ class SummarizationModule(BaseTransformer):
     def save_metrics(self, metrics, prefix) -> None:
         self.metrics[prefix].append(metrics)
         pickle_save(self.metrics, self.metrics_save_path)
-
 
     def calc_generative_metrics(self, preds, target) -> dict:
         rouge: Dict = calculate_rouge(preds, target)
@@ -295,10 +294,11 @@ class SummarizationModule(BaseTransformer):
 class TranslationModule(SummarizationModule):
     mode = "translation"
     loss_names = ["loss"]
-    metric_names = ['bleu']
-    val_metric = 'bleu'
+    metric_names = ["bleu"]
+    val_metric = "bleu"
+
     def calc_generative_metrics(self, preds, target) -> dict:
-        return {'bleu': calculate_bleu_score(preds, target)}
+        return {"bleu": calculate_bleu_score(preds, target)}
 
 
 def main(args, model=None) -> SummarizationModule:
@@ -306,7 +306,7 @@ def main(args, model=None) -> SummarizationModule:
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
-        if args.task == 'summarization':
+        if args.task == "summarization":
             model: SummarizationModule = SummarizationModule(args)
         else:
             model: SummarizationModule = TranslationModule(args)
