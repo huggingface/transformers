@@ -277,7 +277,9 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--task", type=int, default='summarization', required=False, help="# examples. -1 means use all.")
+        parser.add_argument(
+            "--task", type=int, default="summarization", required=False, help="# examples. -1 means use all."
+        )
         return parser
 
 
@@ -297,6 +299,7 @@ def main(args, model=None) -> SummarizationModule:
         logger = True  # don't pollute wandb logs unnecessarily
     elif args.logger == "wandb":
         from pytorch_lightning.loggers import WandbLogger
+
         logger = WandbLogger(name=model.output_dir.name, project=dataset)
 
     elif args.logger == "wandb_shared":
