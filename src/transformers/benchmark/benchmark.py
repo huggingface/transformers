@@ -196,7 +196,7 @@ class PyTorchBenchmark(Benchmark):
             if self.args.is_tpu:
                 # tpu
                 raise NotImplementedError(
-                    "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`"
+                    "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `--no_memory` or `args.no_memory=True`"
                 )
             elif self.args.is_gpu:
                 if not is_py3nvml_available():
