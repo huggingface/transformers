@@ -24,6 +24,7 @@ from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
+    import torch
     from transformers import (
         MobileBertConfig,
         MobileBertModel,
@@ -458,3 +459,39 @@ class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MobileBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+def _long_tensor(tok_lst):
+    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device,)
+
+
+TOLERANCE = 1e-3
+
+
+@require_torch
+class MobileBertModelIntegrationTests(unittest.TestCase):
+    @slow
+    def test_inference_no_head(self):
+        model = MobileBertModel.from_pretrained("google/mobilebert-uncased").to(torch_device)
+        input_ids = _long_tensor([[  101,  7110,  1005,  1056,  2023, 11333, 17413,  1029,   102]])
+        with torch.no_grad():
+            output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 9, 512))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[
+                [-2.4736526e+07,  8.2691656e+04,  1.6521838e+05],
+                [-5.7541704e-01,  3.9056022e+00,  4.4011507e+00],
+                [ 2.6047359e+00,  1.5677652e+00, -1.7324188e-01]
+            ]]
+            , device=torch_device
+        )
+
+        # MobileBERT results range from 10e0 to 10e8. Even a 0.0000001% difference with a value of 10e8 results in a
+        # ~1 difference, it's therefore not a good idea to measure using addition.
+        # Here, we instead divide the expected result with the result in order to obtain ~1. We then check that the
+        # result is held between bounds: 1 - TOLERANCE < expected_result / result < 1 + TOLERANCE
+        lower_bound = torch.all((expected_slice / output[..., :3, :3]) >= 1 - TOLERANCE)
+        upper_bound = torch.all((expected_slice / output[..., :3, :3]) <= 1 + TOLERANCE)
+
+        self.assertTrue(lower_bound and upper_bound)
