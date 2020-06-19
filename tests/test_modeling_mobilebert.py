@@ -473,18 +473,20 @@ class MobileBertModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = MobileBertModel.from_pretrained("google/mobilebert-uncased").to(torch_device)
-        input_ids = _long_tensor([[  101,  7110,  1005,  1056,  2023, 11333, 17413,  1029,   102]])
+        input_ids = _long_tensor([[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
         expected_shape = torch.Size((1, 9, 512))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[
-                [-2.4736526e+07,  8.2691656e+04,  1.6521838e+05],
-                [-5.7541704e-01,  3.9056022e+00,  4.4011507e+00],
-                [ 2.6047359e+00,  1.5677652e+00, -1.7324188e-01]
-            ]]
-            , device=torch_device
+            [
+                [
+                    [-2.4736526e07, 8.2691656e04, 1.6521838e05],
+                    [-5.7541704e-01, 3.9056022e00, 4.4011507e00],
+                    [2.6047359e00, 1.5677652e00, -1.7324188e-01],
+                ]
+            ],
+            device=torch_device,
         )
 
         # MobileBERT results range from 10e0 to 10e8. Even a 0.0000001% difference with a value of 10e8 results in a
