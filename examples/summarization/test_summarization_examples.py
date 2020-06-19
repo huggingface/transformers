@@ -79,7 +79,6 @@ def _dump_articles(path: Path, articles: list):
         f.write("\n".join(articles))
 
 
-BDIR = Path("~/transformers_fork/examples/summarization/bart/").absolute()
 articles = [" Sam ate lunch today", "Sams lunch ingredients"]
 summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 
