@@ -20,3 +20,5 @@ We provide a 6-layer pretrained model on MNLI as a general-purpose model, which 
 | BERT-base       | 83.5 | 89.5 | 91.2 | 89.8 | 71.1 | 91.5  | 88.9  |
 | DistillBERT     | 79.0 | 87.5 | 85.3 | 84.9 | 59.9 | 90.7  | 81.2  |
 | BERT-of-Theseus | 82.1 | 87.5 | 88.8 | 88.8 | 70.1 | 91.8  | 87.8  |
+
+Please Note: this checkpoint is for [Intermediate-Task Transfer Learning](https://arxiv.org/abs/2005.00628) so it does not include the classification head for MNLI! Please fine-tune it before use (like DistilBERT).
