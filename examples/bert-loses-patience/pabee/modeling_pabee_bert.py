@@ -27,8 +27,8 @@ from transformers.modeling_bert import (
     BERT_INPUTS_DOCSTRING,
     BERT_START_DOCSTRING,
     BertEncoder,
-    BertForSequenceClassification,
     BertModel,
+    BertPreTrainedModel,
 )
 
 
@@ -291,11 +291,13 @@ class BertModelWithPabee(BertModel):
     the pooled output) e.g. for GLUE tasks. """,
     BERT_START_DOCSTRING,
 )
-class BertForSequenceClassificationWithPabee(BertForSequenceClassification):
+class BertForSequenceClassificationWithPabee(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        self.num_labels = config.num_labels
 
         self.bert = BertModelWithPabee(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifiers = nn.ModuleList(
             [nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)]
         )

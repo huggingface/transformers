@@ -24,8 +24,8 @@ from transformers.file_utils import add_start_docstrings, add_start_docstrings_t
 from transformers.modeling_albert import (
     ALBERT_INPUTS_DOCSTRING,
     ALBERT_START_DOCSTRING,
-    AlbertForSequenceClassification,
     AlbertModel,
+    AlbertPreTrainedModel,
     AlbertTransformer,
 )
 
@@ -223,11 +223,13 @@ class AlbertModelWithPabee(AlbertModel):
     the pooled output) e.g. for GLUE tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class AlbertForSequenceClassificationWithPabee(AlbertForSequenceClassification):
+class AlbertForSequenceClassificationWithPabee(AlbertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        self.num_labels = config.num_labels
 
         self.albert = AlbertModelWithPabee(config)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifiers = nn.ModuleList(
             [nn.Linear(config.hidden_size, self.config.num_labels) for _ in range(config.num_hidden_layers)]
         )
