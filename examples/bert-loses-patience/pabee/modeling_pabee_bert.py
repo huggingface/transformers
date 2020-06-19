@@ -389,4 +389,4 @@ class BertForSequenceClassificationWithPabee(BertPreTrainedModel):
                 total_weights += ix + 1
             outputs = (total_loss / total_weights,) + outputs
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        return outputs
