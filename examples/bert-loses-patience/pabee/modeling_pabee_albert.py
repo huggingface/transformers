@@ -56,7 +56,7 @@ class AlbertTransformerWithPabee(AlbertTransformer):
 
 
 @add_start_docstrings(
-    "The bare ALBERT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare ALBERT Model transformer with PABEE outputting raw hidden-states without any specific head on top.",
     ALBERT_START_DOCSTRING,
 )
 class AlbertModelWithPabee(AlbertModel):
@@ -125,18 +125,6 @@ class AlbertModelWithPabee(AlbertModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Example::
-
-        from transformers import AlbertModel, AlbertTokenizer
-        import torch
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertModel.from_pretrained('albert-base-v2')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
 
         if input_ids is not None and inputs_embeds is not None:
@@ -231,7 +219,7 @@ class AlbertModelWithPabee(AlbertModel):
 
 
 @add_start_docstrings(
-    """Albert Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """Albert Model transformer with PABEE and a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
     ALBERT_START_DOCSTRING,
 )
@@ -284,11 +272,12 @@ class AlbertForSequenceClassificationWithPabee(AlbertForSequenceClassification):
 
         Examples::
 
-            from transformers import AlbertTokenizer, AlbertForSequenceClassification
+            from transformers import AlbertTokenizer
+            from pabee import AlbertForSequenceClassificationWithPabee
             import torch
 
             tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            model = AlbertForSequenceClassification.from_pretrained('albert-base-v2')
+            model = AlbertForSequenceClassificationWithPabee.from_pretrained('albert-base-v2')
             input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
             labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
             outputs = model(input_ids, labels=labels)

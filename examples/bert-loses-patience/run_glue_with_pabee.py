@@ -30,7 +30,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
-from pabee.modeling_pabee_bert import BertForSequenceClassification
+from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -55,7 +55,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 MODEL_CLASSES = {
-    "bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
+    "bert": (BertConfig, BertForSequenceClassificationWithPabee, BertTokenizer),
     "albert": (AlbertConfig, AlbertForSequenceClassificationWithPabee, AlbertTokenizer),
 }
 

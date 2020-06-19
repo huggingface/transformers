@@ -45,7 +45,7 @@ class BertEncoderWithPabee(BertEncoder):
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Bert Model transformer with PABEE outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
 class BertModelWithPabee(BertModel):
@@ -132,20 +132,6 @@ class BertModelWithPabee(BertModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import BertModel, BertTokenizer
-        import torch
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertModel.from_pretrained('bert-base-uncased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
 
         if input_ids is not None and inputs_embeds is not None:
@@ -301,11 +287,11 @@ class BertModelWithPabee(BertModel):
 
 
 @add_start_docstrings(
-    """Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    """Bert Model transformer with PABEE and a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
     BERT_START_DOCSTRING,
 )
-class BertForSequenceClassification(BertForSequenceClassification):
+class BertForSequenceClassificationWithPabee(BertForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
 
@@ -355,10 +341,11 @@ class BertForSequenceClassification(BertForSequenceClassification):
     Examples::
 
         from transformers import BertTokenizer, BertForSequenceClassification
+        from pabee import BertForSequenceClassificationWithPabee
         import torch
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+        model = BertForSequenceClassificationWithPabee.from_pretrained('bert-base-uncased')
 
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
