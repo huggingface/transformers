@@ -278,7 +278,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument(
-            "--task", type=int, default="summarization", required=False, help="# examples. -1 means use all."
+            "--task", type=str, default="summarization", required=False, help="# examples. -1 means use all."
         )
         return parser
 
