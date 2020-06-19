@@ -105,7 +105,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         "vi_VN": 250024,
         "zh_CN": 250025,
     }
-    id_to_lang_code = {v: k for k,v in lang_code_to_id.items()}
+    id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
@@ -120,7 +120,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         if index in self.id_to_lang_code:
             return self.id_to_lang_code[index]
-        return self.sp_model.IdToPiece(index- self.fairseq_offset)
+        return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
     def prepare_translation_batch(
         self,
