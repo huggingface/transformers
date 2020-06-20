@@ -1,4 +1,4 @@
-export OUTPUT_DIR=bart_cnn_finetune
+export OUTPUT_DIR=bart_finetune
 
 # Make output directory if it doesn't exist
 mkdir -p $OUTPUT_DIR
@@ -9,10 +9,9 @@ export PYTHONPATH="../":"${PYTHONPATH}"
 
 # --model_name_or_path=t5-base for t5
 
+# the proper usage is documented in the README
 python finetune.py \
     --model_name_or_path=facebook/bart-large \
-    --data_dir=./cnn-dailymail/cnn_dm \
-    --output_dir=$OUTPUT_DIR \
     --learning_rate=3e-5 \
     --fp16 \
     --gpus 1 \
