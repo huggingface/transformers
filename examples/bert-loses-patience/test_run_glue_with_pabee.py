@@ -44,6 +44,5 @@ class PabeeTests(unittest.TestCase):
             """.split()
         with patch.object(sys, "argv", testargs):
             result = run_glue_with_pabee.main()
-            del result["eval_loss"]
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
