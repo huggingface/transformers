@@ -26,7 +26,8 @@ class PabeeTests(unittest.TestCase):
 
         testargs = """
             run_glue_with_pabee.py
-            --model_name_or_path albert
+            --model_type albert
+            --model_name_or_path albert-base-v2
             --data_dir ./tests/fixtures/tests_samples/MRPC/
             --task_name mrpc
             --do_train
