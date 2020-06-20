@@ -342,7 +342,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
-            assert len(inputs) <= 10, "Too many inputs."
+            output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -354,7 +355,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 10, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
 

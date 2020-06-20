@@ -247,7 +247,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
             output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
-            assert len(inputs) <= 9, "Too many inputs."
+            output_hidden_states = inputs[9] if len(inputs) > 9 else output_hidden_states
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -258,7 +259,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 9, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
