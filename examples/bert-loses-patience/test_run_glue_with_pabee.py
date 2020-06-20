@@ -35,8 +35,8 @@ class PabeeTests(unittest.TestCase):
             --output_dir ./tests/fixtures/tests_samples/temp_dir
             --per_gpu_train_batch_size=2
             --per_gpu_eval_batch_size=1
-            --learning_rate=1e-4
-            --max_steps=10
+            --learning_rate=2e-5
+            --max_steps=50
             --warmup_steps=2
             --overwrite_output_dir
             --seed=42
