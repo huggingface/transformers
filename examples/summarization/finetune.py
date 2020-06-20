@@ -85,7 +85,7 @@ class SummarizationModule(BaseTransformer):
         if self.hparams.freeze_encoder:
             freeze_params(self.model.model.encoder)  # TODO: this will break for t5
         self.hparams.git_sha = get_git_info()["repo_sha"]
-        self.num_workers = 4
+        self.num_workers = hparams.num_workers
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""

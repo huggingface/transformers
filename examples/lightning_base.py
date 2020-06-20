@@ -8,7 +8,7 @@ from typing import Any, Dict
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.utilities import rank_zero_only
+from pytorch_lightning.utilities import rank_zero_info, rank_zero_only
 
 from transformers import (
     AdamW,
@@ -63,7 +63,7 @@ class BaseTransformer(pl.LightningModule):
     ):
         """Initialize a model, tokenizer and config."""
         super().__init__()
-        self.hparams = hparams
+        self.hparams = hparams  # TODO: move to self.save_hyperparameters()
         self.step_count = 0
         self.tfmr_ckpts = {}
         self.output_dir = Path(self.hparams.output_dir)
@@ -190,6 +190,7 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
         parser.add_argument("--warmup_steps", default=500, type=int, help="Linear warmup over warmup_steps.")
+        parser.add_argument("--num_workers", default=4, type=int, help="kwarg passed to DataLoader")
         parser.add_argument(
             "--num_train_epochs", default=3, type=int, help="Total number of training epochs to perform."
         )
@@ -201,12 +202,12 @@ class BaseTransformer(pl.LightningModule):
 class LoggingCallback(pl.Callback):
     @rank_zero_only
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        logger.info("***** Validation results *****")
+        rank_zero_info("***** Validation results *****")
         metrics = trainer.callback_metrics
         # Log results
         for key in sorted(metrics):
             if key not in ["log", "progress_bar"]:
-                logger.info("{} = {}\n".format(key, str(metrics[key])))
+                rank_zero_info("{} = {}\n".format(key, str(metrics[key])))
 
     @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):

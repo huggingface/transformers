@@ -24,6 +24,7 @@ logger = logging.getLogger()
 FP16_EVER = False
 CHEAP_ARGS = {
     "logger": "default",
+    "num_workers": 2,
     "alpha_hid": 0,
     "freeze_embeds": True,
     "enc_only": False,
@@ -234,15 +235,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertIn("test_results.txt", contents)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
-        import pandas as pd
-
-        val_df = pd.DataFrame(metrics["val"])
-        train_df = pd.DataFrame(metrics["train"])
-        test_df = pd.DataFrame(metrics["test"])
         desired_n_evals = args_d["num_train_epochs"] * 2 + 1
-        self.assertEqual(val_df.shape[0], desired_n_evals)  #
-        self.assertEqual(test_df.shape[1], val_df.shape[1])
-        self.assertEqual(train_df.shape[0], 0)
+        self.assertEqual(len(metrics["val"]), desired_n_evals)
+        self.assertEqual(len(metrics["train"]), 0)  # doesn't get logged here
         return model
 
 
