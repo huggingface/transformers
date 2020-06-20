@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import run_glue_with_pabee
 
+
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
