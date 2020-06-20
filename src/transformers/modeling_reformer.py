@@ -1546,7 +1546,7 @@ class ReformerModel(ReformerPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         num_hashes=None,
-        output_hidden_states=False,
+        output_hidden_states=None,
         output_attentions=None,
     ):
         r"""
@@ -1742,7 +1742,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         inputs_embeds=None,
         num_hashes=None,
         labels=None,
-        output_hidden_states=False,
+        output_hidden_states=None,
         output_attentions=None,
     ):
         r"""
