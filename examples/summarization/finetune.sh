@@ -11,6 +11,8 @@ export PYTHONPATH="../":"${PYTHONPATH}"
 
 python finetune.py \
     --model_name_or_path=facebook/bart-large \
+    --data_dir=./cnn-dailymail/cnn_dm \
+    --output_dir=$OUTPUT_DIR \
     --learning_rate=3e-5 \
     --fp16 \
     --gpus 1 \

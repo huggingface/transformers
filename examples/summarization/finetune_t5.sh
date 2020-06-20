@@ -11,7 +11,6 @@ export PYTHONPATH="../":"${PYTHONPATH}"
 python finetune.py \
 --data_dir=./cnn-dailymail/cnn_dm \
 --model_name_or_path=t5-large \
---model_type=t5
 --learning_rate=3e-5 \
 --train_batch_size=4 \
 --eval_batch_size=4 \
