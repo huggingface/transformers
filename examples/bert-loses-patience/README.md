@@ -2,7 +2,7 @@
 
 Patience-based Early Exit (PABEE) is a plug-and-play inference method for pretrained language models.
 We have already implemented it on BERT and ALBERT. Basically, you can make your LM faster and more robust with PABEE. It can even improve the performance of ALBERT on GLUE. The only sacrifice is that the batch size can only be 1.
-Learn more in the paper ["BERT Loses Patience: Fast and Robust Inference with Early Exit"](https://arxiv.org/abs/2006.04152).
+Learn more in the paper ["BERT Loses Patience: Fast and Robust Inference with Early Exit"](https://arxiv.org/abs/2006.04152) and the official [GitHub repo](https://github.com/JetRunner/PABEE).
 
 ![PABEE](https://github.com/JetRunner/PABEE/raw/master/bert-loses-patience.png)
 
