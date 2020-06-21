@@ -1,7 +1,3 @@
-export OUTPUT_DIR=bart_finetune
-
-# Make output directory if it doesn't exist
-mkdir -p $OUTPUT_DIR
 
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
