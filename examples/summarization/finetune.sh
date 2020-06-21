@@ -1,9 +1,7 @@
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
-
-# --model_name_or_path=t5-base for t5
-
+# the proper usage is documented in the README, you need to specify data_dir, output_dir and model_name_or_path
 python finetune.py \
     --learning_rate=3e-5 \
     --fp16 \

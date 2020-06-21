@@ -42,13 +42,13 @@ Run/modify `finetune.sh`
 
 The following command should work on a 16GB GPU:
 ```bash
-export me=`git config user.name`
 ./finetune.sh \
     --data_dir $XSUM_DIR \
     --train_batch_size=1 \
-    --eval_batch_size=1 \
-    --output_dir="$me"_xsum_results \
+    --eval_batch_size=1 \0
+    --output_dir=xsum_results \
     --num_train_epochs 1
+    --model_name_or_path facebook/bart-large
 ```
 
 Tips:
@@ -66,13 +66,13 @@ Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_t
 Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
 Here is an example command
 ```bash
-export me=`git config user.name`
 ./finetune.sh \
     --data_dir $XSUM_DIR \
-    --output_dir "$me"_xsum_frozen_embs \
+    --output_dir xsum_frozen_embs \
+    --model_name_or_path facebook/bart-large \
     --logger wandb_shared \
     --train_batch_size 16 --eval_batch_size 16 --freeze_embeds --freeze_encoder \
-    --num_train_epochs 6
+    --num_train_epochs 6 
 ```
 
 Results can be viewed [here](https://app.wandb.ai/sshleifer/hf_summarization/table?workspace=user-)
