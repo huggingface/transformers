@@ -742,7 +742,8 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
         encoder_outputs = self.encoder(
-            [embedding_output, extended_attention_mask, head_mask, output_attentions, output_hidden_states], training=training
+            [embedding_output, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]
