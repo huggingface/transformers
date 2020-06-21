@@ -22,7 +22,7 @@ General terms
   masking some words and trying to predict them (see MLM).
 - RNN: recurrent neural network, a type of model that uses a loop over a layer to process texts.
 - seq2seq or sequence-to-sequence: models that generate a new sequence from an input, like translation models, or
-  summarization models.
+  summarization models (such as :doc:`Bart </model_doc/bart>` or :doc:`T5 </model_doc/t5>`).
 - token: a part of a sentence, usually a word, but can also be a subword (non-common words are often split in subwords)
   or a punctuation symbol.
 
@@ -81,8 +81,8 @@ token indices are under the key "input_ids":
 
     [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 
-Note that the tokenizer automatically adds "special tokens" which are special IDs the model uses. If we decode the
-previous sequence of ids,
+Note that the tokenizer automatically adds "special tokens" (if the associated model rely on them) which are special
+IDs the model sometimes uses. If we decode the previous sequence of ids,
 
 ::
 
