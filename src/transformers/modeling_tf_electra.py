@@ -217,6 +217,10 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings
 
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 
@@ -371,9 +375,6 @@ class TFElectraModel(TFElectraPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.electra = TFElectraMainLayer(config, name="electra")
 
-    def get_input_embeddings(self):
-        return self.electra.embeddings
-
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
@@ -421,9 +422,6 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
 
         self.electra = TFElectraMainLayer(config, name="electra")
         self.discriminator_predictions = TFElectraDiscriminatorPredictions(config, name="discriminator_predictions")
-
-    def get_input_embeddings(self):
-        return self.electra.embeddings
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def call(
@@ -518,9 +516,6 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         else:
             self.activation = config.hidden_act
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
-
-    def get_input_embeddings(self):
-        return self.electra.embeddings
 
     def get_output_embeddings(self):
         return self.generator_lm_head

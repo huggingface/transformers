@@ -213,6 +213,10 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.w
 
+    def set_input_embeddings(self, value):
+        self.w.weight = value
+        self.w.vocab_size = value.shape[0]
+
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
 

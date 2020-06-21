@@ -146,10 +146,10 @@ class MBartCC25IntegrationTest(MBartIntegrationTests):
 
     @slow
     def test_cc25_generate(self):
-        inputs: dict = self.tokenizer.prepare_translation_batch([self.src_text[0]]).to(torch_device)
-        translated_tokens = self.model.generate(input_ids=inputs["input_ids"].to(torch_device))
-        import ipdb
-
-        ipdb.set_trace()
+        inputs = self.tokenizer.prepare_translation_batch([self.src_text[0]]).to(torch_device)
+        translated_tokens = self.model.generate(
+            input_ids=inputs["input_ids"].to(torch_device),
+            decoder_start_token_id=self.tokenizer.lang_code_to_id["ro_RO"],
+        )
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
