@@ -41,6 +41,7 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
+        extra_pos_embeddings=2,
         activation_function="gelu",
         vocab_size=50265,
         d_model=1024,
@@ -117,6 +118,9 @@ class BartConfig(PretrainedConfig):
 
         # Classifier stuff
         self.classif_dropout = classifier_dropout
+
+        # pos embedding offset
+        self.extra_pos_embeddings = extra_pos_embeddings
 
     @property
     def num_attention_heads(self) -> int:
