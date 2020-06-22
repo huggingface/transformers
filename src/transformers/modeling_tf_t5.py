@@ -558,6 +558,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         past_key_value_states=None,
         use_cache=False,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -584,6 +585,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
@@ -696,7 +698,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(inputs_embeds, training=training)
 
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
@@ -731,14 +733,14 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
 
         # Add last layer
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
             outputs = outputs + (present_key_value_states,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
@@ -912,7 +914,7 @@ class TFT5Model(TFT5PreTrainedModel):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `hidden-state` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -953,6 +955,7 @@ class TFT5Model(TFT5PreTrainedModel):
         use_cache = kwargs.get("use_cache", True)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
+        output_hidden_states = kwargs.get("output_hidden_states", None)
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -962,6 +965,7 @@ class TFT5Model(TFT5PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
         hidden_states = encoder_outputs[0]
@@ -985,6 +989,7 @@ class TFT5Model(TFT5PreTrainedModel):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         if use_cache is True:
@@ -1049,7 +1054,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `prediction_score` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1094,6 +1099,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
+        output_hidden_states = kwargs.get("output_hidden_states", None)
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1104,6 +1110,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1127,6 +1134,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         # insert decoder past at right place
