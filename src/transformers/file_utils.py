@@ -81,6 +81,31 @@ except ImportError:
     _torch_tpu_available = False
 
 
+try:
+    import psutil  # noqa: F401
+
+    _psutil_available = True
+
+except ImportError:
+    _psutil_available = False
+
+
+try:
+    import py3nvml  # noqa: F401
+
+    _py3nvml_available = True
+
+except ImportError:
+    _py3nvml_available = False
+
+
+try:
+    from apex import amp  # noqa: F401
+
+    _has_apex = True
+except ImportError:
+    _has_apex = False
+
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 
@@ -113,6 +138,18 @@ def is_tf_available():
 
 def is_torch_tpu_available():
     return _torch_tpu_available
+
+
+def is_psutil_available():
+    return _psutil_available
+
+
+def is_py3nvml_available():
+    return _py3nvml_available
+
+
+def is_apex_available():
+    return _has_apex
 
 
 def add_start_docstrings(*docstr):

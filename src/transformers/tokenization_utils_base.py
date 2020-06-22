@@ -1774,6 +1774,51 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def batch_decode(self, sequences: List[List[int]], **kwargs) -> List[str]:
         return [self.decode(seq, **kwargs) for seq in sequences]
 
+    def decode(
+        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+    ) -> str:
+        """
+        Converts a sequence of ids (integer) in a string, using the tokenizer and vocabulary
+        with options to remove special tokens and clean up tokenization spaces.
+        Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
+
+        Args:
+            token_ids: list of tokenized input ids. Can be obtained using the `encode` or `encode_plus` methods.
+            skip_special_tokens: if set to True, will replace special tokens.
+            clean_up_tokenization_spaces: if set to True, will clean up the tokenization spaces.
+        """
+        raise NotImplementedError
+
+    def get_special_tokens_mask(
+        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+
+        Args:
+            token_ids_0: list of ids (must not contain special tokens)
+            token_ids_1: Optional list of ids (must not contain special tokens), necessary when fetching sequence ids
+                for sequence pairs
+            already_has_special_tokens: (default False) Set to True if the token list is already formated with
+                special tokens for the model
+
+        Returns:
+            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+        assert already_has_special_tokens and token_ids_1 is None, (
+            "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
+            "Please use a slow (full python) tokenizer to activate this argument."
+            "Or set `return_special_token_mask=True` when calling the encoding method "
+            "to get the special tokens mask in any tokenizer. "
+        )
+
+        all_special_ids = self.all_special_ids  # cache the property
+
+        special_tokens_mask = [1 if token in all_special_ids else 0 for token in token_ids_0]
+
+        return special_tokens_mask
+
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """ Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms.

@@ -20,22 +20,15 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
+from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available
-from .training_args import TrainingArguments, is_torch_tpu_available
+from .training_args import TrainingArguments
 
 
-try:
+if is_apex_available():
     from apex import amp
-
-    _has_apex = True
-except ImportError:
-    _has_apex = False
-
-
-def is_apex_available():
-    return _has_apex
 
 
 if is_torch_tpu_available():
