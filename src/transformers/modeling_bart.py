@@ -814,7 +814,7 @@ class BartModel(PretrainedBartModel):
         encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
     ):
@@ -822,6 +822,7 @@ class BartModel(PretrainedBartModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -914,7 +915,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_attention_mask=None,
         decoder_cached_states=None,
         labels=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         **unused,
