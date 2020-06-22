@@ -379,7 +379,7 @@ class GPT2Model(GPT2PreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
     ):
@@ -420,6 +420,7 @@ class GPT2Model(GPT2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -562,7 +563,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
     ):
@@ -671,7 +672,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         mc_token_ids=None,
         labels=None,
         mc_labels=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         **kwargs

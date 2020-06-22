@@ -135,7 +135,15 @@ class TFT5ModelTester:
         self.batch_size = 1
 
         # first forward pass
-        _, past_key_value_states = model(input_ids, use_cache=True)
+        outputs = model(input_ids, use_cache=True)
+
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past_key_value_states = outputs
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
