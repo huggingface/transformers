@@ -1,6 +1,6 @@
-# BERT L-10 H512 fine-tuned on MLM (CORD-19 2020/06/16)
+# BERT L-10 H-512 fine-tuned on MLM (CORD-19 2020/06/16)
 
-BERT model with [10 Transformer layers and hidden embedding of size 512](https://huggingface.co/google/bert_uncased_L-10_H-512_A-8), referenced in [Well-Read Students Learn Better: On the Importance of Pre-training Compact Models](https://arxiv.org/abs/1908.08962).
+BERT model with [10 Transformer layers and hidden embedding of size 512](https://huggingface.co/google/bert_uncased_L-10_H-512_A-8), referenced in [Well-Read Students Learn Better: On the Importance of Pre-training Compact Models](https://arxiv.org/abs/1908.08962), fine-tuned for MLM on CORD-19 dataset (as released on 2020/06/16).
 
 ## Training the model
 
@@ -14,7 +14,7 @@ python run_language_modeling.py
     --mlm_probability 0.2
     --line_by_line
     --block_size 512
-    --per_device_train_batch_size 20
+    --per_device_train_batch_size 10
     --learning_rate 3e-5
     --num_train_epochs 2
     --output_dir bert_uncased_L-10_H-512_A-8_cord19-200616
