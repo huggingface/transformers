@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import warnings
-from collections import UserDict, UserString
+from collections import UserDict
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -593,15 +593,11 @@ class SpecialTokensMixin:
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
-                # elif isinstance(value, AddedTokenFast):
-                #     setattr(self, key, str(value))
                 elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
                 else:
                     raise TypeError(
-                        "special token {} has to be either str or AddedToken but got: {}".format(
-                            key, type(value)
-                        )
+                        "special token {} has to be either str or AddedToken but got: {}".format(key, type(value))
                     )
 
     def sanitize_special_tokens(self):

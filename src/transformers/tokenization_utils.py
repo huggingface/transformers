@@ -260,7 +260,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 **kwargs (:obj: `dict`): Arguments passed to the model-specific `prepare_for_tokenization` preprocessing method.
         """
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
-        all_special_tokens_extended = dict((str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken))
+        all_special_tokens_extended = dict(
+            (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
+        )
 
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 

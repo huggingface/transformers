@@ -21,7 +21,6 @@ import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
@@ -236,15 +235,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
-
-        # # Convert AddedToken in AddedTokenFast
-        # converted_tokens = []
-        # for tok in new_tokens:
-        #     # if isinstance(tok, AddedToken):
-        #     #     tok = AddedTokenFast(
-        #     #         content=str(tok), single_word=tok._single_word, lstrip=tok._lstrip, rstrip=tok._rstrip
-        #     #     )
-        #     converted_tokens.append(tok)
 
         if special_token:
             return self._tokenizer.add_special_tokens(new_tokens)
