@@ -1,7 +1,7 @@
 --
 language: english
 datasets:
-- imbd
+- imdb
 ---
 
 # T5-base fine-tuned for Sentiment Anlalysis 🎞️👍👎
