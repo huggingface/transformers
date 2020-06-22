@@ -16,9 +16,13 @@
 
 import dataclasses
 import json
+import logging
 from dataclasses import dataclass, field
 from time import time
 from typing import List
+
+
+logger = logging.getLogger(__name__)
 
 
 def list_field(default=None, metadata=None):
@@ -53,6 +57,9 @@ class BenchmarkArguments:
     )
 
     no_inference: bool = field(default=False, metadata={"help": "Don't benchmark inference of model"})
+    no_cuda: bool = field(default=False, metadata={"help": "Whether to run on available cuda devices"})
+    no_tpu: bool = field(default=False, metadata={"help": "Whether to run on available tpu devices"})
+    fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
     training: bool = field(default=False, metadata={"help": "Benchmark training of model"})
     verbose: bool = field(default=False, metadata={"help": "Verbose memory tracing"})
     no_speed: bool = field(default=False, metadata={"help": "Don't perform speed measurments"})
@@ -61,6 +68,12 @@ class BenchmarkArguments:
     save_to_csv: bool = field(default=False, metadata={"help": "Save result to a CSV file"})
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
     no_env_print: bool = field(default=False, metadata={"help": "Don't print environment information"})
+    no_multi_process: bool = field(
+        default=False,
+        metadata={
+            "help": "Don't use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be used for debugging / testing and on TPU."
+        },
+    )
     with_lm_head: bool = field(
         default=False,
         metadata={
@@ -101,4 +114,17 @@ class BenchmarkArguments:
 
     @property
     def model_names(self):
+        assert (
+            len(self.models) > 0
+        ), "Please make sure you provide at least one model name / model identifier, *e.g.* `--models bert-base-cased` or `args.models = ['bert-base-cased']."
         return self.models
+
+    @property
+    def do_multi_processing(self):
+        if self.no_multi_process:
+            return False
+        elif self.is_tpu:
+            logger.info("Multiprocessing is currently not possible on TPU.")
+            return False
+        else:
+            return True
