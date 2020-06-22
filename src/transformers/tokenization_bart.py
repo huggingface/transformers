@@ -115,10 +115,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + special_tokens
 
-    def set_lang(self, lang: str) -> None:
-        """Make subsequent calls to batch_encode_plus work on target side"""
-        self.cur_lang_code = self.lang_code_to_id[lang]
-
     def prepare_translation_batch(
         self,
         src_texts: List[str],
