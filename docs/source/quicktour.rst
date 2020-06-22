@@ -296,22 +296,14 @@ and if you are loading a saved TensorFlow model in a PyTorch model, you should u
 
 Lastly, you can also ask the model to return all hidden states and all attention weights if you need them:
 
-..
-    When #4978 is merged, present the alternative as passed at model call.
 
 ::
 
     ## PYTORCH CODE
-    model = AutoModelForSequenceClassification.from_pretrained(model_name,
-                                                               output_hidden_states=True,
-                                                               output_attentions=True)
-    outputs = model(**batch)
+    outputs = model(**batch, output_hidden_states=True, output_attentions=True)
     all_hidden_states, all_attentions = outputs[-2:]
     ## TENSORFLOW CODE
-    model = TFAutoModelForSequenceClassification.from_pretrained(model_name,
-                                                                 output_hidden_states=True,
-                                                                 output_attentions=True)
-    outputs = model(batch)
+    outputs = model(batch, output_hidden_states=True, output_attentions=True)
     all_hidden_states, all_attentions = outputs[-2:]
 
 Accessing the code
