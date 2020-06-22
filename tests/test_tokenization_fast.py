@@ -863,3 +863,7 @@ class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
     @require_torch
     def test_all_tokenizers(self):
         super().test_all_tokenizers()
+
+    @require_torch
+    def test_pretokenized_tokenizers(self):
+        super().test_pretokenized_tokenizers()
