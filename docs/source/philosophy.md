@@ -14,11 +14,11 @@ The library was designed with two strong goals in mind:
     just three standard classes required to use each model: configuration, models and tokenizer.
   - All of these classes can be initialized in a simple and unified way from pretrained instances by using a common
     `from_pretrained()` instantiation method which will take care of downloading (if needed), caching and loading the
-    related class from a pretrained instance supplied in the library or your own saved instance.
-  - On top of those common abstractions for the model, the library provdes two APIs: `pipeline` for quickly using a
-    model on a given task and `Trainer`/`TFTrainer` to quickly train or fine-tune a given model.
+    related class instance and associated data (configurations' hyper-parameters, tokenizers' vocabulary, and models' weights) from a pretrained checkpoint provided on HuggingFace Hub or your own saved checkpoint.
+  - On top of those three base classes, the library provides two APIs: `pipeline` for quickly using a
+    model (plus its associated tokenizer and configuration) on a given task and `Trainer`/`TFTrainer` to quickly train or fine-tune a given model.
   - As a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to
-    extend/build-upon the library, just use regular Python/PyTorch modules and inherit from the base classes of the
+    extend/build-upon the library, just use regular Python/PyTorch/TensorFlow/Keras modules and inherit from the base classes of the
     library to reuse functionalities like model loading/saving.
 
 - Provide state-of-the-art models with performances as close as possible to the original models:

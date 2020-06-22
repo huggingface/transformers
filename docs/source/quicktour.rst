@@ -2,8 +2,8 @@ Quick tour
 ==========
 
 Let's have a quick look at the 🤗 Transformers library features. The library downloads pretrained models for
-Natural Language Understanding (NLU), such as analyzing the sentiment of a text, and Natural Language Generation (NLG),
-sych as completing a prompt with new text or translating in another language.
+Natural Language Understanding (NLU) tasks, such as analyzing the sentiment of a text, and Natural Language Generation (NLG),
+such as completing a prompt with new text or translating in another language.
 
 First we will see how to easily leverage the pipeline API to quickly use those pretrained models at inference. Then, we
 will dig a little bit more and see how the library gives you access to those models and helps you preprocess your data.
@@ -307,7 +307,8 @@ Lastly, you can also ask the model to return all hidden states and all attention
 Accessing the code
 ^^^^^^^^^^^^^^^^^^
 
-The :obj:`AutoModel` and :obj:`AutoTokenizer` classes are just shortcuts that will automaticalyl work with any
+The :obj:`AutoModel` and :obj:`AutoTokenizer` classes are just shortcuts that will automatically work with any
+
 pretrained model. Behind the scenes, the library has one model class per combination of architecture plus class, so the
 code is easy to access and tweak if you need to.
 
