@@ -206,14 +206,3 @@ if _has_sklearn:
             return {"acc": simple_accuracy(preds, labels)}
         else:
             raise KeyError(task_name)
-
-    superglue_tasks_metrics = {
-        "boolq": "acc",
-        "cb": "acc_and_f1",
-        "copa": "acc",
-        "multirc": "em_and_f1",
-        "record": "em_and_f1",
-        "rte": "acc",
-        "wic": "acc",
-        "wsc": "acc_and_f1",
-    }

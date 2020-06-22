@@ -20,6 +20,7 @@ from .processors import (
     superglue_convert_examples_to_features,
     superglue_output_modes,
     superglue_processors,
+    superglue_tasks_metrics,
     superglue_tasks_num_labels,
     superglue_tasks_num_spans,
     xnli_output_modes,
@@ -29,4 +30,4 @@ from .processors import (
 
 
 if is_sklearn_available():
-    from .metrics import glue_compute_metrics, superglue_compute_metrics, xnli_compute_metrics, superglue_tasks_metrics
+    from .metrics import glue_compute_metrics, superglue_compute_metrics, xnli_compute_metrics

@@ -929,3 +929,14 @@ superglue_output_modes = {
     "wic": "span_classification",
     "wsc": "span_classification",
 }
+
+superglue_tasks_metrics = {
+    "boolq": "acc",
+    "cb": "acc_and_f1",
+    "copa": "acc",
+    "multirc": "em_and_f1",
+    "record": "em_and_f1",
+    "rte": "acc",
+    "wic": "acc",
+    "wsc": "acc_and_f1",
+}
