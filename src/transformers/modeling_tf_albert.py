@@ -715,39 +715,39 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
-        Returns:
-            :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
-            last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-                Sequence of hidden-states at the output of the last layer of the model.
-            pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
-                Last layer hidden-state of the first token of the sequence (classification token)
-                further processed by a Linear layer and a Tanh activation function. The Linear
-                layer weights are trained from the next sentence prediction (classification)
-                objective during Albert pretraining. This output is usually *not* a good summary
-                of the semantic content of the input, you're often better with averaging or pooling
-                the sequence of hidden-states for the whole input sequence.
-            hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
-            ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-                tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
+        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token)
+            further processed by a Linear layer and a Tanh activation function. The Linear
+            layer weights are trained from the next sentence prediction (classification)
+            objective during Albert pretraining. This output is usually *not* a good summary
+            of the semantic content of the input, you're often better with averaging or pooling
+            the sequence of hidden-states for the whole input sequence.
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-                tuple of :obj:`tf.Tensor` (one for each layer) of shape
-                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
-        Examples::
+    Examples::
 
-            import tensorflow as tf
-            from transformers import AlbertTokenizer, TFAlbertModel
+        import tensorflow as tf
+        from transformers import AlbertTokenizer, TFAlbertModel
 
-            tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            model = TFAlbertModel.from_pretrained('albert-base-v2')
-            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-            outputs = model(input_ids)
-            last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        model = TFAlbertModel.from_pretrained('albert-base-v2')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
         outputs = self.albert(inputs, **kwargs)
@@ -780,15 +780,18 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         sop_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`):
             Prediction scores of the sentence order prediction (classification) head (scores of True/False continuation before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
-        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
     Examples::
         import tensorflow as tf
         from transformers import AlbertTokenizer, TFAlbertForPreTraining
@@ -840,17 +843,17 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
-        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -916,17 +919,17 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`)
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
-        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -1007,17 +1010,17 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
-        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -1106,17 +1109,17 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
-        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -1216,17 +1219,17 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
-        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 

@@ -274,6 +274,7 @@ class TFAutoModel(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: TFT5Model (T5 model)
             - `distilbert`: TFDistilBertModel (DistilBERT model)
             - `roberta`: TFRobertaModel (RoBERTa model)
@@ -308,6 +309,7 @@ class TFAutoModel(object):
         Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: TFDistilBertModel (DistilBERT model)
                     - isInstance of `roberta` configuration class: TFRobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: TFBertModel (Bert model)
@@ -341,6 +343,7 @@ class TFAutoModel(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: TFT5Model (T5 model)
             - `distilbert`: TFDistilBertModel (DistilBERT model)
             - `roberta`: TFRobertaModel (RoBERTa model)
@@ -488,6 +491,7 @@ class TFAutoModelForPreTraining(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.TFT5ModelWithLMHead` (T5 model)
             - `distilbert`: :class:`~transformers.TFDistilBertForMaskedLM` (DistilBERT model)
             - `albert`: :class:`~transformers.TFAlbertForPreTraining` (ALBERT model)
@@ -586,6 +590,7 @@ class TFAutoModelWithLMHead(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: TFT5ForConditionalGeneration (T5 model)
             - `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
             - `roberta`: TFRobertaForMaskedLM (RoBERTa model)
@@ -620,6 +625,7 @@ class TFAutoModelWithLMHead(object):
         Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
                     - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: BertModel (Bert model)
@@ -653,6 +659,7 @@ class TFAutoModelWithLMHead(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: TFT5ForConditionalGeneration (T5 model)
             - `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
             - `roberta`: TFRobertaForMaskedLM (RoBERTa model)
@@ -805,6 +812,7 @@ class TFAutoModelForMultipleChoice:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `albert`: TFRobertaForMultiple (Albert model)
             - `bert`: TFBertForMultipleChoice (Bert model)
 
@@ -898,6 +906,7 @@ class TFAutoModelForSequenceClassification(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
             - `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
             - `bert`: TFBertForSequenceClassification (Bert model)
@@ -927,6 +936,7 @@ class TFAutoModelForSequenceClassification(object):
         Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
                     - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: BertModel (Bert model)
@@ -958,6 +968,7 @@ class TFAutoModelForSequenceClassification(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
             - `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
             - `bert`: TFBertForSequenceClassification (Bert model)
@@ -1054,6 +1065,7 @@ class TFAutoModelForQuestionAnswering(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
             - `albert`: TFAlbertForQuestionAnswering (ALBERT model)
             - `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
@@ -1084,6 +1096,7 @@ class TFAutoModelForQuestionAnswering(object):
         Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
                     - isInstance of `albert` configuration class: AlbertModel (ALBERT model)
                     - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
@@ -1116,6 +1129,7 @@ class TFAutoModelForQuestionAnswering(object):
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
             - `albert`: TFAlbertForQuestionAnswering (ALBERT model)
             - `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
@@ -1224,6 +1238,7 @@ class TFAutoModelForTokenClassification:
         Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `bert` configuration class: BertModel (Bert model)
                     - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBert model)
@@ -1254,6 +1269,7 @@ class TFAutoModelForTokenClassification:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `bert`: BertForTokenClassification (Bert model)
             - `xlnet`: XLNetForTokenClassification (XLNet model)
             - `distilbert`: DistilBertForTokenClassification (DistilBert model)
