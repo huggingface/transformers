@@ -17,7 +17,7 @@ The pipeline abstraction
 The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any
 other pipeline but requires an additional argument which is the `task`.
 
-... autofunction:: transformers.pipeline
+.. autofunction:: transformers.pipeline
 
 
 The task specific pipelines

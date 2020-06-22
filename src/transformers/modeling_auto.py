@@ -32,6 +32,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    MobileBertConfig,
     OpenAIGPTConfig,
     ReformerConfig,
     RetriBertConfig,
@@ -87,6 +88,7 @@ from .modeling_distilbert import (
 )
 from .modeling_electra import (
     ElectraForMaskedLM,
+    ElectraForMultipleChoice,
     ElectraForPreTraining,
     ElectraForQuestionAnswering,
     ElectraForSequenceClassification,
@@ -110,6 +112,15 @@ from .modeling_longformer import (
     LongformerModel,
 )
 from .modeling_marian import MarianMTModel
+from .modeling_mobilebert import (
+    MobileBertForMaskedLM,
+    MobileBertForMultipleChoice,
+    MobileBertForPreTraining,
+    MobileBertForQuestionAnswering,
+    MobileBertForSequenceClassification,
+    MobileBertForTokenClassification,
+    MobileBertModel,
+)
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
 from .modeling_retribert import RetriBertModel
@@ -165,6 +176,7 @@ MODEL_MAPPING = OrderedDict(
         (BertConfig, BertModel),
         (OpenAIGPTConfig, OpenAIGPTModel),
         (GPT2Config, GPT2Model),
+        (MobileBertConfig, MobileBertModel),
         (TransfoXLConfig, TransfoXLModel),
         (XLNetConfig, XLNetModel),
         (FlaubertConfig, FlaubertModel),
@@ -189,6 +201,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (BertConfig, BertForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
+        (MobileBertConfig, MobileBertForPreTraining),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
         (FlaubertConfig, FlaubertWithLMHeadModel),
@@ -212,6 +225,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (BertConfig, BertForMaskedLM),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
+        (MobileBertConfig, MobileBertForMaskedLM),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
         (FlaubertConfig, FlaubertWithLMHeadModel),
@@ -248,6 +262,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForMaskedLM),
+        (MobileBertConfig, MobileBertForMaskedLM),
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
@@ -274,6 +289,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
+        (MobileBertConfig, MobileBertForSequenceClassification),
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
@@ -291,6 +307,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
+        (MobileBertConfig, MobileBertForQuestionAnswering),
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
     ]
@@ -305,6 +322,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (LongformerConfig, LongformerForTokenClassification),
         (RobertaConfig, RobertaForTokenClassification),
         (BertConfig, BertForTokenClassification),
+        (MobileBertConfig, MobileBertForTokenClassification),
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
@@ -315,11 +333,13 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         (CamembertConfig, CamembertForMultipleChoice),
+        (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
         (LongformerConfig, LongformerForMultipleChoice),
         (RobertaConfig, RobertaForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
         (DistilBertConfig, DistilBertForMultipleChoice),
+        (MobileBertConfig, MobileBertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
         (AlbertConfig, AlbertForMultipleChoice),
     ]

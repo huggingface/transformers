@@ -634,7 +634,6 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
 class TransfoXLModel(TransfoXLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_hidden_states = config.output_hidden_states
 
         self.n_token = config.vocab_size
 
@@ -750,7 +749,15 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         return new_mems
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, output_attentions=None):
+    def forward(
+        self,
+        input_ids=None,
+        mems=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
@@ -760,12 +767,12 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -785,6 +792,9 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -873,7 +883,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         # We transpose back here to shape [bsz, len, hidden_dim]
         outputs = [core_out.transpose(0, 1).contiguous(), new_mems]
-        if self.output_hidden_states:
+        if output_hidden_states:
             # Add last layer and transpose to library standard shape [bsz, len, hidden_dim]
             hids.append(core_out)
             hids = list(t.transpose(0, 1).contiguous() for t in hids)
@@ -936,7 +946,14 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
     def forward(
-        self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, labels=None, output_attentions=None
+        self,
+        input_ids=None,
+        mems=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -956,12 +973,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -988,7 +1005,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         transformer_outputs = self.transformer(
-            input_ids, mems=mems, head_mask=head_mask, inputs_embeds=inputs_embeds, output_attentions=output_attentions
+            input_ids,
+            mems=mems,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         last_hidden = transformer_outputs[0]

@@ -1,4 +1,4 @@
-Usage
+Summary of the tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This page shows the most frequent use-cases when using the library. The models available allow for many different

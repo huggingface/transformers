@@ -392,16 +392,22 @@ class TFModelTesterMixin:
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
-            config.output_hidden_states = True
+        def check_hidden_states_output(config, inputs_dict, model_class):
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
             hidden_states = [t.numpy() for t in outputs[-1]]
-            self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size],
             )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(config, inputs_dict, model_class)
+
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            check_hidden_states_output(config, inputs_dict, model_class)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -471,6 +477,30 @@ class TFModelTesterMixin:
                 inputs["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
             model(inputs)
+
+    def test_resize_token_embeddings(self):
+        if not self.test_resize_embeddings:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        INPUT_SHAPE = [1, 10, config.hidden_size]
+        for model_class in self.all_model_classes:
+            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
+                # build the embeddings
+                model = model_class(config=config)
+                emb_old = model.get_input_embeddings()
+                emb_old.build(INPUT_SHAPE)
+                # reshape the embeddings
+                new_embeddings = model._get_resized_embeddings(emb_old, size)
+                # # check that the the resized embeddings size matches the desired size.
+                assert_size = size if size is not None else config.vocab_size
+                self.assertEqual(new_embeddings.shape[0], assert_size)
+                # check that weights remain the same after resizing
+                emd_old_weights = model._get_word_embeddings(emb_old)
+                models_equal = True
+                for p1, p2 in zip(emd_old_weights.numpy(), new_embeddings.numpy()):
+                    if np.sum(abs(p1 - p2)) > 0:
+                        models_equal = False
+                self.assertTrue(models_equal)
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
