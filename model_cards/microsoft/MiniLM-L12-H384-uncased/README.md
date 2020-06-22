@@ -14,9 +14,8 @@ Please find the information about preprocessing, training and full details of th
 Please note: This checkpoint can be an inplace substitution for BERT and it needs to be fine-tuned before use!
 
 ### English Pre-trained Models
-We release the **uncased** **12**-layer and **6**-layer MiniLM models with **384** hidden size distilled from an in-house pre-trained [UniLM v2](/unilm) model in BERT-Base size.
+We release the **uncased** **12**-layer model with **384** hidden size distilled from an in-house pre-trained [UniLM v2](/unilm) model in BERT-Base size.
 
-The links to the pre-trained models:
 - MiniLMv1-L12-H384-uncased: 12-layer, 384-hidden, 12-heads, 33M parameters, 2.7x faster than BERT-Base
 
 #### Fine-tuning on NLU tasks

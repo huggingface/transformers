@@ -16,7 +16,7 @@ Please note: This checkpoint uses `BertModel` with `XLMRobertaTokenizer` so `Aut
 ### Multilingual Pretrained Model
 - Multilingual-MiniLMv1-L12-H384: 12-layer, 384-hidden, 12-heads, 21M Transformer parameters, 96M embedding parameters
 
-Multilingual MiniLM uses the same tokenizer as XLM-R. But the Transformer architecture of our model is the same as BERT. We provide the fine-tuning code on XNLI based on [huggingface/transformers](https://github.com/huggingface/transformers). Please replace `run_xnli.py` in transformers with ours to fine-tune multilingual MiniLM.  
+Multilingual MiniLM uses the same tokenizer as XLM-R. But the Transformer architecture of our model is the same as BERT. We provide the fine-tuning code on XNLI based on [huggingface/transformers](https://github.com/huggingface/transformers). Please replace `run_xnli.py` in transformers with [ours](https://github.com/microsoft/unilm/blob/master/minilm/examples/run_xnli.py) to fine-tune multilingual MiniLM.  
 
 We evaluate the multilingual MiniLM on cross-lingual natural language inference benchmark (XNLI) and cross-lingual question answering benchmark (MLQA).
 
@@ -39,7 +39,7 @@ DATA_DIR=/{path_of_data}/
 OUTPUT_DIR=/{path_of_fine-tuned_model}/
 MODEL_PATH=/{path_of_pre-trained_model}/
 
-python ./examples/run_xnli.py --model_type bert \
+python ./examples/run_xnli.py --model_type minilm \
  --output_dir ${OUTPUT_DIR} --data_dir ${DATA_DIR} \
  --model_name_or_path microsoft/Multilingual-MiniLM-L12-H384 \
  --tokenizer_name xlm-roberta-base \
