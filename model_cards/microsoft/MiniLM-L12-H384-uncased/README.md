@@ -1,4 +1,5 @@
 ---
+thumbnail: https://huggingface.co/front/thumbnails/microsoft.png
 tags:
 - text-classification
 license: mit
