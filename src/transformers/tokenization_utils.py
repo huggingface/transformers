@@ -339,9 +339,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
-                raise ValueError(
-                    f"Input {text} is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
-                )
+                if is_pretokenized:
+                    raise ValueError(
+                        f"Input {text} is not valid. Should be a string or a list/tuple of strings when `is_pretokenized=True`."
+                    )
+                else:
+                    raise ValueError(
+                        f"Input {text} is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
+                    )
 
         if return_offsets_mapping:
             raise NotImplementedError(
