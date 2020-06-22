@@ -184,3 +184,4 @@ conversion utilities for the following models:
     model_doc/marian
     model_doc/longformer
     model_doc/retribert
+    model_doc/mobilebert

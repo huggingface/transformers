@@ -37,7 +37,7 @@ class EncoderDecoderConfig(PretrainedConfig):
                 Remaining dictionary of keyword arguments. Notably:
                     encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
                         An instance of a configuration object that defines the encoder config.
-                    encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
+                    decoder (:class:`PretrainedConfig`, optional, defaults to `None`):
                         An instance of a configuration object that defines the decoder config.
 
         Example::
