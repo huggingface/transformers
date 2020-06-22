@@ -23,13 +23,7 @@ import tqdm
 from filelock import FileLock
 
 from transformers import DataProcessor, PreTrainedTokenizer, is_tf_available, is_torch_available
-from transformers import (
-    BartTokenizer,
-    BartTokenizerFast,
-    RobertaTokenizer,
-    RobertaTokenizerFast,
-    XLMRobertaTokenizer
-)
+from transformers import BartTokenizer, BartTokenizerFast, RobertaTokenizer, RobertaTokenizerFast, XLMRobertaTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -153,6 +147,7 @@ if is_torch_available():
         def get_labels(self):
             return self.label_list
 
+
 if is_tf_available():
     import tensorflow as tf
 
@@ -237,6 +232,7 @@ if is_tf_available():
 
         def get_labels(self):
             return self.label_list
+
 
 class HansProcessor(DataProcessor):
     """Processor for the HANS data set."""
