@@ -749,7 +749,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
                 )
             else:
-                logger.warning(
+                logger.info(
                     f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n"
                 )
             if len(missing_keys) > 0:
