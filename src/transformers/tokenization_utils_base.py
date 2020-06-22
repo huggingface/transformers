@@ -1295,12 +1295,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             write_dict = {}
             for key, value in self.special_tokens_map_extended.items():
                 if isinstance(value, AddedToken):
-                    write_dict[key] = {
-                        "content": value.content,
-                        "single_word": value.single_word,
-                        "lstrip": value.lstrip,
-                        "rstrip": value.rstrip,
-                    }
+                    write_dict[key] = value.__getstate__()
                 else:
                     write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
