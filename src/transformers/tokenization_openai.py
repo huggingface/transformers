@@ -23,7 +23,8 @@ import re
 from tokenizers import CharBPETokenizer
 
 from .tokenization_bert import BasicTokenizer
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)

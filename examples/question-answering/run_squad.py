@@ -319,7 +319,6 @@ def evaluate(args, model, tokenizer, prefix=""):
             outputs = model(**inputs)
 
         for i, feature_index in enumerate(feature_indices):
-            # TODO: i and feature_index are the same number! Simplify by removing enumerate?
             eval_feature = features[feature_index.item()]
             unique_id = int(eval_feature.unique_id)
 
