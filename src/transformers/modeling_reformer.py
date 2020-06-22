@@ -1818,6 +1818,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
         return inputs_dict
 
+
 class ReformerClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1836,6 +1837,7 @@ class ReformerClassificationHead(nn.Module):
         x = self.out_proj(x)
         return x
 
+
 REFORMER_START_DOCSTRING = r"""
 
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
@@ -1847,6 +1849,7 @@ REFORMER_START_DOCSTRING = r"""
             model. Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
+
 
 @add_start_docstrings(
     """Reformer Model transformer with a sequence classification/regression head on top (a linear layer
@@ -1875,15 +1878,15 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         pass
 
     def forward(
-            self,
-            input_ids=None,
-            position_ids=None,
-            attention_mask=None,
-            head_mask=None,
-            inputs_embeds=None,
-            num_hashes=None,
-            labels=None,
-            do_output_hidden_states=False
+        self,
+        input_ids=None,
+        position_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        num_hashes=None,
+        labels=None,
+        do_output_hidden_states=False,
     ):
 
         reformer_outputs = self.reformer(
@@ -1893,7 +1896,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
-            do_output_hidden_states=do_output_hidden_states
+            do_output_hidden_states=do_output_hidden_states,
         )
 
         sequence_output = reformer_outputs[0]
