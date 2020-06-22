@@ -1,6 +1,6 @@
 # RoBERTa Pretrained on Smaller Datasets
 
-We pretrain RoBERTa on smaller datasets (1M, 10M, 100M, 1B tokens). We pick 3 models with lowest perplexities for each pretraining data size out of 25 runs (or 10 in the case of 1B tokens). The pretraining data reproduces that of BERT: We combine English Wikipedia and a reproduction of BookCorpus using texts from smashwords in a ratio of approximately 3:1.
+We pretrain RoBERTa on smaller datasets (1M, 10M, 100M, 1B tokens). We release 3 models with lowest perplexities for each pretraining data size out of 25 runs (or 10 in the case of 1B tokens). The pretraining data reproduces that of BERT: We combine English Wikipedia and a reproduction of BookCorpus using texts from smashwords in a ratio of approximately 3:1.
 
 ### Hyperparameters and Validation Perplexity
 
