@@ -41,6 +41,8 @@ class T5Config(PretrainedConfig):
             vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `T5Model`.
             d_model: Size of the encoder layers and the pooler layer. `d_model` can also accesed via the property `hidden_size`.
             num_layers: Number of hidden layers in the Transformer encoder. `num_layers` can also be accessed via the property `num_hidden_layers`.
+            d_kv: Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model // num_heads`.
+            d_ff: Size of the intermediate feed forward layer in each `T5Block`.
             num_heads: Number of attention heads for each attention layer in
                 the Transformer encoder. `num_heads` can also be accessed via the property `num_attention_heads`.
             intermediate_size: The size of the "intermediate" (i.e., feed-forward)
