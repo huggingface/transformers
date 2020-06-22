@@ -25,7 +25,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.autograd.function import Function
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import gelu, gelu_fast, gelu_new, swish
 from .configuration_reformer import ReformerConfig
@@ -1817,3 +1817,96 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             inputs_dict["num_hashes"] = kwargs["num_hashes"]
 
         return inputs_dict
+
+class ReformerClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+    def forward(self, features, **kwargs):
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
+REFORMER_START_DOCSTRING = r"""
+
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.ReformerConfig`): Model configuration class with all the parameters of the
+            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+@add_start_docstrings(
+    """Reformer Model transformer with a sequence classification/regression head on top (a linear layer
+    on top of the pooled output) e.g. for GLUE tasks. """,
+    REFORMER_START_DOCSTRING,
+)
+class ReformerForSequenceClassification(ReformerPreTrainedModel):
+
+    config_class = ReformerConfig
+    base_model_prefix = "reformer"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.reformer = ReformerModel(config)
+        self.classifier = ReformerClassificationHead(config)
+
+        self.init_weights()
+
+        def get_output_embeddings(self):
+            return self.lm_head.decoder
+
+    def tie_weights(self):
+        # word embeddings are not tied in Reformer
+        pass
+
+    def forward(
+            self,
+            input_ids=None,
+            position_ids=None,
+            attention_mask=None,
+            head_mask=None,
+            inputs_embeds=None,
+            num_hashes=None,
+            labels=None,
+            do_output_hidden_states=False
+    ):
+
+        reformer_outputs = self.reformer(
+            input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            num_hashes=num_hashes,
+            do_output_hidden_states=do_output_hidden_states
+        )
+
+        sequence_output = reformer_outputs[0]
+        logits = self.classifier(sequence_output)
+        outputs = (logits,) + reformer_outputs[1:]
+
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+        return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
