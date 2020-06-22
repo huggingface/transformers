@@ -80,7 +80,7 @@ def _dump_articles(path: Path, articles: list):
         f.write("\n".join(articles))
 
 
-MSG = "These won't pass until hidden_states kwarg is merged."
+MSG = "T5 is broken at the moment"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 
 
@@ -114,21 +114,8 @@ class TestSummarizationDistiller(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
-    @unittest.skip(MSG)
-    def test_bdc_t5_eval_fp16(self):
-        updates = dict(
-            fp16=FP16_EVER,
-            gpus=1,
-            model_type="t5",
-            model_name_or_path=T5_TINY,
-            do_train=False,
-            do_predict=True,
-            tokenizer_name=None,
-            no_teacher=True,
-        )
-        self._bart_distiller_cli(updates, check_contents=False)
 
-    @unittest.skip(MSG)
+    #@unittest.skip(MSG)
     def test_bdc_t5_train_fp16(self):
         updates = dict(
             fp16=FP16_EVER,
@@ -146,12 +133,11 @@ class TestSummarizationDistiller(unittest.TestCase):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True,)
         self._bart_distiller_cli(updates)
 
-    @unittest.skip(MSG)
+
     def test_bdc_yes_teacher(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
         self._bart_distiller_cli(updates)
 
-    @unittest.skip(MSG)
     def test_bdc_checkpointing(self):
         updates = dict(
             student_encoder_layers=2,
@@ -175,34 +161,19 @@ class TestSummarizationDistiller(unittest.TestCase):
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
-    @unittest.skip(MSG)
     def test_bdc_t5(self):
         updates = dict(
             student_encoder_layers=1,
             student_decoder_layers=1,
             alpha_hid=2.0,
             teacher=T5_TINY,
-            model_type="t5",
             model_name_or_path=T5_TINY,
             tokenizer_name=T5_TINY,
         )
         self._bart_distiller_cli(updates)
 
-    @unittest.skip(MSG)
-    def test_bdc_t5_eval(self):
-        updates = dict(
-            model_type="t5",
-            model_name_or_path=T5_TINY,
-            do_train=False,
-            do_predict=True,
-            tokenizer_name=T5_TINY,
-            no_teacher=True,
-        )
-        self._bart_distiller_cli(updates, check_contents=False)
-
     def _bart_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
-            model_type="bart",
             train_batch_size=1,
             eval_batch_size=2,
             num_train_epochs=2,
@@ -267,7 +238,6 @@ class TestBartExamples(unittest.TestCase):
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
             data_dir=tmp_dir,
-            model_type="t5",
             model_name_or_path=T5_TINY,
             tokenizer_name=None,  # T5_TINY,
             train_batch_size=2,
