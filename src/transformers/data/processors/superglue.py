@@ -22,7 +22,6 @@ import os
 from collections import defaultdict
 
 import numpy as np
-from scipy.special import softmax
 
 from ...file_utils import is_tf_available
 from .utils import DataProcessor, InputExample, InputFeatures, SpanClassificationExample, SpanClassificationFeatures
@@ -614,7 +613,7 @@ class RecordProcessor(DataProcessor):
                 logits = np.vstack([i[1] for i in idxs_and_prds])
 
                 # take the most probable choice as the prediction
-                pred_idx = softmax(logits, axis=1)[:, -1].argmax().item()
+                pred_idx = logits[:, -1].argmax().item()
                 pred = cands[pred_idx]
 
                 pred_fh.write(f"{json.dumps({'idx': qst_idx, 'label': pred})}\n")
