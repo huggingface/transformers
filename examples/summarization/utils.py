@@ -60,8 +60,8 @@ def lmap(f: Callable, x: Iterable) -> List:
     return list(map(f, x))
 
 
-def calculate_bleu_score(output_lns, refs_lns) -> float:
-    return corpus_bleu(output_lns, [refs_lns]).score
+def calculate_bleu_score(output_lns, refs_lns) -> dict:
+    return {'bleu': corpus_bleu(output_lns, [refs_lns]).score}
 
 
 def trim_batch(

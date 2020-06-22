@@ -298,7 +298,7 @@ class TranslationModule(SummarizationModule):
     val_metric = "bleu"
 
     def calc_generative_metrics(self, preds, target) -> dict:
-        return {"bleu": calculate_bleu_score(preds, target)}
+        return calculate_bleu_score(preds, target)
 
 
 def main(args, model=None) -> SummarizationModule:
