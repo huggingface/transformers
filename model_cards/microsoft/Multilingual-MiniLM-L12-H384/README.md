@@ -10,7 +10,7 @@ MiniLM is a distilled model from the paper "[MiniLM: Deep Self-Attention Distill
 
 Please find the information about preprocessing, training and full details of the MiniLM in the [original MiniLM repository](https://github.com/microsoft/unilm/blob/master/minilm/).
 
-Please note: This checkpoint uses `BertModel` with `XLMTokenizer` so `AutoTokenizer` won't work with this checkpoint!
+Please note: This checkpoint uses `BertModel` with `XLMRobertaTokenizer` so `AutoTokenizer` won't work with this checkpoint!
 
 ### Multilingual Pretrained Model
 - Multilingual-MiniLMv1-L12-H384: 12-layer, 384-hidden, 12-heads, 21M Transformer parameters, 96M embedding parameters
