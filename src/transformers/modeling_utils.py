@@ -759,7 +759,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
                 )
             else:
-                logger.warning(
+                logger.info(
                     f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
                     f"If your task is similar to the task the model of the ckeckpoint was trained on, "
                     f"you can already use {model.__class__.__name__} for predictions without further training."
