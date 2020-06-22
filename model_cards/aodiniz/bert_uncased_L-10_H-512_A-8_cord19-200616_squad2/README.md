@@ -1,6 +1,11 @@
+---
+datasets:
+- squad_v2
+---
+
 # BERT L-10 H-512 CORD-19 (2020/06/16) fine-tuned on SQuAD v2.0
 
-BERT model with [10 Transformer layers and hidden embedding of size 512](https://huggingface.co/google/bert_uncased_L-10_H-512_A-8), referenced in [Well-Read Students Learn Better: On the Importance of Pre-training Compact Models](https://arxiv.org/abs/1908.08962), [fine-tuned for MLM](https://huggingface.co/aodiniz/bert_uncased_L-10_H-512_A-8_cord19-200616) on CORD-19 dataset (as released on 2020/06/16) and file-tuned for QA on SQuAD v2.0.
+BERT model with [10 Transformer layers and hidden embedding of size 512](https://huggingface.co/google/bert_uncased_L-10_H-512_A-8), referenced in [Well-Read Students Learn Better: On the Importance of Pre-training Compact Models](https://arxiv.org/abs/1908.08962), [fine-tuned for MLM](https://huggingface.co/aodiniz/bert_uncased_L-10_H-512_A-8_cord19-200616) on CORD-19 dataset (as released on 2020/06/16) and fine-tuned for QA on SQuAD v2.0.
 
 ## Training the model
 
