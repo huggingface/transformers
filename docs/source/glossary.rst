@@ -81,7 +81,7 @@ token indices are under the key "input_ids":
 
     [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 
-Note that the tokenizer automatically add "special tokens" which are special IDs the model uses. If we decode the
+Note that the tokenizer automatically adds "special tokens" which are special IDs the model uses. If we decode the
 previous sequence of ids,
 
 ::
