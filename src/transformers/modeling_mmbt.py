@@ -141,7 +141,7 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
@@ -163,7 +163,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
                 objective during Bert pretraining. This output is usually *not* a good summary
                 of the semantic content of the input, you're often better with averaging or pooling
                 the sequence of hidden-states for the whole input sequence.
-            **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            **hidden_states**: (`optional`, returned when ``output_hidden_states=True``)
                 list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
                 of shape ``(batch_size, sequence_length, hidden_size)``:
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
@@ -200,6 +200,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_hidden_states=None,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -257,6 +258,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = encoder_outputs[0]
@@ -293,7 +295,7 @@ class MMBTForClassification(nn.Module):
                 Classification (or regression if config.num_labels==1) loss.
             **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
                 Classification (or regression if config.num_labels==1) scores (before SoftMax).
-            **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            **hidden_states**: (`optional`, returned when ``output_hidden_states=True``)
                 list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
                 of shape ``(batch_size, sequence_length, hidden_size)``:
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.

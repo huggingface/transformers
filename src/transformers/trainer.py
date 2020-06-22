@@ -1,10 +1,10 @@
-import json
 import logging
 import math
 import os
 import random
 import re
 import shutil
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
@@ -19,23 +19,16 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
-from .data.data_collator import DataCollator, DefaultDataCollator
+from .data.data_collator import DataCollator, default_data_collator
+from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
-from .training_args import TrainingArguments, is_torch_tpu_available
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available
+from .training_args import TrainingArguments
 
 
-try:
+if is_apex_available():
     from apex import amp
-
-    _has_apex = True
-except ImportError:
-    _has_apex = False
-
-
-def is_apex_available():
-    return _has_apex
 
 
 if is_torch_tpu_available():
@@ -60,21 +53,8 @@ def is_tensorboard_available():
     return _has_tensorboard
 
 
-try:
+if is_wandb_available():
     import wandb
-
-    wandb.ensure_configured()
-    if wandb.api.api_key is None:
-        _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
-    else:
-        _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except (ImportError, AttributeError):
-    _has_wandb = False
-
-
-def is_wandb_available():
-    return _has_wandb
 
 
 logger = logging.getLogger(__name__)
@@ -190,10 +170,7 @@ class Trainer:
         """
         self.model = model.to(args.device)
         self.args = args
-        if data_collator is not None:
-            self.data_collator = data_collator
-        else:
-            self.data_collator = DefaultDataCollator()
+        self.data_collator = data_collator if data_collator is not None else default_data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
@@ -222,6 +199,15 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
+        if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
+            self.data_collator = self.data_collator.collate_batch
+            warnings.warn(
+                (
+                    "The `data_collator` should now be a simple callable (function, class with `__call__`), classes "
+                    + "with a `collate_batch` are deprecated and won't be supported in a future version."
+                ),
+                FutureWarning,
+            )
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -239,7 +225,7 @@ class Trainer:
             self.train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
-            collate_fn=self.data_collator.collate_batch,
+            collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
@@ -264,7 +250,7 @@ class Trainer:
             eval_dataset,
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator.collate_batch,
+            collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
@@ -285,7 +271,7 @@ class Trainer:
             test_dataset,
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
-            collate_fn=self.data_collator.collate_batch,
+            collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
 
@@ -342,8 +328,8 @@ class Trainer:
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
             wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
-            # keep track of model topology and gradients
-            if os.getenv("WANDB_WATCH") != "false":
+            # keep track of model topology and gradients, unsupported on TPU
+            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(
                     self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
                 )
@@ -556,6 +542,9 @@ class Trainer:
     def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         if self.epoch is not None:
             logs["epoch"] = self.epoch
+        if self.global_step is None:
+            # when logging evaluation metrics without training
+            self.global_step = 0
         if self.tb_writer:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
@@ -574,11 +563,11 @@ class Trainer:
         if is_wandb_available():
             if self.is_world_master():
                 wandb.log(logs, step=self.global_step)
-        output = json.dumps({**logs, **{"step": self.global_step}})
+        output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
         else:
-            print(output)
+            logger.info(output)
 
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer

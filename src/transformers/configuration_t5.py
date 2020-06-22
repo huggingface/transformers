@@ -53,7 +53,7 @@ class T5Config(PretrainedConfig):
                 probabilities.
             n_positions: The maximum sequence length that this model might
                 ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048). `n_positions` can also be accessed via the property `max_position_embeddings'.
+                (e.g., 512 or 1024 or 2048). `n_positions` can also be accessed via the property `max_position_embeddings`.
             type_vocab_size: The vocabulary size of the `token_type_ids` passed into
                 `T5Model`.
             initializer_factor: A factor for initializing all weight matrices (should be kept to 1.0, used for initialization testing).

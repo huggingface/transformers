@@ -15,6 +15,7 @@
 
 
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from shutil import copyfile
@@ -23,7 +24,6 @@ from transformers.tokenization_marian import MarianTokenizer, save_json, vocab_f
 from transformers.tokenization_utils import BatchEncoding
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import slow
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
@@ -51,19 +51,24 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = MarianTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
-    def get_tokenizer(self, max_len=None, **kwargs) -> MarianTokenizer:
-        return MarianTokenizer.from_pretrained(self.tmpdirname, model_max_length=max_len, **kwargs)
+    def get_tokenizer(self, **kwargs) -> MarianTokenizer:
+        return MarianTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         return (
             "This is a test",
             "This is a test",
         )
 
-    @slow
     def test_tokenizer_equivalence_en_de(self):
         en_de_tokenizer = MarianTokenizer.from_pretrained(f"{ORG_NAME}opus-mt-en-de")
         batch = en_de_tokenizer.prepare_translation_batch(["I am a small frog"], return_tensors=None)
         self.assertIsInstance(batch, BatchEncoding)
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, batch.input_ids[0])
+
+        save_dir = tempfile.mkdtemp()
+        en_de_tokenizer.save_pretrained(save_dir)
+        contents = [x.name for x in Path(save_dir).glob("*")]
+        self.assertIn("source.spm", contents)
+        MarianTokenizer.from_pretrained(save_dir)

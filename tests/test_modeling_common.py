@@ -38,6 +38,7 @@ if is_torch_available():
         BertConfig,
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         top_k_top_p_filtering,
     )
 
@@ -142,14 +143,13 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
-            config.output_hidden_states = False
+            inputs_dict["output_hidden_states"] = False
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
-            self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -161,7 +161,6 @@ class ModelTesterMixin:
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
-            self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
@@ -180,8 +179,13 @@ class ModelTesterMixin:
                 correct_outlen = 4
                 decoder_attention_idx = 1
 
-                if "lm_labels" in inputs_dict:  # loss will come first
-                    correct_outlen += 1  # compute loss
+                # loss is at first position
+                if "labels" in inputs_dict:
+                    correct_outlen += 1  # loss is added to beginning
+                    decoder_attention_idx += 1
+                # Question Answering model returns start_logits and end_logits
+                if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                     decoder_attention_idx += 1
                 self.assertEqual(out_len, correct_outlen)
 
@@ -195,14 +199,13 @@ class ModelTesterMixin:
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
-            config.output_hidden_states = True
+            inputs_dict["output_hidden_states"] = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
-            self.assertEqual(model.config.output_hidden_states, True)
 
             self_attentions = outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
@@ -487,19 +490,16 @@ class ModelTesterMixin:
             self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2], 2: [1, 2]})
 
     def test_hidden_states_output(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            config.output_hidden_states = True
+        def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs[-1]
-            self.assertEqual(model.config.output_hidden_states, True)
-            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
 
+            self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
                 if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
@@ -510,6 +510,18 @@ class ModelTesterMixin:
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()

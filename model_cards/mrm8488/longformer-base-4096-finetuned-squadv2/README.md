@@ -1,6 +1,7 @@
 ---
 language: english
-thumbnail:
+datasets:
+- squad_v2
 ---
 
 # Longformer-base-4096 fine-tuned on SQuAD v2
@@ -17,13 +18,19 @@ Longformer uses a combination of a sliding window (local) attention and global a
 
 ## Details of the downstream task (Q&A) - Dataset 📚 🧐 ❓
 
-[SQuAD v2](https://rajpurkar.github.io/SQuAD-explorer/) combines the 100,000 questions in SQuAD1.1 with over 50,000 unanswerable questions written adversarially by crowdworkers to look similar to answerable ones. To do well on SQuAD2.0, systems must not only answer questions when possible, but also determine when no answer is supported by the paragraph and abstain from answering.
-
+Dataset ID: ```squad_v2``` from  [HugginFace/NLP](https://github.com/huggingface/nlp)
 | Dataset  | Split | # samples |
 | -------- | ----- | --------- |
-| SQuAD2.0 | train | 130k      |
-| SQuAD2.0 | eval  | 12.3k     |
+| squad_v2 | train | 130319      |
+| squad_v2 | valid  | 11873     |
 
+How to load it from [nlp](https://github.com/huggingface/nlp)
+
+```python
+train_dataset  = nlp.load_dataset('squad_v2', split=nlp.Split.TRAIN)
+valid_dataset = nlp.load_dataset('squad_v2', split=nlp.Split.VALIDATION)
+```
+Check out more about this dataset and others in [NLP Viewer](https://huggingface.co/nlp/viewer/)
 
 
 ## Model fine-tuning 🏋️‍
