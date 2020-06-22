@@ -72,3 +72,17 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         contents = [x.name for x in Path(save_dir).glob("*")]
         self.assertIn("source.spm", contents)
         MarianTokenizer.from_pretrained(save_dir)
+
+    def test_default_truncation_setting(self):
+        tok = self.get_tokenizer()
+        batch = tok.prepare_translation_batch(["I am a small frog" * 1000, "I am a small frog"], max_length=512)
+        self.assertIsInstance(batch, BatchEncoding)
+        self.assertEqual(batch.input_ids.shape, (2, 512))
+
+    def test_default_padding_behavior(self):
+        tok = self.get_tokenizer()
+        batch_smaller = tok.prepare_translation_batch(
+            ["I am a tiny frog", "I am a small frog"], truncation_strategy="only_first", max_length=512
+        )
+        self.assertIsInstance(batch_smaller, BatchEncoding)
+        self.assertEqual(batch_smaller.input_ids.shape, (2, 10))
