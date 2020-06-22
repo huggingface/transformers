@@ -267,7 +267,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if kwargs:
-            raise ValueError(f"Keyword arguments {kwargs} not recognized.")
+            logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
         # TODO: should this be in the base class?
         if self.init_kwargs.get("do_lower_case", False):
