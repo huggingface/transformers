@@ -1,10 +1,10 @@
 # RoBERTa Pretrained on Smaller Datasets
 
-We pretrain RoBERTa on smaller datasets (1M, 10M, 100M, 1B tokens). We pick 3 models with lowest perplexities for each pretraining data size.
+We pretrain RoBERTa on smaller datasets (1M, 10M, 100M, 1B tokens). We pick 3 models with lowest perplexities for each pretraining data size out of 25 runs (or 10 in the case of 1B tokens). The pretraining data reproduces that of BERT: We combine English Wikipedia and a reproduction of BookCorpus using texts from smashwords in a ratio of approximately 3:1.
 
 ### Hyperparameters and Validation Perplexity
 
-Here are hyperparameters and validation perplexities corresponding to each model:
+The hyperparameters and validation perplexities corresponding to each model are as follows:
 
 | Model Name               | Training Size | Model Size | Max Steps | Batch Size | Validation Perplexity |
 |--------------------------|---------------|------------|-----------|------------|-----------------------|
@@ -21,7 +21,7 @@ Here are hyperparameters and validation perplexities corresponding to each model
 | [roberta-med-small-1M-2][link-roberta-med-small-1M-2]   | 1M            | MED-SMALL  | 10K       | 512        | 134.18                |
 | [roberta-med-small-1M-3][link-roberta-med-small-1M-3]   | 1M            | MED-SMALL  | 31K       | 512        | 139.39                |
 
-Here are hyperparameters corresponding to model sizes mentioned above:
+The hyperparameters corresponding to model sizes mentioned above are as follows:
 
 | Model Size | L  | AH | HS  | FFN  | P    |
 |------------|----|----|-----|------|------|
