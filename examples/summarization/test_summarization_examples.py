@@ -114,25 +114,23 @@ class TestSummarizationDistiller(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
-
-    #@unittest.skip(MSG)
-    def test_bdc_t5_train_fp16(self):
+    def test_bdc_t5_train(self):
         updates = dict(
             fp16=FP16_EVER,
-            gpus=1,
+            gpus=1 if torch.cuda.is_available() else 0,
             model_type="t5",
             model_name_or_path=T5_TINY,
             do_train=True,
             do_predict=True,
             tokenizer_name=T5_TINY,
             no_teacher=True,
+            alpha_hid=2.0,
         )
         self._bart_distiller_cli(updates)
 
     def test_bdc_no_teacher(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True,)
         self._bart_distiller_cli(updates)
-
 
     def test_bdc_yes_teacher(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
@@ -160,17 +158,6 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
-
-    def test_bdc_t5(self):
-        updates = dict(
-            student_encoder_layers=1,
-            student_decoder_layers=1,
-            alpha_hid=2.0,
-            teacher=T5_TINY,
-            model_name_or_path=T5_TINY,
-            tokenizer_name=T5_TINY,
-        )
-        self._bart_distiller_cli(updates)
 
     def _bart_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
@@ -206,7 +193,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertIn("test_results.txt", contents)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
-        desired_n_evals = args_d["num_train_epochs"] * 2 + 1
+        desired_n_evals = int(args_d["num_train_epochs"] * (1 / args_d["val_check_interval"]) + 1)
         self.assertEqual(len(metrics["val"]), desired_n_evals)
         self.assertEqual(len(metrics["train"]), 0)  # doesn't get logged here
         return model

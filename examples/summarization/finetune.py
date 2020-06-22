@@ -292,6 +292,7 @@ def main(args, model=None) -> SummarizationModule:
         logger=logger,
         # TODO: early stopping callback seems messed up
     )
+    pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
         return model
 

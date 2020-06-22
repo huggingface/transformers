@@ -47,6 +47,7 @@ def encode_file(
             add_prefix_space=True,
             return_tensors=return_tensors,
         )
+        assert tokenized.input_ids.shape[1] == max_length
         examples.append(tokenized)
     torch.save(lmap(dict, examples), cache_path.open("wb"))
     return examples
