@@ -79,7 +79,17 @@ Let's say we want to use another model; for instance, one that has been trained 
 the `model hub <https://huggingface.co/models>`__ that gathers models pretrained on a lot of data by research labs, but
 also community models (usually fine-tuned versions of those big models on a specific dataset). Applying the tags
 "French" and "text-classification" gives back a suggestion "nlptown/bert-base-multilingual-uncased-sentiment". Let's
-see how we can use it.
+see how we can use it. 
+
+You can directly pass the name of the model to use to :func:`~transformers.pipeline`:
+
+::
+
+    classifier = pipeline('sentiment-analysis', model="nlptown/bert-base-multilingual-uncased-sentiment")
+
+This classifier can now deal with texts in English, French, but also Dutch, German, Italian and Spanish! You can also
+replace that name by a local folder where you have saved a pretrained model (see below). You can also pass a model
+object and its associated tokenizer.
 
 We will need two classes for this. The first is :class:`~transformers.AutoTokenizer`, which we will use to download the
 tokenizer associated to the model we picked and instantiate it. The second is
@@ -95,8 +105,9 @@ the model itself. Note that if we were using the library on an other task, the c
     ## TENSORFLOW CODE
     from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
-Now, to download the models and tokenizer we found previously, we just have to use the ``from_pretrained`` method
-(feel free to replace ``model_name`` by any other model from the model hub):
+Now, to download the models and tokenizer we found previously, we just have to use the 
+:func:`~transformers.AutoModelForSequenceClassification.from_pretrained` method (feel free to replace ``model_name`` by
+any other model from the model hub):
 
 ::
 
@@ -110,8 +121,6 @@ Now, to download the models and tokenizer we found previously, we just have to u
     model = TFAutoModelForSequenceClassification.from_pretrained(model_name)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
-
-This classifier can now deal with texts in English, French, but also Dutch, German, Italian and Spanish.
 
 If you don't find a model that has been pretrained on some data similar to yours, you will need to fine-tune a
 pretrained model on your data. We provide :doc:`example scripts </examples>` to do so. Once you're done, don't forget
@@ -157,9 +166,9 @@ To apply these steps on a given text, we can just feed it to our tokenizer:
     input = tokenizer("We are very happy to show you the Transformers library.")
     print(input)
 
-This returns a dictionary string to list of ints. It contains the ids of the tokens, as mentioned before, but also
-additional arguments that will be useful to the model. Here for instance, we also have an :obj:`attention_mask` because
-the model will expect it:
+This returns a dictionary string to list of ints. It contains the `ids of the tokens <glossary.html#input-ids>`__,
+as mentioned before, but also additional arguments that will be useful to the model. Here for instance, we also have an
+`attention mask <glossary.html#attention-mask>`__ because the model will expect it:
 
 ::
 
@@ -167,8 +176,8 @@ the model will expect it:
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
 You can pass a list of sentences directly to your tokenizer. If your goal is to send them through your model as a
-batch, you probably want to pad them all to the same length and get tensors back. You can specify all of that to the
-tokenizer:
+batch, you probably want to pad them all to the same length, truncate them to the maximum length the model can accept
+and get tensors back. You can specify all of that to the tokenizer:
 
 ::
 
@@ -176,13 +185,13 @@ tokenizer:
     batch = tokenizer(
         ["We are very happy to show you the Transformers library.",
          "We hope you don't hate it."],
-        padding=True, return_tensors="pt")
+        padding=True, truncation=True, return_tensors="pt")
     print(batch)
     ## TENSORFLOW CODE
     batch = tokenizer(
         ["We are very happy to show you the Transformers library.",
          "We hope you don't hate it."],
-        padding=True, return_tensors="tf")
+        padding=True, truncation=True, return_tensors="tf")
     print(batch)
 
 The padding is automatically applied on the side the model expect it (in this case, on the right), with the
@@ -195,7 +204,7 @@ padding token the model was pretrained with. The attention mask is also adapted 
      'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]])}
 
-You can learn more about tokenizers in this tutorial (coming soon).
+You can learn more about tokenizers on their :doc:`doc page <main_classes/tokenizer>` (tutorial coming soon).
 
 Using the model
 ^^^^^^^^^^^^^^^
@@ -267,10 +276,10 @@ Once your model is fine-tuned, you can save it with its tokenizer the following 
     tokenizer.save_pretrained(save_directory)
     model.save_pretrained(save_directory)
 
-You can then load this model back using the :func:`from_pretrained` method by passing the directory name instead of the
-model name. One cool feature of 🤗 Transformers is that you can easily switch between PyTorch and TensorFlow: any
-model saved as before can be loaded back either in PyTorch or TensorFlow. If you are loading a saved PyTorch model in a
-TensorFlow model, use :func:`from_pretrained` like this:
+You can then load this model back using the :func:`~transformers.AutoModel.from_pretrained` method by passing the
+directory name instead of the model name. One cool feature of 🤗 Transformers is that you can easily switch between
+PyTorch and TensorFlow: any model saved as before can be loaded back either in PyTorch or TensorFlow. If you are
+loading a saved PyTorch model in a TensorFlow model, use :func:`~transformers.TFAutoModel.from_pretrained` like this:
 
 ::
 
@@ -308,7 +317,6 @@ Accessing the code
 ^^^^^^^^^^^^^^^^^^
 
 The :obj:`AutoModel` and :obj:`AutoTokenizer` classes are just shortcuts that will automatically work with any
-
 pretrained model. Behind the scenes, the library has one model class per combination of architecture plus class, so the
 code is easy to access and tweak if you need to.
 
@@ -339,6 +347,11 @@ comes with its own relevant configuration (in the case of DistilBERT, :class:`~t
 allows you to specify any of the hidden dimension, dropout rate etc. If you do core modifications, like changing the
 hidden size, you won't be able to use a pretrained model anymore and will need to train from scratch. You would then
 instantiate the model directly from this configuration.
+
+Here we use the predefined vocabulary of DistilBERT (hence load the tokenizer with the
+:func:`~transformers.DistilBertTokenizer.from_pretrained` method) and initialize the model from scratch (hence
+instantiate the model from the configuration instead of using the
+:func:`~transformers.DistilBertForSequenceClassification.from_pretrained` method).
 
 ::
 
