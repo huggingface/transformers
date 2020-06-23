@@ -234,7 +234,9 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
 
     def test_pipeline(self):
         device = 0 if torch_device == "cuda" else -1
-        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=device)
+        pipeline = TranslationPipeline(
+            self.model, self.tokenizer, framework="pt", device=device, src_lang=self.src, tgt_lang=self.tgt
+        )
         output = pipeline(self.src_text)
         self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 

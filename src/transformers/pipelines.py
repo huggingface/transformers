@@ -20,6 +20,7 @@ import logging
 import os
 import pickle
 import sys
+import warnings
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
@@ -396,7 +397,7 @@ class Pipeline(_ScikitCompat):
             self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
-        if self.task not in SUPPORTED_TASKS:
+        if self.task not in SUPPORTED_TASKS and self.abstract_task not in SUPPORTED_TASKS:
             raise KeyError("Unknown task {}, available tasks are {}".format(self.task, list(SUPPORTED_TASKS.keys())))
 
         task_specific_params = self.model.config.task_specific_params
@@ -1528,8 +1529,13 @@ class TranslationPipeline(Pipeline):
 
     abstract_task = "translation"
 
-    def __init__(self, src_lang: str, tgt_lang: str, *args, **kwargs):
-        self.task = self.abstract_task + "_" + src_lang + "_to_" + tgt_lang
+    def __init__(self, *args, **kwargs):
+        if not ("src_lang" in kwargs and "tgt_lang" in kwargs):
+            warnings.warn("`src_lang` and `tgt_lang` should be provided in kwargs", FutureWarning)
+        else:
+            self.task = self.abstract_task + "_" + kwargs["src_lang"] + "_to_" + kwargs["tgt_lang"]
+            del kwargs["src_lang"]
+            del kwargs["tgt_lang"]
         super().__init__(*args, **kwargs)
 
     def __call__(
@@ -1752,8 +1758,9 @@ def pipeline(
             # Using "translation_en_to_fr" should slowly be deprecated
             # Instead "translation" should be used with "src_lang" and "tgt_lang" kwargs
             if not ("src_lang" in kwargs and "tgt_lang" in kwargs):
-                raise FutureWarning(
-                    f"When using pipeline with 'translation', `src_lang` and `tgt_lang` should be provided in kwargs"
+                warnings.warn(
+                    f"When using pipeline with 'translation', `src_lang` and `tgt_lang` should be provided in kwargs",
+                    FutureWarning,
                 )
                 assert "_to_" in task, "f{task} should be in the format 'translation_{src_lang}_to_{tgt_lang}"
 
