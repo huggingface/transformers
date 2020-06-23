@@ -1824,18 +1824,18 @@ class ReformerClassificationHead(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(2 * config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = torch.tanh(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
+    def forward(self, hidden_states, **kwargs):
+        hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
 
 
 REFORMER_START_DOCSTRING = r"""
@@ -1857,10 +1857,6 @@ REFORMER_START_DOCSTRING = r"""
     REFORMER_START_DOCSTRING,
 )
 class ReformerForSequenceClassification(ReformerPreTrainedModel):
-
-    config_class = ReformerConfig
-    base_model_prefix = "reformer"
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1869,9 +1865,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         self.classifier = ReformerClassificationHead(config)
 
         self.init_weights()
-
-        def get_output_embeddings(self):
-            return self.lm_head.decoder
 
     def tie_weights(self):
         # word embeddings are not tied in Reformer
@@ -1886,7 +1879,8 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         inputs_embeds=None,
         num_hashes=None,
         labels=None,
-        do_output_hidden_states=False,
+        output_hidden_states=False,
+        output_attentions=False,
     ):
 
         reformer_outputs = self.reformer(
@@ -1896,7 +1890,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
-            do_output_hidden_states=do_output_hidden_states,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = reformer_outputs[0]

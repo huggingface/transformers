@@ -27,6 +27,7 @@ if is_torch_available():
         ReformerConfig,
         ReformerModel,
         ReformerModelWithLMHead,
+        ReformerForSequenceClassification,
         ReformerTokenizer,
         ReformerLayer,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -976,3 +977,15 @@ class ReformerIntegrationTests(unittest.TestCase):
             output_text,
             "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
         )
+
+    @slow
+    def test_inference_classification_head(self):
+        model = ReformerForSequenceClassification.from_pretrained("google/reformer-enwik8")
+
+        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 3))
+        self.assertEqual(output.shape, expected_shape)
+        expected_tensor = torch.tensor([[-0.9469, 0.3913, 0.5118]])
+
+        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
