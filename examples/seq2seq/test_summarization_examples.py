@@ -21,9 +21,10 @@ from .utils import SummarizationDataset, lmap, pickle_load
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
-FP16_EVER = False
+CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
     "logger": "default",
+    "cache_dir": "",
     "task": "summarization",
     "num_workers": 2,
     "alpha_hid": 0,
@@ -35,10 +36,10 @@ CHEAP_ARGS = {
     "student_decoder_layers": 1,
     "val_check_interval": 1.0,
     "output_dir": "",
-    "fp16": False,
+    "fp16": CUDA_AVAILABLE,
     "no_teacher": False,
     "fp16_opt_level": "O1",
-    "gpus": 1 if torch.cuda.is_available() else 0,
+    "gpus": 1 if CUDA_AVAILABLE else 0,
     "n_tpu_cores": 0,
     "max_grad_norm": 1.0,
     "do_train": True,
@@ -47,13 +48,11 @@ CHEAP_ARGS = {
     "server_ip": "",
     "server_port": "",
     "seed": 42,
-    "model_type": "bart",
     "model_name_or_path": "sshleifer/bart-tiny-random",
     "config_name": "",
     "tokenizer_name": "facebook/bart-large",
-    "cache_dir": "",
     "do_lower_case": False,
-    "learning_rate": 3e-05,
+    "learning_rate": 0.3,
     "weight_decay": 0.0,
     "adam_epsilon": 1e-08,
     "warmup_steps": 0,
@@ -81,17 +80,20 @@ def _dump_articles(path: Path, articles: list):
         f.write("\n".join(articles))
 
 
-articles = [" Sam ate lunch today", "Sams lunch ingredients"]
-summaries = ["A very intere sting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+ARTICLES = [" Sam ate lunch today", "Sams lunch ingredients"]
+SUMMARIES = ["A very intere sting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 MSG = "T5 is broken at the moment"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
+stream_handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(stream_handler)
+logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
 
 
 def make_test_data_dir():
     tmp_dir = Path(tempfile.gettempdir())
     for split in ["train", "val", "test"]:
-        _dump_articles((tmp_dir / f"{split}.source"), articles)
-        _dump_articles((tmp_dir / f"{split}.target"), summaries)
+        _dump_articles((tmp_dir / f"{split}.source"), ARTICLES)
+        _dump_articles((tmp_dir / f"{split}.target"), SUMMARIES)
     return tmp_dir
 
 
@@ -102,58 +104,20 @@ class TestSummarizationDistiller(unittest.TestCase):
         return cls
 
     @unittest.skipUnless(torch.cuda.device_count() > 1, "skipping multiGPU test")
-    def test_bdc_multigpu(self):
+    def test_multigpu(self):
         updates = dict(
-            student_encoder_layers=2,
-            student_decoder_layers=1,
             no_teacher=True,
             freeze_encoder=True,
             gpus=2,
             sortish_sampler=False,
-            fp16_opt_level="O1",
-            fp16=FP16_EVER,
         )
-        self._bart_distiller_cli(updates)
+        self._test_distiller_cli(updates)
 
-    @unittest.skip(MSG)
-    def test_bdc_t5_eval_fp16(self):
-        updates = dict(
-            fp16=FP16_EVER,
-            gpus=1,
-            model_type="t5",
-            model_name_or_path=T5_TINY,
-            do_train=False,
-            do_predict=True,
-            tokenizer_name=None,
-            no_teacher=True,
-        )
-        self._bart_distiller_cli(updates)
+    def test_distill_no_teacher(self):
+        updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True)
+        self._test_distiller_cli(updates)
 
-    def test_bdc_t5_train(self):
-        updates = dict(
-            fp16=FP16_EVER,
-            gpus=1 if torch.cuda.is_available() else 0,
-            model_type="t5",
-            model_name_or_path=T5_TINY,
-            do_train=True,
-            do_predict=True,
-            tokenizer_name=T5_TINY,
-            no_teacher=True,
-            alpha_hid=2.0,
-        )
-        self._bart_distiller_cli(updates)
-
-    def test_bdc_no_teacher(self):
-        updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True,)
-        self._bart_distiller_cli(updates)
-
-    @unittest.skip(MSG)
-    def test_bdc_yes_teacher(self):
-        updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
-        self._bart_distiller_cli(updates)
-
-    @unittest.skip(MSG)
-    def test_bdc_checkpointing(self):
+    def test_distill_checkpointing_with_teacher(self):
         updates = dict(
             student_encoder_layers=2,
             student_decoder_layers=1,
@@ -161,7 +125,7 @@ class TestSummarizationDistiller(unittest.TestCase):
             val_check_interval=0.25,
             alpha_hid=2.0,
         )
-        model = self._bart_distiller_cli(updates, check_contents=False)
+        model = self._test_distiller_cli(updates, check_contents=False)
 
         ckpts = list(Path(model.output_dir).glob("*.ckpt"))
         self.assertEqual(1, len(ckpts))
@@ -171,25 +135,24 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertEqual(len(new_transformer_ckpts), 1)
         examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
         out_path = tempfile.mktemp()
-        generate_summaries(examples, out_path, new_transformer_ckpts[0].parent)
+        generate_summaries(examples, out_path, str(new_transformer_ckpts[0].parent))
         self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
     @unittest.skip(MSG)
-    def test_bdc_t5(self):
+    def test_distill_t5(self):
         updates = dict(
             student_encoder_layers=1,
             student_decoder_layers=1,
             alpha_hid=2.0,
             teacher=T5_TINY,
-            model_type="t5",
             model_name_or_path=T5_TINY,
             tokenizer_name=T5_TINY,
         )
-        self._bart_distiller_cli(updates)
+        self._test_distiller_cli(updates)
 
-    def _bart_distiller_cli(self, updates, check_contents=True):
+    def _test_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
             train_batch_size=1,
             eval_batch_size=2,
@@ -197,7 +160,6 @@ class TestSummarizationDistiller(unittest.TestCase):
             alpha_mlm=0.2,
             alpha_ce=0.8,
             do_predict=True,
-            gpus=1 if torch.cuda.is_available() else 0,
             model_name_or_path="sshleifer/tinier_bart",
             teacher=CHEAP_ARGS["model_name_or_path"],
             val_check_interval=0.5,
@@ -229,15 +191,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         return model
 
 
-class TestBartExamples(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-        logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
-        return cls
+class TestFinetune(unittest.TestCase):
 
-    def test_bart_cnn_cli(self):
+    def test_bart_finetune(self):
         tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
         output_file_name = Path(tempfile.gettempdir()) / "utest_output_bart_sum.hypo"
         articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
@@ -248,7 +204,7 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    def test_t5_run_sum_cli(self):
+    def test_t5_finetune(self):
         args_d: dict = CHEAP_ARGS.copy()
 
         tmp_dir = make_test_data_dir()
@@ -259,7 +215,6 @@ class TestBartExamples(unittest.TestCase):
             tokenizer_name=None,  # T5_TINY,
             train_batch_size=2,
             eval_batch_size=2,
-            gpus=0,
             output_dir=output_dir,
             do_predict=True,
         )
@@ -278,7 +233,6 @@ class TestBartExamples(unittest.TestCase):
             model_name_or_path="facebook/mbart-large-en-ro",
             train_batch_size=2,
             eval_batch_size=2,
-            gpus=0,
             output_dir=output_dir,
             do_predict=True,
         )
@@ -298,7 +252,6 @@ class TestBartExamples(unittest.TestCase):
             model_name_or_path=mname,
             train_batch_size=2,
             eval_batch_size=2,
-            gpus=0,
             output_dir=output_dir,
             do_predict=True,
             learning_rate=0,
@@ -309,11 +262,12 @@ class TestBartExamples(unittest.TestCase):
         args = argparse.Namespace(**args_d)
         main(args)
 
+class TestDataset(unittest.TestCase):
     def test_mbart_summarization_dataset(self):
         tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
         tmp_dir = make_test_data_dir()
-        max_len_source = max(len(tokenizer.encode(a)) for a in articles)
-        max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
+        max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
+        max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
         trunc_target = 4
         train_dataset = SummarizationDataset(
             tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
@@ -328,16 +282,13 @@ class TestBartExamples(unittest.TestCase):
             # show that targets were truncated
             self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
-            import ipdb
 
-            ipdb.set_trace()
-
-    def test_marian_summarization_dataset(self):
+    def test_marian_dataset(self):
 
         tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-de-en")
         tmp_dir = make_test_data_dir()
-        max_len_source = max(len(tokenizer.encode(a)) for a in articles)
-        max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
+        max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
+        max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
         trunc_target = 4
         train_dataset = SummarizationDataset(
             tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
@@ -357,8 +308,8 @@ class TestBartExamples(unittest.TestCase):
         tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
 
         tmp_dir = make_test_data_dir()
-        max_len_source = max(len(tokenizer.encode(a)) for a in articles)
-        max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
+        max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
+        max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
         trunc_target = 4
         train_dataset = SummarizationDataset(
             tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
@@ -373,8 +324,3 @@ class TestBartExamples(unittest.TestCase):
             # show that targets were truncated
             self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
-
-
-def list_to_text_file(lst, path):
-    dest = Path(path)
-    dest.open("w+").writelines(lst)

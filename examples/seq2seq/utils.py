@@ -28,7 +28,7 @@ def encode_file(
     cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
     if not overwrite_cache and cache_path.exists():
         try:
-            examples = None  # torch.load(cache_path)
+            examples = torch.load(cache_path)
             assert isinstance(examples, list)
             return examples
 
