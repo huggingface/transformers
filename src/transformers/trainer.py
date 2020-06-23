@@ -7,7 +7,7 @@ import shutil
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -570,10 +570,12 @@ class Trainer:
             logger.info(output)
 
     def _training_step(
-        self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], optimizer: torch.optim.Optimizer
     ) -> float:
         model.train()
-        inputs = {k: v.to(self.args.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+        for k, v in inputs.items():
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to(self.args.device)
 
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
@@ -756,7 +758,9 @@ class Trainer:
         for inputs in tqdm(dataloader, desc=description):
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
-            inputs = {k: v.to(self.args.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+            for k, v in inputs.items():
+                if isinstance(v, torch.Tensor):
+                    inputs[k] = v.to(self.args.device)
 
             with torch.no_grad():
                 outputs = model(**inputs)
