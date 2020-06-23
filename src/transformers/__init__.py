@@ -366,6 +366,7 @@ if is_torch_available():
         ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
+        ReformerForSequenceClassification,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 

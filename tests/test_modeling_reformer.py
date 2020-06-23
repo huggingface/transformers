@@ -980,7 +980,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_classification_head(self):
-        model = ReformerForSequenceClassification.from_pretrained("google/reformer-enwik8")
+        model = ReformerForSequenceClassification.from_pretrained("google/reformer-enwik8").to(torch_device)
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
