@@ -1768,6 +1768,8 @@ def pipeline(
             assert (
                 isinstance(kwargs["tgt_lang"], str) and len(kwargs["tgt_lang"]) > 0
             ), f"{kwargs['tgt_lang']} cannot be empty"
+
+            task = "translation"
         else:
             raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
 
