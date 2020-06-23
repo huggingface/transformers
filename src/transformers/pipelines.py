@@ -1526,6 +1526,12 @@ class TranslationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
+    abstract_task = "translation"
+
+    def __init__(self, src_lang: str, tgt_lang: str, *args, **kwargs):
+        self.task = self.abstract_task + "_" + src_lang + "_to_" + tgt_lang
+        super().__init__(*args, **kwargs)
+
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
@@ -1599,18 +1605,6 @@ class TranslationPipeline(Pipeline):
             return results
 
 
-class TranslationEnToFrPipeline(TranslationPipeline):
-    task = "translation_en_to_fr"
-
-
-class TranslationEnToDePipeline(TranslationPipeline):
-    task = "translation_en_to_de"
-
-
-class TranslationEnToRoPipeline(TranslationPipeline):
-    task = "translation_en_to_ro"
-
-
 # Register all the supported tasks here
 SUPPORTED_TASKS = {
     "feature-extraction": {
@@ -1661,20 +1655,8 @@ SUPPORTED_TASKS = {
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "facebook/bart-large-cnn", "tf": "t5-small"}},
     },
-    "translation_en_to_fr": {
-        "impl": TranslationEnToFrPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
-    },
-    "translation_en_to_de": {
-        "impl": TranslationEnToDePipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
-    },
-    "translation_en_to_ro": {
-        "impl": TranslationEnToRoPipeline,
+    "translation": {
+        "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
@@ -1765,7 +1747,29 @@ def pipeline(
     """
     # Retrieve the task
     if task not in SUPPORTED_TASKS:
-        raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
+        if "translation" in task:
+            # Check that translation has special string format
+            # Using "translation_en_to_fr" should slowly be deprecated
+            # Instead "translation" should be used with "src_lang" and "tgt_lang" kwargs
+            if not ("src_lang" in kwargs and "tgt_lang" in kwargs):
+                raise FutureWarning(
+                    f"When using pipeline with 'translation', `src_lang` and `tgt_lang` should be provided in kwargs"
+                )
+                assert "_to_" in task, "f{task} should be in the format 'translation_{src_lang}_to_{tgt_lang}"
+
+                langs = task.split("translation")[-1]
+                src_lang, tgt_lang = langs.split("_to_")
+                kwargs["src_lang"] = src_lang
+                kwargs["tgt_lang"] = tgt_lang
+
+            assert (
+                isinstance(kwargs["src_lang"], str) and len(kwargs["src_lang"]) > 0
+            ), f"{kwargs['src_lang']} cannot be empty"
+            assert (
+                isinstance(kwargs["tgt_lang"], str) and len(kwargs["tgt_lang"]) > 0
+            ), f"{kwargs['tgt_lang']} cannot be empty"
+        else:
+            raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
 
     framework = framework or get_framework(model)
 
