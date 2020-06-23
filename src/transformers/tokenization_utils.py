@@ -283,7 +283,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             full_word = ""
             for i, sub_text in enumerate(split_text):
                 # AddedToken can control whitespace stripping around them.
-                # We use them for GPT2 and Roberta to have differential behavior depending on the special token
+                # We use them for GPT2 and Roberta to have different behavior depending on the special token
                 # Cf. https://github.com/huggingface/transformers/pull/2778
                 # and https://github.com/huggingface/transformers/issues/3788
                 if isinstance(tok_extended, AddedToken):
