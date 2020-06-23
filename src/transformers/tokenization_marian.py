@@ -40,9 +40,9 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab=None,
-        source_spm=None,
-        target_spm=None,
+        vocab,
+        source_spm,
+        target_spm,
         source_lang=None,
         target_lang=None,
         unk_token="<unk>",
@@ -59,6 +59,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             **kwargs,
         )
+        assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
         self.encoder = load_json(vocab)
         if self.unk_token not in self.encoder:
             raise KeyError("<unk> token must be in vocab")
@@ -81,11 +82,11 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def _setup_normalizer(self):
         try:
-            from mosestokenizer import MosesPunctuationNormalizer
+            from sacremoses import MosesPunctNormalizer
 
-            self.punc_normalizer = MosesPunctuationNormalizer(self.source_lang)
-        except ImportError:
-            warnings.warn("Recommended: pip install mosestokenizer")
+            self.punc_normalizer = MosesPunctNormalizer(self.source_lang).normalize
+        except (ImportError, FileNotFoundError):
+            warnings.warn("Recommended: pip install sacremoses.")
             self.punc_normalizer = lambda x: x
 
     def normalize(self, x: str) -> str:
@@ -179,10 +180,11 @@ class MarianTokenizer(PreTrainedTokenizer):
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
 
-        for f in self.spm_files:
+        for orig, f in zip(["source.spm", "target.spm"], self.spm_files):
             dest_path = save_dir / Path(f).name
             if not dest_path.exists():
-                copyfile(f, save_dir / Path(f).name)
+                copyfile(f, save_dir / orig)
+
         return tuple(save_dir / f for f in self.vocab_files_names)
 
     def get_vocab(self) -> Dict:

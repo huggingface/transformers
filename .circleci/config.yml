@@ -73,7 +73,7 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[tf,torch,docs]
-            - run: cd docs && make html
+            - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
                 path: ./docs/_build
     deploy_doc:

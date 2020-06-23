@@ -4,6 +4,7 @@ import os
 import random
 import re
 import shutil
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
@@ -19,22 +20,15 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
+from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available
-from .training_args import TrainingArguments, is_torch_tpu_available
+from .training_args import TrainingArguments
 
 
-try:
+if is_apex_available():
     from apex import amp
-
-    _has_apex = True
-except ImportError:
-    _has_apex = False
-
-
-def is_apex_available():
-    return _has_apex
 
 
 if is_torch_tpu_available():
@@ -205,6 +199,15 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
+        if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
+            self.data_collator = self.data_collator.collate_batch
+            warnings.warn(
+                (
+                    "The `data_collator` should now be a simple callable (function, class with `__call__`), classes "
+                    + "with a `collate_batch` are deprecated and won't be supported in a future version."
+                ),
+                FutureWarning,
+            )
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -325,8 +328,8 @@ class Trainer:
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
             wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
-            # keep track of model topology and gradients
-            if os.getenv("WANDB_WATCH") != "false":
+            # keep track of model topology and gradients, unsupported on TPU
+            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(
                     self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
                 )

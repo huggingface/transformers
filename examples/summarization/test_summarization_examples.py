@@ -7,28 +7,41 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import torch
 from torch.utils.data import DataLoader
 
 from transformers import BartTokenizer
 
-from .evaluate_cnn import run_generate
+from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
-from .utils import SummarizationDataset
+from .run_eval import generate_summaries, run_generate
+from .utils import SummarizationDataset, lmap, pickle_load
 
 
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
-
-DEFAULT_ARGS = {
+FP16_EVER = False
+CHEAP_ARGS = {
+    "logger": "default",
+    "num_workers": 2,
+    "alpha_hid": 0,
+    "freeze_embeds": True,
+    "enc_only": False,
+    "tgt_suffix": "",
+    "resume_from_checkpoint": None,
+    "sortish_sampler": True,
+    "student_decoder_layers": 1,
+    "val_check_interval": 1.0,
     "output_dir": "",
     "fp16": False,
+    "no_teacher": False,
     "fp16_opt_level": "O1",
-    "n_gpu": 1,
+    "gpus": 1 if torch.cuda.is_available() else 0,
     "n_tpu_cores": 0,
     "max_grad_norm": 1.0,
     "do_train": True,
-    "do_predict": False,
+    "do_predict": True,
     "gradient_accumulation_steps": 1,
     "server_ip": "",
     "server_port": "",
@@ -36,7 +49,7 @@ DEFAULT_ARGS = {
     "model_type": "bart",
     "model_name_or_path": "sshleifer/bart-tiny-random",
     "config_name": "",
-    "tokenizer_name": "",
+    "tokenizer_name": "facebook/bart-large",
     "cache_dir": "",
     "do_lower_case": False,
     "learning_rate": 3e-05,
@@ -48,12 +61,27 @@ DEFAULT_ARGS = {
     "eval_batch_size": 2,
     "max_source_length": 12,
     "max_target_length": 12,
+    "val_max_target_length": 12,
+    "test_max_target_length": 12,
+    "fast_dev_run": False,
+    "no_cache": False,
+    "n_train": -1,
+    "n_val": -1,
+    "n_test": -1,
+    "student_encoder_layers": 1,
+    "alpha_loss_encoder": 0.0,
+    "freeze_encoder": False,
+    "auto_scale_batch_size": False,
 }
 
 
 def _dump_articles(path: Path, articles: list):
     with path.open("w") as f:
         f.write("\n".join(articles))
+
+
+MSG = "T5 is broken at the moment"
+T5_TINY = "patrickvonplaten/t5-tiny-random"
 
 
 def make_test_data_dir():
@@ -64,6 +92,111 @@ def make_test_data_dir():
         _dump_articles((tmp_dir / f"{split}.source"), articles)
         _dump_articles((tmp_dir / f"{split}.target"), summaries)
     return tmp_dir
+
+
+class TestSummarizationDistiller(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
+        return cls
+
+    @unittest.skipUnless(torch.cuda.device_count() > 1, "skipping multiGPU test")
+    def test_bdc_multigpu(self):
+        updates = dict(
+            student_encoder_layers=2,
+            student_decoder_layers=1,
+            no_teacher=True,
+            freeze_encoder=True,
+            gpus=2,
+            sortish_sampler=False,
+            fp16_opt_level="O1",
+            fp16=FP16_EVER,
+        )
+        self._bart_distiller_cli(updates)
+
+    def test_bdc_t5_train(self):
+        updates = dict(
+            fp16=FP16_EVER,
+            gpus=1 if torch.cuda.is_available() else 0,
+            model_type="t5",
+            model_name_or_path=T5_TINY,
+            do_train=True,
+            do_predict=True,
+            tokenizer_name=T5_TINY,
+            no_teacher=True,
+            alpha_hid=2.0,
+        )
+        self._bart_distiller_cli(updates)
+
+    def test_bdc_no_teacher(self):
+        updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True,)
+        self._bart_distiller_cli(updates)
+
+    def test_bdc_yes_teacher(self):
+        updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
+        self._bart_distiller_cli(updates)
+
+    def test_bdc_checkpointing(self):
+        updates = dict(
+            student_encoder_layers=2,
+            student_decoder_layers=1,
+            num_train_epochs=4,
+            val_check_interval=0.25,
+            alpha_hid=2.0,
+        )
+        model = self._bart_distiller_cli(updates, check_contents=False)
+
+        ckpts = list(Path(model.output_dir).glob("*.ckpt"))
+        self.assertEqual(1, len(ckpts))
+        transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
+        self.assertEqual(len(transformer_ckpts), len(ckpts))
+        new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
+        self.assertEqual(len(new_transformer_ckpts), 1)
+        examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
+        out_path = tempfile.mktemp()
+        generate_summaries(examples, out_path, new_transformer_ckpts[0].parent)
+        self.assertTrue(Path(out_path).exists())
+
+        evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
+
+    def _bart_distiller_cli(self, updates, check_contents=True):
+        default_updates = dict(
+            train_batch_size=1,
+            eval_batch_size=2,
+            num_train_epochs=2,
+            alpha_mlm=0.2,
+            alpha_ce=0.8,
+            do_predict=True,
+            gpus=1 if torch.cuda.is_available() else 0,
+            model_name_or_path="sshleifer/tinier_bart",
+            teacher=CHEAP_ARGS["model_name_or_path"],
+            val_check_interval=0.5,
+            alpha_encoder_loss=0.4,
+        )
+        default_updates.update(updates)
+        args_d: dict = CHEAP_ARGS.copy()
+        tmp_dir = make_test_data_dir()
+        output_dir = tempfile.mkdtemp(prefix="output_")
+
+        args_d.update(data_dir=tmp_dir, output_dir=output_dir, **default_updates)
+        model = distill_main(argparse.Namespace(**args_d))
+        if not check_contents:
+            return model
+        contents = os.listdir(output_dir)
+        ckpt_name = "val_avg_rouge2=0.0000-step_count=2.ckpt"  # "val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
+        contents = {os.path.basename(p) for p in contents}
+        self.assertIn(ckpt_name, contents)
+        self.assertIn("metrics.pkl", contents)
+        self.assertIn("test_generations.txt", contents)
+        self.assertIn("val_generations_00001.txt", contents)
+        self.assertIn("val_results_00001.txt", contents)
+        self.assertIn("test_results.txt", contents)
+
+        metrics = pickle_load(Path(output_dir) / "metrics.pkl")
+        desired_n_evals = int(args_d["num_train_epochs"] * (1 / args_d["val_check_interval"]) + 1)
+        self.assertEqual(len(metrics["val"]), desired_n_evals)
+        self.assertEqual(len(metrics["train"]), 0)  # doesn't get logged here
+        return model
 
 
 class TestBartExamples(unittest.TestCase):
@@ -79,49 +212,30 @@ class TestBartExamples(unittest.TestCase):
         output_file_name = Path(tempfile.gettempdir()) / "utest_output_bart_sum.hypo"
         articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
         _dump_articles(tmp, articles)
-        testargs = ["evaluate_cnn.py", str(tmp), str(output_file_name), "sshleifer/bart-tiny-random"]
+        testargs = ["run_eval.py", str(tmp), str(output_file_name), "sshleifer/bart-tiny-random"]
         with patch.object(sys, "argv", testargs):
             run_generate()
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    def test_bart_run_sum_cli(self):
-        args_d: dict = DEFAULT_ARGS.copy()
-        tmp_dir = make_test_data_dir()
-        output_dir = tempfile.mkdtemp(prefix="output_")
-        args_d.update(
-            data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
-        )
-        main(argparse.Namespace(**args_d))
-        args_d.update({"do_train": False, "do_predict": True})
-
-        main(argparse.Namespace(**args_d))
-        contents = os.listdir(output_dir)
-        expected_contents = {
-            "checkpointepoch=0.ckpt",
-            "test_results.txt",
-        }
-        created_files = {os.path.basename(p) for p in contents}
-        self.assertSetEqual(expected_contents, created_files)
-
     def test_t5_run_sum_cli(self):
-        args_d: dict = DEFAULT_ARGS.copy()
+        args_d: dict = CHEAP_ARGS.copy()
+
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
             data_dir=tmp_dir,
-            model_type="t5",
-            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            model_name_or_path=T5_TINY,
+            tokenizer_name=None,  # T5_TINY,
             train_batch_size=2,
             eval_batch_size=2,
-            n_gpu=0,
+            gpus=0,
             output_dir=output_dir,
             do_predict=True,
         )
-        main(argparse.Namespace(**args_d))
-
-        # args_d.update({"do_train": False, "do_predict": True})
-        # main(argparse.Namespace(**args_d))
+        assert "n_train" in args_d
+        args = argparse.Namespace(**args_d)
+        main(args)
 
     def test_bart_summarization_dataset(self):
         tmp_dir = Path(tempfile.gettempdir())
@@ -138,42 +252,16 @@ class TestBartExamples(unittest.TestCase):
         )
         dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
         for batch in dataloader:
-            self.assertEqual(batch["source_mask"].shape, batch["source_ids"].shape)
+            self.assertEqual(batch["attention_mask"].shape, batch["input_ids"].shape)
             # show that articles were trimmed.
-            self.assertEqual(batch["source_ids"].shape[1], max_len_source)
-            self.assertGreater(20, batch["source_ids"].shape[1])  # trimmed significantly
+            self.assertEqual(batch["input_ids"].shape[1], max_len_source)
+            self.assertGreater(20, batch["input_ids"].shape[1])  # trimmed significantly
 
             # show that targets were truncated
-            self.assertEqual(batch["target_ids"].shape[1], trunc_target)  # Truncated
+            self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
 
 
-class TestT5Examples(unittest.TestCase):
-    def test_t5_cli(self):
-        output_file_name = "output_t5_sum.txt"
-        score_file_name = "score_t5_sum.txt"
-        articles = ["New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-        tmp = Path(tempfile.gettempdir()) / "utest_generations_t5_sum.hypo"
-        with tmp.open("w", encoding="utf-8") as f:
-            f.write("\n".join(articles))
-
-        output_file_name = Path(tempfile.gettempdir()) / "utest_output_t5_sum.hypo"
-        score_file_name = Path(tempfile.gettempdir()) / "utest_score_t5_sum.hypo"
-
-        testargs = [
-            "evaluate_cnn.py",
-            str(tmp),
-            str(output_file_name),
-            "patrickvonplaten/t5-tiny-random",
-            "--reference_path",
-            str(tmp),
-            "--score_path",
-            str(score_file_name),
-        ]
-
-        with patch.object(sys, "argv", testargs):
-            run_generate()
-            self.assertTrue(Path(output_file_name).exists())
-            self.assertTrue(Path(score_file_name).exists())
+def list_to_text_file(lst, path):
+    dest = Path(path)
+    dest.open("w+").writelines(lst)
