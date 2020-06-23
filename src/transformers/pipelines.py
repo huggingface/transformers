@@ -1776,7 +1776,7 @@ def pipeline(
                 )
                 assert "_to_" in task, "f{task} should be in the format 'translation_{src_lang}_to_{tgt_lang}"
 
-                langs = task.split("translation")[-1]
+                langs = task.split("translation_")[-1]
                 src_lang, tgt_lang = langs.split("_to_")
                 kwargs["src_lang"] = src_lang
                 kwargs["tgt_lang"] = tgt_lang
