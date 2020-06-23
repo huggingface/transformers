@@ -120,7 +120,7 @@ class BartConfig(PretrainedConfig):
         self.classif_dropout = classifier_dropout
 
         # pos embedding offset
-        self.extra_pos_embeddings = extra_pos_embeddings
+        self.extra_pos_embeddings = self.pad_token_id + 1
 
     @property
     def num_attention_heads(self) -> int:

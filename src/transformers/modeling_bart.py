@@ -435,10 +435,7 @@ class BartDecoder(nn.Module):
             )
         else:
             self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings,
-                config.d_model,
-                self.padding_idx,
-                offset=getattr(config, "extra_pos_embeddings", 0),
+                config.max_position_embeddings, config.d_model, self.padding_idx, offset=config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
