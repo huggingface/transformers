@@ -471,7 +471,9 @@ class ReformerTesterMixin:
 
 @require_torch
 class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
@@ -525,7 +527,9 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
 
 @require_torch
 class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
