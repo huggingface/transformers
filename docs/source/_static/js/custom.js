@@ -95,8 +95,7 @@ function addVersionControl() {
     const versionMenu = document.createElement("div");
 
     const htmlLines = [];
-    for (const key in versionMapping) {
-        var value = versionMapping[key];
+    for (const [key, value] of Object.entries(versionMapping)) {
         var urlParts = (key == "") ? [] : [key];
         urlParts = urlParts.concat(parts.slice(versionIndex));
         htmlLines.push(`<a href="${urlParts.join('/')}">${value}</a>`);
@@ -119,9 +118,7 @@ function addVersionControl() {
     // Hide the menu when we click elsewhere
     window.addEventListener("click", (event) => {
         if (event.target != versionButton){
-            if (versionMenu.classList.contains('version-show')) {
-                versionMenu.classList.remove('version-show');
-            }
+            versionMenu.classList.remove('version-show');
         }
     });
 
