@@ -454,12 +454,6 @@ class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
 
 def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device,)
