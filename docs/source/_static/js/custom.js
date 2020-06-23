@@ -1,3 +1,26 @@
+// These two things need to be updated at each release for the version selector.
+// Last stable version
+const stableVersion = "v2.11.0"
+// Dictionary doc folder to label
+const versionMapping = {
+    "master": "master",
+    "": "v2.11.0 (stable)",
+    "v2.10.0": "v2.10.0",
+    "v2.9.1": "v2.9.0/v2.9.1",
+    "v2.8.0": "v2.8.0",
+    "v2.7.0": "v2.7.0",
+    "v2.6.0": "v2.6.0",
+    "v2.5.1": "v2.5.0/v2.5.1",
+    "v2.4.0": "v2.4.0/v2.4.1",
+    "v2.3.0": "v2.3.0",
+    "v2.2.0": "v2.2.0/v2.2.1/v2.2.2",
+    "v2.1.1": "v2.1.1",
+    "v2.0.0": "v2.0.0",
+    "v1.2.0": "v1.2.0",
+    "v1.1.0": "v1.1.0",
+    "v1.0.0": "v1.0.0"
+}
+
 function addIcon() {
     const huggingFaceLogo = "https://huggingface.co/landing/assets/transformers-docs/huggingface_logo.svg";
     const image = document.createElement("img");
@@ -56,6 +79,60 @@ function addGithubButton() {
         </div>
     `;
     document.querySelector(".wy-side-nav-search .icon-home").insertAdjacentHTML('afterend', div);
+}
+
+function addVersionControl() {
+    // To grab the version currently in view, we parse the url
+    const parts = location.toString().split('/');
+    let versionIndex = parts.length - 2
+    // Main classes and models are nested so we need to go deeper
+    if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
+        versionIndex = parts.length - 3
+    } 
+    const version = parts[versionIndex];
+
+    // Menu with all the links,
+    const versionMenu = document.createElement("div");
+
+    const htmlLines = [];
+    for (const [key, value] of Object.entries(versionMapping)) {
+        var urlParts = (key == "") ? [] : [key];
+        urlParts = urlParts.concat(parts.slice(versionIndex));
+        htmlLines.push(`<a href="${urlParts.join('/')}">${value}</a>`);
+    }
+
+    versionMenu.classList.add("version-dropdown");
+    versionMenu.innerHTML = htmlLines.join('\n');
+    
+    // Button for version selection
+    const versionButton = document.createElement("div");
+    versionButton.classList.add("version-button");
+    let label = (version == "transformers") ? stableVersion : version
+    versionButton.innerText = label.concat(" ▼");
+
+    // Toggle the menu when we click on the button
+    versionButton.addEventListener("click", () => {
+        versionMenu.classList.toggle("version-show");
+    });
+
+    // Hide the menu when we click elsewhere
+    window.addEventListener("click", (event) => {
+        if (event.target != versionButton){
+            versionMenu.classList.remove('version-show');
+        }
+    });
+
+    // Container
+    const div = document.createElement("div");
+    div.appendChild(versionButton);
+    div.appendChild(versionMenu);
+    div.style.paddingTop = '25px';
+    div.style.backgroundColor = '#6670FF';
+    div.style.display = 'block';
+    div.style.textAlign = 'center';
+
+    const scrollDiv = document.querySelector(".wy-side-scroll");
+    scrollDiv.insertBefore(div, scrollDiv.children[1]);
 }
 
 function addHfMenu() {
@@ -149,6 +226,7 @@ function parseGithubButtons (){"use strict";var e=window.document,t=e.location,o
 
 function onLoad() {
     addIcon();
+    addVersionControl();
     addCustomFooter();
     addGithubButton();
     parseGithubButtons();
