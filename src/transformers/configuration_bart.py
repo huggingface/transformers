@@ -68,7 +68,6 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
-        use_cache=False,
         **common_kwargs
     ):
         r"""
@@ -85,7 +84,6 @@ class BartConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            use_cache=use_cache,
             **common_kwargs,
         )
         self.vocab_size = vocab_size
