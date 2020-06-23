@@ -3,3 +3,4 @@ coverage:
     project:
       default:
         informational: true
+    patch: off

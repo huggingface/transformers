@@ -87,7 +87,6 @@ class LongformerSelfAttention(nn.Module):
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
-        self.output_attentions = config.output_attentions
         self.num_heads = config.num_attention_heads
         self.head_dim = int(config.hidden_size / config.num_attention_heads)
         self.embed_dim = config.hidden_size
@@ -153,12 +152,11 @@ class LongformerSelfAttention(nn.Module):
         beginning_mask_2d = input_tensor.new_ones(w, w + 1).tril().flip(dims=[0])
         beginning_mask = beginning_mask_2d[None, :, None, :]
         ending_mask = beginning_mask.flip(dims=(1, 3))
-        seqlen = input_tensor.size(1)
         beginning_input = input_tensor[:, :affected_seqlen, :, : w + 1]
-        beginning_mask = beginning_mask[:, :seqlen].expand(beginning_input.size())
+        beginning_mask = beginning_mask.expand(beginning_input.size())
         beginning_input.masked_fill_(beginning_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
         ending_input = input_tensor[:, -affected_seqlen:, :, -(w + 1) :]
-        ending_mask = ending_mask[:, -seqlen:].expand(ending_input.size())
+        ending_mask = ending_mask.expand(ending_input.size())
         ending_input.masked_fill_(ending_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
 
     def _sliding_chunks_matmul_qk(self, q: torch.Tensor, k: torch.Tensor, w: int):
@@ -243,6 +241,7 @@ class LongformerSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
@@ -301,7 +300,6 @@ class LongformerSelfAttention(nn.Module):
         k = k.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         # attn_weights = (batch_size, seqlen, num_heads, window*2+1)
         attn_weights = self._sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size)
-        self._mask_invalid_locations(attn_weights, self.one_sided_attention_window_size)
         if remove_from_windowed_attention_mask is not None:
             # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
             # from (batch_size x seqlen) to (batch_size x seqlen x num_heads x hidden_size)
@@ -329,7 +327,7 @@ class LongformerSelfAttention(nn.Module):
             selected_k[selection_padding_mask_nonzeros] = k[extra_attention_mask_nonzeros]
             # (batch_size, seqlen, num_heads, max_num_extra_indices_per_batch)
             selected_attn_weights = torch.einsum("blhd,bshd->blhs", (q, selected_k))
-            selected_attn_weights[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000
+            selected_attn_weights[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000.0
             # concat to attn_weights
             # (batch_size, seqlen, num_heads, extra attention count + 2*window+1)
             attn_weights = torch.cat((selected_attn_weights, attn_weights), dim=-1)
@@ -417,7 +415,7 @@ class LongformerSelfAttention(nn.Module):
             )
 
         context_layer = attn.transpose(0, 1)
-        if self.output_attentions:
+        if output_attentions:
             if extra_attention_mask is not None:
                 # With global attention, return global attention probabilities only
                 # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
@@ -431,13 +429,13 @@ class LongformerSelfAttention(nn.Module):
                 # batch_size x num_heads x sequence_length x window_size
                 # which is the attention weights of every token attending to its neighbours
                 attn_weights = attn_weights.permute(0, 2, 1, 3)
-        outputs = (context_layer, attn_weights) if self.output_attentions else (context_layer,)
+        outputs = (context_layer, attn_weights) if output_attentions else (context_layer,)
         return outputs
 
 
 LONGFORMER_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
@@ -469,7 +467,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also have
-            global attention. Please refer to the Longformer paper https://arxiv.org/abs/2004.05150 for more details.
+            global attention. Please refer to the `Longformer paper <https://arxiv.org/abs/2004.05150>`__ for more details.
             Mask values selected in ``[0, 1]``:
             ``0`` for local attention (a sliding window attention),
             ``1`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
@@ -489,6 +487,8 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -499,18 +499,16 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 class LongformerModel(RobertaModel):
     """
     This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
-    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer`_by
-    Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention combines a local (sliding window)
-    and global attention to extend to long documents without the O(n^2) increase in memory and compute.
+    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
+    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
+    combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
+    memory and compute.
 
     The selfattention module `LongformerSelfAttention` implemented here supports the combination of local and
     global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
     and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
     tasks. Future release will add support for autoregressive attention, but the support for dilated attention
     requires a custom CUDA kernel to be memory and compute efficient.
-
-    .. _`Longformer: the Long-Document Transformer`:
-        https://arxiv.org/abs/2004.05150
 
     """
 
@@ -588,6 +586,8 @@ class LongformerModel(RobertaModel):
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
 
@@ -595,12 +595,12 @@ class LongformerModel(RobertaModel):
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -626,6 +626,11 @@ class LongformerModel(RobertaModel):
                                             # LM: potentially on the beginning of sentences and paragraphs
         sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # padding
         attention_window = (
@@ -666,6 +671,8 @@ class LongformerModel(RobertaModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         # undo padding
@@ -703,6 +710,8 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
         **kwargs
     ):
         r"""
@@ -720,12 +729,12 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -763,6 +772,8 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -793,6 +804,8 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         self.longformer = LongformerModel(config)
         self.classifier = LongformerClassificationHead(config)
 
+        self.init_weights()
+
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
@@ -803,6 +816,8 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -817,12 +832,12 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -856,6 +871,8 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -914,7 +931,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
         token_type_ids=None,
@@ -922,6 +939,8 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -940,13 +959,15 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
@@ -987,6 +1008,8 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]
@@ -1046,6 +1069,8 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1058,12 +1083,12 @@ class LongformerForTokenClassification(BertPreTrainedModel):
             Classification loss.
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1091,6 +1116,8 @@ class LongformerForTokenClassification(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]
@@ -1145,6 +1172,8 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         labels=None,
         position_ids=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1154,18 +1183,18 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor`` of shape ``(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`torch.FloatTensor`` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss.
         classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1189,7 +1218,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         loss, classification_scores = outputs[:2]
 
         """
-        num_choices = input_ids.shape[1]
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         # set global attention on question tokens
         if global_attention_mask is None:
@@ -1203,13 +1232,18 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
                 dim=1,
             )
 
-        flat_input_ids = input_ids.view(-1, input_ids.size(-1))
+        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
         flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         flat_global_attention_mask = (
             global_attention_mask.view(-1, global_attention_mask.size(-1))
             if global_attention_mask is not None
+            else None
+        )
+        flat_inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
             else None
         )
 
@@ -1219,6 +1253,9 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             global_attention_mask=flat_global_attention_mask,
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         pooled_output = outputs[1]
 

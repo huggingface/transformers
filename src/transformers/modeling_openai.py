@@ -29,7 +29,13 @@ from torch.nn import CrossEntropyLoss
 from .activations import gelu_new, swish
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+from .modeling_utils import (
+    Conv1D,
+    PreTrainedModel,
+    SequenceSummary,
+    find_pruneable_heads_and_indices,
+    prune_conv1d_layer,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -131,8 +137,6 @@ class Attention(nn.Module):
         self.split_size = n_state
         self.scale = scale
 
-        self.output_attentions = config.output_attentions
-
         self.c_attn = Conv1D(n_state * 3, nx)
         self.c_proj = Conv1D(n_state, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
@@ -142,13 +146,9 @@ class Attention(nn.Module):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        mask = torch.ones(self.n_head, self.split_size // self.n_head)
-        heads = set(heads) - self.pruned_heads
-        for head in heads:
-            head -= sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_head, self.split_size // self.n_head, self.pruned_heads
+        )
         index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
         # Prune conv1d layers
         self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
@@ -158,7 +158,7 @@ class Attention(nn.Module):
         self.n_head = self.n_head - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, q, k, v, attention_mask=None, head_mask=None):
+    def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
@@ -179,7 +179,7 @@ class Attention(nn.Module):
             w = w * head_mask
 
         outputs = [torch.matmul(w, v)]
-        if self.output_attentions:
+        if output_attentions:
             outputs.append(w)
         return outputs
 
@@ -196,14 +196,14 @@ class Attention(nn.Module):
         else:
             return x.permute(0, 2, 1, 3)
 
-    def forward(self, x, attention_mask=None, head_mask=None):
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
+        attn_outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -238,8 +238,10 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
-    def forward(self, x, attention_mask=None, head_mask=None):
-        attn_outputs = self.attn(x, attention_mask=attention_mask, head_mask=head_mask)
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+        attn_outputs = self.attn(
+            x, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions,
+        )
         a = attn_outputs[0]
 
         n = self.ln_1(x + a)
@@ -320,6 +322,8 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -330,8 +334,6 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
         self.tokens_embed = nn.Embedding(config.vocab_size, config.n_embd)
         self.positions_embed = nn.Embedding(config.n_positions, config.n_embd)
@@ -362,18 +364,20 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -392,6 +396,11 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -444,22 +453,22 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         all_attentions = ()
         all_hidden_states = ()
         for i, block in enumerate(self.h):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(hidden_states, attention_mask, head_mask[i])
+            outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions=output_attentions)
             hidden_states = outputs[0]
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions = all_attentions + (outputs[1],)
 
         # Add last layer
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
         outputs = (hidden_states.view(*output_shape),)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last hidden state, (all hidden states), (all attentions)
 
@@ -490,6 +499,8 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -509,12 +520,12 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -540,6 +551,8 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
@@ -591,12 +604,14 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_token_ids=None,
         labels=None,
         mc_labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
         **kwargs
     ):
         r"""
         mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
             Index of the classification token in each input sequence.
-            Selected in the range ``[0, input_ids.size(-1) - 1[``.
+            Selected in the range ``[0, input_ids.size(-1) - 1]``.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
             Labels for language modeling.
             Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
@@ -624,12 +639,12 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -669,6 +684,8 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         hidden_states = transformer_outputs[0]
 

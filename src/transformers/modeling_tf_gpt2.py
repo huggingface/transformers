@@ -28,6 +28,7 @@ from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
+    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -63,7 +64,6 @@ def gelu(x):
 class TFAttention(tf.keras.layers.Layer):
     def __init__(self, nx, n_ctx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = config.output_attentions
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -93,7 +93,7 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.cast(m, dtype)
 
     def _attn(self, inputs, training=False):
-        q, k, v, attention_mask, head_mask = inputs
+        q, k, v, attention_mask, head_mask, output_attentions = inputs
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
@@ -118,7 +118,7 @@ class TFAttention(tf.keras.layers.Layer):
             w = w * head_mask
 
         outputs = [tf.matmul(w, v)]
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs.append(w)
         return outputs
 
@@ -135,7 +135,7 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
     def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask, use_cache = inputs
+        x, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
 
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
@@ -148,20 +148,12 @@ class TFAttention(tf.keras.layers.Layer):
             value = tf.concat([past_value, value], axis=-2)
 
         # to cope with keras serialization
-        # we need to cast `use_cache` to correct bool
-        # if it is a tensor
-        if tf.is_tensor(use_cache):
-            if hasattr(use_cache, "numpy"):
-                use_cache = bool(use_cache.numpy())
-            else:
-                use_cache = True
-
-        if use_cache is True:
+        if cast_bool_to_primitive(use_cache, True) is True:
             present = tf.stack([key, value], axis=0)
         else:
             present = (None,)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
+        attn_outputs = self._attn([query, key, value, attention_mask, head_mask, output_attentions], training=training)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -198,10 +190,12 @@ class TFBlock(tf.keras.layers.Layer):
         self.mlp = TFMLP(4 * nx, config, name="mlp")
 
     def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask, use_cache = inputs
+        x, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
 
         a = self.ln_1(x)
-        output_attn = self.attn([a, layer_past, attention_mask, head_mask, use_cache], training=training)
+        output_attn = self.attn(
+            [a, layer_past, attention_mask, head_mask, use_cache, output_attentions], training=training
+        )
         a = output_attn[0]  # output_attn: a, present, (attentions)
         x = x + a
 
@@ -219,8 +213,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
-        self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
@@ -241,8 +235,9 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.wte
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, value):
+        self.wte.weight = value
+        self.wte.vocab_size = self.wte.weight.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -261,6 +256,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         use_cache=True,
         training=False,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -271,7 +268,9 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
-            assert len(inputs) <= 8, "Too many inputs."
+            output_attentions = inputs[8] if len(inputs) > 7 else output_attentions
+            output_hidden_states = inputs[9] if len(inputs) > 8 else output_hidden_states
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -281,9 +280,14 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
-            assert len(inputs) <= 8, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -352,31 +356,34 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         all_attentions = []
         all_hidden_states = ()
         for i, (block, layer_past) in enumerate(zip(self.h, past)):
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block([hidden_states, layer_past, attention_mask, head_mask[i], use_cache], training=training)
+            outputs = block(
+                [hidden_states, layer_past, attention_mask, head_mask[i], use_cache, output_attentions],
+                training=training,
+            )
 
             hidden_states, present = outputs[:2]
             presents = presents + (present,)
 
-            if self.output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 all_attentions.append(outputs[2])
 
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
 
         if use_cache is True:
             outputs = outputs + (presents,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
@@ -465,6 +472,8 @@ GPT2_INPUTS_DOCSTRING = r"""
         training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -488,14 +497,14 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -547,14 +556,14 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -614,6 +623,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         inputs_embeds=None,
         mc_token_ids=None,
         use_cache=True,
+        output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -631,18 +642,17 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as `input_ids` as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
 
     Examples::
 
@@ -681,7 +691,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             mc_token_ids = inputs[7] if len(inputs) > 7 else mc_token_ids
             use_cache = inputs[8] if len(inputs) > 8 else use_cache
-            assert len(inputs) <= 9, "Too many inputs."
+            output_attentions = inputs[9] if len(inputs) > 8 else output_attentions
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -692,7 +703,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             mc_token_ids = inputs.get("mc_token_ids", mc_token_ids)
             use_cache = inputs.get("use_cache", use_cache)
-            assert len(inputs) <= 9, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -717,6 +729,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             head_mask,
             inputs_embeds,
             use_cache,
+            output_attentions,
+            output_hidden_states,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)

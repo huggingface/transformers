@@ -38,6 +38,17 @@ Hugging Face showcasing the generative capabilities of several models. GPT is on
 
 The original code can be found `here <https://github.com/openai/finetune-transformer-lm>`_.
 
+Note:
+
+If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install 
+``ftfy`` and ``SpaCy``::
+
+    pip install spacy ftfy==4.4.3
+    python -m spacy download en
+
+If you don't install ``ftfy`` and ``SpaCy``, the :class:`transformers.OpenAIGPTTokenizer` will default to tokenize using 
+BERT's :obj:`BasicTokenizer` followed by Byte-Pair Encoding (which should be fine for most usage, don't 
+worry).
 
 OpenAIGPTConfig
 ~~~~~~~~~~~~~~~~~~~~~

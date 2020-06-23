@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
-from .file_utils import S3_BUCKET_PREFIX
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 
 
@@ -16,11 +15,6 @@ vocab_files_names = {
     "target_spm": "target.spm",
     "vocab": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
-}
-MODEL_NAMES = ("opus-mt-en-de",)  # TODO(SS): delete this, the only required constant is vocab_files_names
-PRETRAINED_VOCAB_FILES_MAP = {
-    k: {m: f"{S3_BUCKET_PREFIX}/Helsinki-NLP/{m}/{fname}" for m in MODEL_NAMES}
-    for k, fname in vocab_files_names.items()
 }
 # Example URL https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/vocab.json
 
@@ -41,33 +35,31 @@ class MarianTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = vocab_files_names
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
         self,
-        vocab=None,
-        source_spm=None,
-        target_spm=None,
+        vocab,
+        source_spm,
+        target_spm,
         source_lang=None,
         target_lang=None,
         unk_token="<unk>",
         eos_token="</s>",
         pad_token="<pad>",
-        max_len=512,
-        **kwargs,
+        model_max_length=512,
+        **kwargs
     ):
-
         super().__init__(
             # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
-            max_len=max_len,
+            model_max_length=model_max_length,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
             **kwargs,
         )
+        assert Path(source_spm).exists(), f"cannot find spm source {source_spm}"
         self.encoder = load_json(vocab)
         if self.unk_token not in self.encoder:
             raise KeyError("<unk> token must be in vocab")
@@ -90,11 +82,11 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def _setup_normalizer(self):
         try:
-            from mosestokenizer import MosesPunctuationNormalizer
+            from sacremoses import MosesPunctNormalizer
 
-            self.punc_normalizer = MosesPunctuationNormalizer(self.source_lang)
-        except ImportError:
-            warnings.warn("Recommended: pip install mosestokenizer")
+            self.punc_normalizer = MosesPunctNormalizer(self.source_lang).normalize
+        except (ImportError, FileNotFoundError):
+            warnings.warn("Recommended: pip install sacremoses.")
             self.punc_normalizer = lambda x: x
 
     def normalize(self, x: str) -> str:
@@ -188,10 +180,11 @@ class MarianTokenizer(PreTrainedTokenizer):
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
 
-        for f in self.spm_files:
+        for orig, f in zip(["source.spm", "target.spm"], self.spm_files):
             dest_path = save_dir / Path(f).name
             if not dest_path.exists():
-                copyfile(f, save_dir / Path(f).name)
+                copyfile(f, save_dir / orig)
+
         return tuple(save_dir / f for f in self.vocab_files_names)
 
     def get_vocab(self) -> Dict:
