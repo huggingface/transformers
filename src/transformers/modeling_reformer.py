@@ -155,10 +155,14 @@ class AxialPositionEmbeddings(nn.Module):
             )
 
             # reshape axial encodings and use only until sequence_length
-            position_encodings = torch.cat(broadcasted_weights, dim=-1)
-            position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[
-                :, :sequence_length
+            position_encodings = [
+                broadcasted_weight.view(batch_size, -1, broadcasted_weight.shape[-1])[:sequence_length]
+                for broadcasted_weight in broadcasted_weights
             ]
+            position_encodings = torch.cat(broadcasted_weights, dim=-1)
+        #            position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[
+        #                :, :sequence_length
+        #            ]
 
         return position_encodings
 

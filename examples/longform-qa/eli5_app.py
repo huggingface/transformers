@@ -1,8 +1,8 @@
+import nlp
 import numpy as np
 import torch
 
 import faiss
-import nlp
 import streamlit as st
 import transformers
 from elasticsearch import Elasticsearch
