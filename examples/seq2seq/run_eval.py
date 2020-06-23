@@ -22,7 +22,7 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries(
+def generate_summaries_or_translations(
     examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE, fp16=False,
 ) -> None:
     fout = Path(out_file).open("w", encoding="utf-8")
@@ -65,15 +65,17 @@ def run_generate():
     examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path).readlines()]
     score_fn = {"bleu": calculate_bleu_score, "rouge": calculate_rouge}[args.metric]
 
-    generate_summaries(
+    generate_summaries_or_translations(
         examples, args.output_path, args.model_name, batch_size=args.bs, device=args.device, fp16=args.fp16
     )
-    if args.score_path is not None:
-        output_lns = [x.rstrip() for x in open(args.output_path).readlines()]
-        reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()]
 
-        rouge: dict = score_fn(output_lns, reference_lns)
-        json.dump(rouge, open("score_path", "w+"))
+    output_lns = [x.rstrip() for x in open(args.output_path).readlines()]
+    reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()]
+
+    scores: dict = score_fn(output_lns, reference_lns)
+    if args.score_path is not None:
+        json.dump(scores, open("score_path", "w+"))
+    return scores
 
 
 if __name__ == "__main__":
