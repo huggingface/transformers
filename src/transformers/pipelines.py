@@ -367,6 +367,7 @@ class Pipeline(_ScikitCompat):
     """
 
     default_input_names = None
+    task = None
 
     def __init__(
         self,
@@ -374,7 +375,6 @@ class Pipeline(_ScikitCompat):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        task: str = "",
         args_parser: ArgumentHandler = None,
         device: int = -1,
         binary_output: bool = False,
@@ -396,9 +396,12 @@ class Pipeline(_ScikitCompat):
             self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
+        if self.task not in SUPPORTED_TASKS:
+            raise KeyError("Unknown task {}, available tasks are {}".format(self.task, list(SUPPORTED_TASKS.keys())))
+
         task_specific_params = self.model.config.task_specific_params
-        if task_specific_params is not None and task in task_specific_params:
-            self.model.config.update(task_specific_params.get(task))
+        if task_specific_params is not None and self.task in task_specific_params:
+            self.model.config.update(task_specific_params.get(self.task))
 
     def save_pretrained(self, save_directory):
         """
@@ -535,6 +538,8 @@ class FeatureExtractionPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
+    task = "feature-extraction"
+
     def __init__(
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
@@ -543,7 +548,6 @@ class FeatureExtractionPipeline(Pipeline):
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
         device: int = -1,
-        task: str = "",
     ):
         super().__init__(
             model=model,
@@ -553,7 +557,6 @@ class FeatureExtractionPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=True,
-            task=task,
         )
 
     def __call__(self, *args, **kwargs):
@@ -603,6 +606,8 @@ class TextGenerationPipeline(Pipeline):
         "TFOpenAIGPTLMHeadModel",
         "TFCTRLLMHeadModel",
     ]
+
+    task = "text-generation"
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -718,6 +723,8 @@ class TextClassificationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
+    task = "sentiment-analysis"
+
     def __init__(self, return_all_scores: bool = False, **kwargs):
         super().__init__(**kwargs)
 
@@ -775,6 +782,8 @@ class FillMaskPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
+    task = "fill-mask"
+
     def __init__(
         self,
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
@@ -784,7 +793,6 @@ class FillMaskPipeline(Pipeline):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         topk=5,
-        task: str = "",
     ):
         super().__init__(
             model=model,
@@ -794,7 +802,6 @@ class FillMaskPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=True,
-            task=task,
         )
 
         self.topk = topk
@@ -882,6 +889,7 @@ class TokenClassificationPipeline(Pipeline):
     """
 
     default_input_names = "sequences"
+    task = "ner"
 
     def __init__(
         self,
@@ -1111,6 +1119,7 @@ class QuestionAnsweringPipeline(Pipeline):
     """
 
     default_input_names = "question,context"
+    task = "question-answering"
 
     def __init__(
         self,
@@ -1119,7 +1128,6 @@ class QuestionAnsweringPipeline(Pipeline):
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         device: int = -1,
-        task: str = "",
         **kwargs
     ):
         super().__init__(
@@ -1129,7 +1137,6 @@ class QuestionAnsweringPipeline(Pipeline):
             framework=framework,
             args_parser=QuestionAnsweringArgumentHandler(),
             device=device,
-            task=task,
             **kwargs,
         )
 
@@ -1391,9 +1398,7 @@ class SummarizationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    def __init__(self, **kwargs):
-        kwargs.update(task="summarization")
-        super().__init__(**kwargs)
+    task: str = "summarization"
 
     def __call__(
         self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -1596,6 +1601,18 @@ class TranslationPipeline(Pipeline):
             return results
 
 
+class TranslationEnToFrPipeline(TranslationPipeline):
+    task = "translation_en_to_fr"
+
+
+class TranslationEnToDePipeline(TranslationPipeline):
+    task = "translation_en_to_de"
+
+
+class TranslationEnToRoPipeline(TranslationPipeline):
+    task = "translation_en_to_ro"
+
+
 # Register all the supported tasks here
 SUPPORTED_TASKS = {
     "feature-extraction": {
@@ -1647,19 +1664,19 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": "facebook/bart-large-cnn", "tf": "t5-small"}},
     },
     "translation_en_to_fr": {
-        "impl": TranslationPipeline,
+        "impl": TranslationEnToFrPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_de": {
-        "impl": TranslationPipeline,
+        "impl": TranslationEnToDePipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_ro": {
-        "impl": TranslationPipeline,
+        "impl": TranslationEnToRoPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
@@ -1815,4 +1832,4 @@ def pipeline(
             )
         model = model_class.from_pretrained(model, config=config, **model_kwargs)
 
-    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
+    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, **kwargs)
