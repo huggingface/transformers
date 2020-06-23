@@ -45,6 +45,7 @@ def encode_file(
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
             add_prefix_space=True,
+            truncation=True,
             return_tensors=return_tensors,
         )
         assert tokenized.input_ids.shape[1] == max_length
