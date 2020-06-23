@@ -105,12 +105,7 @@ class TestSummarizationDistiller(unittest.TestCase):
 
     @unittest.skipUnless(torch.cuda.device_count() > 1, "skipping multiGPU test")
     def test_multigpu(self):
-        updates = dict(
-            no_teacher=True,
-            freeze_encoder=True,
-            gpus=2,
-            sortish_sampler=False,
-        )
+        updates = dict(no_teacher=True, freeze_encoder=True, gpus=2, sortish_sampler=False,)
         self._test_distiller_cli(updates)
 
     def test_distill_no_teacher(self):
@@ -192,7 +187,6 @@ class TestSummarizationDistiller(unittest.TestCase):
 
 
 class TestFinetune(unittest.TestCase):
-
     def test_bart_finetune(self):
         tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
         output_file_name = Path(tempfile.gettempdir()) / "utest_output_bart_sum.hypo"
@@ -261,6 +255,7 @@ class TestFinetune(unittest.TestCase):
         assert "n_train" in args_d
         args = argparse.Namespace(**args_d)
         main(args)
+
 
 class TestDataset(unittest.TestCase):
     def test_mbart_summarization_dataset(self):
