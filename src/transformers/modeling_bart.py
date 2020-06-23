@@ -818,16 +818,15 @@ class BartModel(PretrainedBartModel):
         output_attentions=None,
         output_hidden_states=None,
     ):
+
+        if decoder_input_ids is None:
+            use_cache = False
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
-        if decoder_input_ids is None:
-            logger.info("Disable caching if no decoder_input_ids are passed.")
-            use_cache = False
-        else:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -976,7 +975,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
             labels = unused.pop("lm_labels")
 
         if labels is not None:
-            logger.info("Disable caching for training.")
             use_cache = False
 
         outputs = self.model(
@@ -1122,7 +1120,6 @@ class BartForSequenceClassification(PretrainedBartModel):
 
         """
         if labels is not None:
-            logger.info("Disable caching for training.")
             use_cache = False
 
         outputs = self.model(
@@ -1233,7 +1230,6 @@ class BartForQuestionAnswering(PretrainedBartModel):
 
         """
         if start_positions is not None and end_positions is not None:
-            logger.info("Disable caching for training.")
             use_cache = False
 
         outputs = self.model(
