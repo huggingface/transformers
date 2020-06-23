@@ -21,12 +21,12 @@ import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
 from .tokenization_utils_base import (
+    AddedToken,
     BatchEncoding,
     PaddingStrategy,
     PreTokenizedInput,
@@ -134,11 +134,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def decoder(self) -> DecoderFast:
         return self._tokenizer._tokenizer.decoder
 
-    def _maybe_update_backend(self, value):
-        """ Update the backend fast tokenizer.
-            Override method from base class SpecialTokensMixin """
-        self._tokenizer.add_special_tokens(value)
-
     def _convert_encoding(
         self,
         encoding: EncodingFast,
@@ -147,6 +142,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
     ) -> Dict[str, Any]:
         """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
@@ -178,6 +174,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
             if return_offsets_mapping:
                 encoding_dict["offset_mapping"].append(e.offsets)
+            if return_length:
+                encoding_dict["length"].append(len(e.ids))
 
         return encoding_dict
 
@@ -208,14 +206,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def convert_tokens_to_string(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
         return self._tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
-    def add_tokens(self, new_tokens: List[Union[str, AddedTokenFast]]) -> int:
+    def add_tokens(self, new_tokens: List[Union[str, AddedToken]], special_token=False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens: string or list of string or :class:`~transformers.AddedTokenFast`. Each string is a token to add.
-                Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to
+            new_tokens: string or list of string or :class:`~transformers.AddedToken`. Each string is a token to add.
+                Tokens are only added if they are not already in the vocabulary. AddedToken wrap a string token to
                 let you personnalize it's behavior (Whether this token should only match against single word, whether
                 this token should strip all potential whitespaces on the left side, Whether this token should strip
                 all potential whitespaces on the right side...).
@@ -235,16 +233,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             print('We have added', num_added_toks, 'tokens')
             model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         """
-        if isinstance(new_tokens, str):
+        if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
-        # TODO This should be done in tokenizers to be really clean.
-        # Removing for now
-        # tokens = []
-        # for token in new_tokens:
-        #     if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
-        #         token = token.lower()
-        #     if token not in tokens:
-        #         tokens.append(token)
+
+        if special_token:
+            return self._tokenizer.add_special_tokens(new_tokens)
+
         return self._tokenizer.add_tokens(new_tokens)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
@@ -330,7 +324,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-        return_lengths: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -339,6 +333,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             raise ValueError(
                 "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
             )
+
+        if kwargs:
+            raise ValueError(f"Keyword arguments {kwargs} not recognized.")
 
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
@@ -381,6 +378,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
                 verbose=verbose,
             )
             for encoding in encodings
@@ -419,6 +417,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -438,6 +437,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
             verbose=verbose,
             **kwargs,
         )
