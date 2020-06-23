@@ -624,6 +624,11 @@ class TextGenerationPipeline(Pipeline):
                     inputs = self._parse_and_tokenize(
                         self.PADDING_TEXT + prompt_text, pad_to_max_length=False, add_special_tokens=False
                     )
+
+                    # PADDING_TEXT will prepend ~~ 160 tokens to the input which will be bigger
+                    # than the default max_len parameter of the model.generate() function.
+                    # This line ensure we are generating at least 20 tokens when max_length is not defined
+                    generate_kwargs["max_length"] = inputs.input_ids.shape[-1] + generate_kwargs.get("max_length", 20)
                 else:
                     inputs = self._parse_and_tokenize(prompt_text, pad_to_max_length=False, add_special_tokens=False)
 
