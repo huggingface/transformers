@@ -323,6 +323,7 @@ class Pipeline(_ScikitCompat):
 
     Base class implementing pipelined operations.
     Pipeline workflow is defined as a sequence of the following operations:
+
         Input -> Tokenization -> Model Inference -> Post-Processing (Task dependent) -> Output
 
     Pipeline supports running on CPU or GPU through the device argument. Users can specify
@@ -727,7 +728,7 @@ class TextClassificationPipeline(Pipeline):
         scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
         if self.return_all_scores:
             return [
-                [{"label": self.model.config.id2label[i], "score": score} for i, score in enumerate(item)]
+                [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(item)]
                 for item in scores
             ]
         else:
@@ -1389,6 +1390,10 @@ class SummarizationPipeline(Pipeline):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
             on the associated CUDA device id.
     """
+
+    def __init__(self, **kwargs):
+        kwargs.update(task="summarization")
+        super().__init__(**kwargs)
 
     def __call__(
         self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs

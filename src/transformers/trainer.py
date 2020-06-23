@@ -4,9 +4,10 @@ import os
 import random
 import re
 import shutil
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -19,22 +20,15 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
+from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
-from .training_args import TrainingArguments, is_torch_tpu_available
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available
+from .training_args import TrainingArguments
 
 
-try:
+if is_apex_available():
     from apex import amp
-
-    _has_apex = True
-except ImportError:
-    _has_apex = False
-
-
-def is_apex_available():
-    return _has_apex
 
 
 if is_torch_tpu_available():
@@ -59,21 +53,8 @@ def is_tensorboard_available():
     return _has_tensorboard
 
 
-try:
+if is_wandb_available():
     import wandb
-
-    wandb.ensure_configured()
-    if wandb.api.api_key is None:
-        _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
-    else:
-        _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except (ImportError, AttributeError):
-    _has_wandb = False
-
-
-def is_wandb_available():
-    return _has_wandb
 
 
 logger = logging.getLogger(__name__)
@@ -218,6 +199,15 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
+        if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
+            self.data_collator = self.data_collator.collate_batch
+            warnings.warn(
+                (
+                    "The `data_collator` should now be a simple callable (function, class with `__call__`), classes "
+                    + "with a `collate_batch` are deprecated and won't be supported in a future version."
+                ),
+                FutureWarning,
+            )
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -338,8 +328,8 @@ class Trainer:
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
             wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
-            # keep track of model topology and gradients
-            if os.getenv("WANDB_WATCH") != "false":
+            # keep track of model topology and gradients, unsupported on TPU
+            if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(
                     self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
                 )
@@ -580,11 +570,12 @@ class Trainer:
             logger.info(output)
 
     def _training_step(
-        self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], optimizer: torch.optim.Optimizer
     ) -> float:
         model.train()
         for k, v in inputs.items():
-            inputs[k] = v.to(self.args.device)
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to(self.args.device)
 
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
@@ -768,7 +759,8 @@ class Trainer:
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
             for k, v in inputs.items():
-                inputs[k] = v.to(self.args.device)
+                if isinstance(v, torch.Tensor):
+                    inputs[k] = v.to(self.args.device)
 
             with torch.no_grad():
                 outputs = model(**inputs)
