@@ -81,8 +81,7 @@ def _dump_articles(path: Path, articles: list):
 
 
 ARTICLES = [" Sam ate lunch today", "Sams lunch ingredients"]
-SUMMARIES = ["A very intere sting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
-MSG = "T5 is broken at the moment"
+SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
@@ -135,7 +134,7 @@ class TestSummarizationDistiller(unittest.TestCase):
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
-    @unittest.skip(MSG)
+    @unittest.skip("T5 distillation is broken at the moment")
     def test_distill_t5(self):
         updates = dict(
             student_encoder_layers=1,
