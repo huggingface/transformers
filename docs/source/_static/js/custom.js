@@ -1,8 +1,8 @@
 // These two things need to be updated at each release for the version selector.
 // Last stable version
-let stableVersion = "v2.11.0"
+const stableVersion = "v2.11.0"
 // Dictionary doc folder to label
-let versionMapping = {
+const versionMapping = {
     "master": "master",
     "": "v2.11.0 (stable)",
     "v2.10.0": "v2.10.0",
@@ -83,19 +83,19 @@ function addGithubButton() {
 
 function addVersionControl() {
     // To grab the version currently in view, we parse the url
-    let parts = location.toString().split('/');
-    var versionIndex = parts.length - 2
+    const parts = location.toString().split('/');
+    let versionIndex = parts.length - 2
     // Main classes and models are nested so we need to go deeper
     if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
         versionIndex = parts.length - 3
     } 
-    let version = parts[versionIndex];
+    const version = parts[versionIndex];
 
     // Menu with all the links,
     const versionMenu = document.createElement("div");
 
-    var htmlLines = [];
-    for (var key in versionMapping) {
+    const htmlLines = [];
+    for (const key in versionMapping) {
         var value = versionMapping[key];
         var urlParts = (key == "") ? [] : [key];
         urlParts = urlParts.concat(parts.slice(versionIndex));
