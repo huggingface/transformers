@@ -26,6 +26,7 @@ def generate_summaries(
     examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE, fp16=False,
 ) -> None:
     fout = Path(out_file).open("w", encoding="utf-8")
+    model_name = str(model_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
     if fp16:
         model = model.half()
