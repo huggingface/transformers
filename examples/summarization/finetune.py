@@ -148,11 +148,9 @@ class SummarizationModule(BaseTransformer):
         self.metrics[prefix].append(metrics)
         pickle_save(self.metrics, self.metrics_save_path)
 
-
     def calc_generative_metrics(self, preds, target) -> dict:
         rouge: Dict = calculate_rouge(preds, target)
         return rouge
-
 
     def _generative_step(self, batch: dict) -> dict:
         pad_token_id = self.tokenizer.pad_token_id
@@ -320,6 +318,7 @@ def main(args, model=None) -> SummarizationModule:
         logger=logger,
         # TODO: early stopping callback seems messed up
     )
+    pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
         return model
 

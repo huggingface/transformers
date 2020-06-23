@@ -28,7 +28,7 @@ def encode_file(
     cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
     if not overwrite_cache and cache_path.exists():
         try:
-            examples = torch.load(cache_path)
+            examples = None # torch.load(cache_path)
             assert isinstance(examples, list)
             return examples
 
@@ -46,8 +46,7 @@ def encode_file(
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
             add_prefix_space=True,
-            #truncation=True,
-            padding=True,
+            truncation=True,
             return_tensors=return_tensors,
         )
         assert tokenized.input_ids.shape[1] == max_length

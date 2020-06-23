@@ -82,8 +82,8 @@ def _dump_articles(path: Path, articles: list):
 
 
 articles = [" Sam ate lunch today", "Sams lunch ingredients"]
-summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
-MSG = "These won't pass until hidden_states kwarg is merged."
+summaries = ["A very intere sting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+MSG = "T5 is broken at the moment"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 
 
@@ -127,19 +127,19 @@ class TestSummarizationDistiller(unittest.TestCase):
             tokenizer_name=None,
             no_teacher=True,
         )
-        self._bart_distiller_cli(updates, check_contents=False)
+        self._bart_distiller_cli(updates)
 
-    @unittest.skip(MSG)
-    def test_bdc_t5_train_fp16(self):
+    def test_bdc_t5_train(self):
         updates = dict(
             fp16=FP16_EVER,
-            gpus=1,
+            gpus=1 if torch.cuda.is_available() else 0,
             model_type="t5",
             model_name_or_path=T5_TINY,
             do_train=True,
             do_predict=True,
             tokenizer_name=T5_TINY,
             no_teacher=True,
+            alpha_hid=2.0,
         )
         self._bart_distiller_cli(updates)
 
@@ -189,21 +189,8 @@ class TestSummarizationDistiller(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
-    @unittest.skip(MSG)
-    def test_bdc_t5_eval(self):
-        updates = dict(
-            model_type="t5",
-            model_name_or_path=T5_TINY,
-            do_train=False,
-            do_predict=True,
-            tokenizer_name=T5_TINY,
-            no_teacher=True,
-        )
-        self._bart_distiller_cli(updates, check_contents=False)
-
     def _bart_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
-            model_type="bart",
             train_batch_size=1,
             eval_batch_size=2,
             num_train_epochs=2,
@@ -236,7 +223,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertIn("test_results.txt", contents)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
-        desired_n_evals = args_d["num_train_epochs"] * 2 + 1
+        desired_n_evals = int(args_d["num_train_epochs"] * (1 / args_d["val_check_interval"]) + 1)
         self.assertEqual(len(metrics["val"]), desired_n_evals)
         self.assertEqual(len(metrics["train"]), 0)  # doesn't get logged here
         return model
@@ -268,7 +255,6 @@ class TestBartExamples(unittest.TestCase):
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
             data_dir=tmp_dir,
-            model_type="t5",
             model_name_or_path=T5_TINY,
             tokenizer_name=None,  # T5_TINY,
             train_batch_size=2,
@@ -289,6 +275,7 @@ class TestBartExamples(unittest.TestCase):
         args_d.update(
             data_dir=tmp_dir,
             tokenizer_name="facebook/mbart-large-en-ro",
+            model_name_or_path="facebook/mbart-large-en-ro",
             train_batch_size=2,
             eval_batch_size=2,
             gpus=0,

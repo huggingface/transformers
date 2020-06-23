@@ -271,6 +271,7 @@ class SummarizationDistiller(SummarizationModule):
 
 class T5SummarizationDistiller(SummarizationDistiller):
     def pre_init(self, hparams):
+        raise NotImplementedError("T5 Distillation does not work yet")
         teacher = T5ForConditionalGeneration.from_pretrained(hparams.teacher)
         n_layer = hparams.student_decoder_layers
         assert n_layer == hparams.student_encoder_layers  # TODO(SS): relax this
