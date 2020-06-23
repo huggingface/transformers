@@ -157,7 +157,7 @@ class SummarizationModule(BaseTransformer):
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         t0 = time.time()
         generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,)
-        gen_time = time.time() - t0 / source_ids.shape[0]
+        gen_time = (time.time() - t0) / source_ids.shape[0]
         preds = self.ids_to_clean_text(generated_ids)
         target = self.ids_to_clean_text(y)
         loss_tensors = self._step(batch)

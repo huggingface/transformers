@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional, Union
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
@@ -271,7 +271,7 @@ def cached_path(
     force_download=False,
     proxies=None,
     resume_download=False,
-    user_agent=None,
+    user_agent: Union[Dict, str, None] = None,
     extract_compressed_file=False,
     force_extract=False,
     local_files_only=False,
@@ -357,7 +357,7 @@ def cached_path(
     return output_path
 
 
-def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
+def http_get(url, temp_file, proxies=None, resume_size=0, user_agent: Union[Dict, str, None] = None):
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
     if is_torch_available():
         ua += "; torch/{}".format(torch.__version__)
@@ -397,7 +397,7 @@ def get_from_cache(
     proxies=None,
     etag_timeout=10,
     resume_download=False,
-    user_agent=None,
+    user_agent: Union[Dict, str, None] = None,
     local_files_only=False,
 ) -> Optional[str]:
     """
