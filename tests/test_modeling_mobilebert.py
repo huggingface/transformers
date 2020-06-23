@@ -36,7 +36,6 @@ if is_torch_available():
         MobileBertForTokenClassification,
         MobileBertForMultipleChoice,
     )
-    from transformers.modeling_mobilebert import MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MobileBertModelTester:
