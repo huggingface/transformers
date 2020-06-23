@@ -44,27 +44,27 @@ make them readable. For instance
 
 ::
 
-    classifier('We are very happy to show you the Transformers library.')
+    classifier('We are very happy to show you the 🤗 Transformers library.')
 
 will return something like this:
 
 ::
 
-    [{'label': 'POSITIVE', 'score': 0.999799370765686}]
+    [{'label': 'POSITIVE', 'score': 0.9997795224189758}]
 
 That's encouraging! You can use it on a list of sentences, which will be preprocessed then fed to the model as a
 `batch`:
 
 ::
 
-    classifier(["We are very happy to show you the Transformers library.",
+    classifier(["We are very happy to show you the 🤗 Transformers library.",
                 "We hope you don't hate it."])
 
 returning a list of dictionaries like this one:
 
 ::
 
-    [{'label': 'POSITIVE', 'score': 0.999799370765686},
+    [{'label': 'POSITIVE', 'score': 0.9997795224189758},
      {'label': 'NEGATIVE', 'score': 0.5308589935302734}]
 
 You can see the second sentence has been classified as negative (it needs to be positive or negative) but its score is
@@ -163,7 +163,7 @@ To apply these steps on a given text, we can just feed it to our tokenizer:
 
 ::
 
-    input = tokenizer("We are very happy to show you the Transformers library.")
+    input = tokenizer("We are very happy to show you the 🤗 Transformers library.")
     print(input)
 
 This returns a dictionary string to list of ints. It contains the `ids of the tokens <glossary.html#input-ids>`__,
@@ -172,9 +172,8 @@ as mentioned before, but also additional arguments that will be useful to the mo
 
 
 ::
-
-    {'input_ids': [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 19081, 3075, 1012, 102],
-     'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
+    {'input_ids': [101, 2057, 2024, 2200, 3407, 2000, 2265, 2017, 1996, 100, 19081, 3075, 1012, 102],
+     'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
 You can pass a list of sentences directly to your tokenizer. If your goal is to send them through your model as a
 batch, you probably want to pad them all to the same length, truncate them to the maximum length the model can accept
@@ -184,13 +183,13 @@ and get tensors back. You can specify all of that to the tokenizer:
 
     ## PYTORCH CODE
     batch = tokenizer(
-        ["We are very happy to show you the Transformers library.",
+        ["We are very happy to show you the 🤗 Transformers library.",
          "We hope you don't hate it."],
         padding=True, truncation=True, return_tensors="pt")
     print(batch)
     ## TENSORFLOW CODE
     batch = tokenizer(
-        ["We are very happy to show you the Transformers library.",
+        ["We are very happy to show you the 🤗 Transformers library.",
          "We hope you don't hate it."],
         padding=True, truncation=True, return_tensors="tf")
     print(batch)
@@ -200,10 +199,10 @@ padding token the model was pretrained with. The attention mask is also adapted 
 
 ::
 
-    {'input_ids': tensor([[  101,  2057,  2024,  2200,  3407,  2000,  2265,  2017,  1996, 19081, 3075,  1012,   102],
-                          [  101,  2057,  3246,  2017,  2123,  1005,  1056,  5223,  2009,  1012,  102,     0,     0]]), 
-     'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                               [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0]])}
+    {'input_ids': tensor([[  101,  2057,  2024,  2200,  3407,  2000,  2265,  2017,  1996,   100, 19081,  3075,  1012,   102],
+                          [  101,  2057,  3246,  2017,  2123,  1005,  1056,  5223,  2009,  1012,   102,     0,     0,     0]]), 
+     'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                               [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])}
 
 You can learn more about tokenizers on their :doc:`doc page <main_classes/tokenizer>` (tutorial coming soon).
 

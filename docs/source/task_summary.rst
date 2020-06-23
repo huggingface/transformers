@@ -217,9 +217,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     """
 
     questions = [
-        "How many pretrained models are available in Transformers?",
-        "What does Transformers provide?",
-        "Transformers provides interoperability between which frameworks?",
+        "How many pretrained models are available in 🤗 Transformers?",
+        "What does 🤗 Transformers provide?",
+        "🤗 Transformers provides interoperability between which frameworks?",
     ]
 
     for question in questions:
@@ -253,9 +253,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     """
 
     questions = [
-        "How many pretrained models are available in Transformers?",
-        "What does Transformers provide?",
-        "Transformers provides interoperability between which frameworks?",
+        "How many pretrained models are available in 🤗 Transformers?",
+        "What does 🤗 Transformers provide?",
+        "🤗 Transformers provides interoperability between which frameworks?",
     ]
 
     for question in questions:
@@ -280,13 +280,13 @@ This outputs the questions followed by the predicted answers:
 
 ::
 
-    Question: How many pretrained models are available in Transformers?
+    Question: How many pretrained models are available in 🤗 Transformers?
     Answer: over 32 +
 
-    Question: What does Transformers provide?
+    Question: What does 🤗 Transformers provide?
     Answer: general - purpose architectures
 
-    Question: Transformers provides interoperability between which frameworks?
+    Question: 🤗 Transformers provides interoperability between which frameworks?
     Answer: tensorflow 2 . 0 and pytorch
 
 

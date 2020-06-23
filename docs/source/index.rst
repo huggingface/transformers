@@ -42,7 +42,7 @@ The documentation is organized in five parts:
 
 - **GET STARTED** contains a quick tour, the installation instructions and some useful information about our philosophy
   and a glossary.
-- **USING TRANSFORMERS** contains general tutorials on how to use the library.
+- **USING 🤗 TRANSFORMERS** contains general tutorials on how to use the library.
 - **ADVANCED GUIDES** contains more advanced guides that are more specific to a given script or part of the library.
 - **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general resarch in
   transformers model
@@ -135,7 +135,7 @@ conversion utilities for the following models:
 
 .. toctree::
     :maxdepth: 2
-    :caption: Using Transformers
+    :caption: Using 🤗 Transformers
 
     task_summary
     model_summary
