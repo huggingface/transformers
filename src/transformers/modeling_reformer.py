@@ -154,15 +154,16 @@ class AxialPositionEmbeddings(nn.Module):
                 self.axial_pos_shape, sequence_length, self.least_common_mult_chunk_length,
             )
 
-            # reshape axial encodings and use only until sequence_length
-            position_encodings = [
-                broadcasted_weight.view(batch_size, -1, broadcasted_weight.shape[-1])[:sequence_length]
-                for broadcasted_weight in broadcasted_weights
+            # compute how many columns are needed
+            required_pos_encodings_columns = -(-sequence_length // self.axial_pos_shape[1])
+
+            # cut to columns that are needed
+            position_encodings = torch.cat(
+                [weight[:, :required_pos_encodings_columns] for weight in broadcasted_weights], dim=-1
+            )
+            position_encodings = torch.reshape(position_encodings, (batch_size, -1, position_encodings.shape[-1]))[
+                :, :sequence_length
             ]
-            position_encodings = torch.cat(broadcasted_weights, dim=-1)
-        #            position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[
-        #                :, :sequence_length
-        #            ]
 
         return position_encodings
 
