@@ -45,7 +45,7 @@ The following command should work on a 16GB GPU:
 ./finetune.sh \
     --data_dir $XSUM_DIR \
     --train_batch_size=1 \
-    --eval_batch_size=1 \0
+    --eval_batch_size=1 \
     --output_dir=xsum_results \
     --num_train_epochs 1
     --model_name_or_path facebook/bart-large
