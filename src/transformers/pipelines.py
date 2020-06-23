@@ -379,7 +379,13 @@ class Pipeline(_ScikitCompat):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         binary_output: bool = False,
+        **kwargs,
     ):
+        if "task" in kwargs:
+            warnings.warn(
+                "The `task` argument is deprecated and will be removed in a future version, there is no need to use it anymore",
+                DeprecationWarning,
+            )
 
         if framework is None:
             framework = get_framework()
@@ -549,6 +555,7 @@ class FeatureExtractionPipeline(Pipeline):
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
         device: int = -1,
+        **kwargs,
     ):
         super().__init__(
             model=model,
@@ -558,6 +565,7 @@ class FeatureExtractionPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=True,
+            **kwargs,
         )
 
     def __call__(self, *args, **kwargs):
@@ -794,6 +802,7 @@ class FillMaskPipeline(Pipeline):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         topk=5,
+        **kwargs,
     ):
         super().__init__(
             model=model,
@@ -803,6 +812,7 @@ class FillMaskPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=True,
+            **kwargs,
         )
 
         self.topk = topk
@@ -903,6 +913,7 @@ class TokenClassificationPipeline(Pipeline):
         binary_output: bool = False,
         ignore_labels=["O"],
         grouped_entities: bool = False,
+        **kwargs,
     ):
         super().__init__(
             model=model,
@@ -912,6 +923,7 @@ class TokenClassificationPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=binary_output,
+            **kwargs,
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
@@ -1759,7 +1771,7 @@ def pipeline(
             # Instead "translation" should be used with "src_lang" and "tgt_lang" kwargs
             if not ("src_lang" in kwargs and "tgt_lang" in kwargs):
                 warnings.warn(
-                    f"When using pipeline with 'translation', `src_lang` and `tgt_lang` should be provided in kwargs",
+                    "When using translation pipeline, `src_lang` and `tgt_lang` should be provided in kwargs",
                     FutureWarning,
                 )
                 assert "_to_" in task, "f{task} should be in the format 'translation_{src_lang}_to_{tgt_lang}"
