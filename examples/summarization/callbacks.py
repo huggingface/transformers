@@ -76,11 +76,11 @@ def get_checkpoint_callback(output_dir, metric):
     """Saves the best model by validation ROUGE2 score."""
     if metric == "rouge2":
         exp = "{val_avg_rouge2:.4f}-{step_count}"
-    elif metric == 'bleu':
+    elif metric == "bleu":
         exp = "{val_avg_bleu:.4f}-{step_count}"
     else:
         raise NotImplementedError(
-            f'seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this function.'
+            f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this function."
         )
 
     checkpoint_callback = ModelCheckpoint(

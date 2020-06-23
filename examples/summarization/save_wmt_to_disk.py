@@ -1,8 +1,7 @@
 from pathlib import Path
 
-from tqdm import tqdm
-
 import nlp
+from tqdm import tqdm
 
 
 ds = nlp.load_dataset("./datasets/wmt16", "de-en")

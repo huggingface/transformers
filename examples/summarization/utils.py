@@ -28,7 +28,7 @@ def encode_file(
     cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
     if not overwrite_cache and cache_path.exists():
         try:
-            examples = None # torch.load(cache_path)
+            examples = None  # torch.load(cache_path)
             assert isinstance(examples, list)
             return examples
 
@@ -61,7 +61,7 @@ def lmap(f: Callable, x: Iterable) -> List:
 
 
 def calculate_bleu_score(output_lns, refs_lns) -> dict:
-    return {'bleu': corpus_bleu(output_lns, [refs_lns]).score}
+    return {"bleu": corpus_bleu(output_lns, [refs_lns]).score}
 
 
 def trim_batch(

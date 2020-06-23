@@ -57,13 +57,13 @@ def run_generate():
     parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test_reference_summaries.txt")
     parser.add_argument("--score_path", type=str, required=False, help="where to save the rouge score in json format")
-    parser.add_argument('--metric', type=str, choices=['bleu', 'rouge'], default='rouge')
+    parser.add_argument("--metric", type=str, choices=["bleu", "rouge"], default="rouge")
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument("--fp16", action="store_true")
     args = parser.parse_args()
     examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path).readlines()]
-    score_fn = {'bleu': calculate_bleu_score, 'rouge': calculate_rouge}[args.metric]
+    score_fn = {"bleu": calculate_bleu_score, "rouge": calculate_rouge}[args.metric]
 
     generate_summaries(
         examples, args.output_path, args.model_name, batch_size=args.bs, device=args.device, fp16=args.fp16
