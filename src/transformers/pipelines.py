@@ -901,7 +901,6 @@ class TokenClassificationPipeline(Pipeline):
         device: int = -1,
         binary_output: bool = False,
         ignore_labels=["O"],
-        task: str = "",
         grouped_entities: bool = False,
     ):
         super().__init__(
@@ -912,7 +911,6 @@ class TokenClassificationPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=binary_output,
-            task=task,
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
