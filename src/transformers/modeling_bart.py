@@ -96,6 +96,7 @@ BART_INPUTS_DOCSTRING = r"""
 
 
 def invert_mask(attention_mask):
+    """Turns 1->0, 0->1, False->True, True-> False"""
     assert attention_mask.dim() == 2
     return attention_mask.eq(0)
 
@@ -261,7 +262,7 @@ class BartEncoder(nn.Module):
             )
         else:
             self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings, embed_dim, self.padding_idx,
+                config.max_position_embeddings, embed_dim, self.padding_idx, config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
@@ -435,7 +436,7 @@ class BartDecoder(nn.Module):
             )
         else:
             self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings, config.d_model, self.padding_idx, offset=config.extra_pos_embeddings,
+                config.max_position_embeddings, config.d_model, self.padding_idx, config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
@@ -745,7 +746,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
     position ids are passed to the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset=2):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = offset
