@@ -482,8 +482,8 @@ class TokenizerTesterMixin:
                 stride = 2
                 seq_0, ids = self.get_clean_sequence(tokenizer)
                 if len(ids) <= 2 + stride:
-                    seq_0 = [s for s in seq_0 for _ in range(2 + stride)]
-                    ids = [i for i in ids for _ in range(2 + stride)]
+                    seq_0 = (seq_0 + " ") * (2 + stride)
+                    ids = None
 
                 seq0_tokens = tokenizer.encode(seq_0, add_special_tokens=False)
                 assert len(seq0_tokens) > 2 + stride
