@@ -67,7 +67,6 @@ if is_torch_available():
 class AutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -82,7 +81,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_pretraining_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -98,7 +96,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_lmhead_model_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -111,7 +108,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_causal_lm(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -124,7 +120,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_masked_lm(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -137,7 +132,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_model_for_encoder_decoder_lm(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -150,7 +144,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_sequence_classification_model_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -165,7 +158,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_question_answering_model_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -178,7 +170,6 @@ class AutoModelTest(unittest.TestCase):
 
     @slow
     def test_token_classification_model_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -190,14 +181,12 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForTokenClassification)
 
     def test_from_pretrained_identifier(self):
-        logging.basicConfig(level=logging.INFO)
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, BertForMaskedLM)
         self.assertEqual(model.num_parameters(), 14830)
         self.assertEqual(model.num_parameters(only_trainable=True), 14830)
 
     def test_from_identifier_from_model_type(self):
-        logging.basicConfig(level=logging.INFO)
         model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(model, RobertaForMaskedLM)
         self.assertEqual(model.num_parameters(), 14830)
