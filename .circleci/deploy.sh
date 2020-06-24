@@ -17,8 +17,21 @@ function deploy_doc(){
 	fi
 }
 
+function debug_custom() {
+	echo "Head of source/_static/js/custom.js"
+	head -10 source/_static/js/custom.js
+	if [ -d "_build/html/_static" ]; then
+	    echo "Head of _build/html/_static/js/custom.js"
+		head -10 _build/html/_static/js/custom.js
+	else
+		echo "No build"
+	fi
+}
+
 # You can find the commit for each tag on https://github.com/huggingface/transformers/tags
+debug_custom
 deploy_doc "master" master
+debug_custom
 deploy_doc "b33a385" v1.0.0
 deploy_doc "fe02e45" v1.1.0
 deploy_doc "89fd345" v1.2.0
@@ -36,3 +49,4 @@ deploy_doc "e7cfc1a" v2.9.0
 deploy_doc "7cb203f" v2.9.1
 deploy_doc "10d7239" v2.10.0 
 deploy_doc "b42586e" #v2.11.0 Latest stable release
+debug_custom
