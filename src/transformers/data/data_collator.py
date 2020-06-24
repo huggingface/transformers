@@ -43,10 +43,7 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
     # Ensure that tensor is created with the correct type
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
-        try:
-            label = first["label"].item()
-        except AttributeError:
-            label = first["label"]
+        label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
         dtype = torch.long if isinstance(label, int) else torch.float
         batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
