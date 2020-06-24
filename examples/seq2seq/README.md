@@ -7,7 +7,7 @@ For `bertabs` instructions, see `bertabs/README.md`.
 
 CNN/DailyMail data
 ```bash
-cd examples/summarization
+cd examples/seq2seq
 wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm.tgz
 tar -xzvf cnn_dm.tgz
 
@@ -19,7 +19,7 @@ To use your own data, copy that files format. Each article to be summarized is o
 
 XSUM Data:
 ```bash
-cd examples/summarization
+cd examples/seq2seq
 wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/xsum.tar.gz
 tar -xzvf xsum.tar.gz
 export XSUM_DIR=${PWD}/xsum
@@ -28,7 +28,7 @@ export XSUM_DIR=${PWD}/xsum
 
 WMT16 English-Romanian Translation Data:
 ```bash
-cd examples/summarization
+cd examples/seq2seq
 wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
@@ -75,6 +75,8 @@ Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_t
 - For CNN/DailyMail, the default `val_max_target_length` and `test_max_target_length` will truncate the ground truth labels, resulting in slightly higher rouge scores. To get accurate rouge scores, you should rerun calculate_rouge on the `{output_dir}/test_generations.txt` file saved by `trainer.test()`
 - `--max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 ` is a reasonable setting for XSUM.
 - `wandb` can be used by specifying `--logger wandb_shared` or `--logger wandb`. It is useful for reproducibility. 
+- This warning can be safely ignored: 
+    > "Some weights of BartForConditionalGeneration were not initialized from the model checkpoint at facebook/bart-large-xsum and are newly initialized: ['final_logits_bias']"
 
 ### XSUM Shared Task
 Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
