@@ -85,8 +85,12 @@ function addVersionControl() {
     // To grab the version currently in view, we parse the url
     const parts = location.toString().split('/');
     let versionIndex = parts.length - 2
+    // Index page may not have a last part with filename.html so we need to go up
+    if (! parts[versionIndex].match(/\.html$/)) {
+        versionIndex = parts.length - 1
+    }
     // Main classes and models are nested so we need to go deeper
-    if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
+    else if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
         versionIndex = parts.length - 3
     } 
     const version = parts[versionIndex];
@@ -96,7 +100,10 @@ function addVersionControl() {
 
     const htmlLines = [];
     for (const [key, value] of Object.entries(versionMapping)) {
-        var urlParts = (key == "") ? [] : [key];
+        var urlParts = parts.slice(0, versionIndex-1);
+        if (key != "") {
+            urlParts = urlParts.concat([key]);
+        }
         urlParts = urlParts.concat(parts.slice(versionIndex));
         htmlLines.push(`<a href="${urlParts.join('/')}">${value}</a>`);
     }
