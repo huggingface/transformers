@@ -402,10 +402,11 @@ class Pipeline(_ScikitCompat):
         if self.framework == "pt" and self.device.type == "cuda":
             self.model = self.model.to(self.device)
 
-        # Update config with task specific parameters
-        if self.task not in SUPPORTED_TASKS and self.abstract_task not in SUPPORTED_TASKS:
-            raise KeyError("Unknown task {}, available tasks are {}".format(self.task, list(SUPPORTED_TASKS.keys())))
+        assert (
+            self.task is not None
+        ), "A task specific `Pipeline` class, such as `SummarizationPipeline` has to instantiated."
 
+        # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
         if task_specific_params is not None and self.task in task_specific_params:
             self.model.config.update(task_specific_params.get(self.task))
@@ -732,7 +733,7 @@ class TextClassificationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    task = "sentiment-analysis"
+    task = "text-classification"
 
     def __init__(self, return_all_scores: bool = False, **kwargs):
         super().__init__(**kwargs)
@@ -900,7 +901,7 @@ class TokenClassificationPipeline(Pipeline):
     """
 
     default_input_names = "sequences"
-    task = "ner"
+    task = "token-classification"
 
     def __init__(
         self,
