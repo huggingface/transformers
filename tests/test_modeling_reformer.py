@@ -405,6 +405,23 @@ class ReformerModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
+    def create_and_check_reformer_for_sequence_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels
+    ):
+        config.num_labels = self.num_labels
+        model = ReformerForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        loss, logits = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
+        )
+        result = {
+            "loss": loss,
+            "logits": logits,
+        }
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
+        self.check_loss_output(result)
+
 
 class ReformerTesterMixin:
     """
@@ -467,6 +484,10 @@ class ReformerTesterMixin:
     def test_multigpu_data_parallel_forward(self):
         # Opt-out of this test.
         pass
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs)
 
 
 @require_torch
@@ -981,24 +1002,3 @@ class ReformerIntegrationTests(unittest.TestCase):
             output_text,
             "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
         )
-
-    def create_and_check_reformer_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = ReformerForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        loss, logits = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-        )
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
-        self.check_loss_output(result)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs)
