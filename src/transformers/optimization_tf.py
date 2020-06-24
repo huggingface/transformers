@@ -58,38 +58,52 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
         }
 
 
-def create_optimizer(init_lr, num_train_steps, num_warmup_steps, end_lr=0.0, optimizer_type="adamw"):
+def create_optimizer(
+    init_lr,
+    num_train_steps,
+    num_warmup_steps,
+    min_lr_ratio=0.0,
+    adam_epsilon=1e-8,
+    weight_decay_rate=0.0,
+    include_in_weight_decay=None,
+):
     """Creates an optimizer with learning rate schedule."""
     # Implements linear decay of the learning rate.
     lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
-        initial_learning_rate=init_lr, decay_steps=num_train_steps, end_learning_rate=end_lr,
+        initial_learning_rate=init_lr,
+        decay_steps=num_train_steps - num_warmup_steps,
+        end_learning_rate=init_lr * min_lr_ratio,
     )
     if num_warmup_steps:
         lr_schedule = WarmUp(
             initial_learning_rate=init_lr, decay_schedule_fn=lr_schedule, warmup_steps=num_warmup_steps,
         )
-
-    optimizer = AdamWeightDecay(
-        learning_rate=lr_schedule,
-        weight_decay_rate=0.01,
-        beta_1=0.9,
-        beta_2=0.999,
-        epsilon=1e-6,
-        exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"],
-    )
-
-    return optimizer
+    if weight_decay_rate > 0.0:
+        optimizer = AdamWeightDecay(
+            learning_rate=lr_schedule,
+            weight_decay_rate=weight_decay_rate,
+            beta_1=0.9,
+            beta_2=0.999,
+            epsilon=adam_epsilon,
+            exclude_from_weight_decay=["LayerNorm", "layer_norm", "bias"],
+            include_in_weight_decay=include_in_weight_decay,
+        )
+    else:
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=adam_epsilon)
+    # We return the optimizer and the LR scheduler in order to better track the
+    # evolution of the LR independently of the optimizer.
+    return optimizer, lr_schedule
 
 
 class AdamWeightDecay(tf.keras.optimizers.Adam):
     """Adam enables L2 weight decay and clip_by_global_norm on gradients.
-  Just adding the square of the weights to the loss function is *not* the
-  correct way of using L2 regularization/weight decay with Adam, since that will
-  interact with the m and v parameters in strange ways.
-  Instead we want ot decay the weights in a manner that doesn't interact with
-  the m/v parameters. This is equivalent to adding the square of the weights to
-  the loss with plain (non-momentum) SGD.
-  """
+    Just adding the square of the weights to the loss function is *not* the
+    correct way of using L2 regularization/weight decay with Adam, since that will
+    interact with the m and v parameters in strange ways.
+    Instead we want ot decay the weights in a manner that doesn't interact with
+    the m/v parameters. This is equivalent to adding the square of the weights to
+    the loss with plain (non-momentum) SGD.
+    """
 
     def __init__(
         self,
@@ -184,11 +198,11 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
 # Extracted from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
 class GradientAccumulator(object):
     """Gradient accumulation utility.
-  When used with a distribution strategy, the accumulator should be called in a
-  replica context. Gradients will be accumulated locally on each replica and
-  without synchronization. Users should then call ``.gradients``, scale the
-  gradients if required, and pass the result to ``apply_gradients``.
-  """
+    When used with a distribution strategy, the accumulator should be called in a
+    replica context. Gradients will be accumulated locally on each replica and
+    without synchronization. Users should then call ``.gradients``, scale the
+    gradients if required, and pass the result to ``apply_gradients``.
+    """
 
     # We use the ON_READ synchronization policy so that no synchronization is
     # performed on assignment. To get the value, we call .value() which returns the

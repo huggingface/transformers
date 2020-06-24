@@ -16,6 +16,7 @@
 
 
 import logging
+import warnings
 from collections import OrderedDict
 
 from .configuration_auto import (
@@ -31,8 +32,10 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    MobileBertConfig,
     OpenAIGPTConfig,
     ReformerConfig,
+    RetriBertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -44,13 +47,19 @@ from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
     AlbertForMaskedLM,
+    AlbertForMultipleChoice,
     AlbertForPreTraining,
     AlbertForQuestionAnswering,
     AlbertForSequenceClassification,
     AlbertForTokenClassification,
     AlbertModel,
 )
-from .modeling_bart import BartForConditionalGeneration, BartForSequenceClassification, BartModel
+from .modeling_bart import (
+    BartForConditionalGeneration,
+    BartForQuestionAnswering,
+    BartForSequenceClassification,
+    BartModel,
+)
 from .modeling_bert import (
     BertForMaskedLM,
     BertForMultipleChoice,
@@ -58,6 +67,7 @@ from .modeling_bert import (
     BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
+    BertLMHeadModel,
     BertModel,
 )
 from .modeling_camembert import (
@@ -70,6 +80,7 @@ from .modeling_camembert import (
 from .modeling_ctrl import CTRLLMHeadModel, CTRLModel
 from .modeling_distilbert import (
     DistilBertForMaskedLM,
+    DistilBertForMultipleChoice,
     DistilBertForQuestionAnswering,
     DistilBertForSequenceClassification,
     DistilBertForTokenClassification,
@@ -77,7 +88,9 @@ from .modeling_distilbert import (
 )
 from .modeling_electra import (
     ElectraForMaskedLM,
+    ElectraForMultipleChoice,
     ElectraForPreTraining,
+    ElectraForQuestionAnswering,
     ElectraForSequenceClassification,
     ElectraForTokenClassification,
     ElectraModel,
@@ -99,8 +112,18 @@ from .modeling_longformer import (
     LongformerModel,
 )
 from .modeling_marian import MarianMTModel
+from .modeling_mobilebert import (
+    MobileBertForMaskedLM,
+    MobileBertForMultipleChoice,
+    MobileBertForPreTraining,
+    MobileBertForQuestionAnswering,
+    MobileBertForSequenceClassification,
+    MobileBertForTokenClassification,
+    MobileBertModel,
+)
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
+from .modeling_retribert import RetriBertModel
 from .modeling_roberta import (
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
@@ -121,6 +144,7 @@ from .modeling_xlm import (
 from .modeling_xlm_roberta import (
     XLMRobertaForMaskedLM,
     XLMRobertaForMultipleChoice,
+    XLMRobertaForQuestionAnswering,
     XLMRobertaForSequenceClassification,
     XLMRobertaForTokenClassification,
     XLMRobertaModel,
@@ -140,6 +164,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, RetriBertModel),
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
         (AlbertConfig, AlbertModel),
@@ -151,6 +176,7 @@ MODEL_MAPPING = OrderedDict(
         (BertConfig, BertModel),
         (OpenAIGPTConfig, OpenAIGPTModel),
         (GPT2Config, GPT2Model),
+        (MobileBertConfig, MobileBertModel),
         (TransfoXLConfig, TransfoXLModel),
         (XLNetConfig, XLNetModel),
         (FlaubertConfig, FlaubertModel),
@@ -163,6 +189,7 @@ MODEL_MAPPING = OrderedDict(
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForPreTraining),
@@ -174,6 +201,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (BertConfig, BertForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
+        (MobileBertConfig, MobileBertForPreTraining),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
         (FlaubertConfig, FlaubertWithLMHeadModel),
@@ -197,6 +225,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (BertConfig, BertForMaskedLM),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
+        (MobileBertConfig, MobileBertForMaskedLM),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
         (FlaubertConfig, FlaubertWithLMHeadModel),
@@ -205,6 +234,47 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
+    ]
+)
+
+MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        (BertConfig, BertLMHeadModel),
+        (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
+        (GPT2Config, GPT2LMHeadModel),
+        (TransfoXLConfig, TransfoXLLMHeadModel),
+        (XLNetConfig, XLNetLMHeadModel),
+        (
+            XLMConfig,
+            XLMWithLMHeadModel,
+        ),  # XLM can be MLM and CLM => model should be split similar to BERT; leave here for now
+        (CTRLConfig, CTRLLMHeadModel),
+        (ReformerConfig, ReformerModelWithLMHead),
+    ]
+)
+
+MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
+    [
+        (DistilBertConfig, DistilBertForMaskedLM),
+        (AlbertConfig, AlbertForMaskedLM),
+        (CamembertConfig, CamembertForMaskedLM),
+        (XLMRobertaConfig, XLMRobertaForMaskedLM),
+        (LongformerConfig, LongformerForMaskedLM),
+        (RobertaConfig, RobertaForMaskedLM),
+        (BertConfig, BertForMaskedLM),
+        (MobileBertConfig, MobileBertForMaskedLM),
+        (FlaubertConfig, FlaubertWithLMHeadModel),
+        (XLMConfig, XLMWithLMHeadModel),
+        (ElectraConfig, ElectraForMaskedLM),
+    ]
+)
+
+MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+    [
+        (T5Config, T5ForConditionalGeneration),
+        (MarianConfig, MarianMTModel),
+        (BartConfig, BartForConditionalGeneration),
+        (EncoderDecoderConfig, EncoderDecoderModel),
     ]
 )
 
@@ -219,6 +289,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
+        (MobileBertConfig, MobileBertForSequenceClassification),
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
@@ -229,12 +300,16 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
+        (BartConfig, BartForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
+        (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
+        (MobileBertConfig, MobileBertForQuestionAnswering),
         (XLMConfig, XLMForQuestionAnsweringSimple),
+        (ElectraConfig, ElectraForQuestionAnswering),
     ]
 )
 
@@ -247,6 +322,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (LongformerConfig, LongformerForTokenClassification),
         (RobertaConfig, RobertaForTokenClassification),
         (BertConfig, BertForTokenClassification),
+        (MobileBertConfig, MobileBertForTokenClassification),
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
@@ -257,11 +333,15 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         (CamembertConfig, CamembertForMultipleChoice),
+        (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
         (LongformerConfig, LongformerForMultipleChoice),
         (RobertaConfig, RobertaForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
+        (DistilBertConfig, DistilBertForMultipleChoice),
+        (MobileBertConfig, MobileBertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
+        (AlbertConfig, AlbertForMultipleChoice),
     ]
 )
 
@@ -333,6 +413,7 @@ class AutoModel:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5Model` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertModel` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertModel` (ALBERT model)
@@ -486,6 +567,7 @@ class AutoModelForPreTraining:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
@@ -616,6 +698,10 @@ class AutoModelWithLMHead:
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             model = AutoModelWithLMHead.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
+        warnings.warn(
+            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models.",
+            FutureWarning,
+        )
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class(config)
@@ -634,7 +720,8 @@ class AutoModelWithLMHead:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
-            - `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
+
+            - `t5`: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
             - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
             - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
@@ -700,6 +787,10 @@ class AutoModelWithLMHead:
             model = AutoModelWithLMHead.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
+        warnings.warn(
+            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models.",
+            FutureWarning,
+        )
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -711,6 +802,415 @@ class AutoModelWithLMHead:
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())
+            )
+        )
+
+
+class AutoModelForCausalLM:
+    r"""
+        :class:`~transformers.AutoModelForCausalLM` is a generic model class
+        that will be instantiated as one of the language modeling model classes of the library
+        when created with the `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)`
+        class method.
+
+        This class cannot be instantiated using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForCausalLM is designed to be instantiated "
+            "using the `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForCausalLM.from_config(config)` methods."
+        )
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                - isInstance of `bert` configuration class: :class:`~transformers.BertLMHeadModel` (Bert model)
+                - isInstance of `openai-gpt` configuration class: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
+                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
+                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL  model)
+                - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
+                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
+                - isInstance of `reformer` configuration class: :class:`~transformers.ReformerModelWithLMHead` (Reformer model)
+
+        Examples::
+
+            config = GPT2Config.from_pretrained('gpt2')    # Download configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        for config_class, model_class in MODEL_FOR_CAUSAL_LM_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+            )
+        )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r""" Instantiates one of the language modeling model classes of the library
+        from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+            - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
+            - `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
+            - `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
+            - `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
+            - `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
+            - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
+            - `reformer`: :class:`~transformers.ReformerModelWithLMHead` (Google Reformer model)
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Args:
+            pretrained_model_name_or_path:
+                Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely received file. Attempt to resume the download if such a file exists.
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                These arguments will be passed to the configuration and the model.
+
+        Examples::
+
+            model = AutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('./test/gpt2_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            assert model.config.output_attention == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_json_file('./tf_model/gpt2_tf_model_config.json')
+            model =  AutoModelForCausalLM.from_pretrained('./tf_model/gpt2_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        for config_class, model_class in MODEL_FOR_CAUSAL_LM_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+            )
+        )
+
+
+class AutoModelForMaskedLM:
+    r"""
+        :class:`~transformers.AutoModelForMaskedLM` is a generic model class
+        that will be instantiated as one of the language modeling model classes of the library
+        when created with the `AutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)`
+        class method.
+
+        This class cannot be instantiated using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForMaskedLM is designed to be instantiated "
+            "using the `AutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForMaskedLM.from_config(config)` methods."
+        )
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
+                - isInstance of `longformer` configuration class: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
+                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
+                - isInstance of `bert` configuration class: :class:`~transformers.BertForMaskedLM` (Bert model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+                - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
+                - isInstance of `xlm-roberta` configuration class: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-Roberta model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForMaskedLM` (Camembert model)
+                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForMaskedLM` (Albert model)
+
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = AutoModelForMaskedLM.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        for config_class, model_class in MODEL_FOR_MASKED_LM_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
+            )
+        )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r""" Instantiates one of the language modeling model classes of the library
+        from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+            - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
+            - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
+            - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
+            - `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
+            - `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
+            - `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
+            - `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
+            - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+            - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+            - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Args:
+            pretrained_model_name_or_path:
+                Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely received file. Attempt to resume the download if such a file exists.
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                These arguments will be passed to the configuration and the model.
+
+        Examples::
+
+            model = AutoModelForMaskedLM.from_pretrained('bert')    # Download model and configuration from S3 and cache.
+            model = AutoModelForMaskedLM.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            assert model.config.output_attention == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            model =  AutoModelForMaskedLM.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        for config_class, model_class in MODEL_FOR_MASKED_LM_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
+            )
+        )
+
+
+class AutoModelForSeq2SeqLM:
+    r"""
+        :class:`~transformers.AutoModelForSeq2SeqLM` is a generic model class
+        that will be instantiated as one of the language modeling model classes of the library
+        when created with the `AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)`
+        class method.
+
+        This class cannot be instantiated using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForSeq2SeqLM is designed to be instantiated "
+            "using the `AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForSeq2SeqLM.from_config(config)` methods."
+        )
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                - isInstance of `t5` configuration class: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
+                - isInstance of `bart` configuration class: :class:`~transformers.BartForConditionalGeneration` (Bart model)
+                - isInstance of `marian` configuration class: :class:`~transformers.MarianMTModel` (Marian model)
+                - isInstance of `encoder-decoder` configuration class: :class:`~transformers.EncoderDecoderModel` (Encoder Decoder model)
+
+        Examples::
+
+            config = T5Config.from_pretrained('t5')
+            model = AutoModelForSeq2SeqLM.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        for config_class, model_class in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r""" Instantiates one of the language modeling model classes of the library
+        from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+            - `t5`: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
+            - `bart`: :class:`~transformers.BartForConditionalGeneration` (Bert model)
+            - `marian`: :class:`~transformers.MarianMTModel` (Marian model)
+            - `encoder-decoder`: :class:`~transformers.EncoderDecoderModel` (Encoder Decoder model)
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Args:
+            pretrained_model_name_or_path:
+                Either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely received file. Attempt to resume the download if such a file exists.
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                These arguments will be passed to the configuration and the model.
+
+        Examples::
+
+            model = AutoModelForSeq2SeqLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
+            model = AutoModelForSeq2SeqLM.from_pretrained('./test/t5_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            assert model.config.output_attention == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_json_file('./tf_model/t5_tf_model_config.json')
+            model =  AutoModelForSeq2SeqLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        for config_class, model_class in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
             )
         )
 
@@ -782,6 +1282,7 @@ class AutoModelForSequenceClassification:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: :class:`~transformers.DistilBertForSequenceClassification` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForSequenceClassification` (ALBERT model)
             - `camembert`: :class:`~transformers.CamembertForSequenceClassification` (CamemBERT model)
@@ -928,6 +1429,7 @@ class AutoModelForQuestionAnswering:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: :class:`~transformers.DistilBertForQuestionAnswering` (DistilBERT model)
             - `albert`: :class:`~transformers.AlbertForQuestionAnswering` (ALBERT model)
             - `bert`: :class:`~transformers.BertForQuestionAnswering` (Bert model)
@@ -1073,6 +1575,7 @@ class AutoModelForTokenClassification:
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `distilbert`: :class:`~transformers.DistilBertForTokenClassification` (DistilBERT model)
             - `xlm`: :class:`~transformers.XLMForTokenClassification` (XLM model)
             - `xlm-roberta`: :class:`~transformers.XLMRobertaForTokenClassification` (XLM-RoBERTa?Para model)

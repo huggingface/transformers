@@ -35,7 +35,8 @@ from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
 from .file_utils import cached_path, is_torch_available
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 if is_torch_available():
@@ -113,7 +114,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.delimiter = delimiter
         self.vocab_file = vocab_file
         self.never_split = never_split
-        self.punctuation_symbols = '!"#$%&()*+,-./\:;<=>?@[\\]^_`{|}~'  # noqa: W605
+        self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
 
@@ -140,7 +141,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _compile_space_around_punctuation_pattern(self):
         look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
-        look_ahead_to_match_all_except_space = "(?=[^\s])"  # noqa: W605
+        look_ahead_to_match_all_except_space = r"(?=[^\s])"
         return re.compile(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space)
 
     def count_file(self, path, verbose=False, add_eos=False):
@@ -271,6 +272,33 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.idx2sym.append(sym)
             self.sym2idx[sym] = len(self.idx2sym) - 1
 
+    def move_added_token(self, token: str, target_idx: int):
+        """
+        Moves an added token to a specific position in the vocab.
+        This method should be used when resizing an embedding layer other than the last one in the `AdaptiveEmbedding`
+        in order to move the token in the tokenizer from the default position (at the very end) to the desired one.
+
+        Args:
+            token: The token to move to a specific position in the vocab.
+            target_idx: The position where the token should be moved to.
+        """
+        assert token in self.added_tokens_encoder, "Token which should be moved has to be an added token"
+        assert token not in self.idx2sym, "Token which should be moved is already in vocab"
+
+        # Insert sym into vocab
+        self.idx2sym.insert(target_idx, token)
+        self.sym2idx[token] = target_idx
+
+        # Shift following indices in sym2idx
+        for idx in range(target_idx + 1, len(self.idx2sym)):
+            current_sym = self.idx2sym[idx]
+            self.sym2idx[current_sym] = idx
+
+        # Delete token from added_tokens
+        old_index = self.added_tokens_encoder[token]
+        del self.added_tokens_decoder[old_index]
+        del self.added_tokens_encoder[token]
+
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
         assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
@@ -327,10 +355,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         else:
             return symbols
 
-    def prepare_for_tokenization(self, text, **kwargs):
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
         # add spaces before punctuation symbols as should be done in transfo-xl
-
-        if "add_space_before_punct_symbol" in kwargs and kwargs["add_space_before_punct_symbol"]:
+        add_space_before_punct_symbol = kwargs.pop("add_space_before_punct_symbol", False)
+        if add_space_before_punct_symbol:
             text = self.punctuation_with_space_around_pattern.sub(r" ", text)
         elif self.punction_without_space_before_pattern.search(text):
             # searches until the first occurence of a punctuation symbol without surrounding spaces
@@ -338,7 +366,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
             )
 
-        return text
+        return (text, kwargs)
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):

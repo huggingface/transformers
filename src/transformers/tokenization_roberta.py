@@ -18,11 +18,10 @@
 import logging
 from typing import List, Optional
 
-from tokenizers import AddedToken
 from tokenizers.processors import RobertaProcessing
 
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import AddedToken, PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -135,6 +134,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
+        add_prefix_space=False,
         **kwargs
     ):
         super().__init__(
@@ -148,8 +148,16 @@ class RobertaTokenizer(GPT2Tokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
+
+    @PreTrainedTokenizer.mask_token.setter
+    def mask_token(self, value):
+        if not isinstance(value, AddedToken):
+            value = AddedToken(value, lstrip=True)
+
+        self._mask_token = value
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -231,14 +239,11 @@ class RobertaTokenizer(GPT2Tokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def prepare_for_tokenization(self, text, add_special_tokens=False, **kwargs):
-        if "add_prefix_space" in kwargs:
-            add_prefix_space = kwargs["add_prefix_space"]
-        else:
-            add_prefix_space = add_special_tokens
-        if add_prefix_space and not text[0].isspace():
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if (is_pretokenized or add_prefix_space) and text:
             text = " " + text
-        return text
+        return (text, kwargs)
 
 
 class RobertaTokenizerFast(GPT2TokenizerFast):
@@ -300,7 +305,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=True,
+        add_prefix_space=False,
         trim_offsets=True,
         **kwargs
     ):
@@ -327,15 +332,14 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             trim_offsets=trim_offsets,
         )
 
-        self.backend_tokenizer.add_special_tokens([kwargs["mask_token"]])
+        self.sanitize_special_tokens()  # This will add the necessary special tokens to the vocabulary if needed.
 
     @PreTrainedTokenizer.mask_token.setter
     def mask_token(self, value):
         if not isinstance(value, AddedToken):
             value = AddedToken(value, lstrip=True)
 
-        self._mask_token = str(value)
-        self._maybe_update_backend([value])
+        self._mask_token = value
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

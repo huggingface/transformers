@@ -83,7 +83,8 @@ class DataProcessor:
     """Base class for data converters for sequence classification data sets."""
 
     def get_example_from_tensor_dict(self, tensor_dict):
-        """Gets an example from a dict with tensorflow tensors
+        """Gets an example from a dict with tensorflow tensors.
+
         Args:
             tensor_dict: Keys and values should match the corresponding Glue
                 tensorflow_dataset examples.
@@ -91,15 +92,15 @@ class DataProcessor:
         raise NotImplementedError()
 
     def get_train_examples(self, data_dir):
-        """Gets a collection of `InputExample`s for the train set."""
+        """Gets a collection of :class:`InputExample` for the train set."""
         raise NotImplementedError()
 
     def get_dev_examples(self, data_dir):
-        """Gets a collection of `InputExample`s for the dev set."""
+        """Gets a collection of :class:`InputExample` for the dev set."""
         raise NotImplementedError()
 
     def get_test_examples(self, data_dir):
-        """Gets a collection of `InputExample`s for the test set."""
+        """Gets a collection of :class:`InputExample` for the test set."""
         raise NotImplementedError()
 
     def get_labels(self):

@@ -28,6 +28,7 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
     "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
+    "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
 }
 
 
@@ -40,6 +41,7 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
+        extra_pos_embeddings=2,
         activation_function="gelu",
         vocab_size=50265,
         d_model=1024,
@@ -117,6 +119,9 @@ class BartConfig(PretrainedConfig):
         # Classifier stuff
         self.classif_dropout = classifier_dropout
 
+        # pos embedding offset
+        self.extra_pos_embeddings = self.pad_token_id + 1
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -132,3 +137,7 @@ class BartConfig(PretrainedConfig):
         if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
+
+
+class MBartConfig(BartConfig):
+    model_type = "mbart"

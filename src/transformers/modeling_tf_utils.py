@@ -84,6 +84,7 @@ def keras_serializable(cls):
         else:
             raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
         self._transformers_config = config
+        self._kwargs = kwargs
 
     cls.__init__ = wrapped_init
 
@@ -94,6 +95,7 @@ def keras_serializable(cls):
         def get_config(self):
             cfg = super(cls, self).get_config()
             cfg["transformers_config"] = self._transformers_config.to_dict()
+            cfg.update(self._kwargs)
             return cfg
 
         cls.get_config = get_config
@@ -102,6 +104,44 @@ def keras_serializable(cls):
     if hasattr(tf.keras.utils, "register_keras_serializable"):
         cls = tf.keras.utils.register_keras_serializable()(cls)
     return cls
+
+
+class TFQuestionAnsweringLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        start_loss = loss_fn(labels["start_position"], logits[0])
+        end_loss = loss_fn(labels["end_position"], logits[1])
+
+        return (start_loss + end_loss) / 2.0
+
+
+class TFTokenClassificationLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        active_loss = tf.reshape(labels, (-1,)) != -1
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+
+        return loss_fn(labels, reduced_logits)
+
+
+class TFSequenceClassificationLoss:
+    def compute_loss(self, labels, logits):
+        if shape_list(logits)[1] == 1:
+            loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+        else:
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+            )
+
+        return loss_fn(labels, logits)
+
+
+TFMultipleChoiceLoss = TFSequenceClassificationLoss
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
@@ -159,6 +199,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             raise NotImplementedError
 
+    def set_input_embeddings(self, value):
+        """
+        Set model's input embeddings
+
+        Args:
+            value (:obj:`tf.keras.layers.Layer`):
+                A module mapping vocabulary to hidden states.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            base_model.set_input_embeddings(value)
+        else:
+            raise NotImplementedError
+
     def get_output_embeddings(self):
         """
         Returns the model's output embeddings.
@@ -168,40 +222,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
-
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Variable from a provided token Embedding Module.
-            Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end
-
-        Args:
-            new_num_tokens: (`optional`) int
-                New number of tokens in the embedding matrix.
-                Increasing the size will add newly initialized vectors at the end
-                Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
-        Return: ``tf.Variable``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
-        """
-        # if new_num_tokens is None:
-        #     return old_embeddings
-
-        # old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
-        # if old_num_tokens == new_num_tokens:
-        #     return old_embeddings
-
-        # # Build new embeddings
-        # new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        # new_embeddings.to(old_embeddings.weight.device)
-
-        # # initialize all new embeddings (in particular added tokens)
-        # self._init_weights(new_embeddings)
-
-        # # Copy token embeddings from the previous weights
-        # num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        # new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
-
-        # return new_embeddings
 
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
@@ -216,7 +236,71 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        raise NotImplementedError
+        model_embeds = self._resize_token_embeddings(new_num_tokens)
+        if new_num_tokens is None:
+            return model_embeds
+
+        return model_embeds
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
+        base_model = getattr(self, self.base_model_prefix, self)
+        old_embeddings = base_model.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        base_model.set_input_embeddings(new_embeddings)
+        # Update base model and current model config
+        self.config.vocab_size = new_num_tokens
+        base_model.vocab_size = new_num_tokens
+        return base_model.get_input_embeddings()
+
+    def _get_word_embeddings(self, embeddings):
+        if hasattr(embeddings, "word_embeddings"):
+            # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+            return embeddings.word_embeddings
+        elif hasattr(embeddings, "weight"):
+            # TFSharedEmbeddings
+            return embeddings.weight
+        else:
+            raise ValueError("word embedding is not defined.")
+
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Variable from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end.
+
+        Args:
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``tf.Variable``
+            Pointer to the resized word Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        word_embeddings = self._get_word_embeddings(old_embeddings)
+        if new_num_tokens is None:
+            return word_embeddings
+        old_num_tokens, old_embedding_dim = word_embeddings.shape
+        if old_num_tokens == new_num_tokens:
+            return word_embeddings
+
+        # initialize new embeddings
+        # todo: initializer range is not always passed in config.
+        init_range = getattr(self.config, "initializer_range", 0.02)
+        new_embeddings = self.add_weight(
+            "weight",
+            shape=[new_num_tokens, old_embedding_dim],
+            initializer=get_initializer(init_range),
+            dtype=tf.float32,
+        )
+        init_weights = new_embeddings.numpy()
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        new_embeddings.assign(init_weights)
+
+        return new_embeddings
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
@@ -254,7 +338,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Parameters:
             pretrained_model_name_or_path: either:
-
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
@@ -266,11 +349,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             config: (`optional`) one of:
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
                     - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
-                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
-                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
-                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+                    - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                    - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                    - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             from_pt: (`optional`) boolean, default False:
                 Load the model weights from a PyTorch state_dict save file (see docstring of pretrained_model_name_or_path argument).
@@ -317,6 +400,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        local_files_only = kwargs.pop("local_files_only", False)
         use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
@@ -329,6 +413,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
                 **kwargs,
             )
         else:
@@ -366,8 +452,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     archive_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
                 )
                 if resolved_archive_file is None:
                     raise EnvironmentError
@@ -417,13 +504,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         unexpected_keys = list(hdf5_layer_names - model_layer_names)
         error_msgs = []
 
-        if len(missing_keys) > 0:
-            logger.info(
-                "Layers of {} not initialized from pretrained model: {}".format(model.__class__.__name__, missing_keys)
-            )
         if len(unexpected_keys) > 0:
-            logger.info(
-                "Layers from pretrained model not used in {}: {}".format(model.__class__.__name__, unexpected_keys)
+            logger.warning(
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+            )
+        else:
+            logger.warning(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+        if len(missing_keys) > 0:
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized: {missing_keys}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+        else:
+            logger.warning(
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"If your task is similar to the task the model of the ckeckpoint was trained on, "
+                f"you can already use {model.__class__.__name__} for predictions without further training."
             )
         if len(error_msgs) > 0:
             raise RuntimeError(
@@ -1105,8 +1207,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
                 _scores = tf.reshape(_scores, (batch_size, num_beams * vocab_size))
 
-                next_tokens = tf.random.categorical(
-                    _scores, dtype=tf.int32, num_samples=2 * num_beams
+                next_tokens = sample_without_replacement(
+                    _scores, num_samples=2 * num_beams
                 )  # (batch_size, 2 * num_beams)
                 # Compute next scores
                 next_scores = tf.gather(_scores, next_tokens, batch_dims=1)  # (batch_size, 2 * num_beams)
@@ -1176,9 +1278,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     if len(next_sent_beam) == num_beams:
                         break
 
-                # Check if were done so that we can save a pad step if all(done)
+                # Check if we are done so that we can save a pad step if all(done)
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    tf.reduce_max(next_scores[batch_idx]).numpy(), cur_len=cur_len
+                    tf.reduce_max(next_scores[batch_idx]).numpy(), cur_len
                 )
 
                 # update next beam content
@@ -1218,7 +1320,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
@@ -1466,7 +1568,7 @@ class BeamHypotheses(object):
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs, cur_len=None):
+    def is_done(self, best_sum_logprobs, cur_len):
         """
         If there are enough hypotheses and that none of the hypotheses being generated
         can become better than the worst one in the heap, then we are done with this sentence.
@@ -1477,8 +1579,6 @@ class BeamHypotheses(object):
         elif self.early_stopping:
             return True
         else:
-            if cur_len is None:
-                cur_len = self.max_length
             cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret
@@ -1530,6 +1630,16 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
             "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
         )
         super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
 
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.
@@ -1686,6 +1796,17 @@ def shape_list(x):
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
+def sample_without_replacement(logits, num_samples):
+    """
+        categorical sampling witouth replacement is currently not implemented
+        the gumbel-max trick will do for now
+        see https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    """
+    z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
+    _, indices = tf.nn.top_k(logits + z, num_samples)
+    return indices
+
+
 def get_initializer(initializer_range=0.02):
     """Creates a `tf.initializers.truncated_normal` with the given range.
     Args:
@@ -1694,3 +1815,24 @@ def get_initializer(initializer_range=0.02):
         TruncatedNormal initializer with stddev = `initializer_range`.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
+
+
+def cast_bool_to_primitive(bool_variable, default_tensor_to_true=False):
+    """Function arguments can be inserted as boolean tensor
+        and bool variables to cope with keras serialization
+        we need to cast `output_attentions` to correct bool
+        if it is a tensor
+
+    Args:
+        default_tensor_to_true: bool, if tensor should default to True
+        in case tensor has no numpy attribute
+    """
+    # if bool variable is tensor and has numpy value
+    if tf.is_tensor(bool_variable):
+        if hasattr(bool_variable, "numpy"):
+            return bool(bool_variable.numpy())
+        elif default_tensor_to_true:
+            return True
+
+    # else variable is bool
+    return bool_variable

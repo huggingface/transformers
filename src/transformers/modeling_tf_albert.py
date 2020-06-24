@@ -23,7 +23,17 @@ import tensorflow as tf
 from .configuration_albert import AlbertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_utils import (
+    TFMultipleChoiceLoss,
+    TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationLoss,
+    TFTokenClassificationLoss,
+    cast_bool_to_primitive,
+    get_initializer,
+    keras_serializable,
+    shape_list,
+)
 from .tokenization_utils import BatchEncoding
 
 
@@ -50,6 +60,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
+        self.vocab_size = config.vocab_size
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             config.embedding_size,
@@ -149,7 +160,6 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
-        self.output_attentions = config.output_attentions
 
         self.num_attention_heads = config.num_attention_heads
         assert config.hidden_size % config.num_attention_heads == 0
@@ -173,7 +183,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, attention_mask, head_mask, output_attentions = inputs
 
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
@@ -213,7 +223,9 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
 
-        outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if cast_bool_to_primitive(output_attentions) is True else (context_layer,)
+        )
         return outputs
 
 
@@ -250,7 +262,7 @@ class TFAlbertAttention(TFBertSelfAttention):
         raise NotImplementedError
 
     def call(self, inputs, training=False):
-        input_tensor, attention_mask, head_mask = inputs
+        input_tensor, attention_mask, head_mask, output_attentions = inputs
 
         batch_size = shape_list(input_tensor)[0]
         mixed_query_layer = self.query(input_tensor)
@@ -290,7 +302,9 @@ class TFAlbertAttention(TFBertSelfAttention):
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
 
-        self_outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
+        self_outputs = (
+            (context_layer, attention_probs) if cast_bool_to_primitive(output_attentions) is True else (context_layer,)
+        )
 
         hidden_states = self_outputs[0]
 
@@ -326,9 +340,11 @@ class TFAlbertLayer(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, attention_mask, head_mask, output_attentions = inputs
 
-        attention_outputs = self.attention([hidden_states, attention_mask, head_mask], training=training)
+        attention_outputs = self.attention(
+            [hidden_states, attention_mask, head_mask, output_attentions], training=training
+        )
         ffn_output = self.ffn(attention_outputs[0])
         ffn_output = self.activation(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
@@ -345,32 +361,32 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.albert_layers = [
             TFAlbertLayer(config, name="albert_layers_._{}".format(i)) for i in range(config.inner_group_num)
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
 
         layer_hidden_states = ()
         layer_attentions = ()
 
         for layer_index, albert_layer in enumerate(self.albert_layers):
-            layer_output = albert_layer([hidden_states, attention_mask, head_mask[layer_index]], training=training)
+            layer_output = albert_layer(
+                [hidden_states, attention_mask, head_mask[layer_index], output_attentions], training=training
+            )
             hidden_states = layer_output[0]
 
-            if self.output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 layer_attentions = layer_attentions + (layer_output[1],)
 
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 layer_hidden_states = layer_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (layer_hidden_states,)
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (layer_attentions,)
         # last-layer hidden state, (layer hidden states), (layer attentions)
         return outputs
@@ -381,8 +397,6 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -394,12 +408,12 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
 
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_attentions = ()
 
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = (hidden_states,)
 
         for i in range(self.config.num_hidden_layers):
@@ -414,21 +428,23 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
                     hidden_states,
                     attention_mask,
                     head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
+                    output_attentions,
+                    output_hidden_states,
                 ],
                 training=training,
             )
             hidden_states = layer_group_output[0]
 
-            if self.output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 all_attentions = all_attentions + layer_group_output[-1]
 
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
 
         # last-layer hidden state, (all hidden states), (all attentions)
@@ -485,6 +501,8 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
@@ -497,6 +515,10 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
     def get_input_embeddings(self):
         return self.embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -516,6 +538,8 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -525,7 +549,9 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            assert len(inputs) <= 8, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -533,9 +559,14 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             position_ids = inputs.get("position_ids", position_ids)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -579,7 +610,10 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
-        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training)
+        encoder_outputs = self.encoder(
+            [embedding_output, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            training=training,
+        )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output[:, 0])
@@ -664,6 +698,8 @@ ALBERT_INPUTS_DOCSTRING = r"""
         training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -679,38 +715,39 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
-        Returns:
-            :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
-            last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-                Sequence of hidden-states at the output of the last layer of the model.
-            pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
-                Last layer hidden-state of the first token of the sequence (classification token)
-                further processed by a Linear layer and a Tanh activation function. The Linear
-                layer weights are trained from the next sentence prediction (classification)
-                objective during Albert pretraining. This output is usually *not* a good summary
-                of the semantic content of the input, you're often better with averaging or pooling
-                the sequence of hidden-states for the whole input sequence.
-            hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
-                tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
+        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification token)
+            further processed by a Linear layer and a Tanh activation function. The Linear
+            layer weights are trained from the next sentence prediction (classification)
+            objective during Albert pretraining. This output is usually *not* a good summary
+            of the semantic content of the input, you're often better with averaging or pooling
+            the sequence of hidden-states for the whole input sequence.
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
-                tuple of :obj:`tf.Tensor` (one for each layer) of shape
-                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
-        Examples::
+    Examples::
 
-            import tensorflow as tf
-            from transformers import AlbertTokenizer, TFAlbertModel
+        import tensorflow as tf
+        from transformers import AlbertTokenizer, TFAlbertModel
 
-            tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            model = TFAlbertModel.from_pretrained('albert-base-v2')
-            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-            outputs = model(input_ids)
-            last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        model = TFAlbertModel.from_pretrained('albert-base-v2')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
         outputs = self.albert(inputs, **kwargs)
@@ -743,14 +780,18 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         sop_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`):
             Prediction scores of the sentence order prediction (classification) head (scores of True/False continuation before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
     Examples::
         import tensorflow as tf
         from transformers import AlbertTokenizer, TFAlbertForPreTraining
@@ -802,16 +843,17 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -841,7 +883,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
+class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -852,23 +894,42 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    def call(self, inputs, **kwargs):
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
+
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`)
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -878,27 +939,133 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = TFAlbertForSequenceClassification.from_pretrained('albert-base-v2')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        logits = outputs[0]
+        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
 
         """
-        outputs = self.albert(inputs, **kwargs)
+
+        outputs = self.albert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
 
         pooled_output = outputs[1]
 
-        pooled_output = self.dropout(pooled_output, training=kwargs.get("training", False))
+        pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        return outputs  # logits, (hidden_states), (attentions)
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """Albert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    ALBERT_START_DOCSTRING,
+)
+class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
+
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        training=False,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
+            Classification scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import AlbertTokenizer, TFAlbertForTokenClassification
+
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        model = TFAlbertForTokenClassification.from_pretrained('albert-base-v2')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
+
+        """
+        outputs = self.albert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output, training=training)
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
     """Albert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
+class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -908,25 +1075,51 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    def call(self, inputs, **kwargs):
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+        cls_index=None,
+        p_mask=None,
+        is_impossible=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        training=False,
+    ):
         r"""
+        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -938,14 +1131,25 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
 
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = TFAlbertForQuestionAnswering.from_pretrained('albert-base-v2')
-        input_ids = tokenizer.encode("Who was Jim Henson?", "Jim Henson was a nice puppet")
-        start_scores, end_scores = model(tf.constant(input_ids)[None, :]) # Batch size 1
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
+        start_scores, end_scores = model(input_dict)
 
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
         answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
 
         """
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
 
         sequence_output = outputs[0]
 
@@ -956,7 +1160,13 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
 
         outputs = (start_logits, end_logits,) + outputs[2:]
 
-        return outputs  # start_logits, end_logits, (hidden_states), (attentions)
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.compute_loss(labels, outputs[:2])
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -964,7 +1174,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
+class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -992,25 +1202,34 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the multiple choice classification loss.
+            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+            of the input tensors. (see `input_ids` above)
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -1019,12 +1238,13 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
 
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = TFAlbertForMultipleChoice.from_pretrained('albert-base-v2')
+        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
 
-        example1 = ["This is a context", "Is it a context? Yes"]
-        example2 = ["This is a context", "Is it a context? No"]
-        encoding = tokenizer.batch_encode_plus([example1, example2], return_tensors='tf', truncation_strategy="only_first", pad_to_max_length=True, max_length=128)
-        outputs = model(encoding["input_ids"][None, :])
-        logits = outputs[0]
+        input_ids = tokenizer(choices, add_special_tokens=True, return_tensors='tf', truncation=True, padding=True)[None, :] # Batch size 1, 2 choices
+        labels = tf.reshape(tf.constant(1), (-1, 1))
+        outputs = model(input_ids, labels=labels)
+
+        loss, classification_scores = outputs[:2]
 
         """
         if isinstance(inputs, (tuple, list)):
@@ -1034,18 +1254,17 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, dict):
-            print("isdict(1)")
             input_ids = inputs.get("input_ids")
-            print(input_ids)
-
             attention_mask = inputs.get("attention_mask", attention_mask)
             token_type_ids = inputs.get("token_type_ids", token_type_ids)
             position_ids = inputs.get("position_ids", position_ids)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -1068,6 +1287,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
             flat_position_ids,
             head_mask,
             inputs_embeds,
+            output_attentions,
+            output_hidden_states,
         ]
 
         outputs = self.albert(flat_inputs, training=training)
@@ -1080,4 +1301,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
 
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        return outputs  # reshaped_logits, (hidden_states), (attentions)
+        if labels is not None:
+            loss = self.compute_loss(labels, reshaped_logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)

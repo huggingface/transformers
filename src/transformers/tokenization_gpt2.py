@@ -23,7 +23,9 @@ from functools import lru_cache
 import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import BatchEncoding
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -144,6 +146,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
+        add_prefix_space=False,
         **kwargs
     ):
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
@@ -159,6 +162,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {}
+        self.add_prefix_space = add_prefix_space
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
@@ -271,10 +275,11 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    def prepare_for_tokenization(self, text, **kwargs):
-        if "add_prefix_space" in kwargs and kwargs["add_prefix_space"]:
-            return " " + text
-        return text
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if is_pretokenized or add_prefix_space:
+            text = " " + text
+        return (text, kwargs)
 
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
@@ -346,3 +351,24 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             **kwargs,
         )
+        self.add_prefix_space = add_prefix_space
+
+    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+
+        is_pretokenized = kwargs.get("is_pretokenized", False)
+        assert self.add_prefix_space or not is_pretokenized, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._batch_encode_plus(*args, **kwargs)
+
+    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+
+        is_pretokenized = kwargs.get("is_pretokenized", False)
+        assert self.add_prefix_space or not is_pretokenized, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._encode_plus(*args, **kwargs)

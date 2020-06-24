@@ -23,7 +23,8 @@ from typing import List, Optional
 
 from tokenizers import BertWordPieceTokenizer
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -130,8 +131,8 @@ class BertTokenizer(PreTrainedTokenizer):
             Whether to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to do basic tokenization before WordPiece.
-        never_split (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            List of tokens which will never be split during tokenization. Only has an effect when
+        never_split (:obj:`Iterable`, `optional`, defaults to :obj:`None`):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
         unk_token (:obj:`string`, `optional`, defaults to "[UNK]"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -208,8 +209,12 @@ class BertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-                for sub_token in self.wordpiece_tokenizer.tokenize(token):
-                    split_tokens.append(sub_token)
+
+                # If the token is part of the never_split set
+                if token in self.basic_tokenizer.never_split:
+                    split_tokens.append(token)
+                else:
+                    split_tokens += self.wordpiece_tokenizer.tokenize(token)
         else:
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
@@ -363,7 +368,7 @@ class BasicTokenizer(object):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
-        self.never_split = never_split
+        self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
 
     def tokenize(self, text, never_split=None):
@@ -376,8 +381,9 @@ class BasicTokenizer(object):
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
                 List of token not to split.
         """
-        never_split = self.never_split + (never_split if never_split is not None else [])
-        text = self._clean_text(text)
+        # union() returns a new set by concatenating the two sets.
+        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
         # matter since the English models were not trained on any Chinese data
@@ -539,45 +545,6 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
-
-
-def _is_whitespace(char):
-    """Checks whether `chars` is a whitespace character."""
-    # \t, \n, and \r are technically contorl characters but we treat them
-    # as whitespace since they are generally considered as such.
-    if char == " " or char == "\t" or char == "\n" or char == "\r":
-        return True
-    cat = unicodedata.category(char)
-    if cat == "Zs":
-        return True
-    return False
-
-
-def _is_control(char):
-    """Checks whether `chars` is a control character."""
-    # These are technically control characters but we count them as whitespace
-    # characters.
-    if char == "\t" or char == "\n" or char == "\r":
-        return False
-    cat = unicodedata.category(char)
-    if cat.startswith("C"):
-        return True
-    return False
-
-
-def _is_punctuation(char):
-    """Checks whether `chars` is a punctuation character."""
-    cp = ord(char)
-    # We treat all non-letter/number ASCII as punctuation.
-    # Characters such as "^", "$", and "`" are not in the Unicode
-    # Punctuation class but we treat them as punctuation anyways, for
-    # consistency.
-    if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
-        return True
-    cat = unicodedata.category(char)
-    if cat.startswith("P"):
-        return True
-    return False
 
 
 class BertTokenizerFast(PreTrainedTokenizerFast):
