@@ -5,19 +5,30 @@ function deploy_doc(){
 	git checkout $1
 	if [ ! -z "$2" ]
 	then
-		if [ "$2" != "master" ] && ssh -oStrictHostKeyChecking=no $doc "[ -d $dir/$2 ]"; then
+		if [ "$2" != "master" ]; then
+		    echo "Pushing master"
+			make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir/$2/
+			cp -r _build/html/_static .
+		elif ssh -oStrictHostKeyChecking=no $doc "[ -d $dir/$2 ]"; then
 			echo "Directory" $2 "already exists"
 		else
 			echo "Pushing version" $2
-			make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html $doc:$dir/$2
+			make clean && make html
+			rm -rf _build/html/_static
+			cp -r _static _build/html
+			scp -r -oStrictHostKeyChecking=no _build/html $doc:$dir/$2
 		fi
 	else
-		echo "Pushing master"
-		make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir
+		echo "Pushing stable"
+		make clean && make html
+		rm -rf _build/html/_static
+		cp -r _static _build/html
+		scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir
 	fi
 }
 
 # You can find the commit for each tag on https://github.com/huggingface/transformers/tags
+deploy_doc "master" master
 deploy_doc "b33a385" v1.0.0
 deploy_doc "fe02e45" v1.1.0
 deploy_doc "89fd345" v1.2.0
@@ -35,7 +46,3 @@ deploy_doc "e7cfc1a" v2.9.0
 deploy_doc "7cb203f" v2.9.1
 deploy_doc "10d7239" v2.10.0 
 deploy_doc "b42586e" #v2.11.0 Latest stable release
-
-# Master needs to be last and we copy the _static from there to use it for all docs
-deploy_doc "master" master
-scp -r -oStrictHostKeyChecking=no _build/html/_static/* $doc:$dir/_static/
