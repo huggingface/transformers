@@ -299,7 +299,10 @@ class TokenizerTesterMixin:
                 all_size = len(tokenizer)
 
                 self.assertNotEqual(vocab_size, 0)
-                self.assertEqual(vocab_size, all_size)
+
+                # We usually have added tokens from the start in tests because our vocab fixtures are
+                # smaller than the original vocabs - let's not assert this
+                # self.assertEqual(vocab_size, all_size)
 
                 new_toks = ["aaaaa bbbbbb", "cccccccccdddddddd"]
                 added_toks = tokenizer.add_tokens(new_toks)
