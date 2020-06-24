@@ -571,18 +571,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Args:
             batch_ids_pairs: list of tokenized input ids or input ids pairs
         """
-        # if padding_strategy == PaddingStrategy.LONGEST:
-        #     # For simplicity we keep the single sentnce path here
-        #     def total_sequence_length(input_pairs):
-        #         first_ids, second_ids = input_pairs
-        #         return len(first_ids) + (
-        #             self.num_special_tokens_to_add()
-        #             if second_ids is None
-        #             else (len(second_ids) + self.num_special_tokens_to_add(pair=True))
-        #         )
-
-        #     max_length = max([total_sequence_length(input_pairs) for input_pairs in batch_ids_pairs])
-        #     padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for first_ids, second_ids in batch_ids_pairs:
@@ -771,15 +759,29 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 else:
                     pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
-            # assert len(ids) > num_tokens_to_remove
-            window_len = min(len(ids), stride + num_tokens_to_remove)
-            overflowing_tokens = ids[-window_len:]
-            ids = ids[:-num_tokens_to_remove]
+            if len(ids) > num_tokens_to_remove:
+                window_len = min(len(ids), stride + num_tokens_to_remove)
+                overflowing_tokens = ids[-window_len:]
+                ids = ids[:-num_tokens_to_remove]
+            else:
+                logger.error(
+                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"but the first sequence has a length {len(ids)}. "
+                    f"Please select another truncation strategy than {truncation_strategy}, "
+                    f"for instance 'longest_first' or 'only_second'."
+                )
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
-            # assert pair_ids is not None and len(pair_ids) > num_tokens_to_remove
-            window_len = min(len(pair_ids), stride + num_tokens_to_remove)
-            overflowing_tokens = pair_ids[-window_len:]
-            pair_ids = pair_ids[:-num_tokens_to_remove]
+            if len(pair_ids) > num_tokens_to_remove:
+                window_len = min(len(pair_ids), stride + num_tokens_to_remove)
+                overflowing_tokens = pair_ids[-window_len:]
+                pair_ids = pair_ids[:-num_tokens_to_remove]
+            else:
+                logger.error(
+                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"but the second sequence has a length {len(pair_ids)}. "
+                    f"Please select another truncation strategy than {truncation_strategy}, "
+                    f"for instance 'longest_first' or 'only_first'."
+                )
 
         return (ids, pair_ids, overflowing_tokens)
 
