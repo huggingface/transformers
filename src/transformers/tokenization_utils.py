@@ -20,7 +20,7 @@ import itertools
 import logging
 import re
 import unicodedata
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
@@ -155,10 +155,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Added tokens
-        self.added_tokens_encoder = {}
-        self.unique_added_tokens_encoder = []
-        self.added_tokens_decoder = {}
+
+        # Added tokens - We store this for both slow and fast tokenizers
+        # until the serialization of Fast tokenizers is updated
+        self.added_tokens_encoder: Dict[str, int] = {}
+        self.added_tokens_decoder: Dict[int, str] = {}
+        self.unique_no_split_tokens: List[str] = []
 
     @property
     def is_fast(self) -> bool:
@@ -173,11 +175,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
         raise NotImplementedError()
 
+    def get_added_vocab(self) -> Dict[str, int]:
+        return self.added_tokens_encoder
+
     def __len__(self):
         """ Size of the full vocabulary with the added tokens """
         return self.vocab_size + len(self.added_tokens_encoder)
 
-    def add_tokens(self, new_tokens: Union[str, List[str]], special_token=False) -> int:
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens=False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -199,16 +204,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             print('We have added', num_added_toks, 'tokens')
             model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         """
-        if not new_tokens:
-            return 0
-
-        if not isinstance(new_tokens, list):
-            new_tokens = [new_tokens]
+        new_tokens = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []
         for token in new_tokens:
-            assert isinstance(token, (str, AddedToken))
-            if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
+            assert isinstance(token, str)
+            if not special_tokens and self.init_kwargs.get("do_lower_case", False):
                 token = token.lower()
             if (
                 token != self.unk_token
@@ -222,10 +223,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
-        self.unique_added_tokens_encoder = list(
-            set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
-        )
         self.added_tokens_decoder.update(added_tok_decoder)
+
+        # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
+        if special_tokens:
+            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(new_tokens)))
+        else:
+            # Or on the newly added tokens
+            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
 
         return len(tokens_to_add)
 
@@ -340,7 +345,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             for tok in tok_list:
                 tokenized_text = []
                 for sub_text in text_list:
-                    if sub_text not in self.unique_added_tokens_encoder:
+                    if sub_text not in self.unique_no_split_tokens:
                         tokenized_text += split_on_token(tok, sub_text)
                     else:
                         tokenized_text += [sub_text]
@@ -349,14 +354,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return list(
                 itertools.chain.from_iterable(
                     (
-                        self._tokenize(token) if token not in self.unique_added_tokens_encoder else [token]
+                        self._tokenize(token) if token not in self.unique_no_split_tokens else [token]
                         for token in tokenized_text
                     )
                 )
             )
 
-        added_tokens = self.unique_added_tokens_encoder
-        tokenized_text = split_on_tokens(added_tokens, text)
+        no_split_token = self.unique_no_split_tokens
+        tokenized_text = split_on_tokens(no_split_token, text)
         return tokenized_text
 
     def _tokenize(self, text, **kwargs):
