@@ -9,7 +9,7 @@ This is roberta-large model finetuned on SQuADv2 dataset for question answering 
 
 ## Model details
 This model is simply an Sequenceclassification model with two inputs (context and question) in a list.
-The result is either [1] for answerable or [0] if it is now answerable.
+The result is either [1] for answerable or [0] if it is not answerable.
 It was trained over 4 epochs on squadv2 dataset and can be used to filter out which context is good to give into the QA model to avoid bad answers.
 
 ## Model training
