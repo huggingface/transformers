@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import torch
 from torch.utils.data import DataLoader
 
@@ -14,7 +15,7 @@ from transformers import BartTokenizer, MarianTokenizer, MBartTokenizer
 
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
-from .run_eval import generate_summaries, run_generate
+from .run_eval import generate_summaries_or_translations, run_generate
 from .utils import SummarizationDataset, lmap, pickle_load
 
 
@@ -83,6 +84,7 @@ def _dump_articles(path: Path, articles: list):
 ARTICLES = [" Sam ate lunch today", "Sams lunch ingredients"]
 SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 T5_TINY = "patrickvonplaten/t5-tiny-random"
+BART_TINY = "sshleifer/bart-tiny-random"
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
 logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
@@ -129,7 +131,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertEqual(len(new_transformer_ckpts), 1)
         examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
         out_path = tempfile.mktemp()
-        generate_summaries(examples, out_path, str(new_transformer_ckpts[0].parent))
+        generate_summaries_or_translations(examples, out_path, str(new_transformer_ckpts[0].parent))
         self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
@@ -185,18 +187,22 @@ class TestSummarizationDistiller(unittest.TestCase):
         return model
 
 
-class TestFinetune(unittest.TestCase):
-    def test_bart_finetune(self):
-        tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
-        output_file_name = Path(tempfile.gettempdir()) / "utest_output_bart_sum.hypo"
-        articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
-        _dump_articles(tmp, articles)
-        testargs = ["run_eval.py", str(tmp), str(output_file_name), "sshleifer/bart-tiny-random"]
-        with patch.object(sys, "argv", testargs):
-            run_generate()
-            self.assertTrue(Path(output_file_name).exists())
-            os.remove(Path(output_file_name))
+@pytest.mark.parametrize(["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY)])
+def test_run_eval_bart(model):
+    tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
 
+    output_file_name = Path(tempfile.gettempdir()) / "utest_output_bart_sum.hypo"
+    assert not output_file_name.exists()
+    articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
+    _dump_articles(tmp, articles)
+    testargs = ["run_eval.py", str(tmp), str(output_file_name), model]
+    with patch.object(sys, "argv", testargs):
+        run_generate()
+        assert Path(output_file_name).exists()
+        os.remove(Path(output_file_name))
+
+
+class TestFinetune(unittest.TestCase):
     def test_t5_finetune(self):
         args_d: dict = CHEAP_ARGS.copy()
 
@@ -205,7 +211,7 @@ class TestFinetune(unittest.TestCase):
         args_d.update(
             data_dir=tmp_dir,
             model_name_or_path=T5_TINY,
-            tokenizer_name=None,  # T5_TINY,
+            tokenizer_name=None,
             train_batch_size=2,
             eval_batch_size=2,
             output_dir=output_dir,
@@ -215,6 +221,7 @@ class TestFinetune(unittest.TestCase):
         args = argparse.Namespace(**args_d)
         main(args)
 
+    @unittest.skip("Multilingual BART finetuning is under construction")
     def test_mbart_finetune(self):
         args_d: dict = CHEAP_ARGS.copy()
 
@@ -278,7 +285,6 @@ class TestDataset(unittest.TestCase):
             self.assertGreater(max_len_target, trunc_target)  # Truncated
 
     def test_marian_dataset(self):
-
         tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-de-en")
         tmp_dir = make_test_data_dir()
         max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
