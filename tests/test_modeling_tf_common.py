@@ -126,6 +126,7 @@ class TFModelTesterMixin:
             if "T5" in main_layer_class.__name__:
                 # Take the same values than in TFT5ModelTester for this shared layer
                 shared = TFSharedEmbeddings(99, 32, name="shared")
+                config.use_cache = False
                 main_layer = main_layer_class(config, embed_tokens=shared)
             else:
                 main_layer = main_layer_class(config)
