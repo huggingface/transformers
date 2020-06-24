@@ -5,7 +5,7 @@ function deploy_doc(){
 	git checkout $1
 	if [ ! -z "$2" ]
 	then
-		if [ -d "$dir/$2" ]; then
+		if [ "$2" != "master" ] && ssh -oStrictHostKeyChecking=no $doc "[ -d $dir/$2 ]"; then
 			echo "Directory" $2 "already exists"
 		else
 			echo "Pushing version" $2
