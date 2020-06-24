@@ -18,5 +18,6 @@ python finetune.py \
     --train_batch_size=$BS --eval_batch_size=$BS --gradient_accumulation_steps=$GAS \
     --data_dir $CNN_DIR \
     --model_name_or_path sshleifer/student_cnn_12_6 \
+    --tokenizer_name facebook/bart-large \
     $@
 
