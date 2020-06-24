@@ -1300,11 +1300,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     f"Should have index {len(tokenizer)} but has index {index} in saved vocabulary."
                 )
                 tokenizer.add_tokens(token, special_tokens=bool(token in special_tokens))
-            # added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
-            # tokenizer.added_tokens_encoder.update(added_tok_encoder)
-            # tokenizer.added_tokens_decoder.update(added_tok_decoder)
-            # union = set(tokenizer.unique_no_split_tokens).union(tokenizer.added_tokens_encoder.keys())
-            # tokenizer.unique_no_split_tokens = list(union)
 
         # Check all our special tokens are registrered as "no split" token (we don't cut them) and are in the vocab
         added_tokens = tokenizer.sanitize_special_tokens()
