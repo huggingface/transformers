@@ -13,11 +13,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model."""
 
+import inspect
 import logging
 import os
-from typing import Callable, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -53,6 +53,20 @@ except ImportError:
 
         def forward(self, input):
             return input
+
+
+def find_pruneable_heads_and_indices(
+    heads: List, n_heads: int, head_size: int, already_pruned_heads: set
+) -> Tuple[set, "torch.LongTensor"]:
+    mask = torch.ones(n_heads, head_size)
+    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
+    for head in heads:
+        # Compute how many pruned heads are before the head and move the index accordingly
+        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
+        mask[head] = 0
+    mask = mask.view(-1).contiguous().eq(1)
+    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
+    return heads, index
 
 
 class ModuleUtilsMixin:
@@ -110,11 +124,39 @@ class ModuleUtilsMixin:
 
     @property
     def device(self) -> device:
-        return next(self.parameters()).device
+        """
+        Get torch.device from module, assuming that the whole module has one device.
+        """
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].device
 
     @property
     def dtype(self) -> dtype:
-        return next(self.parameters()).dtype
+        """
+        Get torch.dtype from module, assuming that the whole module has one dtype.
+        """
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].dtype
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """type: torch.Tensor -> torch.Tensor"""
@@ -128,10 +170,21 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+
+        if self.dtype == torch.float16:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
+        elif self.dtype == torch.float32:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+        else:
+            raise ValueError(
+                "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
+                    self.dtype
+                )
+            )
+
         return encoder_extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: tuple, device: device):
+    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple, device: device) -> Tensor:
         """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
 
         Arguments:
@@ -175,7 +228,7 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask, num_hidden_layers):
+    def get_head_mask(self, head_mask: Tensor, num_hidden_layers: int, is_attention_chunked: bool = False) -> Tensor:
         """
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -189,6 +242,8 @@ class ModuleUtilsMixin:
         """
         if head_mask is not None:
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
         else:
             head_mask = [None] * num_hidden_layers
 
@@ -214,7 +269,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         Class attributes (overridden by derived classes):
             - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-            - ``pretrained_model_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained weights as values.
             - ``load_tf_weights``: a python ``method`` for loading a TensorFlow checkpoint in a PyTorch model, taking as arguments:
 
                 - ``model``: an instance of the relevant subclass of :class:`~transformers.PreTrainedModel`,
@@ -224,7 +278,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
     """
     config_class = None
-    pretrained_model_archive_map = {}
     base_model_prefix = ""
 
     @property
@@ -267,7 +320,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         else:
             raise NotImplementedError
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Module):
         """
         Set model's input embeddings
 
@@ -302,7 +355,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
-        """ Tie or clone module weights depending of weither we are using TorchScript or not
+        """ Tie or clone module weights depending of whether we are using TorchScript or not
         """
         if self.config.torchscript:
             output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
@@ -319,7 +372,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens=None):
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
 
@@ -352,18 +405,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
 
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+    def _get_resized_embeddings(
+        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
+    ) -> torch.nn.Embedding:
         """ Build a resized Embedding Module from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
             Reducing the size will remove vectors from the end
 
         Args:
+            old_embeddings: ``torch.nn.Embedding``
+                Old embeddings to be resized.
             new_num_tokens: (`optional`) int
                 New number of tokens in the embedding matrix.
                 Increasing the size will add newly initialized vectors at the end
                 Reducing the size will remove vectors from the end
                 If not provided or None: return the provided token Embedding Module.
-        Return: ``torch.nn.Embeddings``
+        Return: ``torch.nn.Embedding``
             Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
         """
         if new_num_tokens is None:
@@ -398,7 +455,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # Tie weights if needed
         self.tie_weights()
 
-    def prune_heads(self, heads_to_prune):
+    def prune_heads(self, heads_to_prune: Dict):
         """ Prunes heads of the base model.
 
             Arguments:
@@ -473,6 +530,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             config: (`optional`) one of:
                 - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
                 - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
+
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
                     - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
                     - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
@@ -527,6 +585,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -547,9 +606,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
-            if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            elif os.path.isdir(pretrained_model_name_or_path):
+            if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
                     # Load from a TF 1.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
@@ -577,11 +634,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    pretrained_model_name_or_path,
+                    filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    use_cdn=use_cdn,
                 )
 
-            # redirect to the cache, if necessary
             try:
+                # Load from URL or cache if already cached
                 resolved_archive_file = cached_path(
                     archive_file,
                     cache_dir=cache_dir,
@@ -590,20 +649,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
+                if resolved_archive_file is None:
+                    raise EnvironmentError
             except EnvironmentError:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    msg = "Couldn't reach server at '{}' to download pretrained weights.".format(archive_file)
-                else:
-                    msg = (
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url to model weight files named one of {} but "
-                        "couldn't find any such file at this path or url.".format(
-                            pretrained_model_name_or_path,
-                            ", ".join(cls.pretrained_model_archive_map.keys()),
-                            archive_file,
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME],
-                        )
-                    )
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                )
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
@@ -697,17 +750,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
                 missing_keys.extend(head_model_state_dict_without_base_prefix - base_model_state_dict)
 
-            if len(missing_keys) > 0:
-                logger.info(
-                    "Weights of {} not initialized from pretrained model: {}".format(
-                        model.__class__.__name__, missing_keys
-                    )
-                )
             if len(unexpected_keys) > 0:
+                logger.warning(
+                    f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                )
+            else:
+                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+            if len(missing_keys) > 0:
+                logger.warning(
+                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                    f"and are newly initialized: {missing_keys}\n"
+                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                )
+            else:
                 logger.info(
-                    "Weights from pretrained model not used in {}: {}".format(
-                        model.__class__.__name__, unexpected_keys
-                    )
+                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                    f"If your task is similar to the task the model of the ckeckpoint was trained on, "
+                    f"you can already use {model.__class__.__name__} for predictions without further training."
                 )
             if len(error_msgs) > 0:
                 raise RuntimeError(
@@ -732,15 +796,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             import torch_xla.core.xla_model as xm
 
             model = xm.send_cpu_data_to_device(model, xm.xla_device())
-            model = model.to(xm.xla_device())
+            model.to(xm.xla_device())
 
         return model
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
 
-    def prepare_scores_for_generation(self, scores, **kwargs):
-        return scores
+    def adjust_logits_during_generation(self, logits, **kwargs):
+        return logits
 
     def _use_cache(self, outputs, use_cache):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
@@ -760,30 +824,74 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 else:
                     lprobs[i, previous_token] /= repetition_penalty
 
+    def postprocess_next_token_scores(
+        self,
+        scores,
+        input_ids,
+        no_repeat_ngram_size,
+        bad_words_ids,
+        cur_len,
+        min_length,
+        max_length,
+        eos_token_id,
+        repetition_penalty,
+        batch_size,
+        num_beams,
+    ):
+        # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+        if repetition_penalty != 1.0:
+            self.enforce_repetition_penalty_(
+                scores, batch_size, num_beams, input_ids, repetition_penalty,
+            )
+
+        # set eos token prob to zero if min_length is not reached
+        if eos_token_id is not None and cur_len < min_length:
+            scores[:, eos_token_id] = -float("inf")
+
+        if no_repeat_ngram_size > 0:
+            # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+            num_batch_hypotheses = batch_size * num_beams
+            # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+            banned_batch_tokens = calc_banned_ngram_tokens(
+                input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
+            )
+            for i, banned_tokens in enumerate(banned_batch_tokens):
+                scores[i, banned_tokens] = -float("inf")
+
+        if bad_words_ids is not None:
+            # calculate a list of banned tokens according to bad words
+            banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
+
+            for i, banned_tokens in enumerate(banned_tokens):
+                scores[i, banned_tokens] = -float("inf")
+
+        return scores
+
     @torch.no_grad()
     def generate(
         self,
-        input_ids=None,
-        max_length=None,
-        min_length=None,
-        do_sample=None,
-        early_stopping=None,
-        num_beams=None,
-        temperature=None,
-        top_k=None,
-        top_p=None,
-        repetition_penalty=None,
-        bad_words_ids=None,
-        bos_token_id=None,
-        pad_token_id=None,
-        eos_token_id=None,
-        length_penalty=None,
-        no_repeat_ngram_size=None,
-        num_return_sequences=None,
-        attention_mask=None,
-        decoder_start_token_id=None,
-        use_cache=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        max_length: Optional[int] = None,
+        min_length: Optional[int] = None,
+        do_sample: Optional[bool] = None,
+        early_stopping: Optional[bool] = None,
+        num_beams: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        repetition_penalty: Optional[float] = None,
+        bad_words_ids: Optional[Iterable[int]] = None,
+        bos_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        length_penalty: Optional[float] = None,
+        no_repeat_ngram_size: Optional[int] = None,
+        num_return_sequences: Optional[int] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_start_token_id: Optional[int] = None,
+        use_cache: Optional[bool] = None,
+        **model_specific_kwargs
+    ) -> torch.LongTensor:
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
         Adapted in part from `Facebook's XLM beam search code`_.
@@ -851,7 +959,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
                 Defaults to `None`.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+                `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
                 If an encoder-decoder model starts decoding with a different token than BOS.
@@ -859,6 +967,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
+
+            model_specific_kwargs: (`optional`) dict
+                Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
         Return:
 
@@ -1011,7 +1122,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             pad_token_id = eos_token_id
 
         # current position and vocab size
-        vocab_size = self.config.vocab_size
+        if hasattr(self.config, "vocab_size"):
+            vocab_size = self.config.vocab_size
+        elif (
+            self.config.is_encoder_decoder
+            and hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "vocab_size")
+        ):
+            vocab_size = self.config.decoder.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
@@ -1094,9 +1212,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
@@ -1106,6 +1222,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_specific_kwargs=model_specific_kwargs,
             )
         else:
             output = self._generate_no_beam_search(
@@ -1120,14 +1237,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_specific_kwargs=model_specific_kwargs,
             )
 
         return output
@@ -1145,14 +1261,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         encoder_outputs,
         attention_mask,
         use_cache,
+        model_specific_kwargs,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
@@ -1161,50 +1276,42 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
 
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
 
+            scores = self.postprocess_next_token_scores(
+                scores=next_token_logits,
+                input_ids=input_ids,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                cur_len=cur_len,
+                min_length=min_length,
+                max_length=max_length,
+                eos_token_id=eos_token_id,
+                repetition_penalty=repetition_penalty,
+                batch_size=batch_size,
+                num_beams=1,
+            )
+
             # if model has past, then set the past variable to speed up decoding
             if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
-            # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                self.enforce_repetition_penalty_(next_token_logits, batch_size, 1, input_ids, repetition_penalty)
-
-            if no_repeat_ngram_size > 0:
-                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
-                for batch_idx in range(batch_size):
-                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
-
-            if bad_words_ids is not None:
-                # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-                for batch_idx in range(batch_size):
-                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
-
-            # set eos token prob to zero if min_length is not reached
-            if eos_token_id is not None and cur_len < min_length:
-                next_token_logits[:, eos_token_id] = -float("inf")
-
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
                 if temperature != 1.0:
-                    next_token_logits = next_token_logits / temperature
+                    scores = scores / temperature
                 # Top-p/top-k filtering
-                next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
+                next_token_logscores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p)
                 # Sample
-                probs = F.softmax(next_token_logits, dim=-1)
+                probs = F.softmax(next_token_logscores, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 # Greedy decoding
@@ -1217,13 +1324,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             else:
                 tokens_to_add = next_token
 
+            # add token and increase length by one
             input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
+            cur_len = cur_len + 1
 
             if eos_token_id is not None:
                 eos_in_sents = tokens_to_add == eos_token_id
                 # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
                 is_sents_unfinished_and_token_to_add_is_eos = unfinished_sents.mul(eos_in_sents.long()).bool()
-                sent_lengths.masked_fill_(is_sents_unfinished_and_token_to_add_is_eos, cur_len + 1)
+                sent_lengths.masked_fill_(is_sents_unfinished_and_token_to_add_is_eos, cur_len)
                 # unfinished_sents is set to zero if eos in sentence
                 unfinished_sents.mul_((~eos_in_sents).long())
 
@@ -1237,20 +1346,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
 
-            cur_len = cur_len + 1
-
-        # if there are different sentences lengths in the batch, some batches have to be padded
-        if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined if batches have different lengths"
-            # finished sents are filled with pad_token
-            decoded = input_ids.new(batch_size, sent_lengths.max().item()).fill_(pad_token_id)
-        else:
-            decoded = input_ids
-
-        for hypo_idx, hypo in enumerate(input_ids):
-            decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
-
-        return decoded
+        return input_ids
 
     def _generate_beam_search(
         self,
@@ -1266,10 +1362,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,
@@ -1278,6 +1372,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         encoder_outputs,
         attention_mask,
         use_cache,
+        model_specific_kwargs,
     ):
         """ Generate sequences for each example with beam search.
         """
@@ -1297,14 +1392,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # cache compute states
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # done sentences
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
@@ -1312,41 +1407,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # if model has past, then set the past variable to speed up decoding
             if self._use_cache(outputs, use_cache):
                 past = outputs[1]
-
-            # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                self.enforce_repetition_penalty_(
-                    next_token_logits, batch_size, num_beams, input_ids, repetition_penalty,
+            if self.config.is_encoder_decoder and do_sample is False:
+                # TODO (PVP) still a bit hacky here - there might be a better solution
+                next_token_logits = self.adjust_logits_during_generation(
+                    next_token_logits, cur_len=cur_len, max_length=max_length
                 )
-
-            if temperature != 1.0:
-                next_token_logits = next_token_logits / temperature
 
             scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-            if self.config.is_encoder_decoder and do_sample is False:
-                # TODO (PVP) still a bit hacky here - there might be a better solutino
-                scores = self.prepare_scores_for_generation(scores, cur_len=cur_len, max_length=max_length)
 
-            # set eos token prob to zero if min_length is not reached
-            if eos_token_id is not None and cur_len < min_length:
-                scores[:, eos_token_id] = -float("inf")
-
-            if no_repeat_ngram_size > 0:
-                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                num_batch_hypotheses = batch_size * num_beams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_batch_tokens = calc_banned_ngram_tokens(
-                    input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
-                )
-                for i, banned_tokens in enumerate(banned_batch_tokens):
-                    scores[i, banned_tokens] = -float("inf")
-
-            if bad_words_ids is not None:
-                # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-                for i, banned_tokens in enumerate(banned_tokens):
-                    scores[i, banned_tokens] = -float("inf")
+            scores = self.postprocess_next_token_scores(
+                scores=scores,
+                input_ids=input_ids,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                cur_len=cur_len,
+                min_length=min_length,
+                max_length=max_length,
+                eos_token_id=eos_token_id,
+                repetition_penalty=repetition_penalty,
+                batch_size=batch_size,
+                num_beams=num_beams,
+            )
 
             assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
                 scores.shape, (batch_size * num_beams, vocab_size)
@@ -1354,6 +1435,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             if do_sample:
                 _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
+                # Temperature
+                if temperature != 1.0:
+                    _scores = _scores / temperature
                 # Top-p/top-k filtering
                 _scores = top_k_top_p_filtering(
                     _scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
@@ -1390,7 +1474,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # for each sentence
             for batch_idx in range(batch_size):
 
-                # if we are done with this sentence
+                # if we are done with this sentence, add a pad token
                 if done[batch_idx]:
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
@@ -1401,7 +1485,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
 
-                # next sentence beam content
+                # next sentence beam content, this will get added to next_batch_beam
                 next_sent_beam = []
 
                 # next tokens for this sentence
@@ -1413,7 +1497,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     token_id = beam_token_id % vocab_size
 
                     effective_beam_id = batch_idx * num_beams + beam_id
-                    # add to generated hypotheses if end of sentence or last iteration
+                    # add to generated hypotheses if end of sentence
                     if (eos_token_id is not None) and (token_id.item() == eos_token_id):
                         # if beam_token does not belong to top num_beams tokens, it should not be added
                         is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
@@ -1423,22 +1507,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                             input_ids[effective_beam_id].clone(), beam_token_score.item(),
                         )
                     else:
-                        # add next predicted token if it is not eos_token
+                        # add next predicted token since it is not eos_token
                         next_sent_beam.append((beam_token_score, token_id, effective_beam_id))
 
-                    # the beam for next step is full
+                    # once the beam for next step is full, don't add more tokens to it.
                     if len(next_sent_beam) == num_beams:
                         break
 
-                # Check if were done so that we can save a pad step if all(done)
+                # Check if we are done so that we can save a pad step if all(done)
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    next_scores[batch_idx].max().item(), cur_len=cur_len
+                    next_scores[batch_idx].max().item(), cur_len
                 )
 
                 # update next beam content
                 assert len(next_sent_beam) == num_beams, "Beam should always be full"
                 next_batch_beam.extend(next_sent_beam)
-                assert len(next_batch_beam) == num_beams * (batch_idx + 1)
+                assert len(next_batch_beam) == num_beams * (batch_idx + 1), "We should have added num_beams each step"
 
             # stop when we are done with each sentence
             if all(done):
@@ -1450,9 +1534,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             beam_tokens = input_ids.new([x[1] for x in next_batch_beam])
             beam_idx = input_ids.new([x[2] for x in next_batch_beam])
 
-            # re-order batch
+            # re-order batch and update current length
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
+            cur_len = cur_len + 1
+
             # re-order internal states
             if past is not None:
                 past = self._reorder_cache(past, beam_idx)
@@ -1463,17 +1549,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
 
-            # update current length
-            cur_len = cur_len + 1
-
-        # finalize all open beam hypotheses and end to generated hypotheses
+        # finalize all open beam hypotheses and add to generated hypotheses
         for batch_idx in range(batch_size):
             if done[batch_idx]:
                 continue
 
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                (token_id % vocab_size).item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert torch.all(
                     next_scores[batch_idx, :num_beams] == beam_scores.view(batch_size, num_beams)[batch_idx]
@@ -1505,7 +1588,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 sent_lengths[effective_batch_idx] = len(best_hyp)
                 best.append(best_hyp)
 
-        # shorter batches are filled with pad_token
+        # shorter batches are padded
         if sent_lengths.min().item() != sent_lengths.max().item():
             assert pad_token_id is not None, "`Pad_token_id` has to be defined"
             sent_max_len = min(sent_lengths.max().item() + 1, max_length)
@@ -1522,18 +1605,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
 
         return decoded
-
-    # force one of token_ids to be generated by setting prob of all other tokens to 0.
-    def _force_token_ids_generation(self, scores, token_ids):
-        if isinstance(token_ids, int):
-            token_ids = [token_ids]
-        all_but_token_ids_mask = torch.tensor(
-            [x for x in range(self.config.vocab_size) if x not in token_ids],
-            dtype=torch.long,
-            device=next(self.parameters()).device,
-        )
-        assert len(scores.shape) == 2, "scores should be of rank 2 with shape: [batch_size, vocab_size]"
-        scores[:, all_but_token_ids_mask] = -float("inf")
 
     @staticmethod
     def _reorder_cache(past: Tuple, beam_idx: Tensor) -> Tuple[Tensor]:
@@ -1563,7 +1634,7 @@ def calc_banned_ngram_tokens(prev_input_ids: Tensor, num_hypos: int, no_repeat_n
     return banned_tokens
 
 
-def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
+def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iterable[int]) -> Iterable[int]:
     banned_tokens = []
 
     def _tokens_match(prev_tokens, tokens):
@@ -1599,7 +1670,13 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
     return banned_tokens
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
+def top_k_top_p_filtering(
+    logits: Tensor,
+    top_k: int = 0,
+    top_p: float = 1.0,
+    filter_value: float = -float("Inf"),
+    min_tokens_to_keep: int = 1,
+) -> Tensor:
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size, vocabulary size)
@@ -1666,7 +1743,7 @@ class BeamHypotheses(object):
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs, cur_len=None):
+    def is_done(self, best_sum_logprobs, cur_len):
         """
         If there are enough hypotheses and that none of the hypotheses being generated
         can become better than the worst one in the heap, then we are done with this sentence.
@@ -1677,8 +1754,6 @@ class BeamHypotheses(object):
         elif self.early_stopping:
             return True
         else:
-            if cur_len is None:
-                cur_len = self.max_length
             cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret
@@ -2015,20 +2090,6 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """ Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
-
-    :param torch.Tensor x:
-    :return torch.Tensor:
-    """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indicies = torch.cumsum(mask, dim=1).type_as(mask) * mask
-    return incremental_indicies.long() + padding_idx
-
-
 def prune_linear_layer(layer, index, dim=0):
     """ Prune a linear layer (a model parameters) to keep only entries in index.
         Return the pruned layer as a new layer with requires_grad=True.
@@ -2089,3 +2150,66 @@ def prune_layer(layer, index, dim=None):
         return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
     else:
         raise ValueError("Can't prune layer of class {}".format(layer.__class__))
+
+
+def apply_chunking_to_forward(
+    chunk_size: int, chunk_dim: int, forward_fn: Callable[..., torch.Tensor], *input_tensors
+) -> torch.Tensor:
+    """
+    This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension `chunk_dim`.
+    It then applies a layer `forward_fn` to each chunk independently to save memory.
+    If the `forward_fn` is independent across the `chunk_dim` this function will yield the
+    same result as not applying it.
+
+    Args:
+        chunk_size: int - the chunk size of a chunked tensor. `num_chunks` = `len(input_tensors[0]) / chunk_size`
+        chunk_dim: int - the dimension over which the input_tensors should be chunked
+        forward_fn: fn - the forward fn of the model
+        input_tensors: tuple(torch.Tensor) - the input tensors of `forward_fn` which are chunked
+    Returns:
+        a Tensor with the same shape the foward_fn would have given if applied
+
+
+    Examples::
+
+        # rename the usual forward() fn to forward_chunk()
+        def forward_chunk(self, hidden_states):
+            hidden_states = self.decoder(hidden_states)
+            return hidden_states
+
+        # implement a chunked forward function
+        def forward(self, hidden_states):
+            return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
+    """
+
+    assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
+    tensor_shape = input_tensors[0].shape
+    assert all(
+        input_tensor.shape == tensor_shape for input_tensor in input_tensors
+    ), "All input tenors have to be of the same shape"
+
+    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compability
+    num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
+    assert num_args_in_forward_chunk_fn == len(
+        input_tensors
+    ), "forward_chunk_fn expects {} arguments, but only {} input tensors are given".format(
+        num_args_in_forward_chunk_fn, len(input_tensors)
+    )
+
+    if chunk_size > 0:
+        assert (
+            input_tensors[0].shape[chunk_dim] % chunk_size == 0
+        ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
+            input_tensors[0].shape[chunk_dim], chunk_size
+        )
+
+        num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
+
+        # chunk input tensor into tuples
+        input_tensors_chunks = tuple(input_tensor.chunk(num_chunks, dim=chunk_dim) for input_tensor in input_tensors)
+        # apply forward fn to every tuple
+        output_chunks = tuple(forward_fn(*input_tensors_chunk) for input_tensors_chunk in zip(*input_tensors_chunks))
+        # concatenate output at same dimension
+        return torch.cat(output_chunks, dim=chunk_dim)
+
+    return forward_fn(*input_tensors)

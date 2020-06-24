@@ -20,6 +20,9 @@ A few examples of the model response to a query before and after optimisation:
 |I have watched 3 episodes |with this guy and he is such a talented actor...|	but the show is just plain awful and there ne...|	2.681171|	-4.512792|
 |We know that firefighters and|	police officers are forced to become populari...|	other chains have going to get this disaster ...|	1.367811|	-3.34017|
 
+## Training logs and metrics <img src="https://gblobscdn.gitbook.com/spaces%2F-Lqya5RvLedGEWPhtkjU%2Favatar.png?alt=media" width="25" height="25">
+Watch the whole training logs and metrics on [W&B](https://app.wandb.ai/mrm8488/gpt2-sentiment-negative?workspace=user-mrm8488)
+
 
 
 > Created by [Manuel Romero/@mrm8488](https://twitter.com/mrm8488)

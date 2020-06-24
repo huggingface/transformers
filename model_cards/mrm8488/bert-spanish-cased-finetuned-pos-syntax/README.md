@@ -11,7 +11,7 @@ This model is a fine-tuned version of the Spanish BERT [(BETO)](https://github.c
 
 - [Dataset: CONLL Corpora ES](https://www.kaggle.com/nltkdata/conll-corpora)
 
-#### [Fine-tune script on NER dataset provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/run_ner.py)
+#### [Fine-tune script on NER dataset provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py)
 
 #### 21 Syntax annotations (Labels) covered:
 

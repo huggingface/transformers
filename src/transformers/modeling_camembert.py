@@ -31,11 +31,12 @@ from .modeling_roberta import (
 
 logger = logging.getLogger(__name__)
 
-CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-pytorch_model.bin",
-    "umberto-commoncrawl-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/Musixmatch/umberto-commoncrawl-cased-v1/pytorch_model.bin",
-    "umberto-wikipedia-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/Musixmatch/umberto-wikipedia-uncased-v1/pytorch_model.bin",
-}
+CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "camembert-base",
+    "Musixmatch/umberto-commoncrawl-cased-v1",
+    "Musixmatch/umberto-wikipedia-uncased-v1",
+    # See all CamemBERT models at https://huggingface.co/models?filter=camembert
+]
 
 CAMEMBERT_START_DOCSTRING = r"""
 
@@ -48,6 +49,8 @@ CAMEMBERT_START_DOCSTRING = r"""
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -62,7 +65,6 @@ class CamembertModel(RobertaModel):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -75,7 +77,6 @@ class CamembertForMaskedLM(RobertaForMaskedLM):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -90,7 +91,6 @@ class CamembertForSequenceClassification(RobertaForSequenceClassification):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -105,7 +105,6 @@ class CamembertForMultipleChoice(RobertaForMultipleChoice):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -120,7 +119,6 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -135,4 +133,3 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP

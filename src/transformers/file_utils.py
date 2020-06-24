@@ -15,14 +15,12 @@ import tempfile
 from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
-from typing import Optional
+from pathlib import Path
+from typing import Dict, Optional, Union
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
-import boto3
 import requests
-from botocore.config import Config
-from botocore.exceptions import ClientError
 from filelock import FileLock
 from tqdm.auto import tqdm
 
@@ -61,6 +59,7 @@ try:
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
+
 try:
     from torch.hub import _get_torch_home
 
@@ -69,21 +68,50 @@ except ImportError:
     torch_cache_home = os.path.expanduser(
         os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
     )
-default_cache_path = os.path.join(torch_cache_home, "transformers")
+
 
 try:
-    from pathlib import Path
+    import torch_xla.core.xla_model as xm  # noqa: F401
 
-    PYTORCH_PRETRAINED_BERT_CACHE = Path(
-        os.getenv("PYTORCH_TRANSFORMERS_CACHE", os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path))
-    )
-except (AttributeError, ImportError):
-    PYTORCH_PRETRAINED_BERT_CACHE = os.getenv(
-        "PYTORCH_TRANSFORMERS_CACHE", os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
-    )
+    if _torch_available:
+        _torch_tpu_available = True  # pylint: disable=
+    else:
+        _torch_tpu_available = False
+except ImportError:
+    _torch_tpu_available = False
 
-PYTORCH_TRANSFORMERS_CACHE = PYTORCH_PRETRAINED_BERT_CACHE  # Kept for backward compatibility
-TRANSFORMERS_CACHE = PYTORCH_PRETRAINED_BERT_CACHE  # Kept for backward compatibility
+
+try:
+    import psutil  # noqa: F401
+
+    _psutil_available = True
+
+except ImportError:
+    _psutil_available = False
+
+
+try:
+    import py3nvml  # noqa: F401
+
+    _py3nvml_available = True
+
+except ImportError:
+    _py3nvml_available = False
+
+
+try:
+    from apex import amp  # noqa: F401
+
+    _has_apex = True
+except ImportError:
+    _has_apex = False
+
+default_cache_path = os.path.join(torch_cache_home, "transformers")
+
+
+PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
+PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
+TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
@@ -97,7 +125,7 @@ DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
-CLOUDFRONT_DISTRIB_PREFIX = "https://d2ws9o8vfrpkyk.cloudfront.net"
+CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 
 
 def is_torch_available():
@@ -106,6 +134,22 @@ def is_torch_available():
 
 def is_tf_available():
     return _tf_available
+
+
+def is_torch_tpu_available():
+    return _torch_tpu_available
+
+
+def is_psutil_available():
+    return _psutil_available
+
+
+def is_py3nvml_available():
+    return _py3nvml_available
+
+
+def is_apex_available():
+    return _has_apex
 
 
 def add_start_docstrings(*docstr):
@@ -144,15 +188,31 @@ def add_end_docstrings(*docstr):
 
 def is_remote_url(url_or_filename):
     parsed = urlparse(url_or_filename)
-    return parsed.scheme in ("http", "https", "s3")
+    return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(identifier, postfix=None, cdn=False) -> str:
-    endpoint = CLOUDFRONT_DISTRIB_PREFIX if cdn else S3_BUCKET_PREFIX
-    if postfix is None:
-        return "/".join((endpoint, identifier))
+def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
+    """
+    Resolve a model identifier, and a file name, to a HF-hosted url
+    on either S3 or Cloudfront (a Content Delivery Network, or CDN).
+
+    Cloudfront is replicated over the globe so downloads are way faster
+    for the end user (and it also lowers our bandwidth costs). However, it
+    is more aggressively cached by default, so may not always reflect the
+    latest changes to the underlying file (default TTL is 24 hours).
+
+    In terms of client-side caching from this library, even though
+    Cloudfront relays the ETags from S3, using one or the other
+    (or switching from one to the other) will affect caching: cached files
+    are not shared between the two because the cached file's name contains
+    a hash of the url.
+    """
+    endpoint = CLOUDFRONT_DISTRIB_PREFIX if use_cdn else S3_BUCKET_PREFIX
+    legacy_format = "/" not in model_id
+    if legacy_format:
+        return f"{endpoint}/{model_id}-{filename}"
     else:
-        return "/".join((endpoint, identifier, postfix))
+        return f"{endpoint}/{model_id}/{filename}"
 
 
 def url_to_filename(url, etag=None):
@@ -211,7 +271,7 @@ def cached_path(
     force_download=False,
     proxies=None,
     resume_download=False,
-    user_agent=None,
+    user_agent: Union[Dict, str, None] = None,
     extract_compressed_file=False,
     force_extract=False,
     local_files_only=False,
@@ -297,56 +357,7 @@ def cached_path(
     return output_path
 
 
-def split_s3_path(url):
-    """Split a full s3 path into the bucket name and path."""
-    parsed = urlparse(url)
-    if not parsed.netloc or not parsed.path:
-        raise ValueError("bad s3 path {}".format(url))
-    bucket_name = parsed.netloc
-    s3_path = parsed.path
-    # Remove '/' at beginning of path.
-    if s3_path.startswith("/"):
-        s3_path = s3_path[1:]
-    return bucket_name, s3_path
-
-
-def s3_request(func):
-    """
-    Wrapper function for s3 requests in order to create more helpful error
-    messages.
-    """
-
-    @wraps(func)
-    def wrapper(url, *args, **kwargs):
-        try:
-            return func(url, *args, **kwargs)
-        except ClientError as exc:
-            if int(exc.response["Error"]["Code"]) == 404:
-                raise EnvironmentError("file {} not found".format(url))
-            else:
-                raise
-
-    return wrapper
-
-
-@s3_request
-def s3_etag(url, proxies=None):
-    """Check ETag on S3 object."""
-    s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
-    bucket_name, s3_path = split_s3_path(url)
-    s3_object = s3_resource.Object(bucket_name, s3_path)
-    return s3_object.e_tag
-
-
-@s3_request
-def s3_get(url, temp_file, proxies=None):
-    """Pull a file directly from S3."""
-    s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
-    bucket_name, s3_path = split_s3_path(url)
-    s3_resource.Bucket(bucket_name).download_fileobj(s3_path, temp_file)
-
-
-def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
+def http_get(url, temp_file, proxies=None, resume_size=0, user_agent: Union[Dict, str, None] = None):
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
     if is_torch_available():
         ua += "; torch/{}".format(torch.__version__)
@@ -386,7 +397,7 @@ def get_from_cache(
     proxies=None,
     etag_timeout=10,
     resume_download=False,
-    user_agent=None,
+    user_agent: Union[Dict, str, None] = None,
     local_files_only=False,
 ) -> Optional[str]:
     """
@@ -406,17 +417,13 @@ def get_from_cache(
 
     etag = None
     if not local_files_only:
-        # Get eTag to add to filename, if it exists.
-        if url.startswith("s3://"):
-            etag = s3_etag(url, proxies=proxies)
-        else:
-            try:
-                response = requests.head(url, allow_redirects=True, proxies=proxies, timeout=etag_timeout)
-                if response.status_code == 200:
-                    etag = response.headers.get("ETag")
-            except (EnvironmentError, requests.exceptions.Timeout):
-                # etag is already None
-                pass
+        try:
+            response = requests.head(url, allow_redirects=True, proxies=proxies, timeout=etag_timeout)
+            if response.status_code == 200:
+                etag = response.headers.get("ETag")
+        except (EnvironmentError, requests.exceptions.Timeout):
+            # etag is already None
+            pass
 
     filename = url_to_filename(url, etag)
 
@@ -483,13 +490,7 @@ def get_from_cache(
         with temp_file_manager() as temp_file:
             logger.info("%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name)
 
-            # GET file object
-            if url.startswith("s3://"):
-                if resume_download:
-                    logger.warn('Warning: resumable downloads are not implemented for "s3://" urls')
-                s3_get(url, temp_file, proxies=proxies)
-            else:
-                http_get(url, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent)
+            http_get(url, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent)
 
         logger.info("storing %s in cache at %s", url, cache_path)
         os.replace(temp_file.name, cache_path)

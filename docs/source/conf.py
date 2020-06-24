@@ -26,7 +26,7 @@ author = u'huggingface'
 # The short X.Y version
 version = u''
 # The full version, including alpha/beta/rc tags
-release = u'2.8.0'
+release = u'2.11.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -187,8 +187,8 @@ epub_title = project
 epub_exclude_files = ['search.html']
 
 def setup(app):
-    app.add_stylesheet('css/huggingface.css')
-    app.add_stylesheet('css/code-snippets.css')
+    app.add_css_file('css/huggingface.css')
+    app.add_css_file('css/code-snippets.css')
     app.add_js_file('js/custom.js')
 
 # -- Extension configuration -------------------------------------------------

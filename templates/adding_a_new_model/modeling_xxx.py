@@ -34,13 +34,13 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 ####################################################
-# This dict contrains shortcut names and associated url
-# for the pretrained weights provided with the models
+# This list contrains shortcut names for some of
+# the pretrained weights provided with the models
 ####################################################
-XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-pytorch_model.bin",
-    "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-pytorch_model.bin",
-}
+XXX_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xxx-base-uncased",
+    "xxx-large-uncased",
+]
 
 
 ####################################################
@@ -180,7 +180,6 @@ class XxxPreTrainedModel(PreTrainedModel):
     """
 
     config_class = XxxConfig
-    pretrained_model_archive_map = XXX_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_xxx
     base_model_prefix = "transformer"
 
@@ -286,7 +285,7 @@ class XxxModel(XxxPreTrainedModel):
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -404,7 +403,7 @@ class XxxForMaskedLM(XxxPreTrainedModel):
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -484,7 +483,7 @@ class XxxForSequenceClassification(XxxPreTrainedModel):
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -570,7 +569,7 @@ class XxxForTokenClassification(XxxPreTrainedModel):
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -664,7 +663,7 @@ class XxxForQuestionAnswering(XxxPreTrainedModel):
             list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 

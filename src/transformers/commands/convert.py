@@ -62,7 +62,21 @@ class ConvertCommand(BaseTransformersCLICommand):
         self._finetuning_task_name = finetuning_task_name
 
     def run(self):
-        if self._model_type == "bert":
+        if self._model_type == "albert":
+            try:
+                from transformers.convert_albert_original_tf_checkpoint_to_pytorch import (
+                    convert_tf_checkpoint_to_pytorch,
+                )
+            except ImportError:
+                msg = (
+                    "transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions."
+                )
+                raise ImportError(msg)
+
+            convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
+        elif self._model_type == "bert":
             try:
                 from transformers.convert_bert_original_tf_checkpoint_to_pytorch import (
                     convert_tf_checkpoint_to_pytorch,
