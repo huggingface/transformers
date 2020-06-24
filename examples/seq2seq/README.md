@@ -34,8 +34,8 @@ tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
 ```
 
-If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target
-The source files are the input, the target files are the desired output.
+If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target.  
+The `.source` files are the input, the `.target` files are the desired output.
 
 ### Evaluation
 
@@ -56,7 +56,7 @@ The following command should work on a 16GB GPU:
     --train_batch_size=1 \
     --eval_batch_size=1 \
     --output_dir=xsum_results \
-    --num_train_epochs 1
+    --num_train_epochs 1 \
     --model_name_or_path facebook/bart-large
 ```
 
@@ -64,7 +64,7 @@ The following command should work on a 16GB GPU:
 
 Tips:
 - 1 epoch at batch size 1 for bart-large takes 24 hours and requires 13GB GPU RAM with fp16 on an NVIDIA-V100. 
-- try `bart-base`, `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr/epoch with bs=8, see below)
+- try `bart-base`, `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr/epoch with bs=8, see the "xsum_shared_task" command below)
 - `fp16_opt_level=O1` (the default works best).
 - If you are finetuning on your own dataset, start from `distilbart-cnn-12-6` if you want long summaries and `distilbart-xsum-12-6` if you want short summaries.
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
@@ -92,20 +92,19 @@ Here is an example command
 Results can be viewed [here](https://app.wandb.ai/sshleifer/hf_summarization/table?workspace=user-)
 
 
-### Distillation
+### Distilbart
  
 #### No Teacher Distillation
 To run the simpler distilbart-cnn style distillation all you need is data, a GPU, and a properly initialized student.
 You don't even need `distillation.py`.
 
 Some [un-finetuned students](https://huggingface.co/models?search=sshleifer%2Fstudent) are available for replication purposes.
-They are initialized by copying layers from the associated `bart-large-{cnn|xsum}` teacher using `--init_strategy alternate`. (You can read about that in `initialization_utils.py)
+They are initialized by copying layers from the associated `bart-large-{cnn|xsum}` teacher using `--init_strategy alternate`. (You can read about that in `initialization_utils.py`)
 The command that produced `sshleifer/distilbart-cnn-12-6` is
 ```bash
 ./train_distilbart_cnn.sh
 ```  
 runtime: 6H on NVIDIA RTX 24GB GPU
-
 
 *Note*: You can get the same simple distillation logic by using `./run_distiller.sh --no_teacher` followed by identical arguments as the ones in `train_distilbart_cnn.sh`.
 If you are using `wandb` and comparing the two distillation methods, using this entry point will make your logs consistent,
