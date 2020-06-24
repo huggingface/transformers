@@ -186,6 +186,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
+        self.use_cache = config.use_cache
 
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
@@ -235,7 +236,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         training=False,
@@ -270,6 +271,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.use_cache
 
         # If using past key value states, only the last tokens
         # should be given as an input

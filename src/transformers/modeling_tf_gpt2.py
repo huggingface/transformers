@@ -215,6 +215,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         super().__init__(*inputs, **kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.use_cache = config.use_cache
+
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
@@ -254,10 +256,10 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
-        training=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        training=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -288,6 +290,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.use_cache
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -622,7 +625,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         mc_token_ids=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         training=False,
