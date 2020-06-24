@@ -5,7 +5,7 @@ function deploy_doc(){
 	git checkout $1
 	if [ ! -z "$2" ]
 	then
-		if [ -d "$dir/$2" ]; then
+		if [ "$2" != "master" ] && ssh -oStrictHostKeyChecking=no $doc "[ -d $dir/$2 ]"; then
 			echo "Directory" $2 "already exists"
 		else
 			echo "Pushing version" $2
@@ -17,7 +17,21 @@ function deploy_doc(){
 	fi
 }
 
-deploy_doc "master"
+function debug_custom() {
+	echo "Head of source/_static/js/custom.js"
+	head -10 source/_static/js/custom.js
+	if [ -d "_build/html/_static" ]; then
+	    echo "Head of _build/html/_static/js/custom.js"
+		head -10 _build/html/_static/js/custom.js
+	else
+		echo "No build"
+	fi
+}
+
+# You can find the commit for each tag on https://github.com/huggingface/transformers/tags
+debug_custom
+deploy_doc "master" master
+debug_custom
 deploy_doc "b33a385" v1.0.0
 deploy_doc "fe02e45" v1.1.0
 deploy_doc "89fd345" v1.2.0
@@ -27,3 +41,12 @@ deploy_doc "3616209" v2.2.0
 deploy_doc "d0f8b9a" v2.3.0
 deploy_doc "6664ea9" v2.4.0
 deploy_doc "fb560dc" v2.5.0
+deploy_doc "b90745c" v2.5.1
+deploy_doc "fbc5bf1" v2.6.0
+deploy_doc "6f5a12a" v2.7.0
+deploy_doc "11c3257" v2.8.0
+deploy_doc "e7cfc1a" v2.9.0
+deploy_doc "7cb203f" v2.9.1
+deploy_doc "10d7239" v2.10.0 
+deploy_doc "b42586e" #v2.11.0 Latest stable release
+debug_custom

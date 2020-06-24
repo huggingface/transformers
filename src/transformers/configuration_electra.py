@@ -76,6 +76,28 @@ class ElectraConfig(PretrainedConfig):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
                 The epsilon used by the layer normalization layers.
+            summary_type (:obj:`string`, optional, defaults to "first"):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.ElectraForMultipleChoice`.
+                Is one of the following options:
+
+                    - 'last' => take the last token hidden state (like XLNet)
+                    - 'first' => take the first token hidden state (like Bert)
+                    - 'mean' => take the mean of all tokens hidden states
+                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                    - 'attn' => Not implemented now, use multi-head attention
+            summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.ElectraForMultipleChoice`.
+                Add a projection after the vector extraction
+            summary_activation (:obj:`string` or :obj:`None`, optional, defaults to :obj:`None`):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.ElectraForMultipleChoice`.
+                'gelu' => add a gelu activation to the output, Other => no activation.
+            summary_last_dropout (:obj:`float`, optional, defaults to 0.0):
+                Argument used when doing sequence summary. Used in for the multiple choice head in
+                :class:`~transformers.ElectraForMultipleChoice`.
+                Add a dropout after the projection and activation
 
         Example::
 
@@ -107,6 +129,10 @@ class ElectraConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        summary_type="first",
+        summary_use_proj=True,
+        summary_activation="gelu",
+        summary_last_dropout=0.1,
         pad_token_id=0,
         **kwargs
     ):
@@ -125,3 +151,8 @@ class ElectraConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+
+        self.summary_type = summary_type
+        self.summary_use_proj = summary_use_proj
+        self.summary_activation = summary_activation
+        self.summary_last_dropout = summary_last_dropout

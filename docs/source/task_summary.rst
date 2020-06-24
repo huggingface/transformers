@@ -1,4 +1,4 @@
-Usage
+Summary of the tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This page shows the most frequent use-cases when using the library. The models available allow for many different
@@ -217,9 +217,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     """
 
     questions = [
-        "How many pretrained models are available in Transformers?",
-        "What does Transformers provide?",
-        "Transformers provides interoperability between which frameworks?",
+        "How many pretrained models are available in 🤗 Transformers?",
+        "What does 🤗 Transformers provide?",
+        "🤗 Transformers provides interoperability between which frameworks?",
     ]
 
     for question in questions:
@@ -253,9 +253,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     """
 
     questions = [
-        "How many pretrained models are available in Transformers?",
-        "What does Transformers provide?",
-        "Transformers provides interoperability between which frameworks?",
+        "How many pretrained models are available in 🤗 Transformers?",
+        "What does 🤗 Transformers provide?",
+        "🤗 Transformers provides interoperability between which frameworks?",
     ]
 
     for question in questions:
@@ -280,13 +280,13 @@ This outputs the questions followed by the predicted answers:
 
 ::
 
-    Question: How many pretrained models are available in Transformers?
+    Question: How many pretrained models are available in 🤗 Transformers?
     Answer: over 32 +
 
-    Question: What does Transformers provide?
+    Question: What does 🤗 Transformers provide?
     Answer: general - purpose architectures
 
-    Question: Transformers provides interoperability between which frameworks?
+    Question: 🤗 Transformers provides interoperability between which frameworks?
     Answer: tensorflow 2 . 0 and pytorch
 
 
@@ -692,7 +692,8 @@ following array should be the output:
 
 ::
 
-    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]   
+    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
+
 Summarization
 ----------------------------------------------------
 
@@ -769,7 +770,8 @@ Here Google`s T5 model is used that was only pre-trained on a multi-task mixed d
     # T5 uses a max_length of 512 so we cut the article to 512 tokens.
     inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="tf", max_length=512)
     outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
-    print(outputs)  
+    print(outputs)
+
 Translation
 ----------------------------------------------------
 

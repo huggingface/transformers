@@ -5,6 +5,7 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import ScalarFormatter
 
 from transformers import HfArgumentParser
 
@@ -23,6 +24,9 @@ class PlotArguments:
     is_time: bool = field(
         default=False,
         metadata={"help": "Whether the csv file has time results or memory results. Defaults to memory results."},
+    )
+    no_log_scale: bool = field(
+        default=False, metadata={"help": "Disable logarithmic scale when plotting"},
     )
     is_train: bool = field(
         default=False,
@@ -55,6 +59,14 @@ class Plot:
         title_str = "Time usage" if self.args.is_time else "Memory usage"
         title_str = title_str + " for training" if self.args.is_train else title_str + " for inference"
 
+        if not self.args.no_log_scale:
+            # set logarithm scales
+            ax.set_xscale("log")
+            ax.set_yscale("log")
+
+        for axis in [ax.xaxis, ax.yaxis]:
+            axis.set_major_formatter(ScalarFormatter())
+
         for model_name in self.result_dict.keys():
             batch_sizes = sorted(list(set(self.result_dict[model_name]["bsz"])))
             sequence_lengths = sorted(list(set(self.result_dict[model_name]["seq_len"])))
@@ -64,16 +76,11 @@ class Plot:
                 (batch_sizes, sequence_lengths) if self.args.plot_along_batch else (sequence_lengths, batch_sizes)
             )
 
-            plt.xlim(min(x_axis_array), max(x_axis_array))
-
             for inner_loop_value in inner_loop_array:
                 if self.args.plot_along_batch:
                     y_axis_array = np.asarray([results[(x, inner_loop_value)] for x in x_axis_array], dtype=np.int)
                 else:
                     y_axis_array = np.asarray([results[(inner_loop_value, x)] for x in x_axis_array], dtype=np.float32)
-
-                ax.set_xscale("log", basex=2)
-                ax.set_yscale("log", basey=10)
 
                 (x_axis_label, inner_loop_label) = (
                     ("batch_size", "sequence_length in #tokens")

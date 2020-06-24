@@ -59,7 +59,7 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Share your models ](#Quick-tour-of-model-sharing) | Upload and share your fine-tuned models with the community |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
-| [Documentation][(v2.5.0)](https://huggingface.co/transformers/v2.5.0)[(v2.4.0/v2.4.1)](https://huggingface.co/transformers/v2.4.0)[(v2.3.0)](https://huggingface.co/transformers/v2.3.0)[(v2.2.0/v2.2.1/v2.2.2)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) [(master)](https://huggingface.co/transformers) | Full API documentation and more |
+| Documentation [(master)](https://huggingface.co/transformers/master) [(stable)](https://huggingface.co/transformers/) [(v2.10.0)](https://huggingface.co/transformers/v2.10.0) [(v2.9.0/v2.9.1)](https://huggingface.co/transformers/v2.9.1) [(v2.8.0)](https://huggingface.co/transformers/v2.8.0) [(v2.7.0)](https://huggingface.co/transformers/v2.7.0) [(v2.6.0)](https://huggingface.co/transformers/v2.6.0) [(v2.5.0/v2.5.1)](https://huggingface.co/transformers/v2.5.1) [(v2.4.0/v2.4.1)](https://huggingface.co/transformers/v2.4.0)[(v2.3.0)](https://huggingface.co/transformers/v2.3.0)[(v2.2.0/v2.2.1/v2.2.2)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) | Full API documentation and more |
 
 ## Installation
 
@@ -169,7 +169,7 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 22. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
 23. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
+These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Pearson R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
 ## Online demo
 
@@ -538,20 +538,21 @@ You can create `Pipeline` objects for the following down-stream tasks:
  - `translation_xx_to_yy`
 
 ```python
-from transformers import pipeline
+>>> from transformers import pipeline
 
 # Allocate a pipeline for sentiment-analysis
-nlp = pipeline('sentiment-analysis')
-nlp('We are very happy to include pipeline into the transformers repository.')
->>> {'label': 'POSITIVE', 'score': 0.99893874}
+>>> nlp = pipeline('sentiment-analysis')
+>>> nlp('We are very happy to include pipeline into the transformers repository.')
+[{'label': 'POSITIVE', 'score': 0.9978193640708923}]
 
 # Allocate a pipeline for question-answering
-nlp = pipeline('question-answering')
-nlp({
-    'question': 'What is the name of the repository ?',
-    'context': 'Pipeline have been included in the huggingface/transformers repository'
-})
->>> {'score': 0.28756016668193496, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+>>> nlp = pipeline('question-answering')
+>>> nlp({
+...     'question': 'What is the name of the repository ?',
+...     'context': 'Pipeline have been included in the huggingface/transformers repository'
+... })
+{'score': 0.5135612454720828, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+
 ```
 
 ## Migrating from pytorch-transformers to transformers

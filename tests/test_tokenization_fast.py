@@ -63,6 +63,21 @@ class CommonFastTokenizerTest(unittest.TestCase):
                         self.fast_align_python(tokenizer_r, tokenizer_p, tok_case, pretrained_name)
                         self.fast_only(tokenizer_r)
 
+    def test_pretokenized_tokenizers(self):
+        for tok_case in self.TOKENIZERS_CLASSES:
+            for pretrained_name in tok_case.python_cls.pretrained_vocab_files_map[tok_case.vocab_key].keys():
+
+                # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
+                # information available in Tokenizer (name, rust class, python class, vocab key name)
+                if tok_case.filter is None or (
+                    tok_case.filter is not None and tok_case.filter(tok_case, pretrained_name)
+                ):
+                    with self.subTest("{} ({})".format(tok_case.name, pretrained_name)):
+                        tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, add_prefix_space=True)
+                        tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, add_prefix_space=True)
+
+                        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
+
     def fast_align_python(self, tokenizer_r, tokenizer_p, tok_case, pretrained_name):
         # Check is_fast is set correctly
         self.assertFalse(tokenizer_p.is_fast)
@@ -75,7 +90,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
         self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
         self.assert_padding(tokenizer_r, tokenizer_p)
-        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
         self.assert_create_token_type_ids(tokenizer_r, tokenizer_p)
         # TODO: enable for v3.0.0
         # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
@@ -341,6 +355,14 @@ class CommonFastTokenizerTest(unittest.TestCase):
             "return_special_tokens_mask": True,
             "return_offsets_mapping": False,  # Not implemented in python tokenizers
         }
+        batch_kwargs = {
+            "is_pretokenized": True,
+            "return_token_type_ids": True,
+            "return_attention_mask": True,  # we have an 's' here
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": True,  # we have an 's' here
+            "return_offsets_mapping": False,  # Not implemented in python tokenizers
+        }
         # Test encode_plus for pretokenized inputs
         output_r = tokenizer_r.encode_plus(pretokenized_input_simple, **kwargs)
         output_p = tokenizer_p.encode_plus(pretokenized_input_simple, **kwargs)
@@ -349,8 +371,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
         # Test batch_encode_plus for pretokenized inputs
         input_batch = ([pretokenized_input_simple] * 2) + [pretokenized_input_simple + pretokenized_input_pair]
-        output_r = tokenizer_r.batch_encode_plus(input_batch, **kwargs)
-        output_p = tokenizer_p.batch_encode_plus(input_batch, **kwargs)
+        output_r = tokenizer_r.batch_encode_plus(input_batch, **batch_kwargs)
+        output_p = tokenizer_p.batch_encode_plus(input_batch, **batch_kwargs)
         for key in output_p.keys():
             self.assertEqual(output_p[key], output_r[key])
 
@@ -370,8 +392,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
             pretokenized_input_simple + pretokenized_input_pair,
             pretokenized_input_pair,
         ]
-        output_r = tokenizer_r.batch_encode_plus(input_batch_pair, **kwargs)
-        output_p = tokenizer_p.batch_encode_plus(input_batch_pair, **kwargs)
+        output_r = tokenizer_r.batch_encode_plus(input_batch_pair, **batch_kwargs)
+        output_p = tokenizer_p.batch_encode_plus(input_batch_pair, **batch_kwargs)
         for key in output_p.keys():
             self.assertEqual(output_p[key], output_r[key])
 
@@ -756,8 +778,8 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
         tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
 
         # Rust correctly handles the space before the mask while python doesnt
-        self.assertSequenceEqual(tokens_r["input_ids"], [0, 83, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
-        self.assertSequenceEqual(tokens_p["input_ids"], [0, 83, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
+        self.assertSequenceEqual(tokens_r["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
+        self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 
         # token_type_ids should put 0 everywhere
         self.assertEquals(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
@@ -768,9 +790,10 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
             sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
         )
 
-        # Rust should have 'Ġ' before <mask> which should be left as an entire token
         tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
-        self.assertSequenceEqual(tokens_r, ["<s>", "ĠA", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"])
+        tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
+        self.assertSequenceEqual(tokens_r, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"])
+        self.assertSequenceEqual(tokens_p, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"])
 
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
@@ -840,3 +863,7 @@ class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
     @require_torch
     def test_all_tokenizers(self):
         super().test_all_tokenizers()
+
+    @require_torch
+    def test_pretokenized_tokenizers(self):
+        super().test_pretokenized_tokenizers()

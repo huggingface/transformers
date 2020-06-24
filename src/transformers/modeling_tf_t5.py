@@ -518,6 +518,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
+        self.use_cache = config.use_cache
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
@@ -556,8 +557,9 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         head_mask=None,
         past_key_value_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -584,6 +586,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.use_cache
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
@@ -696,7 +700,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(inputs_embeds, training=training)
 
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
@@ -731,14 +735,14 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
 
         # Add last layer
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
             outputs = outputs + (present_key_value_states,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
@@ -772,19 +776,15 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         return dummy_inputs
 
 
-T5_START_DOCSTRING = r"""    The T5 model was proposed in
-    `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`_
-    by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
+T5_START_DOCSTRING = r"""
+    The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
+    <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
+    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
     It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
 
-    This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
-    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
-
-    .. _`Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`:
-        https://arxiv.org/abs/1910.10683
-
-    .. _`tf.keras.Model`:
-        https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
+    This model is a `tf.keras.Model <https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model>`__
+    sub-class. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
+    general usage and behavior.
 
     Note on the model inputs:
         TF 2.0 models accepts two formats as inputs:
@@ -796,7 +796,7 @@ T5_START_DOCSTRING = r"""    The T5 model was proposed in
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
 
-        - a single Tensor with inputs only and nothing else: `model(inputs_ids)
+        - a single Tensor with inputs only and nothing else: `model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
             `model([inputs, attention_mask])` or `model([inputs, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associaed to the input names given in the docstring:
@@ -818,7 +818,7 @@ T5_INPUTS_DOCSTRING = r"""
             the right or the left.
             Indices can be obtained using :class:`transformers.T5Tokenizer`.
             To know more on how to prepare :obj:`inputs` for pre-training take a look at
-            `T5 Training <./t5.html#training>`_ .
+            `T5 Training <./t5.html#training>`__.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -850,7 +850,7 @@ T5_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
             To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
-            `T5 Training <./t5.html#training>`_ .
+            `T5 Training <./t5.html#training>`__.
         head_mask: (:obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
@@ -876,6 +876,7 @@ class TFT5Model(TFT5PreTrainedModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
@@ -888,6 +889,16 @@ class TFT5Model(TFT5PreTrainedModel):
     def get_output_embeddings(self):
         return self.shared
 
+    def set_input_embeddings(self, new_embeddings):
+        self.shared.weight = new_embeddings
+        self.shared.vocab_size = self.shared.weight.shape[0]
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
+
     def get_encoder(self):
         return self.encoder
 
@@ -897,8 +908,8 @@ class TFT5Model(TFT5PreTrainedModel):
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
             If `decoder_past_key_value_states` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
@@ -906,14 +917,14 @@ class TFT5Model(TFT5PreTrainedModel):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `hidden-state` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -944,9 +955,12 @@ class TFT5Model(TFT5PreTrainedModel):
         decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
-        use_cache = kwargs.get("use_cache", True)
+        use_cache = kwargs.get("use_cache", None)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
+        output_hidden_states = kwargs.get("output_hidden_states", None)
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -956,6 +970,7 @@ class TFT5Model(TFT5PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
         hidden_states = encoder_outputs[0]
@@ -979,6 +994,7 @@ class TFT5Model(TFT5PreTrainedModel):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         if use_cache is True:
@@ -1003,6 +1019,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
@@ -1015,6 +1032,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     def get_output_embeddings(self):
         return self.shared
 
+    def set_input_embeddings(self, new_embeddings):
+        self.shared.weight = new_embeddings
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
+
     def get_encoder(self):
         return self.encoder
 
@@ -1024,8 +1050,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
         loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
             Classification loss (cross entropy).
         prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
@@ -1034,16 +1060,17 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `prediction_score` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -1074,11 +1101,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         encoder_outputs = kwargs.get("encoder_outputs", None)
         decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
-        use_cache = kwargs.get("use_cache", True)
+        use_cache = kwargs.get("use_cache", None)
         inputs_embeds = kwargs.get("inputs_embeds", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
+        output_hidden_states = kwargs.get("output_hidden_states", None)
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1089,6 +1119,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1112,6 +1143,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         # insert decoder past at right place
