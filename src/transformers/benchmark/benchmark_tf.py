@@ -24,13 +24,7 @@ import timeit
 from functools import wraps
 from typing import Callable, Optional
 
-from transformers import (
-    TF_MODEL_MAPPING,
-    TF_MODEL_WITH_LM_HEAD_MAPPING,
-    PretrainedConfig,
-    is_py3nvml_available,
-    is_tf_available,
-)
+from transformers import TF_MODEL_MAPPING, PretrainedConfig, is_py3nvml_available, is_tf_available
 
 from .benchmark_utils import (
     Benchmark,
@@ -125,8 +119,17 @@ class TensorflowBenchmark(Benchmark):
         if self.args.fp16:
             raise NotImplementedError("Mixed precision is currently not supported.")
 
-        if self.args.with_lm_head:
-            model = TF_MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
+        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        if not self.args.only_pretrain_model and has_model_class_in_config:
+            try:
+                model_class = "TF" + config.architectures[0]  # prepend 'TF' for tensorflow model
+                transformers_module = __import__("transformers", fromlist=[model_class])
+                model_cls = getattr(transformers_module, model_class)
+                model = model_cls(config)
+            except ImportError:
+                raise ImportError(
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                )
         else:
             model = TF_MODEL_MAPPING[config.__class__](config)
 
