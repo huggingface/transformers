@@ -1,0 +1,2 @@
+This model is used detecting **hatespeech** in **Polish language**. The mono in the name refers to the monolingual setting, where the model is trained using only English language data. It is finetuned on multilingual bert model.
+The model is trained with different learning rates and the best validation score achieved is 0.723254 for a learning rate of 2e-5. Training code can be found at this [url](https://github.com/punyajoy/DE-LIMIT)
