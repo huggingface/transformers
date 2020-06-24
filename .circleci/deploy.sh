@@ -5,7 +5,7 @@ function deploy_doc(){
 	git checkout $1
 	if [ ! -z "$2" ]
 	then
-		if [ "$2" != "master" ]; then
+		if [ "$2" == "master" ]; then
 		    echo "Pushing master"
 			make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir/$2/
 			cp -r _build/html/_static .
