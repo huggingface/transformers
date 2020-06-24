@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import copy
-import logging
 import os.path
 import random
 import tempfile
