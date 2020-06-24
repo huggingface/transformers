@@ -404,9 +404,12 @@ class Pipeline(_ScikitCompat):
         """
         Save the pipeline's model and tokenizer to the specified save_directory
         """
-        if not os.path.isdir(save_directory):
-            logger.error("Provided path ({}) should be a directory".format(save_directory))
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
+        elif not os.path.exists(save_directory):
+            os.path.makedirs(save_directory)
+        assert os.path.isdir(save_directory), f"Failed to find or create {save_directory}"
 
         self.model.save_pretrained(save_directory)
         self.tokenizer.save_pretrained(save_directory)

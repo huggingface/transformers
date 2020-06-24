@@ -315,6 +315,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         """ Save a model and its configuration file to a directory, so that it
             can be re-loaded using the :func:`~transformers.PreTrainedModel.from_pretrained` class method.
         """
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        elif not os.path.exists(save_directory):
+            os.path.makedirs(save_directory)
         assert os.path.isdir(
             save_directory
         ), "Saving path should be a directory where the model and configuration can be saved"

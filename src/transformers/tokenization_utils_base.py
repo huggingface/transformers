@@ -1270,8 +1270,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             This method make sure the full tokenizer can then be re-loaded using the
             :func:`~transformers.PreTrainedTokenizer.from_pretrained` class method.
         """
-        if not os.path.isdir(save_directory):
-            logger.error("Saving directory ({}) should be a directory".format(save_directory))
+
+        if not os.path.exists(save_directory):
+            os.path.makedirs(save_directory)
+        elif os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
 
         special_tokens_map_file = os.path.join(save_directory, SPECIAL_TOKENS_MAP_FILE)

@@ -132,6 +132,10 @@ class PretrainedConfig(object):
             save_directory (:obj:`string`):
                 Directory where the configuration JSON file will be saved.
         """
+        if os.path.isfile(save_directory):
+            raise AssertionError("Provided path ({}) should be a directory, not a file".format(save_directory))
+        if not os.path.exists(save_directory):
+            os.path.makedirs(save_directory)
         assert os.path.isdir(
             save_directory
         ), "Saving path should be a directory where the model and configuration can be saved"
