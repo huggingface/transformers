@@ -254,7 +254,7 @@ def train(args, train_dataset, model, tokenizer):
     return global_step, tr_loss / global_step
 
 
-def evaluate(args, model, tokenizer, prefix="", patience=None):
+def evaluate(args, model, tokenizer, prefix="", patience=0):
 
     if args.model_type == "albert":
         model.albert.set_regression_threshold(args.regression_threshold)
