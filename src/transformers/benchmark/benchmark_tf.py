@@ -25,13 +25,7 @@ from functools import wraps
 from typing import Callable, Optional
 
 from transformers import (
-    TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-    TF_MODEL_FOR_PRETRAINING_MAPPING,
-    TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-    TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-    TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_MAPPING,
-    TF_MODEL_WITH_LM_HEAD_MAPPING,
     PretrainedConfig,
     is_py3nvml_available,
     is_tf_available,
@@ -45,19 +39,6 @@ from .benchmark_utils import (
     start_memory_tracing,
     stop_memory_tracing,
 )
-
-
-TF_MODEL_TYPE_MAPPING = {
-    "token-classification": TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    "question-answering": TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-    "multiple-choice": TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-    "summarization": TF_MODEL_WITH_LM_HEAD_MAPPING,
-    "transaltion": TF_MODEL_WITH_LM_HEAD_MAPPING,
-    "text-classification": TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-    "causal_language_modeling": TF_MODEL_WITH_LM_HEAD_MAPPING,
-    "masked_language_modeling": TF_MODEL_WITH_LM_HEAD_MAPPING,
-    "masked_pretraining": TF_MODEL_FOR_PRETRAINING_MAPPING,
-}
 
 
 if is_tf_available():
@@ -143,11 +124,15 @@ class TensorflowBenchmark(Benchmark):
         if self.args.fp16:
             raise NotImplementedError("Mixed precision is currently not supported.")
 
-        if self.args.model_type is not None:
-            assert self.args.model_type in TF_MODEL_TYPE_MAPPING.keys(), f"{self.args.model_type} does not exist."
-            model_mapping = TF_MODEL_TYPE_MAPPING[self.args.model_type]
-            assert config.__class__ in model_mapping, f"{config.__class__} is not implemented for {model_mapping}"
-            model = model_mapping[config.__class__](config)
+        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        if not self.args.only_pretrain_model and has_model_class_in_config:
+            try:
+                model_class = "TF" + config.architectures[0]  # prepend 'TF' for tensorflow model
+                transformers_module = __import__("transformers", fromlist=[model_class])
+                model_cls = getattr(transformers_module, model_class)
+                model = model_cls(config)
+            except ImportError:
+                raise ImportError(f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`.")
         else:
             model = TF_MODEL_MAPPING[config.__class__](config)
 

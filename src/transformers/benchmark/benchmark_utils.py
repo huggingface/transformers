@@ -752,6 +752,7 @@ class Benchmark(ABC):
             info["time"] = datetime.time(datetime.now())
             info["fp16"] = self.args.fp16
             info["use_multiprocessing"] = self.args.do_multi_processing
+            info["only_pretrain_model"] = self.args.only_pretrain_model
 
             if is_psutil_available():
                 info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)

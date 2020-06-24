@@ -19,7 +19,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from time import time
-from typing import List, Optional
+from typing import List
 
 
 logger = logging.getLogger(__name__)
@@ -105,9 +105,9 @@ class BenchmarkArguments:
         metadata={"help": "Log filename used if print statements are saved in log."},
     )
     repeat: int = field(default=3, metadata={"help": "Times an experiment will be run."})
-    model_type: Optional[str] = field(
-        default=None,
-        metadata={"help": "Model type that should be loaded for the model, such as `question-answering`."},
+    only_pretrain_model: bool = field(
+        default=False,
+        metadata={"help": "Instead of loading the model as defined in `config.architectures` if exists, just load the pretrain model weights."}
     )
 
     def to_json_string(self):

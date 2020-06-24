@@ -37,7 +37,7 @@ class TFBenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.time_inference_result)
         self.check_results_dict_not_empty(results.memory_inference_result)
 
-    def test_inference_no_configs_model_type(self):
+    def test_inference_no_configs_only_pretrain(self):
         MODEL_ID = "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"
         benchmark_args = TensorflowBenchmarkArguments(
             models=[MODEL_ID],
@@ -46,7 +46,7 @@ class TFBenchmarkTest(unittest.TestCase):
             sequence_lengths=[8],
             batch_sizes=[1],
             no_multi_process=True,
-            model_type="question-answering",
+            only_pretrain_model=True
         )
         benchmark = TensorflowBenchmark(benchmark_args)
         results = benchmark.run()
