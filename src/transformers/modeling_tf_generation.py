@@ -19,6 +19,7 @@ import logging
 import numpy as np
 import tensorflow as tf
 
+
 logger = logging.getLogger(__name__)
 
 
