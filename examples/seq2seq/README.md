@@ -1,3 +1,8 @@
+This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
+Summarization support is more mature than translation support.
+Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
+For `bertabs` instructions, see `bertabs/README.md`. 
+
 ### Data
 
 CNN/DailyMail data
@@ -89,51 +94,36 @@ Results can be viewed [here](https://app.wandb.ai/sshleifer/hf_summarization/tab
 
 ### Distillation
  
-
-
 #### No Teacher Distillation
 To run the simpler distilbart-cnn style distillation all you need is data, a GPU, and a properly initialized student.
 You don't even need `distillation.py`.
 
-I have made some [un-finetuned students available](https://huggingface.co/models?search=sshleifer%2Fstudent) for replication purposes.
-They are initialized by copying layers from the associated `bart-large-{cnn|xsum}` teacher using `--init_strategy alternate`.
-The command that produced `sshleifer/distilbart-cnn-12-6` is in `dbart_cnn.sh` and can be invoked with
-
+Some [un-finetuned students](https://huggingface.co/models?search=sshleifer%2Fstudent) are available for replication purposes.
+They are initialized by copying layers from the associated `bart-large-{cnn|xsum}` teacher using `--init_strategy alternate`. (You can read about that in `initialization_utils.py)
+The command that produced `sshleifer/distilbart-cnn-12-6` is
 ```bash
-./dbart_cnn.sh --output_dir distilbart-cnn-12-6
+./train_distilbart_cnn.sh
 ```  
-runtime: 6H
+runtime: 6H on NVIDIA RTX 24GB GPU
 
 
-*Note*: You can get the same simple distillation logic by using `./run_distiller.sh --no_teacher` followed by identical arguments.
+*Note*: You can get the same simple distillation logic by using `./run_distiller.sh --no_teacher` followed by identical arguments as the ones in `train_distilbart_cnn.sh`.
 If you are using `wandb` and comparing the two distillation methods, using this entry point will make your logs consistent,
 because you will have the same hyperparameters logged in every run.
 
 #### With a teacher
-Warning: this code is experimental and very frail. Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
-At the moment, only Bart variants are supported.
+*Note* only BART variants are supported
 
-In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `SummarizationDistiller`.
+In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `BartSummarizationDistiller`.
 This is how `sshleifer/distilbart-xsum*` checkpoints were produced.
 
-
-To replicate xsum style distillation, After the XSUM download instructions above, you can run
+The command that produced `sshleifer/distilbart-xsum-12-6` is:
 
 ```bash
-export BS=16
-export GAS=2
-./run_distiller.sh --n_val 1000 --teacher facebook/bart-large-xsum --data_dir $XSUM_DIR \
-  --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 \
-  --student_decoder_layers 6 \
-  --student_encoder_layers 12 \
-  --freeze_encoder --freeze_embeds \
-  --output_dir distilbart_xsum_12_6 \
-  --model_name_or_path student --alpha_hid=3. \
-  --train_batch_size=$BS --eval_batch_size=$BS --gradient_accumulation_steps=$GAS --num_train_epochs=6 \
-  --tokenizer_name facebook/bart-large 
+./train_distilbart_xsum.sh  
 ```
- 
-This took 17hr on a RTX GPU with 24GB RAM. 
+
+runtime: 17H on NVIDIA RTX 24GB GPU 
 
 ### Contributing
 - follow the standard contributing guidelines and code of conduct.

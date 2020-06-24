@@ -120,18 +120,17 @@ class TestSummarizationDistiller(unittest.TestCase):
             num_train_epochs=4,
             val_check_interval=0.25,
             alpha_hid=2.0,
+            model_name_or_path="IGNORE_THIS_IT_DOESNT_GET_USED",
         )
         model = self._test_distiller_cli(updates, check_contents=False)
 
         ckpts = list(Path(model.output_dir).glob("*.ckpt"))
         self.assertEqual(1, len(ckpts))
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
-        self.assertEqual(len(transformer_ckpts), len(ckpts))
-        new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
-        self.assertEqual(len(new_transformer_ckpts), 1)
+        self.assertEqual(len(transformer_ckpts), 2)
         examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
         out_path = tempfile.mktemp()
-        generate_summaries_or_translations(examples, out_path, str(new_transformer_ckpts[0].parent))
+        generate_summaries_or_translations(examples, out_path, str(model.output_dir / "best_tfmr"))
         self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))

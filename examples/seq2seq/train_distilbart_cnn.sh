@@ -19,5 +19,6 @@ python finetune.py \
     --data_dir $CNN_DIR \
     --model_name_or_path sshleifer/student_cnn_12_6 \
     --tokenizer_name facebook/bart-large \
+    --output_dir distilbart-cnn-12-6 \
     $@
 

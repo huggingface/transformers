@@ -39,13 +39,12 @@ except ImportError:
     )
 
 
-class SummarizationDistiller(SummarizationModule):
+class BartSummarizationDistiller(SummarizationModule):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
     def __init__(self, hparams):
         assert Path(hparams.data_dir).exists()
-
-        d_layers_to_copy, student, student_cfg, teacher = self.pre_init(hparams)
+        student, student_cfg, teacher = self.pre_init(hparams)
 
         super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
@@ -73,7 +72,8 @@ class SummarizationDistiller(SummarizationModule):
             del self.teacher.model.encoder
 
     def pre_init(self, hparams):
-        # Dump empty student model at a path, then call from_pretrained on it
+        self.output_dir = Path(hparams.output_dir)
+        self.output_dir.mkdir(exist_ok=True)
         teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
         student_updates = {
             "decoder_layers": hparams.student_decoder_layers,
@@ -89,9 +89,13 @@ class SummarizationDistiller(SummarizationModule):
         student_cfg = BartConfig(**kw)
         student = BartForConditionalGeneration(student_cfg)
         student, _ = init_student(student, teacher)
+        save_dir = self.output_dir.joinpath("student")
+        save_dir.mkdir(exist_ok=True)
+
         self.copy_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
-        Path(hparams.output_dir).mkdir(exist_ok=True)
-        return d_layers_to_copy, student, student_cfg, teacher
+        student.save_pretrained(save_dir)
+        hparams.model_name_or_path = str(save_dir)
+        return student, student_cfg, teacher
 
     def copy_to_student(self, d_layers_to_copy, e_layers_to_copy, hparams, student, teacher):
         if teacher.config.model_type == "t5":
@@ -154,7 +158,6 @@ class SummarizationDistiller(SummarizationModule):
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
-
         model = self.model
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
@@ -269,12 +272,14 @@ class SummarizationDistiller(SummarizationModule):
         return sum(hidden_losses)
 
 
-class T5SummarizationDistiller(SummarizationDistiller):
+class T5SummarizationDistiller(BartSummarizationDistiller):
     def pre_init(self, hparams):
         raise NotImplementedError("T5 Distillation does not work yet")
+        self.output_dir = Path(hparams.output_dir)
+        self.output_dir.mkdir(exist_ok=True)
         teacher = T5ForConditionalGeneration.from_pretrained(hparams.teacher)
         n_layer = hparams.student_decoder_layers
-        assert n_layer == hparams.student_encoder_layers  # TODO(SS): relax this
+        assert n_layer == hparams.student_encoder_layers  # TODO(SS): relax this constraint so that we can do 12-6.
         d_layers_to_copy = get_layers_to_copy(n_layer, len(teacher.decoder.block))
         e_layers_to_copy: List = get_layers_to_copy(n_layer, len(teacher.encoder.block))
         student_updates = {"num_layers": n_layer}
@@ -291,8 +296,13 @@ class T5SummarizationDistiller(SummarizationDistiller):
         Path(hparams.output_dir).mkdir(exist_ok=True)
         task_specific_params = student.config.task_specific_params
         if task_specific_params is not None:
-            student.config.update(task_specific_params.get("summarization", {}))
-        return d_layers_to_copy, student, student_cfg, teacher
+            student.config.update(task_specific_params.get("summarization", {}))  # TODO: dont hardcode
+        save_dir = self.output_dir.joinpath("student")
+        save_dir.mkdir(exist_ok=True)
+
+        student.save_pretrained(save_dir)
+        hparams.model_name_or_path = str(save_dir)
+        return student, student_cfg, teacher
 
     def freeze_embeds(self):
         freeze_params(self.model.shared)
@@ -386,7 +396,7 @@ def create_module(args):
     elif args.enc_only:
         raise ValueError("Deleted that")
     else:
-        module_cls = SummarizationDistiller
+        module_cls = BartSummarizationDistiller
     args.setup_cls: str = module_cls.__name__
     model = module_cls(args)
     return model
@@ -443,7 +453,7 @@ def distill_main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
+    parser = BartSummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     distill_main(args)
