@@ -11,6 +11,7 @@ function deploy_doc(){
 			cp -r _build/html/_static .
 		elif ssh -oStrictHostKeyChecking=no $doc "[ -d $dir/$2 ]"; then
 			echo "Directory" $2 "already exists"
+			scp -r -oStrictHostKeyChecking=no _static/* $doc:$dir/$2/_static/
 		else
 			echo "Pushing version" $2
 			make clean && make html
