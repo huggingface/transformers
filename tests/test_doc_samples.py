@@ -15,50 +15,12 @@
 
 import os
 import unittest
+from doctest import DocTestSuite
 from typing import List, Union
 
+import transformers
+
 from .utils import require_tf, require_torch, slow
-
-
-def get_examples_from_file(file):
-    examples = []
-    example = []
-    example_mode = False
-    example_indentation = None
-    for i, line in enumerate(file):
-        if example_mode:
-            current_indentation = len(line) - len(line.strip()) - 1
-
-            # Check if the indentation is 0 for the example, so that we don't exit as soon as there's a line return.
-            empty_line = example_indentation == 0 and len(line) == 1
-
-            # If we're back to the example indentation or if it's the end of the docstring.
-            if (current_indentation == example_indentation and not empty_line) or '"""' in line:
-                # Exit the example mode and add the example to the examples list
-                example_mode = False
-                example_indentation = None
-                examples.append(example)
-                example = []
-            else:
-                # If line is not empty, add it to the current example
-                if line != "\n":
-                    example.append(line[example_indentation + 4 : -1])
-
-        # Detect the example from '::' or 'example::'
-        if "example::" in line.lower():
-            example_mode = True
-            example_indentation = line.lower().find("example::")
-        elif "examples::" in line.lower():
-            example_mode = True
-            example_indentation = line.lower().find("examples::")
-        # elif "::" in line.lower() and len(line.strip()) == 2:
-        #     example_mode = True
-        #     example_indentation = line.lower().find("::")
-
-    examples = ["\n".join(example) for example in examples]
-    examples = [example for example in examples if "not runnable" not in example.lower()]
-
-    return examples
 
 
 @require_torch
@@ -78,34 +40,11 @@ class TestCodeExamples(unittest.TestCase):
 
         for file in files:
             # Open all files
-            print("Testing", file, end=" ")
-            with open(os.path.join(directory, file)) as f:
-                # Retrieve examples
-                examples = get_examples_from_file(f)
-                joined_examples = []
-
-                def execute_example(code_example):
-                    exec(code_example, {})
-
-                # Some examples are the continuation of others.
-                if len(examples) > 0:
-                    joined_examples.append(examples[0])
-                    joined_examples_index = 0
-                    for example in examples[1:]:
-                        # If they contain this line, then they're a continuation of the previous script
-                        if "# Continuation of the previous script" in example:
-                            joined_examples[joined_examples_index] += "\n" + example
-                        # If not, create a new example and increment the index
-                        else:
-                            joined_examples.append(example)
-                            joined_examples_index += 1
-
-                print(str(len(joined_examples)) + "/" + str(len(joined_examples)))
-
-                # Execute sub tests with every example.
-                for index, code_example in enumerate(joined_examples):
-                    with self.subTest(msg=file + " " + str(index) + "/" + str(len(joined_examples)) + code_example):
-                        execute_example(code_example)
+            print("Testing", file)
+            module = file.split(".")[0]
+            suite = DocTestSuite(getattr(transformers, module))
+            result = unittest.TextTestRunner().run(suite)
+            self.assertIs(len(result.failures), 0)
 
     def test_configuration_examples(self):
         transformers_directory = "src/transformers"
@@ -121,13 +60,5 @@ class TestCodeExamples(unittest.TestCase):
     def test_modeling_examples(self):
         transformers_directory = "src/transformers"
         modeling_files = "modeling"
-        ignore_files = [
-            "modeling_auto.py",
-            "modeling_t5.py",
-            "modeling_tf_auto.py",
-            "modeling_utils.py",
-            "modeling_tf_t5.py",
-            "modeling_bart.py",
-            "modeling_tf_utils.py",
-        ]
+        ignore_files = ["modeling_longformer.py"]
         self.analyze_directory(transformers_directory, identifier=modeling_files, ignore_files=ignore_files)

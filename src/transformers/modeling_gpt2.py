@@ -26,7 +26,7 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import ACT2FN
 from .configuration_gpt2 import GPT2Config
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import (
     Conv1D,
     PreTrainedModel,
@@ -37,6 +37,8 @@ from .modeling_utils import (
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt2",
@@ -370,6 +372,7 @@ class GPT2Model(GPT2PreTrainedModel):
             self.h[layer].attn.prune_heads(heads)
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
     def forward(
         self,
         input_ids=None,
@@ -403,18 +406,6 @@ class GPT2Model(GPT2PreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import GPT2Tokenizer, GPT2Model
-        import torch
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2Model.from_pretrained('gpt2')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -553,6 +544,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         return {"input_ids": input_ids, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
     def forward(
         self,
         input_ids=None,
@@ -595,19 +587,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import torch
-        from transformers import GPT2Tokenizer, GPT2LMHeadModel
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2LMHeadModel.from_pretrained('gpt2')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(
             input_ids,

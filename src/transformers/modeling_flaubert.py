@@ -22,7 +22,7 @@ import torch
 from torch.nn import functional as F
 
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_xlm import (
     XLMForQuestionAnswering,
     XLMForQuestionAnsweringSimple,
@@ -34,6 +34,8 @@ from .modeling_xlm import (
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "FlaubertTokenizer"
 
 FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "flaubert/flaubert_small_cased",
@@ -119,6 +121,7 @@ class FlaubertModel(XLMModel):
         self.pre_norm = getattr(config, "pre_norm", False)
 
     @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="flaubert-base-cased")
     def forward(
         self,
         input_ids=None,
@@ -149,18 +152,6 @@ class FlaubertModel(XLMModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import FlaubertTokenizer, FlaubertModel
-        import torch
-
-        tokenizer = FlaubertTokenizer.from_pretrained('flaubert-base-cased')
-        model = FlaubertModel.from_pretrained('flaubert-base-cased')
-        input_ids = torch.tensor(tokenizer.encode("Le chat mange une pomme.", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

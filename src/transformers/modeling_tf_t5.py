@@ -24,7 +24,13 @@ import math
 import tensorflow as tf
 
 from .configuration_t5 import T5Config
-from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
@@ -36,6 +42,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "t5-small",
@@ -906,6 +914,7 @@ class TFT5Model(TFT5PreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="t5-small")
     def call(self, inputs, **kwargs):
         r"""
     Returns:

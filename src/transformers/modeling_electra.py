@@ -8,13 +8,14 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import get_activation
 from .configuration_electra import ElectraConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
 from .modeling_utils import SequenceSummary
 
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-small-generator",
@@ -264,6 +265,7 @@ class ElectraModel(ElectraPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def forward(
         self,
         input_ids=None,
@@ -291,20 +293,6 @@ class ElectraModel(ElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ElectraModel, ElectraTokenizer
-        import torch
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = ElectraModel.from_pretrained('google/electra-small-discriminator')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -383,6 +371,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def forward(
         self,
         input_ids=None,
@@ -419,21 +408,6 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import BertTokenizer, BertForSequenceClassification
-        import torch
-
-        tokenizer = ElectraTokenizer.from_pretrained('bert-base-uncased')
-        model = ElectraForSequenceClassification.from_pretrained('bert-base-uncased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-
-        loss, logits = outputs[:2]
-
         """
         discriminator_hidden_states = self.electra(
             input_ids,
@@ -589,6 +563,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         return self.generator_lm_head
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-generator")
     def forward(
         self,
         input_ids=None,
@@ -628,20 +603,6 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-        Examples::
-
-            from transformers import ElectraTokenizer, ElectraForMaskedLM
-            import torch
-
-            tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
-            model = ElectraForMaskedLM.from_pretrained('google/electra-small-generator')
-
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids, labels=input_ids)
-
-            loss, prediction_scores = outputs[:2]
-
         """
         if "masked_lm_labels" in kwargs:
             warnings.warn(
@@ -696,6 +657,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def forward(
         self,
         input_ids=None,
@@ -730,21 +692,6 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ElectraTokenizer, ElectraForTokenClassification
-        import torch
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = ElectraForTokenClassification.from_pretrained('google/electra-small-discriminator')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-
-        loss, scores = outputs[:2]
-
         """
 
         discriminator_hidden_states = self.electra(
@@ -802,6 +749,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def forward(
         self,
         input_ids=None,
@@ -844,23 +792,6 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ElectraTokenizer, ElectraForQuestionAnswering
-        import torch
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-base-discriminator')
-        model = ElectraForQuestionAnswering.from_pretrained('google/electra-base-discriminator')
-
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        encoding = tokenizer.encode_plus(question, text, return_tensors='pt')
-        input_ids, token_type_ids = encoding['input_ids'], encoding['token_type_ids']
-        start_scores, end_scores = model(input_ids, token_type_ids=token_type_ids)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids.squeeze(0))
-        answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
-
         """
 
         discriminator_hidden_states = self.electra(
@@ -918,6 +849,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def forward(
         self,
         input_ids=None,
@@ -954,25 +886,6 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ElectraTokenizer, ElectraForMultipleChoice
-        import torch
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-base-discriminator')
-        model = ElectraForMultipleChoice.from_pretrained('google/electra-base-discriminator')
-
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        choice0 = "It is eaten with a fork and a knife."
-        choice1 = "It is eaten while held in the hand."
-        labels = torch.tensor(0) # choice0 is correct (according to Wikipedia ;))
-
-        encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='pt', pad_to_max_length=True)
-        outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
-
-        # the linear classifier still needs to be trained
-        loss, logits = outputs[:2]
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

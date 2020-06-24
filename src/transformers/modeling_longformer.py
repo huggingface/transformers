@@ -24,12 +24,14 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from .configuration_longformer import LongformerConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertPreTrainedModel
 from .modeling_roberta import RobertaLMHead, RobertaModel
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
@@ -807,6 +809,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="allenai/longformer-base-4096")
     def forward(
         self,
         input_ids=None,
@@ -843,19 +846,6 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import LongformerTokenizer, LongformerForSequenceClassification
-        import torch
-
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
-        model = LongformerForSequenceClassification.from_pretrained('allenai/longformer-base-4096')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
 
         if global_attention_mask is None:
@@ -1060,6 +1050,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="allenai/longformer-base-4096")
     def forward(
         self,
         input_ids=None,
@@ -1094,19 +1085,6 @@ class LongformerForTokenClassification(BertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import LongformerTokenizer, LongformerForTokenClassification
-        import torch
-
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
-        model = LongformerForTokenClassification.from_pretrained('allenai/longformer-base-4096')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
 
         outputs = self.longformer(
@@ -1163,6 +1141,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="allenai/longformer-base-4096")
     def forward(
         self,
         input_ids=None,
@@ -1200,23 +1179,6 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import LongformerTokenizer, LongformerForMultipleChoice
-        import torch
-
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
-        model = LongformerForMultipleChoice.from_pretrained('allenai/longformer-base-4096')
-        # context = "The dog is cute" | choice = "the dog" / "the cat"
-        choices = [("The dog is cute", "the dog"), ("The dog is cute", "the cat")]
-        input_ids = torch.tensor([tokenizer.encode(s[0], s[1], add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
-
-        # global attention is automatically put on "the dog" and "the cat"
-        outputs = model(input_ids, labels=labels)
-        loss, classification_scores = outputs[:2]
-
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

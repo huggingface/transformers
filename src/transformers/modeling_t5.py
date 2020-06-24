@@ -27,11 +27,19 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_t5 import T5Config
-from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 ####################################################
 # This dict contrains shortcut names and associated url
@@ -887,6 +895,7 @@ class T5Model(T5PreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="t5-small")
     def forward(
         self,
         input_ids=None,
@@ -923,17 +932,6 @@ class T5Model(T5PreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import T5Tokenizer, T5Model
-
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5Model.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 

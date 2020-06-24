@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_gpt2 import GPT2Config
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFConv1D,
     TFPreTrainedModel,
@@ -37,6 +37,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt2",
@@ -490,6 +492,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -511,18 +514,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import GPT2Tokenizer, TFGPT2Model
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = TFGPT2Model.from_pretrained('gpt2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
     """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
@@ -549,6 +540,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -570,19 +562,6 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import GPT2Tokenizer, TFGPT2LMHeadModel
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = TFGPT2LMHeadModel.from_pretrained('gpt2')
-
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        logits = outputs[0]
-
         """
         transformer_outputs = self.transformer(inputs, **kwargs)
         hidden_states = transformer_outputs[0]

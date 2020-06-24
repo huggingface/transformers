@@ -34,11 +34,14 @@ from transformers.modeling_bert import BertIntermediate
 
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "MobileBertTokenizer"
+
 MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["google/mobilebert-uncased"]
 
 
@@ -747,6 +750,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def forward(
         self,
         input_ids=None,
@@ -785,20 +789,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import MobileBertModel, MobileBertTokenizer
-        import torch
-
-        tokenizer = MobileBertTokenizer.from_pretrained(model_name_or_path)
-        model = MobileBertModel.from_pretrained(model_name_or_path)
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -951,13 +941,17 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             heads.
 
     Examples::
-        from transformers import MobileBertTokenizer, MobileBertForPreTraining
-        import torch
-        tokenizer = MobileBertTokenizer.from_pretrained(model_name_or_path)
-        model = MobileBertForPreTraining.from_pretrained(model_name_or_path)
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores, seq_relationship_scores = outputs[:2]
+
+        >>> from transformers import MobileBertTokenizer, MobileBertForPreTraining
+        >>> import torch
+
+        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
+
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> outputs = model(input_ids)
+
+        >>> prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
         outputs = self.mobilebert(
@@ -1022,6 +1016,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def forward(
         self,
         input_ids=None,
@@ -1063,20 +1058,6 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-        Examples::
-
-            from transformers import MobileBertTokenizer, MobileBertForMaskedLM
-            import torch
-
-            tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-            model = MobileBertForMaskedLM.from_pretrained('mobilebert-uncased')
-
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids, labels=input_ids)
-
-            loss, prediction_scores = outputs[:2]
-
         """
         if "masked_lm_labels" in kwargs:
             warnings.warn(
@@ -1177,12 +1158,12 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         from transformers import MobileBertTokenizer, MobileBertForNextSentencePrediction
         import torch
 
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = MobileBertForNextSentencePrediction.from_pretrained('mobilebert-uncased')
+        tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
+        model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
 
         prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        encoding = tokenizer.encode_plus(prompt, next_sentence, return_tensors='pt')
+        encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
 
         loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))
         assert logits[0, 0] < logits[0, 1] # next sentence was random
@@ -1228,6 +1209,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def forward(
         self,
         input_ids=None,
@@ -1263,20 +1245,6 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import BertTokenizer, BertForSequenceClassification
-        import torch
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-
-        loss, logits = outputs[:2]
         """
 
         outputs = self.mobilebert(
@@ -1321,6 +1289,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def forward(
         self,
         input_ids=None,
@@ -1363,25 +1332,6 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import MobileBertTokenizer, MobileBertForQuestionAnswering
-        import torch
-
-        tokenizer = BertTokenizer.from_pretrained(model_name_or_path)
-        model = MobileBertForQuestionAnswering.from_pretrained(model_name_or_path)
-
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        encoding = tokenizer.encode_plus(question, text)
-        input_ids, token_type_ids = encoding["input_ids"], encoding["token_type_ids"]
-        start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-        answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
-
-        assert answer == "a nice puppet"
-
         """
 
         outputs = self.mobilebert(
@@ -1439,6 +1389,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def forward(
         self,
         input_ids=None,
@@ -1476,25 +1427,6 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import MobileBertTokenizer, MobileBertForMultipleChoice
-        import torch
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = MobileBertForMultipleChoice.from_pretrained('mobilebert-uncased')
-
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        choice0 = "It is eaten with a fork and a knife."
-        choice1 = "It is eaten while held in the hand."
-        labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
-
-        encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='pt', pad_to_max_length=True)
-        outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
-
-        # the linear classifier still needs to be trained
-        loss, logits = outputs[:2]
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1552,6 +1484,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def forward(
         self,
         input_ids=None,
@@ -1586,21 +1519,6 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import MobileBertTokenizer, MobileBertForTokenClassification
-        import torch
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = MobileBertForTokenClassification.from_pretrained('mobilebert-uncased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-
-        loss, scores = outputs[:2]
-
         """
 
         outputs = self.mobilebert(
