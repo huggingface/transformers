@@ -60,7 +60,7 @@ class DprBertEncoder(BertModel):
         if dropout != 0:
             cfg.attention_probs_dropout_prob = dropout
             cfg.hidden_dropout_prob = dropout
-        return cls.from_pretrained(cfg_name, config=cfg, project_dim=projection_dim, **kwargs)
+        return cls(cfg, project_dim=projection_dim)
 
     def forward(self, input_ids: T, token_type_ids: T, attention_mask: T) -> Tuple[T, ...]:
         if self.config.output_hidden_states:
