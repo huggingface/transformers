@@ -493,7 +493,7 @@ class TokenizerTesterMixin:
 
                 seq_1 = "This is another sentence to be encoded."
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
-                if len(seq0_tokens) == len(seq1_tokens):
+                if abs(len(seq0_tokens) - len(seq1_tokens)) <= 2:
                     seq1_tokens = seq1_tokens + seq1_tokens
                     seq_1 = tokenizer.decode(seq1_tokens, clean_up_tokenization_spaces=False)
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
