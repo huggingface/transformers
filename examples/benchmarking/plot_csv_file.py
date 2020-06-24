@@ -39,6 +39,14 @@ class PlotArguments:
     )
 
 
+def can_convert_to_number(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+
+
 class Plot:
     def __init__(self, args):
         self.args = args
@@ -50,9 +58,11 @@ class Plot:
                 model_name = row["model"]
                 self.result_dict[model_name]["bsz"].append(int(row["batch_size"]))
                 self.result_dict[model_name]["seq_len"].append(int(row["sequence_length"]))
-                self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = row[
-                    "result"
-                ]
+                if can_convert_to_number(row["result"]):
+                    # value is not None
+                    self.result_dict[model_name]["result"][
+                        (int(row["batch_size"]), int(row["sequence_length"]))
+                    ] = row["result"]
 
     def plot(self):
         fig, ax = plt.subplots()
@@ -78,9 +88,15 @@ class Plot:
 
             for inner_loop_value in inner_loop_array:
                 if self.args.plot_along_batch:
-                    y_axis_array = np.asarray([results[(x, inner_loop_value)] for x in x_axis_array], dtype=np.int)
+                    y_axis_array = np.asarray(
+                        [results[(x, inner_loop_value)] for x in x_axis_array if (x, inner_loop_value) in results],
+                        dtype=np.int,
+                    )
                 else:
-                    y_axis_array = np.asarray([results[(inner_loop_value, x)] for x in x_axis_array], dtype=np.float32)
+                    y_axis_array = np.asarray(
+                        [results[(inner_loop_value, x)] for x in x_axis_array if (inner_loop_value, x) in results],
+                        dtype=np.float32,
+                    )
 
                 (x_axis_label, inner_loop_label) = (
                     ("batch_size", "sequence_length in #tokens")
@@ -88,7 +104,7 @@ class Plot:
                     else ("sequence_length in #tokens", "batch_size")
                 )
 
-                x_axis_array = np.asarray(x_axis_array, np.int)
+                x_axis_array = np.asarray(x_axis_array, np.int)[: len(y_axis_array)]
                 plt.scatter(x_axis_array, y_axis_array, label=f"{model_name} - {inner_loop_label}: {inner_loop_value}")
                 plt.plot(x_axis_array, y_axis_array, "--")
 
