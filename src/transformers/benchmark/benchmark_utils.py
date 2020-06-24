@@ -807,7 +807,7 @@ class Benchmark(ABC):
                     else:
                         result = str(result)
                     self.print_fn(
-                        model_name.center(30) + str(batch_size).center(15),
+                        model_name[:30].center(30) + str(batch_size).center(15),
                         str(sequence_length).center(15),
                         result.center(15),
                     )
