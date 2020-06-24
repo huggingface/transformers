@@ -24,12 +24,7 @@ import timeit
 from functools import wraps
 from typing import Callable, Optional
 
-from transformers import (
-    TF_MODEL_MAPPING,
-    PretrainedConfig,
-    is_py3nvml_available,
-    is_tf_available,
-)
+from transformers import TF_MODEL_MAPPING, PretrainedConfig, is_py3nvml_available, is_tf_available
 
 from .benchmark_utils import (
     Benchmark,
@@ -132,7 +127,9 @@ class TensorflowBenchmark(Benchmark):
                 model_cls = getattr(transformers_module, model_class)
                 model = model_cls(config)
             except ImportError:
-                raise ImportError(f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`.")
+                raise ImportError(
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                )
         else:
             model = TF_MODEL_MAPPING[config.__class__](config)
 

@@ -96,7 +96,9 @@ class PyTorchBenchmark(Benchmark):
                 model_cls = getattr(transformers_module, model_class)
                 model = model_cls(config)
             except ImportError:
-                raise ImportError(f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`.")
+                raise ImportError(
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                )
         else:
             model = MODEL_MAPPING[config.__class__](config)
 
@@ -144,7 +146,9 @@ class PyTorchBenchmark(Benchmark):
                 model_cls = getattr(transformers_module, model_class)
                 model = model_cls(config)
             except ImportError:
-                raise ImportError(f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`.")
+                raise ImportError(
+                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
+                )
         else:
             model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
 

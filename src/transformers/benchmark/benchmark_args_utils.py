@@ -107,7 +107,9 @@ class BenchmarkArguments:
     repeat: int = field(default=3, metadata={"help": "Times an experiment will be run."})
     only_pretrain_model: bool = field(
         default=False,
-        metadata={"help": "Instead of loading the model as defined in `config.architectures` if exists, just load the pretrain model weights."}
+        metadata={
+            "help": "Instead of loading the model as defined in `config.architectures` if exists, just load the pretrain model weights."
+        },
     )
 
     def to_json_string(self):

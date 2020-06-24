@@ -47,7 +47,7 @@ class BenchmarkTest(unittest.TestCase):
             sequence_lengths=[8],
             batch_sizes=[1],
             no_multi_process=True,
-            only_pretrain_model=True
+            only_pretrain_model=True,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
         results = benchmark.run()
