@@ -1,7 +1,8 @@
 Preprocessing data
 ==================
 
-In this tutorial, we'll explore how to preocess your data using 🤗 Transformers. The main tool for this is what we
+In this tutorial, we'll explore how to preprocess your data using 🤗 Transformers. The main tool for this is what we
+
 call a :doc:`tokenizer <main_classes/tokenizer>`. You can build one using the tokenizer class associated to the model
 you would like to use, or directly with the :class:`~transformers.AutoTokenizer` class.
 
@@ -60,7 +61,8 @@ which should return
     "[CLS] Hello, I'm a single sentence! [SEP]"
 
 As you can see, the tokenizer automatically added some special tokens that the model expect. Not all model need special
-tokens; for instance, if we had use `gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we would have
+tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we would have
+
 seen the same sentence as the original one here. You can disable this behavior (which is only advised if you have added
 those special tokens yourself) by passing ``add_special_tokens=False``.
 
@@ -122,7 +124,8 @@ which should now return a dictionary string to tensor like this:
                                [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
 
 We can now see what the `attention_mask <glossary.html#attention-mask>`__ is all about: it points out which tokens the
-model should pay attention to and which ones it shoul not (because they represent padding in this case).
+model should pay attention to and which ones it should not (because they represent padding in this case).
+
 
 Note that if your model does not have a maximum length associated to it, the command above will throw a warning. You
 can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer to throw those kinds of warnings.
@@ -140,8 +143,10 @@ then represented like this:
 
     [CLS] Sequence A [SEP] Sequence B [SEP]
 
-You can encode a pair of sentences in the format your model expects it by passing the two sentences as two arguments
-(not a list since a list of two sentences will be interpreted as a batch of teo single sentences, as we saw before).
+You can encode a pair of sentences in the format expected by your model by supplying the two sentences as two arguments
+
+(not a list since a list of two sentences will be interpreted as a batch of two single sentences, as we saw before).
+
 
 ::
 
@@ -227,7 +232,8 @@ length the model can accept and return tensors directly with the following:
 Everything you always wanted to know about padding and truncation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We have seen the command that will work for most cases (pad your batch to the length of the maximum sentence and
+We have seen the commands that will work for most cases (pad your batch to the length of the maximum sentence and
+
 truncate to the maximum length the mode can accept). However, the API supports more strategies if you need them. The
 three arguments you need to know for this are :obj:`padding`, :obj:`truncation` and :obj:`max_length`.
 
