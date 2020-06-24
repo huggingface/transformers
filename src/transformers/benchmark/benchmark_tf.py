@@ -25,6 +25,11 @@ from functools import wraps
 from typing import Callable, Optional
 
 from transformers import (
+    TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+    TF_MODEL_FOR_PRETRAINING_MAPPING,
+    TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_MAPPING,
     TF_MODEL_WITH_LM_HEAD_MAPPING,
     PretrainedConfig,
@@ -40,6 +45,19 @@ from .benchmark_utils import (
     start_memory_tracing,
     stop_memory_tracing,
 )
+
+
+TF_MODEL_TYPE_MAPPING = {
+    "token-classification": TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    "question-answering": TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    "multiple-choice": TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+    "summarization": TF_MODEL_WITH_LM_HEAD_MAPPING,
+    "transaltion": TF_MODEL_WITH_LM_HEAD_MAPPING,
+    "text-classification": TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    "causal_language_modeling": TF_MODEL_WITH_LM_HEAD_MAPPING,
+    "masked_language_modeling": TF_MODEL_WITH_LM_HEAD_MAPPING,
+    "masked_pretraining": TF_MODEL_FOR_PRETRAINING_MAPPING,
+}
 
 
 if is_tf_available():
@@ -125,8 +143,11 @@ class TensorflowBenchmark(Benchmark):
         if self.args.fp16:
             raise NotImplementedError("Mixed precision is currently not supported.")
 
-        if self.args.with_lm_head:
-            model = TF_MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
+        if self.args.model_type is not None:
+            assert self.args.model_type in TF_MODEL_TYPE_MAPPING.keys(), f"{self.args.model_type} does not exist."
+            model_mapping = TF_MODEL_TYPE_MAPPING[self.args.model_type]
+            assert config.__class__ in model_mapping, f"{config.__class__} is not implemented for {model_mapping}"
+            model = model_mapping[config.__class__](config)
         else:
             model = TF_MODEL_MAPPING[config.__class__](config)
 

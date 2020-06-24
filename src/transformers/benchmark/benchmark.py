@@ -23,6 +23,14 @@ import timeit
 from typing import Callable, Optional
 
 from transformers import (
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    MODEL_FOR_MASKED_LM_MAPPING,
+    MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+    MODEL_FOR_PRETRAINING_MAPPING,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     MODEL_MAPPING,
     MODEL_WITH_LM_HEAD_MAPPING,
     PretrainedConfig,
@@ -50,6 +58,18 @@ if is_py3nvml_available():
 
 
 logger = logging.getLogger(__name__)
+
+MODEL_TYPE_MAPPING = {
+    "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+    "multiple-choice": MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+    "summarization": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    "transaltion": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    "text-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    "causal_language_modeling": MODEL_FOR_CAUSAL_LM_MAPPING,
+    "masked_language_modeling": MODEL_FOR_MASKED_LM_MAPPING,
+    "masked_pretraining": MODEL_FOR_PRETRAINING_MAPPING,
+}
 
 
 class PyTorchBenchmark(Benchmark):
@@ -87,8 +107,12 @@ class PyTorchBenchmark(Benchmark):
 
         if self.args.torchscript:
             config.torchscript = True
-        if self.args.with_lm_head:
-            model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
+
+        if self.args.model_type is not None:
+            assert self.args.model_type in MODEL_TYPE_MAPPING.keys(), f"{self.args.model_type} does not exist."
+            model_mapping = MODEL_TYPE_MAPPING[self.args.model_type]
+            assert config.__class__ in model_mapping, f"{config.__class__} is not implemented for {model_mapping}"
+            model = model_mapping[config.__class__](config)
         else:
             model = MODEL_MAPPING[config.__class__](config)
 
@@ -127,7 +151,14 @@ class PyTorchBenchmark(Benchmark):
 
     def _prepare_train_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
-        model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
+
+        if self.args.model_type is not None:
+            assert self.args.model_type in MODEL_TYPE_MAPPING.keys(), f"{self.args.model_type} does not exist."
+            model_mapping = MODEL_TYPE_MAPPING[self.args.model_type]
+            assert config.__class__ in model_mapping, f"{config.__class__} is not implemented for {model_mapping}"
+            model = model_mapping[config.__class__](config)
+        else:
+            model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
 
         if self.args.torchscript:
             raise NotImplementedError("Training for torchscript is currently not implemented")
