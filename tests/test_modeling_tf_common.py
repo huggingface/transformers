@@ -591,16 +591,21 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             if getattr(model, "compute_loss", None):
+                # The number of elements in the loss should be the same as the number of elements in the label
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                added_label = prepared_for_class[list(prepared_for_class.keys() - inputs_dict.keys())[0]]
+                loss_size = tf.size(added_label)
+
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 input_ids = prepared_for_class.pop("input_ids")
                 loss = model(input_ids, **prepared_for_class)[0]
-                self.assertEqual(loss.shape, [])
+                self.assertEqual(loss.shape, [loss_size])
 
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 loss = model(prepared_for_class)[0]
-                self.assertEqual(loss.shape, [])
+                self.assertEqual(loss.shape, [loss_size])
 
                 # Test that model correctly compute the loss with a tuple
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
@@ -624,7 +629,7 @@ class TFModelTesterMixin:
 
                 # Send to model
                 loss = model(tuple_input)[0]
-                self.assertEqual(loss.shape, [])
+                self.assertEqual(loss.shape, [loss_size])
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):
         # special tokens cannot be bad tokens
