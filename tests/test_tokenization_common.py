@@ -399,17 +399,50 @@ class TokenizerTesterMixin:
                     )
 
     def test_maximum_encoding_length_single_input(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
+        tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 seq_0, ids = self.get_clean_sequence(tokenizer)
-                stride = 2
 
                 sequence = tokenizer.encode(seq_0, add_special_tokens=False)
-                # self.assertEqual(sequence, ids)
-
                 total_length = len(sequence)
-                information = tokenizer.encode_plus(
+
+                assert total_length > 1, "Issue with the testing sequence, please update it it's too short"
+
+                # Test with max model input length
+                model_max_length = tokenizer.model_max_length
+                self.assertEqual(model_max_length, 100)
+                seq_1 = seq_0 * model_max_length
+
+                sequence1 = tokenizer(seq_1, add_special_tokens=False)
+                total_length1 = len(sequence1["input_ids"])
+                assert (
+                    total_length1 > model_max_length
+                ), "Issue with the testing sequence, please update it it's too short"
+
+                # Simple
+                for truncation_state in [True, "longest_first", "only_first"]:
+                    for padding_state in [False, True, "longest"]:
+                        with self.subTest(f"Padding: {padding_state} - Truncation: {truncation_state}"):
+                            output = tokenizer(seq_1, padding=padding_state, truncation=truncation_state)
+                            self.assertEqual(len(output["input_ids"]), model_max_length)
+
+                            output = tokenizer([seq_1], padding=padding_state, truncation=truncation_state)
+                            self.assertEqual(len(output["input_ids"][0]), model_max_length)
+
+                # Simple with no truncation
+                for truncation_state in [False]:
+                    for padding_state in [False, True, "longest"]:
+                        with self.subTest(f"Padding: {padding_state} - Truncation: {truncation_state}"):
+                            output = tokenizer(seq_1, padding=padding_state, truncation=truncation_state)
+                            self.assertNotEqual(len(output["input_ids"]), model_max_length)
+
+                            output = tokenizer([seq_1], padding=padding_state, truncation=truncation_state)
+                            self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
+
+                # Overflowing tokens
+                stride = 2
+                information = tokenizer(
                     seq_0,
                     max_length=total_length - 2,
                     add_special_tokens=False,
@@ -442,7 +475,7 @@ class TokenizerTesterMixin:
                     )  # No overflowing tokens when using 'longest' in python tokenizers
 
     def test_maximum_encoding_length_pair_input(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
+        tokenizers = self.get_tokenizers(do_lower_case=False, model_max_length=100)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 # Build a sequence from our model's vocabulary
@@ -469,6 +502,49 @@ class TokenizerTesterMixin:
                 # We are not using the special tokens - a bit too hard to test all the tokenizers with this
                 # TODO try this again later
                 sequence = tokenizer.encode(seq_0, seq_1, add_special_tokens=False)  # , add_prefix_space=False)
+
+                # Test with max model input length
+                model_max_length = tokenizer.model_max_length
+                self.assertEqual(model_max_length, 100)
+                seq_2 = seq_0 * model_max_length
+
+                sequence1 = tokenizer(seq_1, add_special_tokens=False)
+                total_length1 = len(sequence1["input_ids"])
+                sequence2 = tokenizer(seq_2, seq_1, add_special_tokens=False)
+                total_length2 = len(sequence2["input_ids"])
+                assert total_length1 < model_max_length - 10, "Issue with the testing sequence, please update it."
+                assert total_length2 > model_max_length, "Issue with the testing sequence, please update it."
+
+                # Simple
+                for truncation_state in [True, "longest_first", "only_first"]:
+                    for padding_state in [False, True, "longest"]:
+                        with self.subTest(f"Padding: {padding_state} - Truncation: {truncation_state}"):
+                            output = tokenizer(seq_2, seq_1, padding=padding_state, truncation=truncation_state)
+                            self.assertEqual(len(output["input_ids"]), model_max_length)
+
+                            output = tokenizer([seq_2], [seq_1], padding=padding_state, truncation=truncation_state)
+                            self.assertEqual(len(output["input_ids"][0]), model_max_length)
+
+                # Simple
+                for truncation_state in ["only_second"]:
+                    for padding_state in [False, True, "longest"]:
+                        with self.subTest(f"Padding: {padding_state} - Truncation: {truncation_state}"):
+                            output = tokenizer(seq_1, seq_2, padding=padding_state, truncation=truncation_state)
+                            self.assertEqual(len(output["input_ids"]), model_max_length)
+
+                            output = tokenizer([seq_1], [seq_2], padding=padding_state, truncation=truncation_state)
+                            self.assertEqual(len(output["input_ids"][0]), model_max_length)
+
+                # Simple with no truncation
+                for truncation_state in [False]:
+                    for padding_state in [False, True, "longest"]:
+                        with self.subTest(f"Padding: {padding_state} - Truncation: {truncation_state}"):
+                            output = tokenizer(seq_1, seq_2, padding=padding_state, truncation=truncation_state)
+                            self.assertNotEqual(len(output["input_ids"]), model_max_length)
+
+                            output = tokenizer([seq_1], [seq_2], padding=padding_state, truncation=truncation_state)
+                            self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
+
                 truncated_first_sequence = tokenizer.encode(seq_0, add_special_tokens=False)[:-2] + tokenizer.encode(
                     seq_1, add_special_tokens=False
                 )

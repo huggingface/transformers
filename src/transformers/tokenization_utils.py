@@ -571,18 +571,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Args:
             batch_ids_pairs: list of tokenized input ids or input ids pairs
         """
-        if padding_strategy == PaddingStrategy.LONGEST:
-            # For simplicity we keep the single sentnce path here
-            def total_sequence_length(input_pairs):
-                first_ids, second_ids = input_pairs
-                return len(first_ids) + (
-                    self.num_special_tokens_to_add()
-                    if second_ids is None
-                    else (len(second_ids) + self.num_special_tokens_to_add(pair=True))
-                )
+        # if padding_strategy == PaddingStrategy.LONGEST:
+        #     # For simplicity we keep the single sentnce path here
+        #     def total_sequence_length(input_pairs):
+        #         first_ids, second_ids = input_pairs
+        #         return len(first_ids) + (
+        #             self.num_special_tokens_to_add()
+        #             if second_ids is None
+        #             else (len(second_ids) + self.num_special_tokens_to_add(pair=True))
+        #         )
 
-            max_length = max([total_sequence_length(input_pairs) for input_pairs in batch_ids_pairs])
-            padding_strategy = PaddingStrategy.MAX_LENGTH
+        #     max_length = max([total_sequence_length(input_pairs) for input_pairs in batch_ids_pairs])
+        #     padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for first_ids, second_ids in batch_ids_pairs:
@@ -590,16 +590,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 first_ids,
                 second_ids,
                 add_special_tokens=add_special_tokens,
-                padding_strategy=padding_strategy,
+                padding_strategy=PaddingStrategy.DO_NOT_PAD,  # we pad in batch afterward
                 truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 stride=stride,
-                return_attention_mask=return_attention_mask,
+                return_attention_mask=False,  # we pad in batch afterward
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_length=return_length,
-                return_tensors=None,  # We will convert the whole batch to tensors at the end
+                return_tensors=None,  # We convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
             )
@@ -608,6 +608,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
+
+        batch_outputs = self.pad(
+            batch_outputs,
+            padding=padding_strategy.value,
+            max_length=max_length,
+            return_attention_mask=return_attention_mask,
+        )
 
         batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
@@ -695,12 +702,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             )
 
         # Padding
-        encoded_inputs = self.pad(
-            encoded_inputs,
-            max_length=max_length,
-            padding=padding_strategy.value,
-            return_attention_mask=return_attention_mask,
-        )
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
+            encoded_inputs = self.pad(
+                encoded_inputs,
+                max_length=max_length,
+                padding=padding_strategy.value,
+                return_attention_mask=return_attention_mask,
+            )
 
         if return_length:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
@@ -763,12 +771,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 else:
                     pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
-            assert len(ids) > num_tokens_to_remove
+            # assert len(ids) > num_tokens_to_remove
             window_len = min(len(ids), stride + num_tokens_to_remove)
             overflowing_tokens = ids[-window_len:]
             ids = ids[:-num_tokens_to_remove]
-        elif truncation_strategy == TruncationStrategy.ONLY_SECOND:
-            assert pair_ids is not None and len(pair_ids) > num_tokens_to_remove
+        elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
+            # assert pair_ids is not None and len(pair_ids) > num_tokens_to_remove
             window_len = min(len(pair_ids), stride + num_tokens_to_remove)
             overflowing_tokens = pair_ids[-window_len:]
             pair_ids = pair_ids[:-num_tokens_to_remove]
