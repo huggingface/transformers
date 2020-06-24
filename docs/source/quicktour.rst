@@ -204,7 +204,7 @@ padding token the model was pretrained with. The attention mask is also adapted 
      'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])}
 
-You can learn more about tokenizers on their :doc:`doc page <main_classes/tokenizer>` (tutorial coming soon).
+You can learn more about tokenizers :doc:`here <preprocessing>`.
 
 Using the model
 ^^^^^^^^^^^^^^^
