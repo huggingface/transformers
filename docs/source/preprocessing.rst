@@ -162,7 +162,10 @@ This will once again return a dict string to list of ints:
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
 This shows us what the `token_type_ids <glossary.html#token-type-ids>`__ are for: they indicate to the model which part
-of the inputs correspond to the first sentence and which part corresponds to the second sentence.
+of the inputs correspond to the first sentence and which part corresponds to the second sentence. Note that
+`token_type_ids` are not required or handled by all models. By default, a tokenizer will only return the inputs that
+its associated model expects. You can force the return (or the non-return) of any of those special arguments by
+using ``return_input_ids`` or ``return_token_type_ids``.
 
 If we decode the token ids we obtained, we will see that the special tokens have been properly added.
 
