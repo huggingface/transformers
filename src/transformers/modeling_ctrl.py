@@ -335,7 +335,7 @@ class CTRLModel(CTRLPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
     ):
@@ -374,6 +374,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -519,7 +520,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
     ):

@@ -988,7 +988,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         mems=None,
         perm_mask=None,
@@ -998,9 +998,9 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1043,8 +1043,15 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         loss, logits = outputs[:2]
 
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[12] if len(inputs) > 12 else labels
+            if len(inputs) > 12:
+                inputs = inputs[:12]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         transformer_outputs = self.transformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             mems=mems,
             perm_mask=perm_mask,
@@ -1100,7 +1107,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
     def call(
         self,
-        inputs,
+        inputs=None,
         token_type_ids=None,
         input_mask=None,
         attention_mask=None,
@@ -1110,9 +1117,9 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1168,7 +1175,8 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             use_cache = inputs[9] if len(inputs) > 9 else use_cache
             output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
             output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
-            assert len(inputs) <= 12, "Too many inputs."
+            labels = inputs[12] if len(inputs) > 12 else labels
+            assert len(inputs) <= 13, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -1181,8 +1189,9 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_attentions)
-            assert len(inputs) <= 12, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 13, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -1197,6 +1206,11 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_input_mask = tf.reshape(input_mask, (-1, seq_length)) if input_mask is not None else None
+        flat_inputs_embeds = (
+            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            if inputs_embeds is not None
+            else None
+        )
 
         flat_inputs = [
             flat_input_ids,
@@ -1207,7 +1221,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             flat_token_type_ids,
             flat_input_mask,
             head_mask,
-            inputs_embeds,
+            flat_inputs_embeds,
             use_cache,
             output_attentions,
             output_hidden_states,
@@ -1245,7 +1259,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
 
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         mems=None,
         perm_mask=None,
@@ -1255,9 +1269,9 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1298,8 +1312,15 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         loss, scores = outputs[:2]
 
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[12] if len(inputs) > 12 else labels
+            if len(inputs) > 12:
+                inputs = inputs[:12]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         transformer_outputs = self.transformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             mems=mems,
             perm_mask=perm_mask,
@@ -1342,7 +1363,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         mems=None,
         perm_mask=None,
@@ -1352,13 +1373,10 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        start_positions=None,
-        end_positions=None,
-        cls_index=None,
-        p_mask=None,
-        is_impossible=None,
         output_attentions=None,
         output_hidden_states=None,
+        start_positions=None,
+        end_positions=None,
         training=False,
     ):
         r"""
@@ -1410,8 +1428,17 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
 
         """
+        if isinstance(inputs, (tuple, list)):
+            start_positions = inputs[12] if len(inputs) > 12 else start_positions
+            end_positions = inputs[13] if len(inputs) > 13 else end_positions
+            if len(inputs) > 12:
+                inputs = inputs[:12]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
+
         transformer_outputs = self.transformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             mems=mems,
             perm_mask=perm_mask,
