@@ -9,7 +9,7 @@ function deploy_doc(){
 			echo "Directory" $2 "already exists"
 		else
 			echo "Pushing version" $2
-			make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html $doc:$dir/$2
+			make clean && make html && scp -r -oStrictHostKeyChecking=no _build/html/* $doc:$dir/$2
 		fi
 	else
 		echo "Pushing master"
