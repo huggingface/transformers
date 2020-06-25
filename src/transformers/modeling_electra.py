@@ -495,16 +495,14 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
     Examples::
 
-        from transformers import ElectraTokenizer, ElectraForPreTraining
-        import torch
+        >>> from transformers import ElectraTokenizer, ElectraForPreTraining
+        >>> import torch
 
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = ElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+        >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        >>> model = ElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        prediction_scores, seq_relationship_scores = outputs[:2]
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> scores = model(input_ids)[0]
 
         """
 

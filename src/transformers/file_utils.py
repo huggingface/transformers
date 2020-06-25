@@ -309,6 +309,7 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+        >>> input_ids = inputs["input_ids"]
         >>> inputs["labels"] = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
 
         >>> outputs = model(inputs)
@@ -408,9 +409,8 @@ TF_CAUSAL_LM_SAMPLE = r"""
         >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> inputs["labels"] = inputs["input_ids"]
         >>> outputs = model(inputs)
-        >>> loss, logits = outputs[:2]
+        >>> logits = outputs[0]
 """
 
 

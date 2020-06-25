@@ -914,7 +914,6 @@ class TFT5Model(TFT5PreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="t5-small")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -940,13 +939,13 @@ class TFT5Model(TFT5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, TFT5Model
+        >>> from transformers import T5Tokenizer, TFT5Model
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5Model.from_pretrained('t5-small')
-        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(inputs, decoder_input_ids=inputs)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5Model.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> outputs = model(inputs, decoder_input_ids=inputs)
+        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
 
@@ -1083,18 +1082,18 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+        >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(inputs, decoder_input_ids=inputs)
-        prediction_scores = outputs[0]
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> outputs = model(inputs, decoder_input_ids=inputs)
+        >>> prediction_scores = outputs[0]
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        model.generate(inputs)
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> result = model.generate(inputs)
 
         """
 

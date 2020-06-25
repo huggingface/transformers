@@ -843,7 +843,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             labels = inputs[4] if len(inputs) > 4 else labels
             output_attentions = inputs[5] if len(inputs) > 5 else output_attentions
             assert len(inputs) <= 6, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (BatchEncoding, dict)):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
             head_mask = inputs.get("head_mask", head_mask)

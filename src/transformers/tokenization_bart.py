@@ -66,13 +66,15 @@ class MBartTokenizer(XLMRobertaTokenizer):
     The tokenization method is <tokens> <eos> <language code>. There is no BOS token.
 
     Examples::
-        from transformers import MBartTokenizer
-        tokenizer = MBartTokenizer.from_pretrained('mbart-large-en-ro')
-        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
-        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        batch: dict = tokenizer.prepare_translation_batch(
-            example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
-        )
+
+        >>> from transformers import MBartTokenizer
+        >>> tokenizer = MBartTokenizer.from_pretrained('mbart-large-en-ro')
+        >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        >>> batch: dict = tokenizer.prepare_translation_batch(
+        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
+        ... )
+
     """
 
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}

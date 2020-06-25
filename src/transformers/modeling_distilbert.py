@@ -882,22 +882,23 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
 
     Examples::
 
-        from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
-        import torch
+        >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+        >>> import torch
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased')
+        >>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased')
 
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        choice0 = "It is eaten with a fork and a knife."
-        choice1 = "It is eaten while held in the hand."
-        labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> choice0 = "It is eaten with a fork and a knife."
+        >>> choice1 = "It is eaten while held in the hand."
+        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-        encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='pt', pad_to_max_length=True)
-        outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
+        >>> encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='pt', pad_to_max_length=True)
+        >>> outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
 
-        # the linear classifier still needs to be trained
-        loss, logits = outputs[:2]
+        >>> # the linear classifier still needs to be trained
+        >>> loss, logits = outputs[:2]
+
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

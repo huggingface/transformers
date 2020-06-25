@@ -611,22 +611,22 @@ class LongformerModel(RobertaModel):
 
     Examples::
 
-        import torch
-        from transformers import LongformerModel, LongformerTokenizer
+        >>> import torch
+        >>> from transformers import LongformerModel, LongformerTokenizer
 
-        model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
+        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
-        SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
-        input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-        # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
-        attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
-                                            # classification: the <s> token
-                                            # QA: question tokens
-                                            # LM: potentially on the beginning of sentences and paragraphs
-        sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
+        >>> # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
+        >>> attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
+        >>> attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
+        ...                                     # classification: the <s> token
+        ...                                     # QA: question tokens
+        ...                                     # LM: potentially on the beginning of sentences and paragraphs
+        >>> sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -745,18 +745,18 @@ class LongformerForMaskedLM(BertPreTrainedModel):
 
     Examples::
 
-        import torch
-        from transformers import LongformerForMaskedLM, LongformerTokenizer
+        >>> import torch
+        >>> from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-        model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
+        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
-        SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
-        input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-        attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
-                               # check ``LongformerModel.forward`` for more details how to set `attention_mask`
-        loss, prediction_scores = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
+        ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
+        >>> loss, prediction_scores = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         """
 
         if "masked_lm_labels" in kwargs:
@@ -963,25 +963,25 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
 
     Examples::
 
-        from transformers import LongformerTokenizer, LongformerForQuestionAnswering
-        import torch
+        >>> from transformers import LongformerTokenizer, LongformerForQuestionAnswering
+        >>> import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
-        model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
-        input_ids = encoding["input_ids"]
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
+        >>> input_ids = encoding["input_ids"]
 
-        # default is local attention everywhere
-        # the forward method will automatically set global attention on question tokens
-        attention_mask = encoding["attention_mask"]
+        >>> # default is local attention everywhere
+        >>> # the forward method will automatically set global attention on question tokens
+        >>> attention_mask = encoding["attention_mask"]
 
-        start_scores, end_scores = model(input_ids, attention_mask=attention_mask)
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
+        >>> start_scores, end_scores = model(input_ids, attention_mask=attention_mask)
+        >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
 
-        answer_tokens = all_tokens[torch.argmax(start_scores) :torch.argmax(end_scores)+1]
-        answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
+        >>> answer_tokens = all_tokens[torch.argmax(start_scores) :torch.argmax(end_scores)+1]
+        >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
 
         """
 

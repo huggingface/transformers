@@ -46,19 +46,11 @@ class TestCodeExamples(unittest.TestCase):
             result = unittest.TextTestRunner().run(suite)
             self.assertIs(len(result.failures), 0)
 
-    def test_configuration_examples(self):
-        transformers_directory = "src/transformers"
-        configuration_files = "configuration"
-        ignore_files = ["configuration_auto.py", "configuration_utils.py"]
-        self.analyze_directory(transformers_directory, identifier=configuration_files, ignore_files=ignore_files)
-
-    def test_main_doc_examples(self):
-        doc_directory = "docs/source"
-        ignore_files = ["favicon.ico"]
-        self.analyze_directory(doc_directory, ignore_files=ignore_files)
-
     def test_modeling_examples(self):
         transformers_directory = "src/transformers"
         modeling_files = "modeling"
-        ignore_files = ["modeling_longformer.py"]
+        ignore_files = [
+            "modeling_ctrl.py",
+            "modeling_tf_ctrl.py",
+        ]
         self.analyze_directory(transformers_directory, identifier=modeling_files, ignore_files=ignore_files)

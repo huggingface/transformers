@@ -121,7 +121,7 @@ class FlaubertModel(XLMModel):
         self.pre_norm = getattr(config, "pre_norm", False)
 
     @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="flaubert-base-cased")
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="flaubert/flaubert_base_cased")
     def forward(
         self,
         input_ids=None,

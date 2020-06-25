@@ -840,16 +840,16 @@ class BertForPreTraining(BertPreTrainedModel):
 
     Examples::
 
-        from transformers import BertTokenizer, BertForPreTraining
-        import torch
+        >>> from transformers import BertTokenizer, BertForPreTraining
+        >>> import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForPreTraining.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = BertForPreTraining.from_pretrained('bert-base-uncased')
 
-        inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        outputs = model(inputs)
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
 
-        prediction_scores, seq_relationship_scores = outputs[:2]
+        >>> prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
         if "masked_lm_labels" in kwargs:
@@ -905,7 +905,6 @@ class BertLMHeadModel(BertPreTrainedModel):
         return self.cls.predictions.decoder
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-uncased")
     def forward(
         self,
         input_ids=None,
@@ -947,6 +946,21 @@ class BertLMHeadModel(BertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+
+    Example::
+
+        >>> from transformers import BertTokenizer, BertLMHeadModel, BertConfig
+        >>> import torch
+
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
+        >>> config = BertConfig.from_pretrained("bert-base-cased")
+        >>> config.is_decoder = True
+        >>> model = BertLMHeadModel.from_pretrained('bert-base-cased', config=config)
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
 
         outputs = self.bert(
@@ -1148,18 +1162,18 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
     Examples::
 
-        from transformers import BertTokenizer, BertForNextSentencePrediction
-        import torch
+        >>> from transformers import BertTokenizer, BertForNextSentencePrediction
+        >>> import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        >>> model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
 
-        loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))
-        assert logits[0, 0] < logits[0, 1] # next sentence was random
+        >>> loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))
+        >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
         """
 
         outputs = self.bert(

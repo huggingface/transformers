@@ -648,16 +648,16 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
     Examples::
 
-        from transformers import AlbertTokenizer, AlbertForPreTraining
-        import torch
+        >>> from transformers import AlbertTokenizer, AlbertForPreTraining
+        >>> import torch
 
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertForPreTraining.from_pretrained('albert-base-v2')
+        >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> outputs = model(input_ids)
 
-        prediction_scores, sop_scores = outputs[:2]
+        >>> prediction_scores, sop_scores = outputs[:2]
 
         """
 
