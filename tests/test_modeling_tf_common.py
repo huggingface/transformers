@@ -16,25 +16,19 @@
 
 import copy
 import inspect
-import os
 import random
-import tempfile
 import unittest
-from importlib import import_module
 
-from transformers import is_tf_available, is_torch_available
+from transformers import is_tf_available
 
 from .utils import _tf_gpu_memory_limit, require_tf
 
 
 if is_tf_available():
     import tensorflow as tf
-    import numpy as np
 
     from transformers import (
         tf_top_k_top_p_filtering,
-        TFAdaptiveEmbedding,
-        TFSharedEmbeddings,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -590,7 +584,6 @@ class TFModelTesterMixin:
     def test_loss_computation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            print(model_class)
             model = model_class(config)
             if getattr(model, "compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label

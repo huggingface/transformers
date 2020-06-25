@@ -221,15 +221,15 @@ class TFXLMModelTester:
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
 
     def create_and_check_xlm_for_token_classification(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_lengths,
-            sequence_labels,
-            token_labels,
-            is_impossible_labels,
-            input_mask,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_lengths,
+        sequence_labels,
+        token_labels,
+        is_impossible_labels,
+        input_mask,
     ):
         config.num_labels = self.num_labels
         model = TFXLMForTokenClassification(config=config)
@@ -266,7 +266,13 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         # TODO The multiple choice model is missing and should be added.
-        (TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple, TFXLMForTokenClassification)
+        (
+            TFXLMModel,
+            TFXLMWithLMHeadModel,
+            TFXLMForSequenceClassification,
+            TFXLMForQuestionAnsweringSimple,
+            TFXLMForTokenClassification,
+        )
         if is_tf_available()
         else ()
     )
