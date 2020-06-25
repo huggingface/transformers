@@ -125,10 +125,17 @@ Here is an example command, but you can do whatever you want. Hopefully this wil
     --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100
 ```
 
-Results can be viewed [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
+You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
 
+### DistilBART
 
-### Distilbart
+For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
+you just copy alternating layers from `bart-large-cnn` and finetune more on the same data. 
+
+For the XSUM dataset, that didn’t work as well so we used that same initialization strategy followed by a combination of Distillbert’s ce_loss and the hidden states MSE loss used in the tinybert paper.
+
+You can see the performance tradeoffs of model sizes [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=0).
+and more granular timing results [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=1753259047&range=B2:I23).
 
 #### No Teacher Distillation
 To run the simpler distilbart-cnn style distillation all you need is data, a GPU, and a properly initialized student.
