@@ -134,6 +134,29 @@ class LongformerModelTester:
         )
         self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
+    def create_and_check_longformer_model_with_global_attention_mask(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = LongformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        global_attention_mask = input_mask.clone()
+        global_attention_mask[:, input_mask.shape[-1] // 2] = 0
+        global_attention_mask = global_attention_mask.to(torch_device)
+
+        sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, global_attention_mask=global_attention_mask, token_type_ids=token_type_ids)
+        sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask)
+        sequence_output, pooled_output = model(input_ids, global_attention_mask=global_attention_mask)
+
+        result = {
+            "sequence_output": sequence_output,
+            "pooled_output": pooled_output,
+        }
+        self.parent.assertListEqual(
+            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+
     def create_and_check_longformer_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -297,6 +320,10 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_longformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_longformer_model(*config_and_inputs)
+
+    def test_longformer_model_global_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_model_with_global_attention_mask(*config_and_inputs)
 
     def test_longformer_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
