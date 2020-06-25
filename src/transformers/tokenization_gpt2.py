@@ -23,7 +23,7 @@ from functools import lru_cache
 import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, AddedToken
 from .tokenization_utils_base import BatchEncoding
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 
@@ -149,6 +149,9 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         add_prefix_space=False,
         **kwargs
     ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
