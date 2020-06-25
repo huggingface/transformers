@@ -890,14 +890,32 @@ class TokenizerTesterMixin:
                 self.skipTest("No padding token.")
             else:
                 with self.subTest(f"{tokenizer.__class__.__name__}"):
-                    empty_tokens = tokenizer("", pad_to_multiple_of=8)
-                    normal_tokens = tokenizer("This is a sample input", pad_to_multiple_of=8)
-
+                    empty_tokens = tokenizer("", padding=True, pad_to_multiple_of=8)
+                    normal_tokens = tokenizer("This is a sample input", padding=True, pad_to_multiple_of=8)
                     for key, value in empty_tokens.items():
                         self.assertEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
-
                     for key, value in normal_tokens.items():
                         self.assertEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
+
+                    normal_tokens = tokenizer("This", pad_to_multiple_of=8)
+                    for key, value in normal_tokens.items():
+                        self.assertNotEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
+
+                    # Should also work with truncation
+                    normal_tokens = tokenizer("This", padding=True, truncation=True, pad_to_multiple_of=8)
+                    for key, value in normal_tokens.items():
+                        self.assertEqual(len(value) % 8, 0, "BatchEncoding.{} is not multiple of 8".format(key))
+
+                    # truncation to something which is not a multiple of pad_to_multiple_of raises an error
+                    self.assertRaises(
+                        ValueError,
+                        tokenizer.__call__,
+                        "This",
+                        padding=True,
+                        truncation=True,
+                        max_length=12,
+                        pad_to_multiple_of=8,
+                    )
 
     def test_encode_plus_with_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

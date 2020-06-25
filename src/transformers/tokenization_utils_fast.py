@@ -317,16 +317,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if kwargs:
             raise ValueError(f"Keyword arguments {kwargs} not recognized.")
 
-        if pad_to_multiple_of is not None and padding_strategy != PaddingStrategy.MAX_LENGTH:
-            logger.info(
-                "Overriding padding_strategy from %s to %s as required by pad_to_multiple_of=%d",
-                padding_strategy.name,
-                PaddingStrategy.MAX_LENGTH.name,
-                pad_to_multiple_of,
-            )
-
-            padding_strategy = PaddingStrategy.MAX_LENGTH
-
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
             padding_strategy=padding_strategy,
