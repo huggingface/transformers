@@ -1,5 +1,3 @@
-#CNN_DIR = /home/shleifer/transformers_fork/examples/summarization/bart/cnn_dm
-
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 

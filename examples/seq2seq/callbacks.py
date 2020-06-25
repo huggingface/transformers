@@ -32,9 +32,12 @@ class Seq2SeqLoggingCallback(pl.Callback):
             results_file = od / "test_results.txt"
             generations_file = od / "test_generations.txt"
         else:
-            results_file = od / f"{type_path}_results_{trainer.global_step:05d}.txt"
-            generations_file = od / f"{type_path}_generations_{trainer.global_step:05d}.txt"
-
+            # this never gets hit. I prefer not to save intermediate generations, and results are in metrics.json
+            # If people want this it will be easy enough to add back.
+            results_file = od / f"{type_path}_results/{trainer.global_step:05d}.txt"
+            generations_file = od / f"{type_path}_generations/{trainer.global_step:05d}.txt"
+            results_file.parent.mkdir(exist_ok=True)
+            generations_file.parent.mkdir(exist_ok=True)
         with open(results_file, "a+") as writer:
             for key in sorted(metrics):
                 if key in ["log", "progress_bar", "preds"]:
@@ -64,19 +67,24 @@ class Seq2SeqLoggingCallback(pl.Callback):
         trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
 
     @rank_zero_only
-    def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        return self._write_logs(trainer, pl_module, "val")
-
-    @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         return self._write_logs(trainer, pl_module, "test")
 
 
-def get_rouge2_checkpoint_callback(output_dir):
+def get_checkpoint_callback(output_dir, metric):
     """Saves the best model by validation ROUGE2 score."""
+    if metric == "rouge2":
+        exp = "{val_avg_rouge2:.4f}-{step_count}"
+    elif metric == "bleu":
+        exp = "{val_avg_bleu:.4f}-{step_count}"
+    else:
+        raise NotImplementedError(
+            f"seq2seq callbacks only support rouge2 and bleu, got {metric}, You can make your own by adding to this function."
+        )
+
     checkpoint_callback = ModelCheckpoint(
-        filepath=os.path.join(output_dir, "{val_avg_rouge2:.4f}-{step_count}"),
-        monitor="val_rouge",
+        filepath=os.path.join(output_dir, exp),
+        monitor=f"val_{metric}",
         mode="max",
         save_top_k=1,
         period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.
