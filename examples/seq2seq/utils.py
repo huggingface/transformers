@@ -99,7 +99,7 @@ class SummarizationDataset(Dataset):
         )
         tgt_path = os.path.join(data_dir, type_path + ".target")
         if hasattr(tokenizer, "set_lang"):
-            tokenizer.set_lang("ro_RO")
+            tokenizer.set_lang("ro_RO")  # HACK: only applies to mbart
         self.target = encode_file(
             tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
         )
