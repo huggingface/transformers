@@ -1243,7 +1243,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             total_loss = (start_loss + end_loss) / 2
             outputs = (total_loss,) + outputs
 
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        return outputs  # return outputs  # (loss), start_logits, end_logits, encoder_outputs, (hidden_states), (attentions)
 
 
 class SinusoidalPositionalEmbedding(nn.Embedding):

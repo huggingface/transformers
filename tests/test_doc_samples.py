@@ -13,15 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 import unittest
 from doctest import DocTestSuite
 from typing import List, Union
-import logging
 
 import transformers
 
 from .utils import require_tf, require_torch, slow
+
 
 logger = logging.getLogger()
 
@@ -31,11 +32,11 @@ logger = logging.getLogger()
 @slow
 class TestCodeExamples(unittest.TestCase):
     def analyze_directory(
-            self,
-            directory: str,
-            identifier: Union[str, None] = None,
-            ignore_files: Union[List[str], None] = [],
-            n_identifier: Union[str, None] = None
+        self,
+        directory: str,
+        identifier: Union[str, None] = None,
+        ignore_files: Union[List[str], None] = [],
+        n_identifier: Union[str, None] = None,
     ):
         """
         Runs through the specific directory, looking for the files identified with `identifier`. Executes
