@@ -129,6 +129,8 @@ You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?worksp
 
 ### DistilBART
 
+![PABEE](https://github.com/JetRunner/PABEE/raw/master/bert-loses-patience.png)
+
 For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
 you just copy alternating layers from `bart-large-cnn` and finetune more on the same data. 
 
