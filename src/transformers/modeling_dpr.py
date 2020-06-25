@@ -227,13 +227,88 @@ class DprPretrainedReader(PreTrainedModel):
 ###############
 
 
-DPR_START_DOCSTRING = r""""""
+DPR_START_DOCSTRING = r"""
 
-DPR_INPUTS_DOCSTRING = r""""""
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.DprConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+DPR_ENCODERS_INPUTS_DOCSTRING = r"""
+    Inputs:
+        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary.
+            To match pre-training, DPR input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+
+            (a) For sequence pairs:
+
+                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
+
+                ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
+
+            (b) For single sequences:
+
+                ``tokens:         [CLS] the dog is hairy . [SEP]``
+
+                ``token_type_ids:   0   0   0   0  0     0   0``
+
+            Dpr is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
+            Indices can be obtained using :class:`transformers.DprTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+            (see `DPR: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+"""
+
+DPR_READER_INPUTS_DOCSTRING = r"""
+    Inputs:
+        **question_and_titles_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary.
+            It has to be a sequence pair with 1) the question and 2) the context title:
+            To match pre-training, DPR `question_and_titles_ids` sequence should be formatted with [CLS] and [SEP] tokens as follows:
+
+                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] jack ##son ##ville page [SEP]``
+
+            Dpr is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
+            Indices can be obtained using :class:`transformers.DprTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        **text_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary.
+            It has to be a single sequence with the context text (content of the passage):
+            To match pre-training, DPR `text_ids` sequence should be formatted without [CLS] and [SEP] tokens as follows:
+
+                ``tokens:         this is jack ##son ##ville .``
+
+            This is because the `text_ids` are then concatenated after the `question_and_titles_ids`
+
+            Dpr is a model with absolute position embeddings so it's usually advised to pad the inputs on
+            the right rather than the left.
+
+            Indices can be obtained using :class:`transformers.DprTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+"""
 
 
 @add_start_docstrings(
-    "The bare Dpr Model transformer outputting pooler outputs.", DPR_START_DOCSTRING, DPR_INPUTS_DOCSTRING,
+    "The bare DprContextEncoder transformer outputting pooler outputs as context representations.", DPR_START_DOCSTRING, DPR_ENCODERS_INPUTS_DOCSTRING,
 )
 class DprContextEncoder(DprPretrainedContextEncoder):
     r"""
@@ -269,7 +344,7 @@ class DprContextEncoder(DprPretrainedContextEncoder):
 
 
 @add_start_docstrings(
-    "The bare Dpr Model transformer outputting pooler outputs.", DPR_START_DOCSTRING, DPR_INPUTS_DOCSTRING,
+    "The bare DprQuestionEncoder transformer outputting pooler outputs as question representations.", DPR_START_DOCSTRING, DPR_ENCODERS_INPUTS_DOCSTRING,
 )
 class DprQuestionEncoder(DprPretrainedQuestionEncoder):
     r"""
@@ -310,7 +385,7 @@ DprSpanPrediction = collections.namedtuple(
 
 
 @add_start_docstrings(
-    "The bare Dpr Model transformer outputting pooler outputs.", DPR_START_DOCSTRING, DPR_INPUTS_DOCSTRING,
+    "The bare DprReader transformer outputting span predictions.", DPR_START_DOCSTRING, DPR_READER_INPUTS_DOCSTRING,
 )
 class DprReader(DprPretrainedReader):
     r"""
