@@ -25,7 +25,7 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
-from .modeling_tf_generation import TFModelGenerationMixin, shape_list
+from .modeling_tf_generation import TFGenerationMixin, shape_list
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 
@@ -145,7 +145,7 @@ class TFSequenceClassificationLoss:
 TFMultipleChoiceLoss = TFSequenceClassificationLoss
 
 
-class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFModelGenerationMixin):
+class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     r""" Base class for all TF models.
 
         :class:`~transformers.TFPreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models

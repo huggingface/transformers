@@ -25,9 +25,9 @@ from torch.nn import functional as F
 logger = logging.getLogger(__name__)
 
 
-class ModuleGenerationMixin:
+class GenerationMixin:
     """
-    A class contraining all of the functions supporting generation, to be used as a mixin.
+    A class contraining all of the functions supporting generation, to be used as a mixin in PreTrainedModel.
     """
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):

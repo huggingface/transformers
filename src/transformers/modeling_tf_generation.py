@@ -23,9 +23,9 @@ import tensorflow as tf
 logger = logging.getLogger(__name__)
 
 
-class TFModelGenerationMixin:
+class TFGenerationMixin:
     """
-    A class contraining all of the functions supporting generation, to be used as a mixin.
+    A class contraining all of the functions supporting generation, to be used as a mixin in TFPreTrainedModel.
     """
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
