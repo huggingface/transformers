@@ -203,8 +203,8 @@ def main():
     trainer = TFTrainer(
         model=model,
         args=training_args,
-        train_sized_dataset=(train_dataset.get_dataset(), len(train_dataset)) if train_dataset else (None, None),
-        eval_sized_dataset=(eval_dataset.get_dataset(), len(eval_dataset)) if eval_dataset else (None, None),
+        train_dataset=train_dataset.get_dataset() if train_dataset else None,
+        eval_dataset=eval_dataset.get_dataset() if eval_dataset else None,
         compute_metrics=compute_metrics,
     )
 
