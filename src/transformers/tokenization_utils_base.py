@@ -1890,7 +1890,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
 
-        if padding_strategy == PaddingStrategy.LONGEST and max_length is None:
+        if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(encoded_inputs["input_ids"])
 
         needs_to_be_padded = (

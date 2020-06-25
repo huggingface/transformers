@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import copy
-import logging
 import os.path
 import random
 import tempfile
@@ -855,7 +854,6 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 class ModelUtilsTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = BertConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
