@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import doctest
 import logging
 import os
 import unittest
-from doctest import ELLIPSIS, DocTestSuite, testfile
 from pathlib import Path
 from typing import List, Union
 
@@ -74,13 +74,13 @@ class TestCodeExamples(unittest.TestCase):
                 try:
                     module_identifier = file.split(".")[0]
                     module_identifier = getattr(transformers, module_identifier)
-                    suite = DocTestSuite(module_identifier)
+                    suite = doctest.DocTestSuite(module_identifier)
                     result = unittest.TextTestRunner().run(suite)
                     self.assertIs(len(result.failures), 0)
                 except AttributeError:
                     logger.info(f"{module_identifier} is not a module.")
             else:
-                result = testfile(str(".." / directory / file), optionflags=ELLIPSIS)
+                result = doctest.testfile(str(".." / directory / file), optionflags=doctest.ELLIPSIS)
                 self.assertIs(result.failed, 0)
 
     def test_modeling_examples(self):
