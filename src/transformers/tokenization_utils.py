@@ -20,7 +20,7 @@ import itertools
 import logging
 import re
 import unicodedata
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
@@ -155,10 +155,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Added tokens
-        self.added_tokens_encoder = {}
-        self.unique_added_tokens_encoder = []
-        self.added_tokens_decoder = {}
+
+        # Added tokens - We store this for both slow and fast tokenizers
+        # until the serialization of Fast tokenizers is updated
+        self.added_tokens_encoder: Dict[str, int] = {}
+        self.added_tokens_decoder: Dict[int, str] = {}
+        self.unique_no_split_tokens: List[str] = []
 
     @property
     def is_fast(self) -> bool:
@@ -173,11 +175,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
         raise NotImplementedError()
 
+    def get_added_vocab(self) -> Dict[str, int]:
+        return self.added_tokens_encoder
+
     def __len__(self):
         """ Size of the full vocabulary with the added tokens """
         return self.vocab_size + len(self.added_tokens_encoder)
 
-    def add_tokens(self, new_tokens: Union[str, List[str]], special_token=False) -> int:
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens=False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -199,16 +204,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             print('We have added', num_added_toks, 'tokens')
             model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         """
-        if not new_tokens:
-            return 0
-
-        if not isinstance(new_tokens, list):
-            new_tokens = [new_tokens]
+        new_tokens = [str(tok) for tok in new_tokens]
 
         tokens_to_add = []
         for token in new_tokens:
-            assert isinstance(token, (str, AddedToken))
-            if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
+            assert isinstance(token, str)
+            if not special_tokens and self.init_kwargs.get("do_lower_case", False):
                 token = token.lower()
             if (
                 token != self.unk_token
@@ -222,10 +223,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
-        self.unique_added_tokens_encoder = list(
-            set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
-        )
         self.added_tokens_decoder.update(added_tok_decoder)
+
+        # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
+        if special_tokens:
+            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(new_tokens)))
+        else:
+            # Or on the newly added tokens
+            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
 
         return len(tokens_to_add)
 
@@ -340,7 +345,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             for tok in tok_list:
                 tokenized_text = []
                 for sub_text in text_list:
-                    if sub_text not in self.unique_added_tokens_encoder:
+                    if sub_text not in self.unique_no_split_tokens:
                         tokenized_text += split_on_token(tok, sub_text)
                     else:
                         tokenized_text += [sub_text]
@@ -349,14 +354,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return list(
                 itertools.chain.from_iterable(
                     (
-                        self._tokenize(token) if token not in self.unique_added_tokens_encoder else [token]
+                        self._tokenize(token) if token not in self.unique_no_split_tokens else [token]
                         for token in tokenized_text
                     )
                 )
             )
 
-        added_tokens = self.unique_added_tokens_encoder
-        tokenized_text = split_on_tokens(added_tokens, text)
+        no_split_token = self.unique_no_split_tokens
+        tokenized_text = split_on_tokens(no_split_token, text)
         return tokenized_text
 
     def _tokenize(self, text, **kwargs):
@@ -571,18 +576,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Args:
             batch_ids_pairs: list of tokenized input ids or input ids pairs
         """
-        if padding_strategy == PaddingStrategy.LONGEST:
-            # For simplicity we keep the single sentnce path here
-            def total_sequence_length(input_pairs):
-                first_ids, second_ids = input_pairs
-                return len(first_ids) + (
-                    self.num_special_tokens_to_add()
-                    if second_ids is None
-                    else (len(second_ids) + self.num_special_tokens_to_add(pair=True))
-                )
-
-            max_length = max([total_sequence_length(input_pairs) for input_pairs in batch_ids_pairs])
-            padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for first_ids, second_ids in batch_ids_pairs:
@@ -590,16 +583,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 first_ids,
                 second_ids,
                 add_special_tokens=add_special_tokens,
-                padding_strategy=padding_strategy,
+                padding_strategy=PaddingStrategy.DO_NOT_PAD,  # we pad in batch afterward
                 truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 stride=stride,
-                return_attention_mask=return_attention_mask,
+                return_attention_mask=False,  # we pad in batch afterward
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_length=return_length,
-                return_tensors=None,  # We will convert the whole batch to tensors at the end
+                return_tensors=None,  # We convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
             )
@@ -608,6 +601,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
+
+        batch_outputs = self.pad(
+            batch_outputs,
+            padding=padding_strategy.value,
+            max_length=max_length,
+            return_attention_mask=return_attention_mask,
+        )
 
         batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
@@ -695,12 +695,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             )
 
         # Padding
-        encoded_inputs = self.pad(
-            encoded_inputs,
-            max_length=max_length,
-            padding=padding_strategy.value,
-            return_attention_mask=return_attention_mask,
-        )
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
+            encoded_inputs = self.pad(
+                encoded_inputs,
+                max_length=max_length,
+                padding=padding_strategy.value,
+                return_attention_mask=return_attention_mask,
+            )
 
         if return_length:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
@@ -763,15 +764,29 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 else:
                     pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
-            assert len(ids) > num_tokens_to_remove
-            window_len = min(len(ids), stride + num_tokens_to_remove)
-            overflowing_tokens = ids[-window_len:]
-            ids = ids[:-num_tokens_to_remove]
-        elif truncation_strategy == TruncationStrategy.ONLY_SECOND:
-            assert pair_ids is not None and len(pair_ids) > num_tokens_to_remove
-            window_len = min(len(pair_ids), stride + num_tokens_to_remove)
-            overflowing_tokens = pair_ids[-window_len:]
-            pair_ids = pair_ids[:-num_tokens_to_remove]
+            if len(ids) > num_tokens_to_remove:
+                window_len = min(len(ids), stride + num_tokens_to_remove)
+                overflowing_tokens = ids[-window_len:]
+                ids = ids[:-num_tokens_to_remove]
+            else:
+                logger.error(
+                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"but the first sequence has a length {len(ids)}. "
+                    f"Please select another truncation strategy than {truncation_strategy}, "
+                    f"for instance 'longest_first' or 'only_second'."
+                )
+        elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
+            if len(pair_ids) > num_tokens_to_remove:
+                window_len = min(len(pair_ids), stride + num_tokens_to_remove)
+                overflowing_tokens = pair_ids[-window_len:]
+                pair_ids = pair_ids[:-num_tokens_to_remove]
+            else:
+                logger.error(
+                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"but the second sequence has a length {len(pair_ids)}. "
+                    f"Please select another truncation strategy than {truncation_strategy}, "
+                    f"for instance 'longest_first' or 'only_first'."
+                )
 
         return (ids, pair_ids, overflowing_tokens)
 
