@@ -16,9 +16,9 @@
 import logging
 import os
 import unittest
-from doctest import DocTestSuite, testfile, ELLIPSIS
-from typing import List, Union
+from doctest import ELLIPSIS, DocTestSuite, testfile
 from pathlib import Path
+from typing import List, Union
 
 import transformers
 
@@ -38,7 +38,7 @@ class TestCodeExamples(unittest.TestCase):
         identifier: Union[str, None] = None,
         ignore_files: Union[List[str], None] = [],
         n_identifier: Union[str, None] = None,
-        only_modules: bool = True
+        only_modules: bool = True,
     ):
         """
         Runs through the specific directory, looking for the files identified with `identifier`. Executes
@@ -80,7 +80,7 @@ class TestCodeExamples(unittest.TestCase):
                 except AttributeError:
                     logger.info(f"{module_identifier} is not a module.")
             else:
-                result = testfile(str('..' / directory / file), optionflags=ELLIPSIS)
+                result = testfile(str(".." / directory / file), optionflags=ELLIPSIS)
                 self.assertIs(result.failed, 0)
 
     def test_modeling_examples(self):
