@@ -163,8 +163,8 @@ function platformToggle() {
 
     const getFrameworkSpans = filteredCodeBlock => {
         const spans = filteredCodeBlock.element.innerHTML;
-        let pytorchSpanPosition = spans.indexOf(pytorchSpanIdentifier);
-        let tensorflowSpanPosition = spans.indexOf(tensorflowSpanIdentifier);
+        const pytorchSpanPosition = spans.indexOf(pytorchSpanIdentifier);
+        const tensorflowSpanPosition = spans.indexOf(tensorflowSpanIdentifier);
 
         let pytorchSpans;
         let tensorflowSpans;
