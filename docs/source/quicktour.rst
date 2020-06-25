@@ -111,7 +111,8 @@ any other model from the model hub):
     >>> pipe = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
     >>> ## TENSORFLOW CODE
     >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
-    >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)  # This model only exists in PyTorch, so we use the `from_pt` flag to import that model in TensorFlow.
+    >>> # This model only exists in PyTorch, so we use the `from_pt` flag to import that model in TensorFlow.
+    >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True) 
     >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
     >>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
 
