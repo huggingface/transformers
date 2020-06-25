@@ -11,7 +11,7 @@ import pytest
 import torch
 from torch.utils.data import DataLoader
 
-from transformers import BartTokenizer, MarianTokenizer, MBartTokenizer
+from transformers import AutoTokenizer
 
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
@@ -86,13 +86,15 @@ ARTICLES = [" Sam ate lunch today", "Sams lunch ingredients"]
 SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 BART_TINY = "sshleifer/bart-tiny-random"
+MBART_TINY = "sshleifer/tiny-mbart"
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 stream_handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(stream_handler)
 logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
 
 
-def make_test_data_dir():
-    tmp_dir = Path(tempfile.gettempdir())
+def make_test_data_dir(**kwargs):
+    tmp_dir = Path(tempfile.mkdtemp(**kwargs))
     for split in ["train", "val", "test"]:
         _dump_articles((tmp_dir / f"{split}.source"), ARTICLES)
         _dump_articles((tmp_dir / f"{split}.target"), SUMMARIES)
@@ -189,7 +191,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         return model
 
 
-@pytest.mark.parametrize(["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY)])
+@pytest.mark.parametrize(["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY)])
 def test_run_eval_bart(model):
     tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
 
@@ -197,132 +199,54 @@ def test_run_eval_bart(model):
     assert not output_file_name.exists()
     articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
     _dump_articles(tmp, articles)
-    testargs = ["run_eval.py", str(tmp), str(output_file_name), model]
+    testargs = ["run_eval.py", str(tmp), str(output_file_name), model]  # TODO: test score_path
     with patch.object(sys, "argv", testargs):
         run_generate()
         assert Path(output_file_name).exists()
         os.remove(Path(output_file_name))
 
 
-class TestFinetune(unittest.TestCase):
-    def test_t5_finetune(self):
-        args_d: dict = CHEAP_ARGS.copy()
-
-        tmp_dir = make_test_data_dir()
-        output_dir = tempfile.mkdtemp(prefix="output_")
-        args_d.update(
-            data_dir=tmp_dir,
-            model_name_or_path=T5_TINY,
-            tokenizer_name=None,
-            train_batch_size=2,
-            eval_batch_size=2,
-            output_dir=output_dir,
-            do_predict=True,
-        )
-        assert "n_train" in args_d
-        args = argparse.Namespace(**args_d)
-        main(args)
-
-    @unittest.skip("Multilingual BART finetuning is under construction")
-    def test_mbart_finetune(self):
-        args_d: dict = CHEAP_ARGS.copy()
-
-        tmp_dir = make_test_data_dir()
-        output_dir = tempfile.mkdtemp(prefix="output_")
-        args_d.update(
-            data_dir=tmp_dir,
-            tokenizer_name="facebook/mbart-large-en-ro",
-            model_name_or_path="facebook/mbart-large-en-ro",
-            train_batch_size=2,
-            eval_batch_size=2,
-            output_dir=output_dir,
-            do_predict=True,
-        )
-        assert "n_train" in args_d
-        args = argparse.Namespace(**args_d)
-        main(args)
-
-    def test_marian_finetune(self):
-        args_d: dict = CHEAP_ARGS.copy()
-
-        tmp_dir = make_test_data_dir()
-        output_dir = tempfile.mkdtemp(prefix="output_")
-        mname = "Helsinki-NLP/opus-mt-en-ro"
-        args_d.update(
-            data_dir=tmp_dir,
-            tokenizer_name=mname,
-            model_name_or_path=mname,
-            train_batch_size=2,
-            eval_batch_size=2,
-            output_dir=output_dir,
-            do_predict=True,
-            learning_rate=0,
-            task="translation",
-            num_train_epochs=2,
-        )
-        assert "n_train" in args_d
-        args = argparse.Namespace(**args_d)
-        main(args)
+@pytest.mark.parametrize(
+    ["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)]
+)
+def test_finetune(model):
+    args_d: dict = CHEAP_ARGS.copy()
+    task = "translation" if model in [MBART_TINY, MARIAN_TINY] else "summarization"
+    tmp_dir = make_test_data_dir()
+    output_dir = tempfile.mkdtemp(prefix="output_")
+    args_d.update(
+        data_dir=tmp_dir,
+        model_name_or_path=model,
+        tokenizer_name=None,
+        train_batch_size=2,
+        eval_batch_size=2,
+        output_dir=output_dir,
+        do_predict=True,
+        task=task,
+    )
+    assert "n_train" in args_d
+    args = argparse.Namespace(**args_d)
+    main(args)
 
 
-class TestDataset(unittest.TestCase):
-    def test_mbart_summarization_dataset(self):
-        tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
-        tmp_dir = make_test_data_dir()
-        max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
-        max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
-        trunc_target = 4
-        train_dataset = SummarizationDataset(
-            tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
-        )
-        dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
-        for batch in dataloader:
-            self.assertEqual(batch["attention_mask"].shape, batch["input_ids"].shape)
-            # show that articles were trimmed.
-            self.assertEqual(batch["input_ids"].shape[1], max_len_source)
-            self.assertGreater(20, batch["input_ids"].shape[1])  # trimmed significantly
-
-            # show that targets were truncated
-            self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
-            self.assertGreater(max_len_target, trunc_target)  # Truncated
-
-    def test_marian_dataset(self):
-        tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-de-en")
-        tmp_dir = make_test_data_dir()
-        max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
-        max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
-        trunc_target = 4
-        train_dataset = SummarizationDataset(
-            tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
-        )
-        dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
-        for batch in dataloader:
-            self.assertEqual(batch["attention_mask"].shape, batch["input_ids"].shape)
-            # show that articles were trimmed.
-            self.assertEqual(batch["input_ids"].shape[1], max_len_source)
-            self.assertGreater(20, batch["input_ids"].shape[1])  # trimmed significantly
-
-            # show that targets were truncated
-            self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
-            self.assertGreater(max_len_target, trunc_target)  # Truncated
-
-    def test_summarization_dataset(self):
-        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-
-        tmp_dir = make_test_data_dir()
-        max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
-        max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
-        trunc_target = 4
-        train_dataset = SummarizationDataset(
-            tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
-        )
-        dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
-        for batch in dataloader:
-            self.assertEqual(batch["attention_mask"].shape, batch["input_ids"].shape)
-            # show that articles were trimmed.
-            self.assertEqual(batch["input_ids"].shape[1], max_len_source)
-            self.assertGreater(20, batch["input_ids"].shape[1])  # trimmed significantly
-
-            # show that targets were truncated
-            self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
-            self.assertGreater(max_len_target, trunc_target)  # Truncated
+@pytest.mark.parametrize(
+    ["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)]
+)
+def test_dataset(tok):
+    tokenizer = AutoTokenizer.from_pretrained(tok)
+    tmp_dir = make_test_data_dir()
+    max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
+    max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
+    trunc_target = 4
+    train_dataset = SummarizationDataset(
+        tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
+    )
+    dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
+    for batch in dataloader:
+        assert batch["attention_mask"].shape == batch["input_ids"].shape
+        # show that articles were trimmed.
+        assert batch["input_ids"].shape[1] == max_len_source
+        assert 20 >= batch["input_ids"].shape[1]  # trimmed significantly
+        # show that targets were truncated
+        assert batch["decoder_input_ids"].shape[1] == trunc_target  # Truncated
+        assert max_len_target > trunc_target  # Truncated
