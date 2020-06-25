@@ -128,8 +128,7 @@ Here is an example command, but you can do whatever you want. Hopefully this wil
 You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
 
 ### DistilBART
-
-![PABEE](https://github.com/JetRunner/PABEE/raw/master/bert-loses-patience.png)
+![DBART](https://github.com/sshleifer/transformers_fork/raw/add-distilbart-pic/examples/seq2seq/distilbart_w_logos.png)
 
 For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
 you just copy alternating layers from `bart-large-cnn` and finetune more on the same data. 
