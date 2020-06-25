@@ -809,26 +809,36 @@ class SpecialTokensMixin:
     @property
     def bos_token_id(self):
         """ Id of the beginning of sentence token in the vocabulary. Log an error if used while not having been set. """
+        if self._bos_token is None:
+            return None
         return self.convert_tokens_to_ids(self.bos_token)
 
     @property
     def eos_token_id(self):
         """ Id of the end of sentence token in the vocabulary. Log an error if used while not having been set. """
+        if self._eos_token is None:
+            return None
         return self.convert_tokens_to_ids(self.eos_token)
 
     @property
     def unk_token_id(self):
         """ Id of the unknown token in the vocabulary. Log an error if used while not having been set. """
+        if self._unk_token is None:
+            return None
         return self.convert_tokens_to_ids(self.unk_token)
 
     @property
     def sep_token_id(self):
         """ Id of the separation token in the vocabulary. E.g. separate context and query in an input sequence. Log an error if used while not having been set. """
+        if self._sep_token is None:
+            return None
         return self.convert_tokens_to_ids(self.sep_token)
 
     @property
     def pad_token_id(self):
         """ Id of the padding token in the vocabulary. Log an error if used while not having been set. """
+        if self._pad_token is None:
+            return None
         return self.convert_tokens_to_ids(self.pad_token)
 
     @property
@@ -839,11 +849,15 @@ class SpecialTokensMixin:
     @property
     def cls_token_id(self):
         """ Id of the classification token in the vocabulary. E.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model. Log an error if used while not having been set. """
+        if self._cls_token is None:
+            return None
         return self.convert_tokens_to_ids(self.cls_token)
 
     @property
     def mask_token_id(self):
         """ Id of the mask token in the vocabulary. E.g. when training a model with masked-language modeling. Log an error if used while not having been set. """
+        if self._mask_token is None:
+            return None
         return self.convert_tokens_to_ids(self.mask_token)
 
     @property
