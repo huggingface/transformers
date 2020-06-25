@@ -310,41 +310,48 @@ class LongformerSelfAttention(nn.Module):
         # attention_probs = (batch_size, seq_len, num_heads, window*2+1)
         attention_probs = self._sliding_chunks_query_key_matmul(query_vectors, key_vectors, self.one_sided_attention_window_size)
 
-        remove_from_windowed_attention_mask = attention_mask != 0
         # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
         # from (batch_size x seq_len) to (batch_size x seq_len x num_heads x hidden_size)
-        remove_from_windowed_attention_mask = remove_from_windowed_attention_mask.unsqueeze(dim=-1).unsqueeze(
+        remove_from_windowed_attention_mask = (attention_mask != 0).unsqueeze(dim=-1).unsqueeze(
             dim=-1
         )
+
         # cast to fp32/fp16 then replace 1's with -inf
         float_mask = remove_from_windowed_attention_mask.type_as(query_vectors).masked_fill(
             remove_from_windowed_attention_mask, -10000.0
         )
-        ones = float_mask.new_ones(size=float_mask.size())  # tensor of ones
         # diagonal mask with zeros everywhere and -inf inplace of padding
-        d_mask = self._sliding_chunks_query_key_matmul(ones, float_mask, self.one_sided_attention_window_size)
-        attention_probs += d_mask
+        diagonal_mask = self._sliding_chunks_query_key_matmul(float_mask.new_ones(size=float_mask.size()), float_mask, self.one_sided_attention_window_size)
+        attention_probs += diagonal_mask
 
         assert list(attention_probs.size()) == [
             batch_size,
             seq_len,
             self.num_heads,
             self.one_sided_attention_window_size * 2 + 1,
-        ]
+        ], f"attention_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attention_window_size * 2 + 1}), but is of size {attention_probs.size()}"
 
         # the extra attention
         if max_num_extra_indices_per_batch > 0:
-            selected_k = key_vectors.new_zeros(batch_size, max_num_extra_indices_per_batch, self.num_heads, self.head_dim)
-            selected_k[selection_padding_mask_nonzeros] = key_vectors[extra_attention_mask_nonzeros]
+            extra_key_vectors = key_vectors.new_zeros(batch_size, max_num_extra_indices_per_batch, self.num_heads, self.head_dim)
+            extra_key_vectors[selection_padding_mask_nonzeros] = key_vectors[extra_attention_mask_nonzeros]
             # (batch_size, seq_len, num_heads, max_num_extra_indices_per_batch)
-            selected_attention_probs = torch.einsum("blhd,bshd->blhs", (query_vectors, selected_k))
-            selected_attention_probs[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000.0
+
+            extra_attention_probs = torch.einsum("blhd,bshd->blhs", (query_vectors, extra_key_vectors))
+            extra_attention_probs[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000.0
+
             # concat to attention_probs
             # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
-            attention_probs = torch.cat((selected_attention_probs, attention_probs), dim=-1)
+            attention_probs = torch.cat((extra_attention_probs, attention_probs), dim=-1)
+
+            # free memory
+            del key_vectors, query_vectors, extra_key_vectors, extra_attention_probs
 
         attention_probs_fp32 = F.softmax(attention_probs, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
         attention_probs = attention_probs_fp32.type_as(attention_probs)
+
+        # free memory
+        del attention_probs_fp32
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         attention_probs = torch.masked_fill(attention_probs, key_padding_mask.unsqueeze(-1).unsqueeze(-1), 0.0)
