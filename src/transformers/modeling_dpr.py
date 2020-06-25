@@ -32,7 +32,6 @@ from .configuration_dpr import DprConfig
 from .file_utils import add_start_docstrings
 from .modeling_bert import BertConfig, BertModel
 from .modeling_utils import PreTrainedModel
-from .tokenization_dpr import DprTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -55,14 +54,14 @@ class DprBertEncoder(BertModel):
         self.init_weights()
 
     @classmethod
-    def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.0, **kwargs) -> BertModel:
+    def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.0, **kwargs) -> "DprBertEncoder":
         cfg = BertConfig.from_pretrained(cfg_name)
         if dropout != 0:
             cfg.attention_probs_dropout_prob = dropout
             cfg.hidden_dropout_prob = dropout
         return cls(cfg, project_dim=projection_dim)
 
-    def forward(self, input_ids: T, token_type_ids: T, attention_mask: T) -> Tuple[T, ...]:
+    def forward(self, input_ids: T, token_type_ids: Optional[T], attention_mask: Optional[T]) -> Tuple[T, ...]:
         if self.config.output_hidden_states:
             sequence_output, pooled_output, hidden_states = super().forward(
                 input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask
@@ -77,7 +76,7 @@ class DprBertEncoder(BertModel):
             pooled_output = self.encode_proj(pooled_output)
         return sequence_output, pooled_output, hidden_states
 
-    def get_out_size(self):
+    def get_out_size(self) -> int:
         if self.encode_proj:
             return self.encode_proj.out_features
         return self.config.hidden_size
@@ -118,21 +117,21 @@ class Reader(nn.Module):
 ##############
 
 
-def get_bert_question_encoder_components(config: DprConfig, **kwargs):
+def get_bert_question_encoder_component(config: DprConfig, **kwargs) -> DprBertEncoder:
     question_encoder = DprBertEncoder.init_encoder(
         config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
     )
     return question_encoder
 
 
-def get_bert_ctx_encoder_components(config: DprConfig, **kwargs):
+def get_bert_ctx_encoder_component(config: DprConfig, **kwargs) -> DprBertEncoder:
     ctx_encoder = DprBertEncoder.init_encoder(
         config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
     )
     return ctx_encoder
 
 
-def get_bert_reader_components(config: DprConfig, **kwargs):
+def get_bert_reader_component(config: DprConfig, **kwargs) -> Reader:
     encoder = DprBertEncoder.init_encoder(config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs)
     hidden_size = encoder.config.hidden_size
     reader = Reader(encoder, hidden_size)
@@ -166,6 +165,7 @@ class DprPretrainedContextEncoder(PreTrainedModel):
     base_model_prefix = "dpr"
 
     def init_weights(self):
+        """Load the weights from the official DPR repo's format if specified."""
         if self.config.biencoder_model_file is not None:
             logger.info("Loading DPR biencoder from {}".format(self.config.biencoder_model_file))
             saved_state = load_states_from_checkpoint(self.config.biencoder_model_file)
@@ -175,6 +175,8 @@ class DprPretrainedContextEncoder(PreTrainedModel):
                 key[prefix_len:]: value for (key, value) in saved_state.model_dict.items() if key.startswith(prefix)
             }
             encoder.load_state_dict(ctx_state)
+        else:
+            super().init_weights()
 
 
 class DprPretrainedQuestionEncoder(PreTrainedModel):
@@ -187,6 +189,7 @@ class DprPretrainedQuestionEncoder(PreTrainedModel):
     base_model_prefix = "dpr"
 
     def init_weights(self):
+        """Load the weights from the official DPR repo's format if specified."""
         if self.config.biencoder_model_file is not None:
             logger.info("Loading DPR biencoder from {}".format(self.config.biencoder_model_file))
             saved_state = load_states_from_checkpoint(self.config.biencoder_model_file)
@@ -196,6 +199,8 @@ class DprPretrainedQuestionEncoder(PreTrainedModel):
                 key[prefix_len:]: value for (key, value) in saved_state.model_dict.items() if key.startswith(prefix)
             }
             encoder.load_state_dict(ctx_state)
+        else:
+            super().init_weights()
 
 
 class DprPretrainedReader(PreTrainedModel):
@@ -208,10 +213,13 @@ class DprPretrainedReader(PreTrainedModel):
     base_model_prefix = "dpr"
 
     def init_weights(self):
+        """Load the weights from the official DPR repo's format if specified."""
         if self.config.reader_model_file is not None:
             logger.info("Loading DPR reader from {}".format(self.config.reader_model_file))
             saved_state = load_states_from_checkpoint(self.config.reader_model_file)
             self.reader.load_state_dict(saved_state.model_dict)
+        else:
+            super().init_weights()
 
 
 ###############
@@ -229,40 +237,30 @@ DPR_INPUTS_DOCSTRING = r""""""
 )
 class DprContextEncoder(DprPretrainedContextEncoder):
     r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the output of the last layer of the model.
+    Outputs: The DPR encoder only outputs the `pooler_output` that corresponds to the context representation:
         **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
             Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during Dpr pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            further processed by a Linear layer. This output is to be used to embed contexts for
+            nearest neighbors queries with question embeddings.
 
     Examples::
 
         tokenizer = DprTokenizer.from_pretrained('dpr-base-uncased')
-        model = DprModel.from_pretrained('dpr-base-uncased')
+        model = DprContextEncoder.from_pretrained('dpr-ctx_encoder-base')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        embeddings = model(input_ids)  # the embeddings of the given context.
 
     """
 
     def __init__(self, config: DprConfig):
         super().__init__(config)
         self.config = config
-        self.ctx_encoder = get_bert_ctx_encoder_components(config)
+        self.ctx_encoder = get_bert_ctx_encoder_component(config)
         self.init_weights()
 
     def forward(
         self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None
-    ) -> Tuple[T, ...]:
+    ) -> T:
         if attention_mask is None:
             attention_mask = input_ids != self.config.pad_id
             attention_mask = attention_mask.to(device=input_ids.device)
@@ -275,40 +273,30 @@ class DprContextEncoder(DprPretrainedContextEncoder):
 )
 class DprQuestionEncoder(DprPretrainedQuestionEncoder):
     r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the output of the last layer of the model.
+    Outputs: The DPR encoder only outputs the `pooler_output` that corresponds to the question representation:
         **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
             Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during Dpr pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            further processed by a Linear layer. This output is to be used to embed questions for
+            nearest neighbors queries with context embeddings.
 
     Examples::
 
         tokenizer = DprTokenizer.from_pretrained('dpr-base-uncased')
-        model = DprModel.from_pretrained('dpr-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        model = DprQuestionEncoder.from_pretrained('dpr-ctx_encoder-base')
+        input_ids = torch.tensor(tokenizer.encode("Hello, is my dog cute ?")).unsqueeze(0)  # Batch size 1
+        embeddings = model(input_ids)  # the embeddings of the given question.
 
     """
 
     def __init__(self, config: DprConfig):
         super().__init__(config)
         self.config = config
-        self.question_encoder = get_bert_question_encoder_components(config)
+        self.question_encoder = get_bert_question_encoder_component(config)
         self.init_weights()
 
     def forward(
         self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None
-    ) -> Tuple[T, ...]:
+    ) -> T:
         if attention_mask is None:
             attention_mask = input_ids != self.config.pad_id
             attention_mask = attention_mask.to(device=input_ids.device)
@@ -327,34 +315,37 @@ DprSpanPrediction = collections.namedtuple(
 class DprReader(DprPretrainedReader):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the output of the last layer of the model.
-        **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during Dpr pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **input_ids**: ``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``
+            They correspond to the combined `input_ids` from `(question + context title + context content`).
+        **start_logits**: ``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``
+            Logits of the start index of the span for each passage.
+        **end_logits**: ``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``
+            Logits of the end index of the span for each passage.
+        **relevance_logits**: `torch.FloatTensor`` of shape ``(n_passages, )``
+            Outputs of the QA classifier of the DprReader that corresponds to the scores of each passage
+            to answer the question, compared to all the other passages.
+
 
     Examples::
 
-        tokenizer = DprTokenizer.from_pretrained('dpr-base-uncased')
-        model = DprModel.from_pretrained('dpr-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        tokenizer = DprReader.from_pretrained('dpr-base-uncased')
+        model = DprModel.from_pretrained('dpr-reader-base')
+        question_and_titles_ids = [
+            torch.tensor(tokenizer.encode("Hello, is my dog cute ?", "Dog cuteness"))
+            ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
+        texts_ids = [
+            torch.tensor(tokenizer.encode("Hello, my dog is definitely cute", add_special_tokens=False))
+            ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
+        outputs = model(question_and_titles_ids, texts_ids)
+        start_logits = outputs[1]  # The logits of the start of the span
+        end_logits = outputs[2]  # The logits of the end of the span
 
     """
 
     def __init__(self, config: DprConfig):
         super().__init__(config)
         self.config = config
-        self.reader = get_bert_reader_components(config)
+        self.reader = get_bert_reader_component(config)
         self.init_weights()
 
     def forward(self, question_and_titles_ids: List[T], texts_ids: List[T],) -> Tuple[T, ...]:
@@ -382,14 +373,44 @@ class DprReader(DprPretrainedReader):
         texts_ids: List[T],
         max_answer_length: int = 64,
         top_spans_per_passage: int = 10,
-    ) -> Tuple[T, ...]:
+    ) -> List[DprSpanPrediction]:
+        """
+        Get the span predictions for the extractive Q&A model.
+        Outputs: `List` of `DprSpanPrediction` sorted by descending `(relevance_score, span_score)`.
+            Each `DprSpanPrediction` is a `Tuple` with:
+            **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to other spans
+                in the same passage. It corresponds to the sum of the start and end logits of the span.
+            **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
+                compared to all the other passages. It corresponds to the output of the QA classifier of the DprReader.
+            **doc_id**: ``int``` the id of the passage.
+            **start_index**: ``int`` the start index of the span (inclusive).
+            **end_index**: ``int`` the end index of the span (inclusive).
+
+        Examples::
+
+            tokenizer = DprTokenizer.from_pretrained('dpr-base-uncased')
+            model = DprModel.from_pretrained('dpr-reader-base')
+            question_and_titles_ids = [
+                torch.tensor(tokenizer.encode("Hello, is my dog cute ?", "Dog cuteness"))
+                ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
+            texts_ids = [
+                torch.tensor(tokenizer.encode("Hello, my dog is definitely cute", add_special_tokens=False))
+                ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
+            predicted_spans = model.generate(question_and_titles_ids, texts_ids)
+            # get best answer
+            best_span = predicted_spans[0]
+            best_span_ids = texts_ids[best_span.doc_id]
+            best_span_ids = best_span_ids[best_span.start_index:best_span.end_index + 1]
+            print(tokenizer.decode(best_span_ids))
+
+        """
 
         input_ids, start_logits, end_logits, relevance_logits = self.forward(question_and_titles_ids, texts_ids)
 
         questions_num, docs_per_question = relevance_logits.size()
         assert questions_num == 1
         _, idxs = torch.sort(relevance_logits, dim=1, descending=True,)
-        nbest = []
+        nbest_spans_predictions: List[DprSpanPrediction] = []
         for p in range(docs_per_question):
             doc_id = idxs[0, p].item()
             sequence_ids = input_ids[0, doc_id]
@@ -409,8 +430,8 @@ class DprReader(DprPretrainedReader):
                 relevance_logits[0, doc_id].item(),
                 top_spans=top_spans_per_passage,
             )
-            nbest.extend(best_spans)
-        return nbest
+            nbest_spans_predictions.extend(best_spans)
+        return nbest_spans_predictions
 
     def _get_best_spans(
         self,
@@ -423,7 +444,9 @@ class DprReader(DprPretrainedReader):
         top_spans: int,
     ) -> List[DprSpanPrediction]:
         """
-        Finds the best answer span for the extractive Q&A model
+        Finds the best answer span for the extractive Q&A model for one passage.
+        It returns the best span by descending `span_score` order and keeping max `top_spans` spans.
+        Spans longer that `max_answer_length` are ignored.
         """
         scores = []
         for (i, s) in enumerate(start_logits):
