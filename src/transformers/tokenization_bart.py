@@ -55,7 +55,7 @@ class BartTokenizerFast(RobertaTokenizerFast):
     }
 
 
-_all_mbart_models = ["facebook/mbart-large-en-ro"]
+_all_mbart_models = ["facebook/mbart-large-en-ro", "sshleifer/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
 
 
@@ -105,6 +105,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         "vi_VN": 250024,
         "zh_CN": 250025,
     }
+    id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
@@ -114,6 +115,16 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return token_ids_0 + special_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + special_tokens
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        if index in self.id_to_lang_code:
+            return self.id_to_lang_code[index]
+        return self.sp_model.IdToPiece(index - self.fairseq_offset)
+
+    def set_lang(self, lang: str) -> None:
+        """Set the current language code in order to call batch_encode_plus properly."""
+        self.cur_lang_code = self.lang_code_to_id[lang]
 
     def prepare_translation_batch(
         self,
