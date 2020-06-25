@@ -607,7 +607,7 @@ class SpecialTokensMixin:
                         "special token {} has to be either str or AddedToken but got: {}".format(key, type(value))
                     )
 
-    def sanitize_special_tokens(self):
+    def sanitize_special_tokens(self) -> int:
         """ Make sure that all the special tokens attributes of the tokenizer (tokenizer.mask_token, tokenizer.cls_token, ...)
             are in the vocabulary. Add the missing ones to the vocabulary if needed.
 
@@ -616,7 +616,7 @@ class SpecialTokensMixin:
         """
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
-    def add_special_tokens(self, special_tokens_dict):
+    def add_special_tokens(self, special_tokens_dict: Dict[str, Union[str, AddedToken]]) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls...) to the encoder and link them
         to class attributes. If special tokens are NOT in the vocabulary, they are added
@@ -665,10 +665,14 @@ class SpecialTokensMixin:
             setattr(self, key, value)
 
             if key == "additional_special_tokens":
-                assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
+                assert isinstance(value, (list, tuple)) and all(
+                    isinstance(t, (str, AddedToken)) for t in value
+                ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
-                assert isinstance(value, str)
+                assert isinstance(
+                    value, (str, AddedToken)
+                ), f"Token {value} for key {key} should be a str or an AddedToken instance"
                 added_tokens += self.add_tokens([value], special_tokens=True)
 
         return added_tokens
