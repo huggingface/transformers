@@ -94,17 +94,17 @@ class TFTrainer:
                 .prefetch(tf.data.experimental.AUTOTUNE)
             )
         else:
-            self.train_steps: int = math.ceil(self.num_train_examples / self.args.train_batch_size)
+            self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
 
-        ds = (
-            self.train_dataset.cache()
-            .shuffle(self.num_train_examples)
-            .batch(self.args.train_batch_size, drop_remainder=self.args.dataloader_drop_last)
-            .prefetch(tf.data.experimental.AUTOTUNE)
-        )
+            ds = (
+                self.train_dataset.cache()
+                .shuffle(self.num_train_examples)
+                .batch(self.args.train_batch_size, drop_remainder=self.args.dataloader_drop_last)
+                .prefetch(tf.data.experimental.AUTOTUNE)
+            )
 
         if self.args.max_steps > 0:
-            self.train_dataset = self.train_dataset.repeat(-1)
+            ds = ds.repeat(-1)
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 
@@ -119,10 +119,16 @@ class TFTrainer:
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
+        if self.args.is_tpu_available():
+            ds = ds.repeat(-1)
+
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
         ds = test_dataset.batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
+
+        if self.args.is_tpu_available():
+            ds = ds.repeat(-1)
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 
