@@ -67,10 +67,6 @@ This returns a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
     label: POSITIVE, with score: 0.9999
 
 
-.. code-block::
-
-
-
 Here is an example of doing a sequence classification using a model to determine if two sequences are paraphrases
 of each other. The process is the following:
 
@@ -528,7 +524,7 @@ Here is an example for text generation using XLNet and its tokenzier.
 
     >>> prompt = "Today the weather is really nice and I am planning on "
     >>> inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="pt")
-    >>>
+
     >>> prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
     >>> outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
     >>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
@@ -599,7 +595,7 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
 
     >>> nlp = pipeline("ner")
 
-    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
+    >>> sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very"
     ...            "close to the Manhattan Bridge which is visible from the window."
 
 
@@ -607,6 +603,7 @@ This outputs a list of all words that have been identified as an entity from the
 expected results:
 
 .. code-block::
+
     print(nlp(sequence))
 
     [
