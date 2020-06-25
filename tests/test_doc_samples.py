@@ -98,3 +98,7 @@ class TestCodeExamples(unittest.TestCase):
         transformers_directory = "src/transformers"
         n_identifiers = ["configuration", "modeling", "tokenization"]
         self.analyze_directory(transformers_directory, n_identifier=n_identifiers)
+
+    def test_doc_sources(self):
+        doc_source_directory = "docs/source"
+        self.analyze_directory(doc_source_directory)
