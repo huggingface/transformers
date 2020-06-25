@@ -17,10 +17,13 @@ import os
 import unittest
 from doctest import DocTestSuite
 from typing import List, Union
+import logging
 
 import transformers
 
 from .utils import require_tf, require_torch, slow
+
+logger = logging.getLogger()
 
 
 @require_torch
@@ -28,23 +31,49 @@ from .utils import require_tf, require_torch, slow
 @slow
 class TestCodeExamples(unittest.TestCase):
     def analyze_directory(
-        self, directory: str, identifier: Union[str, None] = None, ignore_files: Union[List[str], None] = None
+            self,
+            directory: str,
+            identifier: Union[str, None] = None,
+            ignore_files: Union[List[str], None] = [],
+            n_identifier: Union[str, None] = None
     ):
+        """
+        Runs through the specific directory, looking for the files identified with `identifier`. Executes
+        the doctests in those files
+
+        Args:
+            directory (:obj:`str`): Directory containing the files
+            identifier (:obj:`str`): Will parse files containing this
+            ignore_files (:obj:`List[str]`): List of files to skip
+            n_identifier (:obj:`str` or :obj:`List[str]`): Will not parse files containing this/these identifiers.
+        """
         files = [file for file in os.listdir(directory) if os.path.isfile(os.path.join(directory, file))]
 
         if identifier is not None:
             files = [file for file in files if identifier in file]
 
-        if ignore_files is not None:
-            files = [file for file in files if file not in ignore_files]
+        if n_identifier is not None:
+            if isinstance(n_identifier, List):
+                for n_ in n_identifier:
+                    files = [file for file in files if n_ not in file]
+            else:
+                files = [file for file in files if n_identifier not in file]
+
+        ignore_files.append("__init__.py")
+        files = [file for file in files if file not in ignore_files]
 
         for file in files:
             # Open all files
             print("Testing", file)
-            module = file.split(".")[0]
-            suite = DocTestSuite(getattr(transformers, module))
-            result = unittest.TextTestRunner().run(suite)
-            self.assertIs(len(result.failures), 0)
+            module_identifier = file.split(".")[0]
+
+            try:
+                module_identifier = getattr(transformers, module_identifier)
+                suite = DocTestSuite(module_identifier)
+                result = unittest.TextTestRunner().run(suite)
+                self.assertIs(len(result.failures), 0)
+            except AttributeError:
+                logger.info(f"{module_identifier} is not user-facing.")
 
     def test_modeling_examples(self):
         transformers_directory = "src/transformers"
@@ -58,6 +87,14 @@ class TestCodeExamples(unittest.TestCase):
     def test_tokenization_examples(self):
         transformers_directory = "src/transformers"
         files = "tokenization"
-        ignore_files = [
-        ]
-        self.analyze_directory(transformers_directory, identifier=files, ignore_files=ignore_files)
+        self.analyze_directory(transformers_directory, identifier=files)
+
+    def test_configuration_examples(self):
+        transformers_directory = "src/transformers"
+        files = "configuration"
+        self.analyze_directory(transformers_directory, identifier=files)
+
+    def test_remaining_examples(self):
+        transformers_directory = "src/transformers"
+        n_identifiers = ["configuration", "modeling", "tokenization"]
+        self.analyze_directory(transformers_directory, n_identifier=n_identifiers)
