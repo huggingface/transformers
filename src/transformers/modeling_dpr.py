@@ -33,7 +33,9 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 DPR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-ctx_encoder-single-nq-base", "facebook/dpr-question_encoder-single-nq-base", "facebook/dpr-reader-single-nq-base"
+    "facebook/dpr-ctx_encoder-single-nq-base",
+    "facebook/dpr-question_encoder-single-nq-base",
+    "facebook/dpr-reader-single-nq-base",
 ]
 
 
@@ -425,7 +427,9 @@ class DprReader(DprPretrainedReader):
         assert len(question_and_titles_ids) == len(texts_ids)
         device = question_and_titles_ids[0].device
         n_contexts = len(question_and_titles_ids)
-        input_ids = torch.ones((n_contexts, self.config.sequence_length), dtype=torch.int64) * int(self.config.pad_token_id)
+        input_ids = torch.ones((n_contexts, self.config.sequence_length), dtype=torch.int64) * int(
+            self.config.pad_token_id
+        )
         input_ids = input_ids.to(device=device)
         for i in range(n_contexts):
             question_and_title_ids = question_and_titles_ids[i]
