@@ -22,8 +22,6 @@ from transformers.tokenization_roberta import RobertaTokenizerFast
 from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
 
 
-logging.basicConfig(level=logging.INFO)
-
 logger = logging.getLogger(__name__)
 
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
