@@ -426,9 +426,13 @@ class LongformerSelfAttention(nn.Module):
                 max_num_global_attn_indices_of_batches,
                 local_attention_probs.size(-1) - max_num_global_attn_indices_of_batches,
             ).contiguous()
+
             # add computed attention output
-            attention_output = local_attention_output_only_global + self._sliding_chunks_matmul_attention_probs_value(
-                local_attn_probs_without_global, value_vectors, self.one_sided_attention_window_size
+            attention_output = (
+                self._sliding_chunks_matmul_attention_probs_value(
+                    local_attn_probs_without_global, value_vectors, self.one_sided_attention_window_size
+                )
+                + local_attention_output_only_global
             )
 
             # free memory
@@ -505,7 +509,7 @@ class LongformerSelfAttention(nn.Module):
                 global_attention_probs_float.type_as(global_attention_probs), p=self.dropout, training=self.training
             )
 
-            global_attention_output = torch.bmm(global_attention_probs, global_key_vectors)
+            global_attention_output = torch.bmm(global_attention_probs, global_value_vectors)
 
             assert list(global_attention_output.size()) == [
                 batch_size * self.num_heads,
@@ -815,12 +819,6 @@ class LongformerModel(LongformerPreTrainedModel):
             )
             if input_ids is not None:
                 input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
-            if attention_mask is not None:
-                attention_mask = F.pad(
-                    attention_mask, (0, padding_len), value=False
-                )  # no attention on the padding tokens
-            if token_type_ids is not None:
-                token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
             if position_ids is not None:
                 # pad with position_id = pad_token_id as in modeling_roberta.RobertaEmbeddings
                 position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
@@ -830,6 +828,9 @@ class LongformerModel(LongformerPreTrainedModel):
                 )
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
+
+            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
+            token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
@@ -900,19 +901,6 @@ class LongformerModel(LongformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        # merge `global_attention_mask` and `attention_mask`
-        if global_attention_mask is not None:
-            attention_mask = self._merge_to_attention_mask(attention_mask, global_attention_mask)
-
-        padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            pad_token_id=self.config.pad_token_id,
-        )
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -928,6 +916,19 @@ class LongformerModel(LongformerPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        # merge `global_attention_mask` and `attention_mask`
+        if global_attention_mask is not None:
+            attention_mask = self._merge_to_attention_mask(attention_mask, global_attention_mask)
+
+        padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            pad_token_id=self.config.pad_token_id,
+        )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
