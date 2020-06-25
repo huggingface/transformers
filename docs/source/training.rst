@@ -9,7 +9,7 @@ show how to use our included :func:`~transformers.Trainer` class which
 handles much of the complexity of training for you.
 
 This guide assume that you are already familiar with loading and use our
-models for inference; otherwise, see `Usage <./usage.html>`_. We also assume
+models for inference; otherwise, see the :doc:`task summary <task_summary>`. We also assume
 that you are familiar with training deep neural networks in either PyTorch or
 TF2, and focus specifically on the nuances and tools for training models in
 🤗 Transformers.
