@@ -488,11 +488,11 @@ class SquadProcessor(DataProcessor):
 
         Examples::
 
-            import tensorflow_datasets as tfds
-            dataset = tfds.load("squad")
+            >>> import tensorflow_datasets as tfds
+            >>> dataset = tfds.load("squad")
 
-            training_examples = get_examples_from_dataset(dataset, evaluate=False)
-            evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
+            >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)
+            >>> evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
         """
 
         if evaluate:

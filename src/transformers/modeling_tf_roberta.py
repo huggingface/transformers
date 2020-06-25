@@ -21,7 +21,12 @@ import logging
 import tensorflow as tf
 
 from .configuration_roberta import RobertaConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
@@ -37,6 +42,8 @@ from .tokenization_utils_base import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "roberta-base",
@@ -195,6 +202,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         self.roberta = TFRobertaMainLayer(config, name="roberta")
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -219,18 +227,6 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import RobertaTokenizer, TFRobertaModel
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = TFRobertaModel.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         outputs = self.roberta(inputs, **kwargs)
         return outputs
@@ -279,6 +275,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
         return self.lm_head.decoder
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -296,18 +293,6 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import RobertaTokenizer, TFRobertaForMaskedLM
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = TFRobertaForMaskedLM.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
         """
         outputs = self.roberta(inputs, **kwargs)
 
@@ -358,6 +343,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
         self.classifier = TFRobertaClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def call(
         self,
         inputs=None,
@@ -387,19 +373,6 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import RobertaTokenizer, TFRobertaForSequenceClassification
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = TFRobertaForSequenceClassification.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[8] if len(inputs) > 8 else labels
@@ -441,7 +414,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.roberta = TFBertMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, name="roberta")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -457,6 +430,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def call(
         self,
         inputs,
@@ -493,22 +467,6 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import RobertaTokenizer, TFRobertaForMultipleChoice
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = TFRobertaForMultipleChoice.from_pretrained('roberta-base')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -592,6 +550,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
         )
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def call(
         self,
         inputs=None,
@@ -625,19 +584,6 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import RobertaTokenizer, TFRobertaForTokenClassification
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = TFRobertaForTokenClassification.from_pretrained('roberta-base')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[8] if len(inputs) > 8 else labels
@@ -687,6 +633,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
         )
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def call(
         self,
         inputs=None,
@@ -728,24 +675,6 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        # The checkpoint roberta-base is not fine-tuned for question answering. Please see the
-        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
-
-        import tensorflow as tf
-        from transformers import RobertaTokenizer, TFRobertaForQuestionAnswering
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = TFRobertaForQuestionAnswering.from_pretrained('roberta-base')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
         """
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[8] if len(inputs) > 8 else start_positions

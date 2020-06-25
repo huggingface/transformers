@@ -22,7 +22,12 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_bert import BertConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
@@ -39,6 +44,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
@@ -704,6 +710,7 @@ class TFBertModel(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name="bert")
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-cased")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -728,18 +735,6 @@ class TFBertModel(TFBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertModel
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertModel.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
         outputs = self.bert(inputs, **kwargs)
         return outputs
@@ -819,6 +814,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         return self.bert.embeddings
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-cased")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -836,18 +832,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForMaskedLM
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForMaskedLM.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
         """
         outputs = self.bert(inputs, **kwargs)
 
@@ -930,6 +914,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-cased")
     def call(
         self,
         inputs=None,
@@ -965,19 +950,6 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForSequenceClassification
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[8] if len(inputs) > 8 else labels
@@ -1037,6 +1009,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-cased")
     def call(
         self,
         inputs,
@@ -1073,22 +1046,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForMultipleChoice
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForMultipleChoice.from_pretrained('bert-base-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1177,6 +1134,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-cased")
     def call(
         self,
         inputs=None,
@@ -1210,19 +1168,6 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForTokenClassification
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForTokenClassification.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[8] if len(inputs) > 8 else labels
@@ -1273,6 +1218,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-cased")
     def call(
         self,
         inputs=None,
@@ -1314,22 +1260,6 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForQuestionAnswering
-
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-        assert answer == "a nice puppet"
-
         """
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[8] if len(inputs) > 8 else start_positions
