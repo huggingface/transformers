@@ -194,14 +194,20 @@ def flatten_list(summary_ids: List[List]):
     return [x for x in itertools.chain.from_iterable(summary_ids)]
 
 
-def save_git_info(folder_path: str):
-    """
-    Log commit info.
-    """
+def save_git_info(folder_path: str) -> None:
+    """Save git information to output_dir/git_log.json"""
     repo_infos = get_git_info()
+    save_json(repo_infos, os.path.join(folder_path, "git_log.json"))
 
-    with open(os.path.join(folder_path, "git_log.json"), "w") as f:
-        json.dump(repo_infos, f, indent=4)
+
+def save_json(content, path):
+    with open(path, "w") as f:
+        json.dump(content, f, indent=4)
+
+
+def load_json(path):
+    with open(path) as f:
+        return json.load(f)
 
 
 def get_git_info():

@@ -16,7 +16,7 @@ from transformers import BartTokenizer, MarianTokenizer, MBartTokenizer
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
 from .run_eval import generate_summaries_or_translations, run_generate
-from .utils import SummarizationDataset, lmap, pickle_load
+from .utils import SummarizationDataset, lmap, load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -173,16 +173,18 @@ class TestSummarizationDistiller(unittest.TestCase):
         ckpt_name = "val_avg_rouge2=0.0000-step_count=2.ckpt"  # "val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
         contents = {os.path.basename(p) for p in contents}
         self.assertIn(ckpt_name, contents)
-        self.assertIn("metrics.pkl", contents)
+
         self.assertIn("test_generations.txt", contents)
-        self.assertIn("val_generations_00001.txt", contents)
-        self.assertIn("val_results_00001.txt", contents)
         self.assertIn("test_results.txt", contents)
 
-        metrics = pickle_load(Path(output_dir) / "metrics.pkl")
+        metrics = load_json(model.metrics_save_path)
+        last_step_stats = metrics["val"][-1]
+        self.assertGreaterEqual(last_step_stats["val_avg_gen_time"], 0.01)
+        self.assertGreaterEqual(1.0, last_step_stats["val_avg_gen_time"])
+        self.assertIsInstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
         desired_n_evals = int(args_d["num_train_epochs"] * (1 / args_d["val_check_interval"]) + 1)
         self.assertEqual(len(metrics["val"]), desired_n_evals)
-        self.assertEqual(len(metrics["train"]), 0)  # doesn't get logged here
+        self.assertEqual(len(metrics["test"]), 1)
         return model
 
 

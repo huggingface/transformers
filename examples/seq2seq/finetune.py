@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -23,6 +24,7 @@ try:
         flatten_list,
         pickle_save,
         save_git_info,
+        save_json,
         freeze_params,
         calculate_rouge,
         get_git_info,
@@ -38,6 +40,7 @@ except ImportError:
         flatten_list,
         pickle_save,
         save_git_info,
+        save_json,
         freeze_params,
         calculate_rouge,
         get_git_info,
@@ -59,10 +62,11 @@ class SummarizationModule(BaseTransformer):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
         save_git_info(self.hparams.output_dir)
-        self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
+        self.metrics_save_path = Path(self.output_dir) / "metrics.json"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
+        pickle_save(self.hparams, self.hparams_save_path)
         self.step_count = 0
-        self.metrics = {"train": [], "val": [], "test": []}
+        self.metrics = defaultdict(list)
 
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
@@ -144,13 +148,12 @@ class SummarizationModule(BaseTransformer):
         preds = flatten_list([x["preds"] for x in outputs])
         return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": rouge_tensor}
 
-    def save_metrics(self, metrics, prefix) -> None:
-        self.metrics[prefix].append(metrics)
-        pickle_save(self.metrics, self.metrics_save_path)
+    def save_metrics(self, latest_metrics, type_path) -> None:
+        self.metrics[type_path].append(latest_metrics)
+        save_json(self.metrics, self.metrics_save_path)
 
-    def calc_generative_metrics(self, preds, target) -> dict:
-        rouge: Dict = calculate_rouge(preds, target)
-        return rouge
+    def calc_generative_metrics(self, preds, target) -> Dict:
+        return calculate_rouge(preds, target)
 
     def _generative_step(self, batch: dict) -> dict:
         pad_token_id = self.tokenizer.pad_token_id

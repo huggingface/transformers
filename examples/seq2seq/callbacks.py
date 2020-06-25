@@ -32,9 +32,12 @@ class Seq2SeqLoggingCallback(pl.Callback):
             results_file = od / "test_results.txt"
             generations_file = od / "test_generations.txt"
         else:
-            results_file = od / f"{type_path}_results_{trainer.global_step:05d}.txt"
-            generations_file = od / f"{type_path}_generations_{trainer.global_step:05d}.txt"
-
+            # this never gets hit. I prefer not to save intermediate generations, and results are in metrics.json
+            # If people want this it will be easy enough to add back.
+            results_file = od / f"{type_path}_results/{trainer.global_step:05d}.txt"
+            generations_file = od / f"{type_path}_generations/{trainer.global_step:05d}.txt"
+            results_file.parent.mkdir(exist_ok=True)
+            generations_file.parent.mkdir(exist_ok=True)
         with open(results_file, "a+") as writer:
             for key in sorted(metrics):
                 if key in ["log", "progress_bar", "preds"]:
@@ -62,10 +65,6 @@ class Seq2SeqLoggingCallback(pl.Callback):
         n_trainable_pars = count_trainable_parameters(pl_module)
         # mp stands for million parameters
         trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
-
-    @rank_zero_only
-    def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        return self._write_logs(trainer, pl_module, "val")
 
     @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
