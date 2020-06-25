@@ -33,7 +33,7 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from utils_hans import HansDataset, InputFeatures, hans_processors
+from utils_hans import HansDataset, InputFeatures, hans_processors, hans_tasks_num_labels
 
 
 logger = logging.getLogger(__name__)
@@ -130,9 +130,7 @@ def main():
     set_seed(training_args.seed)
 
     try:
-        processor = hans_processors[data_args.task_name]()
-        label_list = processor.get_labels()
-        num_labels = len(label_list)
+        num_labels = hans_tasks_num_labels[data_args.task_name]
     except KeyError:
         raise ValueError("Task not found: %s" % (data_args.task_name))
 
@@ -214,6 +212,7 @@ def main():
 
         pair_ids = [ex.pairID for ex in eval_dataset]
         output_eval_file = os.path.join(training_args.output_dir, "hans_predictions.txt")
+        label_list = eval_dataset.get_labels()
         if trainer.is_world_master():
             with open(output_eval_file, "w") as writer:
                 writer.write("pairID,gold_label\n")

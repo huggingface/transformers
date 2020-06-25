@@ -815,14 +815,19 @@ class BartModel(PretrainedBartModel):
         encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
     ):
+
+        if decoder_input_ids is None:
+            use_cache = False
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -915,7 +920,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_attention_mask=None,
         decoder_cached_states=None,
         labels=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         **unused,
@@ -967,6 +972,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
                 DeprecationWarning,
             )
             labels = unused.pop("lm_labels")
+
+        if labels is not None:
+            use_cache = False
 
         outputs = self.model(
             input_ids,
@@ -1070,6 +1078,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        use_cache=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1106,6 +1115,9 @@ class BartForSequenceClassification(PretrainedBartModel):
         loss, logits = outputs[:2]
 
         """
+        if labels is not None:
+            use_cache = False
+
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -1114,6 +1126,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_id)
@@ -1159,6 +1172,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
+        use_cache=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1206,6 +1220,8 @@ class BartForQuestionAnswering(PretrainedBartModel):
         answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
 
         """
+        if start_positions is not None and end_positions is not None:
+            use_cache = False
 
         outputs = self.model(
             input_ids,
@@ -1215,6 +1231,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
         )
 
         sequence_output = outputs[0]

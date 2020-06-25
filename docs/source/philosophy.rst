@@ -1,7 +1,7 @@
 Philosophy
 ==========
 
-Transformers is an opinionated library built for:
+🤗 Transformers is an opinionated library built for:
 
 - NLP researchers and educators seeking to use/study/extend large-scale transformers models
 - hands-on practitioners who want to fine-tune those models and/or serve them in production

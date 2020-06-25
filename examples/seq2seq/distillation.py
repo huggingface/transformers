@@ -39,13 +39,12 @@ except ImportError:
     )
 
 
-class SummarizationDistiller(SummarizationModule):
+class BartSummarizationDistiller(SummarizationModule):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
     def __init__(self, hparams):
         assert Path(hparams.data_dir).exists()
-
-        d_layers_to_copy, student, student_cfg, teacher = self.pre_init(hparams)
+        student, student_cfg, teacher = self.pre_init(hparams)
 
         super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
@@ -73,12 +72,15 @@ class SummarizationDistiller(SummarizationModule):
             del self.teacher.model.encoder
 
     def pre_init(self, hparams):
-        # Dump empty student model at a path, then call from_pretrained on it
+        self.output_dir = Path(hparams.output_dir)
+        self.output_dir.mkdir(exist_ok=True)
         teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
         student_updates = {
             "decoder_layers": hparams.student_decoder_layers,
             "encoder_layers": hparams.student_encoder_layers,
         }
+        if hparams.length_penalty != -1:
+            student_updates["length_penalty"] = hparams.length_penalty
         d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
         hparams.d_layer_to_copy = d_layers_to_copy
@@ -89,9 +91,13 @@ class SummarizationDistiller(SummarizationModule):
         student_cfg = BartConfig(**kw)
         student = BartForConditionalGeneration(student_cfg)
         student, _ = init_student(student, teacher)
+        save_dir = self.output_dir.joinpath("student")
+        save_dir.mkdir(exist_ok=True)
+
         self.copy_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
-        Path(hparams.output_dir).mkdir(exist_ok=True)
-        return d_layers_to_copy, student, student_cfg, teacher
+        student.save_pretrained(save_dir)
+        hparams.model_name_or_path = str(save_dir)
+        return student, student_cfg, teacher
 
     def copy_to_student(self, d_layers_to_copy, e_layers_to_copy, hparams, student, teacher):
         if teacher.config.model_type == "t5":
@@ -154,7 +160,6 @@ class SummarizationDistiller(SummarizationModule):
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
-
         model = self.model
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
@@ -180,18 +185,11 @@ class SummarizationDistiller(SummarizationModule):
         # parser.add_argument("--alpha_cos", default=0.0, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
         parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
-        parser.add_argument(
-            "--student_decoder_layers", default=12, type=int, required=False,
-        )
-        parser.add_argument(
-            "--student_encoder_layers", default=12, type=int, required=False,
-        )
-        parser.add_argument(
-            "--no_teacher", action="store_true", default=False,
-        )
-        parser.add_argument(  # TODO: remove
-            "--enc_only", action="store_true", default=False,
-        )
+        parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
+        parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
+        parser.add_argument("--no_teacher", action="store_true", default=False)
+        parser.add_argument("--length_penalty", type=float, default=-1)
+
         return parser
 
     def _step(self, batch):
@@ -269,12 +267,14 @@ class SummarizationDistiller(SummarizationModule):
         return sum(hidden_losses)
 
 
-class T5SummarizationDistiller(SummarizationDistiller):
+class T5SummarizationDistiller(BartSummarizationDistiller):
     def pre_init(self, hparams):
         raise NotImplementedError("T5 Distillation does not work yet")
+        self.output_dir = Path(hparams.output_dir)
+        self.output_dir.mkdir(exist_ok=True)
         teacher = T5ForConditionalGeneration.from_pretrained(hparams.teacher)
         n_layer = hparams.student_decoder_layers
-        assert n_layer == hparams.student_encoder_layers  # TODO(SS): relax this
+        assert n_layer == hparams.student_encoder_layers  # TODO(SS): relax this constraint so that we can do 12-6.
         d_layers_to_copy = get_layers_to_copy(n_layer, len(teacher.decoder.block))
         e_layers_to_copy: List = get_layers_to_copy(n_layer, len(teacher.encoder.block))
         student_updates = {"num_layers": n_layer}
@@ -291,8 +291,13 @@ class T5SummarizationDistiller(SummarizationDistiller):
         Path(hparams.output_dir).mkdir(exist_ok=True)
         task_specific_params = student.config.task_specific_params
         if task_specific_params is not None:
-            student.config.update(task_specific_params.get("summarization", {}))
-        return d_layers_to_copy, student, student_cfg, teacher
+            student.config.update(task_specific_params.get("summarization", {}))  # TODO: dont hardcode
+        save_dir = self.output_dir.joinpath("student")
+        save_dir.mkdir(exist_ok=True)
+
+        student.save_pretrained(save_dir)
+        hparams.model_name_or_path = str(save_dir)
+        return student, student_cfg, teacher
 
     def freeze_embeds(self):
         freeze_params(self.model.shared)
@@ -386,7 +391,7 @@ def create_module(args):
     elif args.enc_only:
         raise ValueError("Deleted that")
     else:
-        module_cls = SummarizationDistiller
+        module_cls = BartSummarizationDistiller
     args.setup_cls: str = module_cls.__name__
     model = module_cls(args)
     return model
@@ -418,18 +423,18 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
 def get_layers_to_copy(n_to_get, tot):
     all_layers = list(range(tot))
     if tot == 12:  # Alternating for special cases
-        layers_to_copy = {  # maps # layers in student -> which teacher layers to copy
-            6: [0, 2, 4, 7, 9, 11],
-            1: [11],
+        layers_to_copy = {  # maps  num layers in student -> which teacher layers to copy
+            1: [0],
+            2: [0, 6],
             3: [0, 6, 11],
-            2: [0, 11],
             4: [0, 4, 8, 11],
+            6: [0, 2, 4, 7, 9, 11],
             9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
             12: all_layers,
         }
         return layers_to_copy[n_to_get]
     else:
-        return all_layers[:n_to_get]
+        return all_layers[:n_to_get]  # TODO: better version on theseus-bart branch
 
 
 def distill_main(args):
@@ -443,7 +448,7 @@ def distill_main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
+    parser = BartSummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     distill_main(args)

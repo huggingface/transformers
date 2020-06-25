@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -23,12 +24,14 @@ try:
         flatten_list,
         pickle_save,
         save_git_info,
+        save_json,
         freeze_params,
         calculate_rouge,
         get_git_info,
         ROUGE_KEYS,
+        calculate_bleu_score,
     )
-    from .callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
+    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 except ImportError:
     from utils import (
         use_task_specific_params,
@@ -37,12 +40,14 @@ except ImportError:
         flatten_list,
         pickle_save,
         save_git_info,
+        save_json,
         freeze_params,
         calculate_rouge,
         get_git_info,
         ROUGE_KEYS,
+        calculate_bleu_score,
     )
-    from callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
+    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 
 logger = logging.getLogger(__name__)
 
@@ -50,15 +55,18 @@ logger = logging.getLogger(__name__)
 class SummarizationModule(BaseTransformer):
     mode = "summarization"
     loss_names = ["loss"]
+    metric_names = ROUGE_KEYS
+    val_metric = "rouge2"
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         use_task_specific_params(self.model, "summarization")
         save_git_info(self.hparams.output_dir)
-        self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
+        self.metrics_save_path = Path(self.output_dir) / "metrics.json"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
+        pickle_save(self.hparams, self.hparams_save_path)
         self.step_count = 0
-        self.metrics = {"train": [], "val": [], "test": []}
+        self.metrics = defaultdict(list)
 
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
@@ -89,12 +97,12 @@ class SummarizationModule(BaseTransformer):
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        if self.model.config.model_type == "bart":
+        try:
             freeze_params(self.model.model.shared)
             for d in [self.model.model.encoder, self.model.model.decoder]:
                 freeze_params(d.embed_positions)
                 freeze_params(d.embed_tokens)
-        else:
+        except AttributeError:
             freeze_params(self.model.shared)
             for d in [self.model.encoder, self.model.decoder]:
                 freeze_params(d.embed_tokens)
@@ -130,19 +138,22 @@ class SummarizationModule(BaseTransformer):
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time", "summ_len"]}
-        rouge_tensor: torch.FloatTensor = torch.tensor(rouges["rouge2"]).type_as(loss)
+        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "summ_len"]}
+        rouge_tensor: torch.FloatTensor = torch.tensor(rouges[self.val_metric]).type_as(loss)
         rouges.update({k: v.item() for k, v in losses.items()})
         losses.update(rouges)
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         metrics["step_count"] = self.step_count
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_rouge": rouge_tensor}
+        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": rouge_tensor}
 
-    def save_metrics(self, metrics, prefix) -> None:
-        self.metrics[prefix].append(metrics)
-        pickle_save(self.metrics, self.metrics_save_path)
+    def save_metrics(self, latest_metrics, type_path) -> None:
+        self.metrics[type_path].append(latest_metrics)
+        save_json(self.metrics, self.metrics_save_path)
+
+    def calc_generative_metrics(self, preds, target) -> Dict:
+        return calculate_rouge(preds, target)
 
     def _generative_step(self, batch: dict) -> dict:
         pad_token_id = self.tokenizer.pad_token_id
@@ -154,7 +165,7 @@ class SummarizationModule(BaseTransformer):
         target = self.ids_to_clean_text(y)
         loss_tensors = self._step(batch)
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
-        rouge: Dict = calculate_rouge(preds, target)
+        rouge: Dict = self.calc_generative_metrics(preds, target)
         summ_len = np.mean(lmap(len, generated_ids))
         base_metrics.update(gen_time=gen_time, summ_len=summ_len, preds=preds, target=target, **rouge)
         return base_metrics
@@ -259,7 +270,20 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
+        parser.add_argument(
+            "--task", type=str, default="summarization", required=False, help="# examples. -1 means use all."
+        )
         return parser
+
+
+class TranslationModule(SummarizationModule):
+    mode = "translation"
+    loss_names = ["loss"]
+    metric_names = ["bleu"]
+    val_metric = "bleu"
+
+    def calc_generative_metrics(self, preds, target) -> dict:
+        return calculate_bleu_score(preds, target)
 
 
 def main(args, model=None) -> SummarizationModule:
@@ -267,7 +291,12 @@ def main(args, model=None) -> SummarizationModule:
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
-        model: BaseTransformer = SummarizationModule(args)
+        if args.task == "summarization":
+            model: SummarizationModule = SummarizationModule(args)
+        else:
+            model: SummarizationModule = TranslationModule(args)
+
+    dataset = Path(args.data_dir).name
     if (
         args.logger == "default"
         or args.fast_dev_run
@@ -278,17 +307,17 @@ def main(args, model=None) -> SummarizationModule:
     elif args.logger == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=model.output_dir.name)
+        logger = WandbLogger(name=model.output_dir.name, project=dataset)
+
     elif args.logger == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        # TODO: separate LB for CNN, we should use Path(args.data_dir).name to determine the correct LB.
-        logger = WandbLogger(name=model.output_dir.name, project="hf_summarization")
+        logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
-        checkpoint_callback=get_rouge2_checkpoint_callback(args.output_dir),
+        checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         logger=logger,
         # TODO: early stopping callback seems messed up
     )

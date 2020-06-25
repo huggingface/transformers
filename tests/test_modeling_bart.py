@@ -153,6 +153,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_advanced_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
             config, inputs_dict["input_ids"]
