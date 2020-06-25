@@ -144,8 +144,15 @@ class LongformerModelTester:
         global_attention_mask[:, input_mask.shape[-1] // 2] = 0
         global_attention_mask = global_attention_mask.to(torch_device)
 
-        sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, global_attention_mask=global_attention_mask, token_type_ids=token_type_ids)
-        sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask)
+        sequence_output, pooled_output = model(
+            input_ids,
+            attention_mask=input_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+        )
+        sequence_output, pooled_output = model(
+            input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask
+        )
         sequence_output, pooled_output = model(input_ids, global_attention_mask=global_attention_mask)
 
         result = {
