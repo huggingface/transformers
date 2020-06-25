@@ -448,8 +448,9 @@ class DprReader(DprPretrainedReader):
         self,
         question_and_titles_ids: List[T],
         texts_ids: List[T],
+        k: int = 16,
         max_answer_length: int = 64,
-        top_spans_per_passage: int = 10,
+        top_spans_per_passage: int = 4,
     ) -> List[DprSpanPrediction]:
         """
         Get the span predictions for the extractive Q&A model.
@@ -508,7 +509,9 @@ class DprReader(DprPretrainedReader):
                 top_spans=top_spans_per_passage,
             )
             nbest_spans_predictions.extend(best_spans)
-        return nbest_spans_predictions
+            if len(nbest_spans_predictions) > k:
+                break
+        return nbest_spans_predictions[:k]
 
     def _get_best_spans(
         self,

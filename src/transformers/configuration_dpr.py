@@ -42,18 +42,16 @@ class DprConfig(PretrainedConfig):
 
     def __init__(
         self,
-        k: int = 16,
-        pretrained_model_cfg: str = "bert-base-uncased",
-        projection_dim: int = 0,
+        pretrained_model_cfg: str = "bert-base-uncased",  # base config
+        projection_dim: int = 0,  # projection of the encoders, 0 for no projection
         sequence_length: int = 512,
         do_lower_case: bool = True,
-        biencoder_model_file: Optional[str] = None,
-        reader_model_file: Optional[str] = None,
+        biencoder_model_file: Optional[str] = None,  # load weights from official repo
+        reader_model_file: Optional[str] = None,  # load weights from official repo
         pad_id: int = 0,
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.k = k
         self.pretrained_model_cfg = pretrained_model_cfg
         self.projection_dim = projection_dim
         self.sequence_length = sequence_length
