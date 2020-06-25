@@ -176,7 +176,7 @@ class DprPretrainedContextEncoder(PreTrainedModel):
             }
             encoder.load_state_dict(ctx_state)
         else:
-            super().init_weights()
+            self.ctx_encoder.init_weights()
 
 
 class DprPretrainedQuestionEncoder(PreTrainedModel):
@@ -200,7 +200,7 @@ class DprPretrainedQuestionEncoder(PreTrainedModel):
             }
             encoder.load_state_dict(ctx_state)
         else:
-            super().init_weights()
+            self.question_encoder.init_weights()
 
 
 class DprPretrainedReader(PreTrainedModel):
@@ -219,7 +219,7 @@ class DprPretrainedReader(PreTrainedModel):
             saved_state = load_states_from_checkpoint(self.config.reader_model_file)
             self.reader.load_state_dict(saved_state.model_dict)
         else:
-            super().init_weights()
+            self.reader.encoder.init_weights()
 
 
 ###############

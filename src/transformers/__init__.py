@@ -381,7 +381,14 @@ if is_torch_available():
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
-    from .modeling_dpr import *
+    from .modeling_dpr import (
+        DprPretrainedContextEncoder,
+        DprPretrainedQuestionEncoder,
+        DprPretrainedReader,
+        DprContextEncoder,
+        DprQuestionEncoder,
+        DprReader,
+    )
     from .modeling_retribert import (
         RetriBertPreTrainedModel,
         RetriBertModel,
