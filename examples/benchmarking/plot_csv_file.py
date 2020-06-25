@@ -46,9 +46,17 @@ class PlotArguments:
     )
 
 
-def can_convert_to_number(s):
+def can_convert_to_int(string):
     try:
-        int(s)
+        int(string)
+        return True
+    except ValueError:
+        return False
+
+
+def can_convert_to_float(string):
+    try:
+        float(string)
         return True
     except ValueError:
         return False
@@ -65,11 +73,16 @@ class Plot:
                 model_name = row["model"]
                 self.result_dict[model_name]["bsz"].append(int(row["batch_size"]))
                 self.result_dict[model_name]["seq_len"].append(int(row["sequence_length"]))
-                if can_convert_to_number(row["result"]):
+                if can_convert_to_int(row["result"]):
                     # value is not None
                     self.result_dict[model_name]["result"][
                         (int(row["batch_size"]), int(row["sequence_length"]))
-                    ] = row["result"]
+                    ] = int(row["result"])
+                elif can_convert_to_float(row["result"]):
+                    # value is not None
+                    self.result_dict[model_name]["result"][
+                        (int(row["batch_size"]), int(row["sequence_length"]))
+                    ] = float(row["result"])
 
     def plot(self):
         fig, ax = plt.subplots()
