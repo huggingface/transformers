@@ -33,13 +33,13 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 DPR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dpr-base-uncased",
+    "facebook/dpr-ctx_encoder-single-nq-base", "facebook/dpr-question_encoder-single-nq-base", "facebook/dpr-reader-single-nq-base"
 ]
 
 
-#############
-# BertEncoder
-#############
+################
+# DprBertEncoder
+################
 
 
 class DprBertEncoder(BertModel):
@@ -333,7 +333,7 @@ class DprContextEncoder(DprPretrainedContextEncoder):
 
     def forward(self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None) -> T:
         if attention_mask is None:
-            attention_mask = input_ids != self.config.pad_id
+            attention_mask = input_ids != self.config.pad_token_id
             attention_mask = attention_mask.to(device=input_ids.device)
         sequence_output, pooled_output, hidden_states = self.ctx_encoder(input_ids, token_type_ids, attention_mask)
         return pooled_output
@@ -369,7 +369,7 @@ class DprQuestionEncoder(DprPretrainedQuestionEncoder):
 
     def forward(self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None) -> T:
         if attention_mask is None:
-            attention_mask = input_ids != self.config.pad_id
+            attention_mask = input_ids != self.config.pad_token_id
             attention_mask = attention_mask.to(device=input_ids.device)
         sequence_output, pooled_output, hidden_states = self.question_encoder(
             input_ids, token_type_ids, attention_mask
@@ -425,7 +425,7 @@ class DprReader(DprPretrainedReader):
         assert len(question_and_titles_ids) == len(texts_ids)
         device = question_and_titles_ids[0].device
         n_contexts = len(question_and_titles_ids)
-        input_ids = torch.ones((n_contexts, self.config.sequence_length), dtype=torch.int64) * int(self.config.pad_id)
+        input_ids = torch.ones((n_contexts, self.config.sequence_length), dtype=torch.int64) * int(self.config.pad_token_id)
         input_ids = input_ids.to(device=device)
         for i in range(n_contexts):
             question_and_title_ids = question_and_titles_ids[i]
@@ -435,7 +435,7 @@ class DprReader(DprPretrainedReader):
             input_ids[i, 0:len_qt] = question_and_title_ids
             input_ids[i, len_qt : len_qt + len_txt] = text_ids
         input_ids = input_ids.unsqueeze(0)
-        attention_mask = input_ids != self.config.pad_id
+        attention_mask = input_ids != self.config.pad_token_id
         attention_mask = attention_mask.to(device=device)
         start_logits, end_logits, relevance_logits = self.reader(input_ids, attention_mask)
         return input_ids, start_logits, end_logits, relevance_logits
@@ -473,7 +473,7 @@ class DprReader(DprPretrainedReader):
             predicted_spans = model.generate(question_and_titles_ids, texts_ids)
             # get best answer
             best_span = predicted_spans[0]
-            best_span_ids = texts_ids[best_span.doc_id]
+            best_span_ids = texts_ids[best_span.doc_id].numpy().flatten()
             best_span_ids = best_span_ids[best_span.start_index:best_span.end_index + 1]
             print(tokenizer.decode(best_span_ids))
 
