@@ -1,22 +1,11 @@
 ---
+language: en
 tags:
 - exbert
-
 license: apache-2.0
----
-
----
-language: "ISO 639-1 code for your language, or `multilingual`"
-thumbnail: "url to a thumbnail used in social sharing"
-tags:
-- array
-- of
-- tags
-license: "any valid license identifier"
 datasets:
-- array of dataset identifiers
-metrics:
-- array of metric identifiers
+- bookcorpus
+- wikipedia
 ---
 
 # BERT base model (uncased)
