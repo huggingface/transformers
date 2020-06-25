@@ -627,19 +627,6 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
         return prediction_scores
 
 
-class TFMobileBertPreTrainingHeads(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
-        self.predictions = TFMobileBertLMPredictionHead(config, name="predictions")
-        self.seq_relationship = tf.keras.layers.Dense(2, name="seq_relationship")
-
-    def call(self, inputs):
-        sequence_output, pooled_output = inputs
-        prediction_scores = self.predictions(sequence_output)
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return prediction_scores, seq_relationship_score
-
-
 @keras_serializable
 class TFMobileBertMainLayer(tf.keras.layers.Layer):
     config_class = MobileBertConfig
@@ -890,7 +877,8 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
-        self.cls = TFMobileBertPreTrainingHeads(config, name="cls")
+        self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
+        self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
     def get_output_embeddings(self):
         return self.mobilebert.embeddings
@@ -918,20 +906,21 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
     Examples::
 
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
+        >>> import tensorflow as tf
+        >>> from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
 
-        tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-        model = TFMobileBertForPreTraining.from_pretrained('google/mobilebert-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores, seq_relationship_scores = outputs[:2]
+        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
+        >>> model = TFMobileBertForPreTraining.from_pretrained('google/mobilebert-uncased')
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        >>> outputs = model(input_ids)
+        >>> prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
         outputs = self.mobilebert(inputs, **kwargs)
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores, seq_relationship_score = self.cls([sequence_output, pooled_output])
+        prediction_scores = self.predictions(sequence_output)
+        seq_relationship_score = self.seq_relationship(pooled_output)
         outputs = (prediction_scores, seq_relationship_score,) + outputs[
             2:
         ]  # add hidden states and attention if they are here
@@ -999,7 +988,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
-        self.cls = TFMobileBertOnlyNSPHead(config, name="cls")
+        self.cls = TFMobileBertOnlyNSPHead(config, name="seq_relationship___cls")
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
@@ -1022,18 +1011,17 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
 
     Examples::
 
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
+        >>> import tensorflow as tf
+        >>> from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
 
-        tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-        model = TFMobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
+        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
+        >>> model = TFMobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
 
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
 
-        logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-        assert logits[0][0] < logits[0][1] # the next sentence was random
+        >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
         """
         outputs = self.mobilebert(inputs, **kwargs)
 

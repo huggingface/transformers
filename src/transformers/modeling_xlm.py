@@ -963,18 +963,18 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
     Example::
 
-        from transformers import XLMTokenizer, XLMForQuestionAnswering
-        import torch
+        >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
+        >>> import torch
 
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
+        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        >>> model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
 
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss = outputs[0]
+        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs[0]
         """
         transformer_outputs = self.transformer(
             input_ids,

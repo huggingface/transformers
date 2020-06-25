@@ -1155,18 +1155,17 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 
     Examples::
 
-        from transformers import MobileBertTokenizer, MobileBertForNextSentencePrediction
-        import torch
+        >>> from transformers import MobileBertTokenizer, MobileBertForNextSentencePrediction
+        >>> import torch
 
-        tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-        model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
+        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
+        >>> model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
 
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
 
-        loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))
-        assert logits[0, 0] < logits[0, 1] # next sentence was random
+        >>> loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))
         """
 
         outputs = self.mobilebert(
