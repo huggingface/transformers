@@ -423,18 +423,18 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
 def get_layers_to_copy(n_to_get, tot):
     all_layers = list(range(tot))
     if tot == 12:  # Alternating for special cases
-        layers_to_copy = {  # maps # layers in student -> which teacher layers to copy
-            6: [0, 2, 4, 7, 9, 11],
-            1: [11],
+        layers_to_copy = {  # maps  num layers in student -> which teacher layers to copy
+            1: [0],
+            2: [0, 6],
             3: [0, 6, 11],
-            2: [0, 11],
             4: [0, 4, 8, 11],
+            6: [0, 2, 4, 7, 9, 11],
             9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
             12: all_layers,
         }
         return layers_to_copy[n_to_get]
     else:
-        return all_layers[:n_to_get]
+        return all_layers[:n_to_get]  # TODO: better version on theseus-bart branch
 
 
 def distill_main(args):
