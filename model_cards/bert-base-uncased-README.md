@@ -44,6 +44,10 @@ You can use the raw model for either masked language modeling or next sentence p
 be fine-tuned on a downstream task. See the [model hub](https://huggingface.co/models?filter=bert) to look for
 fine-tuned versions on a task that interests you.
 
+Note that this model is primarily aimed at being fine-tuned on tasks that use the whole sentence (potentially masked)
+to make decisions, such as sequence classification, token classification or question answering. For tasks such as text
+generation you should look at model like GPT2.
+
 ### How to use
 
 You can use this model directly with a pipeline for masked language modeling:
