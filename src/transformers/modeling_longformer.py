@@ -652,6 +652,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
+        self.config = config
 
         if isinstance(config.attention_window, int):
             assert config.attention_window % 2 == 0, "`config.attention_window` has to be an even value"
@@ -690,10 +691,15 @@ class LongformerModel(LongformerPreTrainedModel):
         token_type_ids: torch.Tensor,
         position_ids: torch.Tensor,
         inputs_embeds: torch.Tensor,
-        attention_window: int,
         pad_token_id: int,
     ):
         """A helper function to pad tokens and mask to work with implementation of Longformer selfattention."""
+        # padding
+        attention_window = (
+            self.config.attention_window
+            if isinstance(self.config.attention_window, int)
+            else max(self.config.attention_window)
+        )
 
         assert attention_window % 2 == 0, f"`attention_window` should be an even value. Given {attention_window}"
         input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
@@ -725,6 +731,18 @@ class LongformerModel(LongformerPreTrainedModel):
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
+
+    def _merge_to_attention_mask(attention_mask: torch.Tensor, global_attention_mask: torch.Tensor):
+        # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
+        # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
+        # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
+        if attention_mask is not None:
+            attention_mask = attention_mask * (global_attention_mask + 1)
+        else:
+            # simply use `global_attention_mask` as `attention_mask`
+            # if no `attention_mask` is given
+            attention_mask = global_attention_mask + 1
+        return attention_mask
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
@@ -781,6 +799,19 @@ class LongformerModel(LongformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        # merge `global_attention_mask` and `attention_mask`
+        if global_attention_mask is not None:
+            attention_mask = self._merge_to_attention_mask(attention_mask, global_attention_mask)
+
+        padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            pad_token_id=self.config.pad_token_id,
+        )
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -796,35 +827,6 @@ class LongformerModel(LongformerPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
-        # padding
-        attention_window = (
-            self.config.attention_window
-            if isinstance(self.config.attention_window, int)
-            else max(self.config.attention_window)
-        )
-
-        # merge `global_attention_mask` and `attention_mask`
-        if global_attention_mask is not None:
-            # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
-            # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
-            # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
-            if attention_mask is not None:
-                attention_mask = attention_mask * (global_attention_mask + 1)
-            else:
-                # simply use `global_attention_mask` as `attention_mask`
-                # if no `attention_mask` is given
-                attention_mask = global_attention_mask + 1
-
-        padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            attention_window=attention_window,
-            pad_token_id=self.config.pad_token_id,
-        )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
