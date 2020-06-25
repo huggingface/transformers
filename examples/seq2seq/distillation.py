@@ -79,6 +79,8 @@ class BartSummarizationDistiller(SummarizationModule):
             "decoder_layers": hparams.student_decoder_layers,
             "encoder_layers": hparams.student_encoder_layers,
         }
+        if hparams.length_penalty != -1:
+            student_updates["length_penalty"] = hparams.length_penalty
         d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
         hparams.d_layer_to_copy = d_layers_to_copy
@@ -183,18 +185,11 @@ class BartSummarizationDistiller(SummarizationModule):
         # parser.add_argument("--alpha_cos", default=0.0, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
         parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
-        parser.add_argument(
-            "--student_decoder_layers", default=12, type=int, required=False,
-        )
-        parser.add_argument(
-            "--student_encoder_layers", default=12, type=int, required=False,
-        )
-        parser.add_argument(
-            "--no_teacher", action="store_true", default=False,
-        )
-        parser.add_argument(  # TODO: remove
-            "--enc_only", action="store_true", default=False,
-        )
+        parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
+        parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
+        parser.add_argument("--no_teacher", action="store_true", default=False)
+        parser.add_argument("--length_penalty", type=float, default=-1)
+
         return parser
 
     def _step(self, batch):

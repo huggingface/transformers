@@ -13,7 +13,7 @@ python distillation.py \
   --student_decoder_layers 6 --student_encoder_layers 12 \
   --freeze_encoder --freeze_embeds \
   --model_name_or_path IGNORED \
-  --alpha_hid=3. \
+  --alpha_hid=3. --length_penalty=0.5 \
   --train_batch_size=$BS --eval_batch_size=$BS --gradient_accumulation_steps=$GAS --num_train_epochs=6 \
   --tokenizer_name facebook/bart-large \
   --output_dir distilbart_xsum_12_6 \
