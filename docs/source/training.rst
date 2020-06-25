@@ -1,7 +1,7 @@
 Training and fine-tuning
 ========================
 
-Model classes in Transformers are designed to be compatible with native
+Model classes in 🤗 Transformers are designed to be compatible with native
 PyTorch and TensorFlow 2 and can be used seemlessly with either. In this
 quickstart, we will show how to fine-tune (or train from scratch) a model
 using the standard training tools available in either framework. We will also
@@ -12,7 +12,7 @@ This guide assume that you are already familiar with loading and use our
 models for inference; otherwise, see `Usage <./usage.html>`_. We also assume
 that you are familiar with training deep neural networks in either PyTorch or
 TF2, and focus specifically on the nuances and tools for training models in
-Transformers.
+🤗 Transformers.
 
 Sections:
 
@@ -26,7 +26,7 @@ Sections:
 Fine-tuning in native PyTorch
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Model classes in Transformers that don't begin with ``TF`` are
+Model classes in 🤗 Transformers that don't begin with ``TF`` are
 `PyTorch Modules <https://pytorch.org/docs/master/generated/torch.nn.Module.html>`_,
 meaning that you can use them just as you would any model in PyTorch for
 both inference and optimization.
@@ -137,7 +137,7 @@ Then all we have to do is call ``scheduler.step()`` after ``optimizer.step()``.
     scheduler.step()
 
 We highly recommend using :func:`~transformers.Trainer`, discussed below,
-which conveniently handles the moving parts of training Transformers models
+which conveniently handles the moving parts of training 🤗 Transformers models
 with features like mixed precision and easy tensorboard logging.
 
 
@@ -214,41 +214,16 @@ Trainer
 We also provide a simple but feature-complete training and evaluation
 interface through :func:`~transformers.Trainer` and
 :func:`~transformers.TFTrainer`. You can train, fine-tune,
-and evaluate any Transformers model with a wide range of training options and
+and evaluate any 🤗 Transformers model with a wide range of training options and
 with built-in features like logging, gradient accumulation, and mixed
 precision.
 
-Using the trainer requires first creating a model and defining a
-:func:`~transformers.data.DataCollator`, which is responsible for taking in a batch and preparing
-them to be fed into the model.  The Trainer will expect the collated batches
-to be a dictionary with keys corresponding to the kwargs that will be used to
-call our model. Below, we define a collator in the case where a batch
-consists of a list of dicts and returns a single dict with the examples
-concatenated.
-
 .. code-block:: python
 
-    from transformers import DataCollator
+    ## PYTORCH CODE
+    from transformers import BertForSequenceClassification, Trainer, TrainingArguments
 
-    class MyCollator(DataCollator):
-        def collate_batch(self, batch):
-            input_ids = torch.stack([example['input_ids'] for example in batch])
-            attention_mask = torch.stack([example['attention_mask'] for example in batch])
-            labels = torch.stack([example['label'] for example in batch])
-
-            return {
-                'input_ids': input_ids,
-                'attention_mask': attention_mask,
-                'labels': labels
-            }
-
-Now, you can simply define a :func:`~transformers.Trainer` and
-:func:`~transformers.TrainingArguments` and the all
-of the underlying work is done for you.
-
-.. code-block:: python
-
-    from transformers import Trainer, TrainingArguments
+    model = BertForSequenceClassification.from_pretrained("bert-large-uncased")
 
     training_args = TrainingArguments(
         output_dir='./results',          # output directory
@@ -261,19 +236,68 @@ of the underlying work is done for you.
     )
 
     trainer = Trainer(
-        model=model,                     # the instantiated Transformers model to be trained
-        args=training_args,              # training arguments, defined above
-        data_collator=MyCollator(),      # instance of your defined data collator (see above)
-        train_dataset=train_dataset,     # training dataset
-        eval_dataset=test_dataset        # evaluation dataset
+        model=model,                         # the instantiated 🤗 Transformers model to be trained
+        args=training_args,                  # training arguments, defined above
+        train_dataset=train_dataset,         # training dataset
+        eval_dataset=test_dataset            # evaluation dataset
+    )
+    ## TENSORFLOW CODE
+    from transformers import TFBertForSequenceClassification, TFTrainer, TFTrainingArguments
+
+    model = TFBertForSequenceClassification.from_pretrained("bert-large-uncased")
+
+    training_args = TFTrainingArguments(
+        output_dir='./results',          # output directory
+        num_train_epochs=3,              # total # of training epochs
+        per_device_train_batch_size=16,  # batch size per device during training
+        per_device_eval_batch_size=64,   # batch size for evaluation
+        warmup_steps=500,                # number of warmup steps for learning rate scheduler
+        weight_decay=0.01,               # strength of weight decay
+        logging_dir='./logs',            # directory for storing logs
+    )
+
+    trainer = TFTrainer(
+        model=model,                         # the instantiated 🤗 Transformers model to be trained
+        args=training_args,                  # training arguments, defined above
+        train_dataset=tfds_train_dataset,    # tensorflow_datasets training dataset
+        eval_dataset=tfds_test_dataset       # tensorflow_datasets evaluation dataset
     )
 
 Now simply call ``trainer.train()`` to train and ``trainer.evaluate()`` to
-evaluate. You can view the results by launching tensorboard in your specified
-``logging_dir`` directory.
+evaluate. You can use your own module as well, but the first
+argument returned from ``forward`` must be the loss which you wish to
+optimize.
 
-You can use your own module as well, but the first argument returned from
-``forward`` must be the loss which you wish to optimize.
+:func:`~transformers.Trainer` uses a built-in default function to collate
+batches and prepare them to be fed into the model. If needed, you can also
+use the ``data_collator`` argument to pass your own collator function which
+takes in the data in the format provides by your dataset and returns a
+batch ready to be fed into the model. Note that
+:func:`~transformers.TFTrainer` expects the passed datasets to be dataset
+objects from ``tensorflow_datasets``.
+
+To calculate additional metrics in addition to the loss, you can also define
+your own ``compute_metrics`` function and pass it to the trainer.
+
+.. code-block:: python
+
+    from sklearn.metrics import precision_recall_fscore_support
+
+    def compute_metrics(pred):
+        labels = pred.label_ids
+        preds = pred.predictions.argmax(-1)
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
+        acc = accuracy_score(labels, preds)
+        return {
+            'accuracy': acc,
+            'f1': f1,
+            'precision': precision,
+            'recall': recall
+        }
+
+Finally, you can view the results, including any calculated metrics, by
+launching tensorboard in your specified ``logging_dir`` directory.
+
 
 .. _additional-resources:
 
@@ -284,7 +308,7 @@ Additional resources
       <https://colab.research.google.com/drive/1-JIJlao4dI-Ilww_NnTc0rxtp-ymgDgM?usp=sharing>`_
       which uses ``Trainer`` for IMDb sentiment classification.
 
-    * `Transformers Examples <https://github.com/huggingface/transformers/tree/master/examples>`_
+    * `🤗 Transformers Examples <https://github.com/huggingface/transformers/tree/master/examples>`_
       including scripts for training and fine-tuning on GLUE, SQuAD, and
       several other tasks.
 
@@ -293,6 +317,6 @@ Additional resources
       a detailed colab notebook which uses ``Trainer`` to train a masked
       language model from scratch on Esperanto.
 
-    * `Transformers Notebooks <./notebooks.html>`_ which contain dozens
+    * `🤗 Transformers Notebooks <./notebooks.html>`_ which contain dozens
       of example notebooks from the community for training and using
-      Transformers on a variety of tasks.
+      🤗 Transformers on a variety of tasks.
