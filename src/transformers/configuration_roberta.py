@@ -49,16 +49,16 @@ class RobertaConfig(BertConfig):
 
         Example::
 
-            from transformers import RobertaConfig, RobertaModel
+            >>> from transformers import RobertaConfig, RobertaModel
 
-            # Initializing a RoBERTa configuration
-            configuration = RobertaConfig()
+            >>> # Initializing a RoBERTa configuration
+            >>> configuration = RobertaConfig()
 
-            # Initializing a model from the configuration
-            model = RobertaModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = RobertaModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
     model_type = "roberta"
 

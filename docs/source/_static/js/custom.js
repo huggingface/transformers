@@ -156,22 +156,36 @@ function platformToggle() {
     const codeBlocks = Array.from(document.getElementsByClassName("highlight"));
     const pytorchIdentifier = "## PYTORCH CODE";
     const tensorflowIdentifier = "## TENSORFLOW CODE";
+
+    const promptSpanIdentifier = `<span class="gp">&gt;&gt;&gt; </span>`
     const pytorchSpanIdentifier = `<span class="c1">${pytorchIdentifier}</span>`;
     const tensorflowSpanIdentifier = `<span class="c1">${tensorflowIdentifier}</span>`;
 
     const getFrameworkSpans = filteredCodeBlock => {
         const spans = filteredCodeBlock.element.innerHTML;
-        const pytorchSpanPosition = spans.indexOf(pytorchSpanIdentifier);
-        const tensorflowSpanPosition = spans.indexOf(tensorflowSpanIdentifier);
+        let pytorchSpanPosition = spans.indexOf(pytorchSpanIdentifier);
+        let tensorflowSpanPosition = spans.indexOf(tensorflowSpanIdentifier);
 
         let pytorchSpans;
         let tensorflowSpans;
 
         if(pytorchSpanPosition < tensorflowSpanPosition){
-            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, tensorflowSpanPosition);
+            const isPrompt = spans.slice(
+                spans.indexOf(tensorflowSpanIdentifier) - promptSpanIdentifier.length,
+                spans.indexOf(tensorflowSpanIdentifier)
+            ) == promptSpanIdentifier;
+            const finalTensorflowSpanPosition = isPrompt ? tensorflowSpanPosition - promptSpanIdentifier.length : tensorflowSpanPosition;
+
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, finalTensorflowSpanPosition);
             tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, spans.length);
         }else{
-            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, pytorchSpanPosition);
+            const isPrompt = spans.slice(
+                spans.indexOf(pytorchSpanIdentifier) - promptSpanIdentifier.length,
+                spans.indexOf(pytorchSpanIdentifier)
+            ) == promptSpanIdentifier;
+            const finalPytorchSpanPosition = isPrompt ? pytorchSpanPosition - promptSpanIdentifier.length : pytorchSpanPosition;
+
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, finalPytorchSpanPosition);
             pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, spans.length);
         }
 

@@ -142,16 +142,16 @@ class XLMConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import XLMConfig, XLMModel
+            >>> from transformers import XLMConfig, XLMModel
 
-            # Initializing a XLM configuration
-            configuration = XLMConfig()
+            >>> # Initializing a XLM configuration
+            >>> configuration = XLMConfig()
 
-            # Initializing a model from the configuration
-            model = XLMModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = XLMModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
     model_type = "xlm"
