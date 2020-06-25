@@ -3,12 +3,13 @@ import json
 import os
 import pickle
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Callable, Dict, Iterable, List
 
 import git
 import numpy as np
 import torch
 from rouge_score import rouge_scorer, scoring
+from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
@@ -41,7 +42,7 @@ def encode_file(
     examples = []
     for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer.batch_encode_plus(
-            [text],  # DONT ADD SPACES
+            [text],
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
             add_prefix_space=True,
@@ -54,11 +55,13 @@ def encode_file(
     return examples
 
 
-def lmap(f, x):
+def lmap(f: Callable, x: Iterable) -> List:
+    """list(map(f, x))"""
     return list(map(f, x))
 
 
-T5_PREFIX = "summarize: "  # HACK, fixme
+def calculate_bleu_score(output_lns, refs_lns) -> dict:
+    return {"bleu": corpus_bleu(output_lns, [refs_lns]).score}
 
 
 def trim_batch(
@@ -95,6 +98,8 @@ class SummarizationDataset(Dataset):
             tok_name=tok_name,
         )
         tgt_path = os.path.join(data_dir, type_path + ".target")
+        if hasattr(tokenizer, "set_lang"):
+            tokenizer.set_lang("ro_RO")  # HACK: only applies to mbart
         self.target = encode_file(
             tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
         )
@@ -189,14 +194,20 @@ def flatten_list(summary_ids: List[List]):
     return [x for x in itertools.chain.from_iterable(summary_ids)]
 
 
-def save_git_info(folder_path: str):
-    """
-    Log commit info.
-    """
+def save_git_info(folder_path: str) -> None:
+    """Save git information to output_dir/git_log.json"""
     repo_infos = get_git_info()
+    save_json(repo_infos, os.path.join(folder_path, "git_log.json"))
 
-    with open(os.path.join(folder_path, "git_log.json"), "w") as f:
-        json.dump(repo_infos, f, indent=4)
+
+def save_json(content, path):
+    with open(path, "w") as f:
+        json.dump(content, f, indent=4)
+
+
+def load_json(path):
+    with open(path) as f:
+        return json.load(f)
 
 
 def get_git_info():
