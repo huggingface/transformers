@@ -405,16 +405,12 @@ class ReformerModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-    def create_and_check_reformer_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels
-    ):
+    def create_and_check_reformer_for_sequence_classification(self, config, input_ids, input_mask, sequence_labels):
         config.num_labels = self.num_labels
         model = ReformerForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        loss, logits = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-        )
+        loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         result = {
             "loss": loss,
             "logits": logits,
