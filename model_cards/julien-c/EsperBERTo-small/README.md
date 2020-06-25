@@ -1,6 +1,10 @@
 ---
 language: esperanto
 thumbnail: https://huggingface.co/blog/assets/EsperBERTo-thumbnail-v2.png
+widget:
+- text: "Jen la komenco de bela <mask>."
+- text: "Uno du <mask>"
+- text: "Jen finiĝas bela <mask>."
 ---
 
 # EsperBERTo: RoBERTa-like Language model trained on Esperanto
