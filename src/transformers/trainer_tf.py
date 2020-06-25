@@ -115,16 +115,10 @@ class TFTrainer:
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
-        if self.args.is_tpu_available():
-            ds = ds.repeat(-1)
-
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
         ds = test_dataset.batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
-
-        if self.args.is_tpu_available():
-            ds = ds.repeat(-1)
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 
