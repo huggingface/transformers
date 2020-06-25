@@ -308,7 +308,9 @@ DPR_READER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare DprContextEncoder transformer outputting pooler outputs as context representations.", DPR_START_DOCSTRING, DPR_ENCODERS_INPUTS_DOCSTRING,
+    "The bare DprContextEncoder transformer outputting pooler outputs as context representations.",
+    DPR_START_DOCSTRING,
+    DPR_ENCODERS_INPUTS_DOCSTRING,
 )
 class DprContextEncoder(DprPretrainedContextEncoder):
     r"""
@@ -333,9 +335,7 @@ class DprContextEncoder(DprPretrainedContextEncoder):
         self.ctx_encoder = get_bert_ctx_encoder_component(config)
         self.init_weights()
 
-    def forward(
-        self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None
-    ) -> T:
+    def forward(self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None) -> T:
         if attention_mask is None:
             attention_mask = input_ids != self.config.pad_id
             attention_mask = attention_mask.to(device=input_ids.device)
@@ -344,7 +344,9 @@ class DprContextEncoder(DprPretrainedContextEncoder):
 
 
 @add_start_docstrings(
-    "The bare DprQuestionEncoder transformer outputting pooler outputs as question representations.", DPR_START_DOCSTRING, DPR_ENCODERS_INPUTS_DOCSTRING,
+    "The bare DprQuestionEncoder transformer outputting pooler outputs as question representations.",
+    DPR_START_DOCSTRING,
+    DPR_ENCODERS_INPUTS_DOCSTRING,
 )
 class DprQuestionEncoder(DprPretrainedQuestionEncoder):
     r"""
@@ -369,13 +371,13 @@ class DprQuestionEncoder(DprPretrainedQuestionEncoder):
         self.question_encoder = get_bert_question_encoder_component(config)
         self.init_weights()
 
-    def forward(
-        self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None
-    ) -> T:
+    def forward(self, input_ids: T, token_type_ids: Optional[T] = None, attention_mask: Optional[T] = None) -> T:
         if attention_mask is None:
             attention_mask = input_ids != self.config.pad_id
             attention_mask = attention_mask.to(device=input_ids.device)
-        sequence_output, pooled_output, hidden_states = self.question_encoder(input_ids, token_type_ids, attention_mask)
+        sequence_output, pooled_output, hidden_states = self.question_encoder(
+            input_ids, token_type_ids, attention_mask
+        )
         return pooled_output
 
 
