@@ -237,9 +237,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             tokens.append(self._tokenizer.id_to_token(index))
         return tokens
 
-    def tokenize(
-        self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False
-    ) -> List[str]:
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False) -> List[str]:
         return self._tokenizer.encode(text, pair, add_special_tokens=add_special_tokens).tokens
 
     def set_truncation_and_padding(

@@ -768,7 +768,16 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
 
 class RobertaFastTokenizerTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors, (('cls_token', '<s>'),))]
+        [
+            Tokenizer(
+                "Roberta",
+                RobertaTokenizerFast,
+                RobertaTokenizer,
+                "vocab_file",
+                filter_roberta_detectors,
+                (("cls_token", "<s>"),),
+            )
+        ]
     )
 
     def assert_embeded_special_tokens(self, tokenizer_r, tokenizer_p):

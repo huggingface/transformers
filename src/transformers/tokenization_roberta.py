@@ -21,7 +21,7 @@ from typing import List, Optional
 from tokenizers.processors import RobertaProcessing
 
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_utils import AddedToken, PreTrainedTokenizer
+from .tokenization_utils import AddedToken
 
 
 logger = logging.getLogger(__name__)
