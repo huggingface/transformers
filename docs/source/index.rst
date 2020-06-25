@@ -139,6 +139,7 @@ conversion utilities for the following models:
 
     task_summary
     model_summary
+    preprocessing
     serialization
     model_sharing
     multilingual
