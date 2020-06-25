@@ -43,8 +43,8 @@ pre-trained model. For example, instantiating a model with
 will create a BERT model instance with encoder weights copied from the
 ``bert-base-uncased`` model and a randomly initialized sequence
 classification head on top of the encoder with an output size of 2. Models
-are initialized in ``eval`` mode by default. To train, we can call
-``model.train()`` to put it in train mode
+are initialized in ``eval`` mode by default. We can call ``model.train()`` to
+put it in train mode.
 
 .. code-block:: python
 
@@ -182,8 +182,9 @@ the pretrained tokenizer name.
 .. code-block:: python
 
     from transformers import BertTokenizer, glue_convert_examples_to_features
+    import tensorflow_datasets as tfds
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    data = tensorflow_datasets.load('glue/mrpc')
+    data = tfds.load('glue/mrpc')
     train_dataset = glue_convert_examples_to_features(data['train'], tokenizer, max_length=128, task='mrpc')
     train_dataset = train_dataset.shuffle(100).batch(32).repeat(2)
 
