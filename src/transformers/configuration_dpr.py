@@ -24,8 +24,9 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 DPR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "dpr-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/dpr-base-uncased-config.json",
-    "dpr-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/dpr-large-uncased-config.json",
+    "dpr-ctx_encoder-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/dpr-ctx_encoder-base/config.json",
+    "dpr-question_encoder-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/dpr-question_encoder-base/config.json",
+    "dpr-reader-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/dpr-reader-base/config.json"
 }
 
 
