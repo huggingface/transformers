@@ -51,28 +51,50 @@ You can use this model directly with a pipeline for masked language modeling:
 ```python
 >>> from transformers import pipeline
 >>> unmasker = pipeline('fill-mask', model='bert-base-uncased')
->>> unmasker("This suspicious person was a [MASK] man.")
+>>> unmasker("Hello I'm a [MASK] model.")
 
-[{'sequence': '[CLS] this suspicious person was a good man. [SEP]',
-  'score': 0.14378854632377625,
-  'token': 2204,
-  'token_str': 'good'},
- {'sequence': '[CLS] this suspicious person was a grown man. [SEP]',
-  'score': 0.07831668853759766,
-  'token': 4961,
-  'token_str': 'grown'},
- {'sequence': '[CLS] this suspicious person was a dead man. [SEP]',
-  'score': 0.06340409815311432,
-  'token': 2757,
-  'token_str': 'dead'},
- {'sequence': '[CLS] this suspicious person was a different man. [SEP]',
-  'score': 0.04061954841017723,
-  'token': 2367,
-  'token_str': 'different'},
- {'sequence': '[CLS] this suspicious person was a real man. [SEP]',
-  'score': 0.03990614041686058,
-  'token': 2613,
-  'token_str': 'real'}]
+[{'sequence': "[CLS] hello i'm a fashion model. [SEP]",
+  'score': 0.1073106899857521,
+  'token': 4827,
+  'token_str': 'fashion'},
+ {'sequence': "[CLS] hello i'm a role model. [SEP]",
+  'score': 0.08774490654468536,
+  'token': 2535,
+  'token_str': 'role'},
+ {'sequence': "[CLS] hello i'm a new model. [SEP]",
+  'score': 0.05338378623127937,
+  'token': 2047,
+  'token_str': 'new'},
+ {'sequence': "[CLS] hello i'm a super model. [SEP]",
+  'score': 0.04667217284440994,
+  'token': 3565,
+  'token_str': 'super'},
+ {'sequence': "[CLS] hello i'm a fine model. [SEP]",
+  'score': 0.027095865458250046,
+  'token': 2986,
+  'token_str': 'fine'}]
+```
+
+Here is how to use this model to get the features of a given text in PyTorch:
+
+```python
+from transformers import BertTokenizer, BertModel
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained("bert-base-uncased")
+text = "Replace me by any text you'd like."
+encoded_input = tokenizer(text, return_tensors='pt')
+output = model(**encoded_input)
+```
+
+and in TensorFlow:
+
+```python
+from transformers import BertTokenizer, BertModel
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+model = BertModel.from_pretrained("bert-base-uncased")
+text = "Replace me by any text you'd like."
+encoded_input = tokenizer(text, return_tensors='tf')
+output = model(encoded_input)
 ```
 
 ### Limitations and bias
