@@ -325,6 +325,18 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
         model.to(torch_device)
 
+        # 'Hello world!'
+        input_ids = torch.tensor([[0, 20920, 232, 328, 1437, 2]], dtype=torch.long, device=torch_device)
+        output = model(input_ids)[0]
+
+        expected_output_slice = torch.tensor([0.0105, 0.1807, -0.2062, -0.0643, 0.0629], device=torch_device)
+        self.assertTrue(torch.allclose(output[0, 0, -5:], expected_output_slice, atol=1e-4))
+
+    @slow
+    def test_inference_no_head_long(self):
+        model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
+        model.to(torch_device)
+
         # 'Hello world! ' repeated 1000 times
         input_ids = torch.tensor(
             [[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=torch.long, device=torch_device
@@ -341,7 +353,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
 
     @slow
-    def test_inference_masked_lm(self):
+    def test_inference_masked_lm_long(self):
         model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         model.to(torch_device)
 
