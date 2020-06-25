@@ -185,7 +185,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return encoding_dict
 
-    def convert_tokens_to_ids(self, tokens):
+    def convert_tokens_to_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
         """ Converts a token string (or a sequence of tokens) in a single integer id
             (or a sequence of ids), using the vocabulary.
         """
@@ -200,7 +200,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             ids.append(self._convert_token_to_id_with_added_voc(token))
         return ids
 
-    def _convert_token_to_id_with_added_voc(self, token: int) -> str:
+    def _convert_token_to_id_with_added_voc(self, token: str) -> int:
         index = self._tokenizer.token_to_id(token)
         if index is None:
             return self.unk_token_id
@@ -208,9 +208,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _convert_id_to_token(self, index: int) -> Optional[str]:
         return self._tokenizer.id_to_token(int(index))
-
-    def convert_tokens_to_string(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
-        return self._tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
 
     def _add_tokens(self, new_tokens: List[Union[str, AddedToken]], special_tokens=False) -> int:
         if special_tokens:
@@ -223,7 +220,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def convert_ids_to_tokens(
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False
-    ) -> Union[int, List[int]]:
+    ) -> Union[str, List[str]]:
         """ Converts a single index or a sequence of indices (integers) in a token "
             (resp.) a sequence of tokens (str), using the vocabulary and added tokens.
 
@@ -241,7 +238,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return tokens
 
     def tokenize(
-        self, text: TextInput, pair: Optional[TextInput] = None, add_special_tokens: bool = False
+        self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False
     ) -> List[str]:
         return self._tokenizer.encode(text, pair, add_special_tokens=add_special_tokens).tokens
 
