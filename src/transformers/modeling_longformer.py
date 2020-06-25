@@ -24,12 +24,14 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from .configuration_longformer import LongformerConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertPreTrainedModel
 from .modeling_roberta import RobertaLMHead, RobertaModel
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
@@ -609,22 +611,22 @@ class LongformerModel(RobertaModel):
 
     Examples::
 
-        import torch
-        from transformers import LongformerModel, LongformerTokenizer
+        >>> import torch
+        >>> from transformers import LongformerModel, LongformerTokenizer
 
-        model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
+        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
-        SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
-        input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-        # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
-        attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
-                                            # classification: the <s> token
-                                            # QA: question tokens
-                                            # LM: potentially on the beginning of sentences and paragraphs
-        sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
+        >>> # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
+        >>> attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
+        >>> attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
+        ...                                     # classification: the <s> token
+        ...                                     # QA: question tokens
+        ...                                     # LM: potentially on the beginning of sentences and paragraphs
+        >>> sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -743,18 +745,18 @@ class LongformerForMaskedLM(BertPreTrainedModel):
 
     Examples::
 
-        import torch
-        from transformers import LongformerForMaskedLM, LongformerTokenizer
+        >>> import torch
+        >>> from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-        model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
+        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
-        SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
-        input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-        attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
-                               # check ``LongformerModel.forward`` for more details how to set `attention_mask`
-        loss, prediction_scores = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
+        ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
+        >>> loss, prediction_scores = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         """
 
         if "masked_lm_labels" in kwargs:
@@ -807,6 +809,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="allenai/longformer-base-4096")
     def forward(
         self,
         input_ids=None,
@@ -843,19 +846,6 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import LongformerTokenizer, LongformerForSequenceClassification
-        import torch
-
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
-        model = LongformerForSequenceClassification.from_pretrained('allenai/longformer-base-4096')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
 
         if global_attention_mask is None:
@@ -973,25 +963,25 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
 
     Examples::
 
-        from transformers import LongformerTokenizer, LongformerForQuestionAnswering
-        import torch
+        >>> from transformers import LongformerTokenizer, LongformerForQuestionAnswering
+        >>> import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
-        model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
-        input_ids = encoding["input_ids"]
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
+        >>> input_ids = encoding["input_ids"]
 
-        # default is local attention everywhere
-        # the forward method will automatically set global attention on question tokens
-        attention_mask = encoding["attention_mask"]
+        >>> # default is local attention everywhere
+        >>> # the forward method will automatically set global attention on question tokens
+        >>> attention_mask = encoding["attention_mask"]
 
-        start_scores, end_scores = model(input_ids, attention_mask=attention_mask)
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
+        >>> start_scores, end_scores = model(input_ids, attention_mask=attention_mask)
+        >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
 
-        answer_tokens = all_tokens[torch.argmax(start_scores) :torch.argmax(end_scores)+1]
-        answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
+        >>> answer_tokens = all_tokens[torch.argmax(start_scores) :torch.argmax(end_scores)+1]
+        >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
 
         """
 
@@ -1060,6 +1050,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="allenai/longformer-base-4096")
     def forward(
         self,
         input_ids=None,
@@ -1094,19 +1085,6 @@ class LongformerForTokenClassification(BertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import LongformerTokenizer, LongformerForTokenClassification
-        import torch
-
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
-        model = LongformerForTokenClassification.from_pretrained('allenai/longformer-base-4096')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
 
         outputs = self.longformer(
@@ -1163,6 +1141,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="allenai/longformer-base-4096")
     def forward(
         self,
         input_ids=None,
@@ -1200,23 +1179,6 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import LongformerTokenizer, LongformerForMultipleChoice
-        import torch
-
-        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
-        model = LongformerForMultipleChoice.from_pretrained('allenai/longformer-base-4096')
-        # context = "The dog is cute" | choice = "the dog" / "the cat"
-        choices = [("The dog is cute", "the dog"), ("The dog is cute", "the cat")]
-        input_ids = torch.tensor([tokenizer.encode(s[0], s[1], add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
-
-        # global attention is automatically put on "the dog" and "the cat"
-        outputs = model(input_ids, labels=labels)
-        loss, classification_scores = outputs[:2]
-
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

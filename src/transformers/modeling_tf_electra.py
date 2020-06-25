@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import (
     TFQuestionAnsweringLoss,
@@ -18,6 +18,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-small-generator",
@@ -383,6 +384,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
         self.electra = TFElectraMainLayer(config, name="electra")
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -400,17 +402,6 @@ class TFElectraModel(TFElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraModel
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = TFElectraModel.from_pretrained('google/electra-small-discriminator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
         outputs = self.electra(inputs, **kwargs)
         return outputs
@@ -532,6 +523,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         return self.generator_lm_head
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-generator")
     def call(
         self,
         input_ids=None,
@@ -560,18 +552,6 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraForMaskedLM
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
-        model = TFElectraForMaskedLM.from_pretrained('google/electra-small-generator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
         """
 
         generator_hidden_states = self.electra(
@@ -611,6 +591,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         )
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(
         self,
         inputs=None,
@@ -644,19 +625,6 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraForTokenClassification
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = TFElectraForTokenClassification.from_pretrained('google/electra-small-discriminator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[8] if len(inputs) > 8 else labels
@@ -705,6 +673,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         )
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(
         self,
         inputs=None,
@@ -746,22 +715,6 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraForQuestionAnswering
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
-        model = TFElectraForQuestionAnswering.from_pretrained('google/electra-small-generator')
-
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
         """
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[8] if len(inputs) > 8 else start_positions

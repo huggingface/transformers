@@ -23,7 +23,12 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlnet import XLNetConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
@@ -41,6 +46,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "XLNetTokenizer"
 
 TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlnet-base-cased",
@@ -832,6 +839,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         self.transformer = TFXLNetMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -853,18 +861,6 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLNetTokenizer, TFXLNetModel
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = TFXLNetModel.from_pretrained('xlnet-large-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
@@ -949,10 +945,13 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
 
         # We show how to setup inputs to predict a next token using a bi-directional context.
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=True))[None, :]  # We will predict the masked token
+
         perm_mask = np.zeros((1, input_ids.shape[1], input_ids.shape[1]))
         perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
+
         target_mapping = np.zeros((1, 1, input_ids.shape[1]))  # Shape [1, 1, seq_length] => let's predict one token
         target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
+
         outputs = model(input_ids, perm_mask=tf.constant(perm_mask, dtype=tf.float32), target_mapping=tf.constant(target_mapping, dtype=tf.float32))
 
         next_token_logits = outputs[0]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
@@ -986,6 +985,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         )
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def call(
         self,
         inputs=None,
@@ -1029,19 +1029,6 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLNetTokenizer, TFXLNetForSequenceClassification
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = TFXLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[12] if len(inputs) > 12 else labels
@@ -1105,6 +1092,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def call(
         self,
         inputs=None,
@@ -1145,22 +1133,6 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLNetTokenizer, TFXLNetForMultipleChoice
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
-        model = TFXLNetForMultipleChoice.from_pretrained('xlnet-base-cased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1257,6 +1229,8 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def call(
         self,
         inputs=None,
@@ -1298,19 +1272,6 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLNetTokenizer, TFXLNetForTokenClassification
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = TFXLNetForTokenClassification.from_pretrained('xlnet-large-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[12] if len(inputs) > 12 else labels
@@ -1361,6 +1322,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         )
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def call(
         self,
         inputs=None,
@@ -1412,21 +1374,6 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLNetTokenizer, TFXLNetForQuestionAnsweringSimple
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
-        model = TFXLNetForQuestionAnsweringSimple.from_pretrained('xlnet-base-cased')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
         """
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[12] if len(inputs) > 12 else start_positions
