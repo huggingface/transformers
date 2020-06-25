@@ -117,10 +117,10 @@ class LongformerSelfAttention(nn.Module):
         self.one_sided_attention_window_size = attention_window // 2
 
     @staticmethod
-    def _skew(hidden_states, direction):
-        """Convert diagonals into columns (or columns into diagonals depending on `direction`"""
+    def pad_and_transpose_last_two_dims(hidden_states_padded, padding):
+        """Convert diagonals into columns (or columns into diagonals depending on `padding`"""
         hidden_states_padded = F.pad(
-            hidden_states, direction
+            hidden_states_padded, padding
         )  # padding value is not important because it will be overwritten
         hidden_states_padded = hidden_states_padded.view(
             *hidden_states_padded.size()[:-2], hidden_states_padded.size(-1), hidden_states_padded.size(-2)
@@ -128,16 +128,15 @@ class LongformerSelfAttention(nn.Module):
         return hidden_states_padded
 
     @staticmethod
-    def _skew2(x):
+    def _value_attention_probs_skew(chunked_hidden_states):
         """shift every row 1 step to right converting columns into diagonals"""
-        # X = B x C x M x L
-        B, C, M, L = x.size()
-        x = F.pad(x, (0, M + 1))  # B x C x M x (L+M+1). Padding value is not important because it'll be overwritten
-        x = x.view(B, C, -1)  # B x C x ML+MM+M
-        x = x[:, :, :-M]  # B x C x ML+MM
-        x = x.view(B, C, M, M + L)  # B x C, M x L+M
-        x = x[:, :, :, :-1]
-        return x
+        total_num_heads, num_chunks, window_overlap, hidden_dim = chunked_hidden_states.size()
+        chunked_hidden_states = F.pad(chunked_hidden_states, (0, window_overlap + 1))  # B x C x M x (L+M+1). Padding value is not important because it'll be overwritten
+        chunked_hidden_states = chunked_hidden_states.view(total_num_heads, num_chunks, -1)  # B x C x ML+MM+M
+        chunked_hidden_states = chunked_hidden_states[:, :, :-window_overlap]  # B x C x ML+MM
+        chunked_hidden_states = chunked_hidden_states.view(total_num_heads, num_chunks, window_overlap, window_overlap + hidden_dim)  # B x C, M x L+M
+        chunked_hidden_states = chunked_hidden_states[:, :, :, :-1]
+        return chunked_hidden_states
 
     @staticmethod
     def _chunk(hidden_states, window_overlap):
@@ -174,17 +173,17 @@ class LongformerSelfAttention(nn.Module):
         """Matrix multiplicatio of query x key tensors using with a sliding window attention pattern.
         This implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer)
         with an overlap of size window_overlap"""
-        batch_size, seqlen, num_heads, head_dim = query.size()
+        batch_size, seq_len, num_heads, head_dim = query.size()
         assert (
-            seqlen % (window_overlap * 2) == 0
-        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seqlen}"
+            seq_len % (window_overlap * 2) == 0
+        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
         assert query.size() == key.size()
 
-        chunks_count = seqlen // window_overlap - 1
+        chunks_count = seq_len // window_overlap - 1
 
-        # group batch_size and num_heads dimensions into one, then chunk seqlen into chunks of size window_overlap * 2
-        query = query.transpose(1, 2).reshape(batch_size * num_heads, seqlen, head_dim)
-        key = key.transpose(1, 2).reshape(batch_size * num_heads, seqlen, head_dim)
+        # group batch_size and num_heads dimensions into one, then chunk seq_len into chunks of size window_overlap * 2
+        query = query.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
+        key = key.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
 
         chunked_query = self._chunk(query, window_overlap)
         chunked_key = self._chunk(key, window_overlap)
@@ -196,7 +195,7 @@ class LongformerSelfAttention(nn.Module):
         chunked_attention_scores = torch.einsum("bcxd,bcyd->bcxy", (chunked_query, chunked_key))  # multiply
 
         # convert diagonals into columns
-        diagonal_chunked_attention_scores = self._skew(chunked_attention_scores, direction=(0, 0, 0, 1))
+        diagonal_chunked_attention_scores = self.pad_and_transpose_last_two_dims(chunked_attention_scores, padding=(0, 0, 0, 1))
 
         # allocate space for the overall attention matrix where the chunks are compined. The last dimension
         # has (w * 2 + 1) columns. The first (w) columns are the w lower triangles (attention from a word to
@@ -225,39 +224,39 @@ class LongformerSelfAttention(nn.Module):
 
         # separate batch_size and num_heads dimensions again
         diagonal_attention_scores = diagonal_attention_scores.view(
-            batch_size, num_heads, seqlen, 2 * window_overlap + 1
+            batch_size, num_heads, seq_len, 2 * window_overlap + 1
         ).transpose(2, 1)
 
         self._mask_invalid_locations(diagonal_attention_scores, window_overlap)
         return diagonal_attention_scores
 
-    def _sliding_chunks_matmul_pv(self, prob: torch.Tensor, v: torch.Tensor, w: int):
-        """Same as _sliding_chunks_query_key_matmul but for prob and value tensors. It is expecting the same output
+    def _sliding_chunks_matmul_attention_probs_value(self, attention_probs: torch.Tensor, value: torch.Tensor, window_overlap: int):
+        """Same as _sliding_chunks_query_key_matmul but for attention_probs and value tensors. It is expecting the same output
         format from _sliding_chunks_query_key_matmul"""
-        batch_size, seqlen, num_heads, head_dim = v.size()
-        assert seqlen % (w * 2) == 0
-        assert prob.size()[:3] == v.size()[:3]
-        assert prob.size(3) == 2 * w + 1
-        chunks_count = seqlen // w - 1
-        # group batch_size and num_heads dimensions into one, then chunk seqlen into chunks of size 2w
-        chunk_prob = prob.transpose(1, 2).reshape(batch_size * num_heads, seqlen // w, w, 2 * w + 1)
+        batch_size, seq_len, num_heads, head_dim = value.size()
+        assert seq_len % (window_overlap * 2) == 0
+        assert attention_probs.size()[:3] == value.size()[:3]
+        assert attention_probs.size(3) == 2 * window_overlap + 1
+        chunks_count = seq_len // window_overlap - 1
+        # group batch_size and num_heads dimensions into one, then chunk seq_len into chunks of size 2 window overlap
+        chunked_attention_probs = attention_probs.transpose(1, 2).reshape(batch_size * num_heads, seq_len // window_overlap, window_overlap, 2 * window_overlap + 1)
 
         # group batch_size and num_heads dimensions into one
-        v = v.transpose(1, 2).reshape(batch_size * num_heads, seqlen, head_dim)
+        value = value.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
 
-        # pad seqlen with w at the beginning of the sequence and another w at the end
-        padded_v = F.pad(v, (0, 0, w, w), value=-1)
+        # pad seq_len with w at the beginning of the sequence and another window overlap at the end
+        padded_value = F.pad(value, (0, 0, window_overlap, window_overlap), value=-1)
 
-        # chunk padded_v into chunks of size 3w and an overlap of size w
-        chunk_v_size = (batch_size * num_heads, chunks_count + 1, 3 * w, head_dim)
-        chunk_v_stride = padded_v.stride()
-        chunk_v_stride = chunk_v_stride[0], w * chunk_v_stride[1], chunk_v_stride[1], chunk_v_stride[2]
-        chunk_v = padded_v.as_strided(size=chunk_v_size, stride=chunk_v_stride)
+        # chunk padded_value into chunks of size 3 window overlap and an overlap of size window overlap
+        chunked_value_size = (batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim)
+        chunked_value_stride = padded_value.stride()
+        chunked_value_stride = chunked_value_stride[0], window_overlap * chunked_value_stride[1], chunked_value_stride[1], chunked_value_stride[2]
+        chunked_value = padded_value.as_strided(size=chunked_value_size, stride=chunked_value_stride)
 
-        skewed_prob = self._skew2(chunk_prob)
+        skewed_prob = self._value_attention_probs_skew(chunked_attention_probs)
 
-        context = torch.einsum("bcwd,bcdh->bcwh", (skewed_prob, chunk_v))
-        return context.view(batch_size, num_heads, seqlen, head_dim).transpose(1, 2)
+        context = torch.einsum("bcwd,bcdh->bcwh", (skewed_prob, chunked_value))
+        return context.view(batch_size, num_heads, seq_len, head_dim).transpose(1, 2)
 
     def forward(
         self, hidden_states, attention_mask=None, output_attentions=False,
@@ -304,20 +303,20 @@ class LongformerSelfAttention(nn.Module):
             key_padding_mask = None
 
         hidden_states = hidden_states.transpose(0, 1)
-        seqlen, batch_size, embed_dim = hidden_states.size()
+        seq_len, batch_size, embed_dim = hidden_states.size()
         assert embed_dim == self.embed_dim
         q = self.query(hidden_states)
         k = self.key(hidden_states)
         v = self.value(hidden_states)
         q /= math.sqrt(self.head_dim)
 
-        q = q.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-        k = k.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-        # attn_weights = (batch_size, seqlen, num_heads, window*2+1)
+        q = q.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+        k = k.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+        # attn_weights = (batch_size, seq_len, num_heads, window*2+1)
         attn_weights = self._sliding_chunks_query_key_matmul(q, k, self.one_sided_attention_window_size)
         if remove_from_windowed_attention_mask is not None:
             # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
-            # from (batch_size x seqlen) to (batch_size x seqlen x num_heads x hidden_size)
+            # from (batch_size x seq_len) to (batch_size x seq_len x num_heads x hidden_size)
             remove_from_windowed_attention_mask = remove_from_windowed_attention_mask.unsqueeze(dim=-1).unsqueeze(
                 dim=-1
             )
@@ -331,7 +330,7 @@ class LongformerSelfAttention(nn.Module):
             attn_weights += d_mask
         assert list(attn_weights.size()) == [
             batch_size,
-            seqlen,
+            seq_len,
             self.num_heads,
             self.one_sided_attention_window_size * 2 + 1,
         ]
@@ -340,11 +339,11 @@ class LongformerSelfAttention(nn.Module):
         if extra_attention_mask is not None:
             selected_k = k.new_zeros(batch_size, max_num_extra_indices_per_batch, self.num_heads, self.head_dim)
             selected_k[selection_padding_mask_nonzeros] = k[extra_attention_mask_nonzeros]
-            # (batch_size, seqlen, num_heads, max_num_extra_indices_per_batch)
+            # (batch_size, seq_len, num_heads, max_num_extra_indices_per_batch)
             selected_attn_weights = torch.einsum("blhd,bshd->blhs", (q, selected_k))
             selected_attn_weights[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000.0
             # concat to attn_weights
-            # (batch_size, seqlen, num_heads, extra attention count + 2*window+1)
+            # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
             attn_weights = torch.cat((selected_attn_weights, attn_weights), dim=-1)
 
         attn_weights_fp32 = F.softmax(attn_weights, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
@@ -355,7 +354,7 @@ class LongformerSelfAttention(nn.Module):
             attn_weights = torch.masked_fill(attn_weights, key_padding_mask.unsqueeze(-1).unsqueeze(-1), 0.0)
 
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-        v = v.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+        v = v.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         attn = None
         if extra_attention_mask is not None:
             selected_attn_probs = attn_probs.narrow(-1, 0, max_num_extra_indices_per_batch)
@@ -368,12 +367,12 @@ class LongformerSelfAttention(nn.Module):
                 -1, max_num_extra_indices_per_batch, attn_probs.size(-1) - max_num_extra_indices_per_batch
             ).contiguous()
         if attn is None:
-            attn = self._sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
+            attn = self._sliding_chunks_matmul_attention_probs_value(attn_probs, v, self.one_sided_attention_window_size)
         else:
-            attn += self._sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
+            attn += self._sliding_chunks_matmul_attention_probs_value(attn_probs, v, self.one_sided_attention_window_size)
 
-        assert attn.size() == (batch_size, seqlen, self.num_heads, self.head_dim), "Unexpected size"
-        attn = attn.transpose(0, 1).reshape(seqlen, batch_size, embed_dim).contiguous()
+        assert attn.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
+        attn = attn.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
 
         # For this case, we'll just recompute the attention for these indices
         # and overwrite the attn tensor.
@@ -396,18 +395,18 @@ class LongformerSelfAttention(nn.Module):
             )  # (batch_size * self.num_heads, max_num_extra_indices_per_batch, head_dim)
             k = (
                 k.contiguous().view(-1, batch_size * self.num_heads, self.head_dim).transpose(0, 1)
-            )  # batch_size * self.num_heads, seqlen, head_dim)
+            )  # batch_size * self.num_heads, seq_len, head_dim)
             v = (
                 v.contiguous().view(-1, batch_size * self.num_heads, self.head_dim).transpose(0, 1)
-            )  # batch_size * self.num_heads, seqlen, head_dim)
+            )  # batch_size * self.num_heads, seq_len, head_dim)
             attn_weights = torch.bmm(q, k.transpose(1, 2))
-            assert list(attn_weights.size()) == [batch_size * self.num_heads, max_num_extra_indices_per_batch, seqlen]
+            assert list(attn_weights.size()) == [batch_size * self.num_heads, max_num_extra_indices_per_batch, seq_len]
 
-            attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seqlen)
+            attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seq_len)
             attn_weights[selection_padding_mask_zeros[0], :, selection_padding_mask_zeros[1], :] = -10000.0
             if key_padding_mask is not None:
                 attn_weights = attn_weights.masked_fill(key_padding_mask.unsqueeze(1).unsqueeze(2), -10000.0,)
-            attn_weights = attn_weights.view(batch_size * self.num_heads, max_num_extra_indices_per_batch, seqlen)
+            attn_weights = attn_weights.view(batch_size * self.num_heads, max_num_extra_indices_per_batch, seq_len)
             attn_weights_float = F.softmax(
                 attn_weights, dim=-1, dtype=torch.float32
             )  # use fp32 for numerical stability
@@ -438,7 +437,7 @@ class LongformerSelfAttention(nn.Module):
                 # It doesn't not return local attention
                 # In case of variable number of global attantion in the rows of a batch,
                 # attn_weights are padded with -10000.0 attention scores
-                attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seqlen)
+                attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seq_len)
             else:
                 # without global attention, return local attention probabilities
                 # batch_size x num_heads x sequence_length x window_size
@@ -698,13 +697,13 @@ class LongformerModel(LongformerPreTrainedModel):
 
         assert attention_window % 2 == 0, f"`attention_window` should be an even value. Given {attention_window}"
         input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
-        batch_size, seqlen = input_shape[:2]
+        batch_size, seq_len = input_shape[:2]
 
-        padding_len = (attention_window - seqlen % attention_window) % attention_window
+        padding_len = (attention_window - seq_len % attention_window) % attention_window
         if padding_len > 0:
             logger.info(
                 "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seqlen, seqlen + padding_len, attention_window
+                    seq_len, seq_len + padding_len, attention_window
                 )
             )
             if input_ids is not None:
