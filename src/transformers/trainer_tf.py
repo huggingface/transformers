@@ -95,7 +95,6 @@ class TFTrainer:
             )
         else:
             self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
-
             ds = (
                 self.train_dataset.cache()
                 .shuffle(self.num_train_examples)
