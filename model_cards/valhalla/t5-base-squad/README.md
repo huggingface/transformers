@@ -19,7 +19,7 @@ model = AutoModelWithLMHead.from_pretrained("valhalla/t5-base-squad")
 
 def get_answer(question, context):
   input_text = "question: %s  context: %s </s>" % (question, context)
-  features = tokenizer.batch_encode_plus([input_text], return_tensors='pt')
+  features = tokenizer([input_text], return_tensors='pt')
 
   out = model.generate(input_ids=features['input_ids'], 
                attention_mask=features['attention_mask'])
