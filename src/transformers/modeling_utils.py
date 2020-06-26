@@ -963,7 +963,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             decoder_start_token_id=None: (`optional`) int
                 Start token id for the decoder. Defaults to ``decoder_start_token_id`` as defined the model's config or to the ``bos_token_id``
-                if no `decoder_start_token_id` is found in the config.
+                if no ``decoder_start_token_id`` is found in the config.
                 This is only relevant for encoder-decoder models.
 
             use_cache: (`optional`) bool
