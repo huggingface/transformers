@@ -216,6 +216,7 @@ class SummarizationModule(BaseTransformer):
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
         )
+        assert max(scheduler.get_last_lr()) > 0, 'All learning rates will end at 0'
         self.lr_scheduler = scheduler
         return dataloader
 
