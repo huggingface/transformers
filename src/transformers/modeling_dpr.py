@@ -41,9 +41,8 @@ DPR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class DPREncoder(BertModel):
     def __init__(self, config: DPRConfig):
         BertModel.__init__(self, BertConfig.from_pretrained(config.pretrained_model_config_name))
-        assert config.hidden_size > 0, "Encoder hidden_size can't be zero"
-        self.config = config
-        self.encode_proj = nn.Linear(config.hidden_size, config.project_dim) if config.project_dim != 0 else None
+        assert self.config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        self.encode_proj = nn.Linear(config.hidden_size, config.projection_dim) if config.projection_dim != 0 else None
         self.init_weights()
 
     def forward(
@@ -69,11 +68,11 @@ class DPREncoder(BertModel):
 
 
 class DPRSpanPredictor(nn.Module):
-    def __init__(self, encoder: nn.Module, hidden_size):
+    def __init__(self, encoder: DPREncoder):
         super().__init__()
         self.encoder = encoder
-        self.qa_outputs = nn.Linear(hidden_size, 2)
-        self.qa_classifier = nn.Linear(hidden_size, 1)
+        self.qa_outputs = nn.Linear(encoder.config.hidden_size, 2)
+        self.qa_classifier = nn.Linear(encoder.config.hidden_size, 1)
 
     def forward(self, input_ids: Tensor, attention_mask: Tensor):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
@@ -381,7 +380,7 @@ class DPRReader(DPRPretrainedReader):
     def __init__(self, config: DPRConfig):
         super().__init__(config)
         self.config = config
-        self.span_predictor = DPRSpanPredictor(config)
+        self.span_predictor = DPRSpanPredictor(DPREncoder(config))
         self.init_weights()
 
     def forward(self, question_and_titles_ids: List[Tensor], texts_ids: List[Tensor],) -> Tuple[Tensor, ...]:
