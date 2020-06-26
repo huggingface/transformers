@@ -42,6 +42,7 @@ _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/bart-base",
     "facebook/bart-large",
     "facebook/bart-large-mnli",
     "facebook/bart-large-cnn",
