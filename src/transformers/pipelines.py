@@ -455,17 +455,14 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def _parse_and_tokenize(self, *args, pad_to_max_length=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
-        inputs = self.tokenizer.batch_encode_plus(
-            inputs,
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            pad_to_max_length=pad_to_max_length,
+        inputs = self.tokenizer(
+            inputs, add_special_tokens=add_special_tokens, return_tensors=self.framework, padding=padding,
         )
 
         return inputs
@@ -622,10 +619,10 @@ class TextGenerationPipeline(Pipeline):
             with self.device_placement():
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
                     inputs = self._parse_and_tokenize(
-                        self.PADDING_TEXT + prompt_text, pad_to_max_length=False, add_special_tokens=False
+                        self.PADDING_TEXT + prompt_text, padding=False, add_special_tokens=False
                     )
                 else:
-                    inputs = self._parse_and_tokenize(prompt_text, pad_to_max_length=False, add_special_tokens=False)
+                    inputs = self._parse_and_tokenize(prompt_text, padding=False, add_special_tokens=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
@@ -919,11 +916,11 @@ class TokenClassificationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
 
-                tokens = self.tokenizer.encode_plus(
+                tokens = self.tokenizer(
                     sentence,
                     return_attention_mask=False,
                     return_tensors=self.framework,
-                    max_length=self.tokenizer.max_len,
+                    truncation=True,
                 )
 
                 # Forward
@@ -1430,11 +1427,11 @@ class SummarizationPipeline(Pipeline):
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
             documents = ([prefix + document for document in documents[0]],)
-            pad_to_max_length = True
+            padding = True
 
         elif isinstance(documents[0], str):
             documents = (prefix + documents[0],)
-            pad_to_max_length = False
+            padding = False
         else:
             raise ValueError(
                 " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
@@ -1443,7 +1440,7 @@ class SummarizationPipeline(Pipeline):
             )
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*documents, pad_to_max_length=pad_to_max_length)
+            inputs = self._parse_and_tokenize(*documents, padding=padding)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
@@ -1548,11 +1545,11 @@ class TranslationPipeline(Pipeline):
                 self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
             args = ([prefix + text for text in args[0]],)
-            pad_to_max_length = True
+            padding = True
 
         elif isinstance(args[0], str):
             args = (prefix + args[0],)
-            pad_to_max_length = False
+            padding = False
         else:
             raise ValueError(
                 " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
@@ -1561,7 +1558,7 @@ class TranslationPipeline(Pipeline):
             )
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*args, pad_to_max_length=pad_to_max_length)
+            inputs = self._parse_and_tokenize(*args, padding=padding)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)

@@ -664,7 +664,7 @@ BERT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
@@ -882,7 +882,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 
         prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        encoding = tokenizer.encode_plus(prompt, next_sentence, return_tensors='tf')
+        encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
 
         logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
         assert logits[0][0] < logits[0][1] # the next sentence was random
