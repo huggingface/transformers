@@ -1598,15 +1598,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             "or `List[List[str]]` (batch of pretokenized examples)."
         )
 
-        assert isinstance(text_pair, str) or (
-            isinstance(text_pair, (list, tuple))
-            and (
-                len(text_pair) == 0
-                or (
-                    isinstance(text_pair[0], str)
+        assert (
+            text_pair is None
+            or isinstance(text_pair, str)
+            or (
+                isinstance(text_pair, (list, tuple))
+                and (
+                    len(text_pair) == 0
                     or (
-                        isinstance(text_pair[0], (list, tuple))
-                        and (len(text_pair[0]) == 0 or isinstance(text_pair[0][0], str))
+                        isinstance(text_pair[0], str)
+                        or (
+                            isinstance(text_pair[0], (list, tuple))
+                            and (len(text_pair[0]) == 0 or isinstance(text_pair[0][0], str))
+                        )
                     )
                 )
             )
