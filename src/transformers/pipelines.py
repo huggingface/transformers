@@ -1180,12 +1180,12 @@ class QuestionAnsweringPipeline(Pipeline):
         examples = self._args_parser(*args, **kwargs)
         features_list = [
             squad_convert_examples_to_features(
-                [example],
-                self.tokenizer,
-                kwargs["max_seq_len"],
-                kwargs["doc_stride"],
-                kwargs["max_question_len"],
-                False,
+                examples=[example],
+                tokenizer=self.tokenizer,
+                max_seq_length=kwargs["max_seq_len"],
+                doc_stride=kwargs["doc_stride"],
+                max_query_length=kwargs["max_question_len"],
+                is_training=False,
                 tqdm_enabled=False,
             )
             for example in examples
