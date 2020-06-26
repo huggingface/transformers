@@ -81,17 +81,20 @@ class TFTrainer:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
-        if self.args.is_tpu_available():
+        if self.args.is_tpu_available:
+            self.num_train_examples = 0
             ds = (
                 self.train_dataset.cache()
-                .batch(self.args.train_batch_size * self.args.gradient_accumulation_steps, drop_remainder=self.args.dataloader_drop_last)
+                .batch(
+                    self.args.train_batch_size * self.args.gradient_accumulation_steps,
+                    drop_remainder=self.args.dataloader_drop_last,
+                )
                 .unbatch()
                 .batch(self.args.train_batch_size)
                 .prefetch(tf.data.experimental.AUTOTUNE)
             )
         else:
             self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
-
             ds = (
                 self.train_dataset.cache()
                 .shuffle(self.num_train_examples)
@@ -300,7 +303,9 @@ class TFTrainer:
             else:
                 approx = math.ceil
 
-            steps_per_epoch = approx(self.num_train_examples / (self.args.train_batch_size * self.args.gradient_accumulation_steps))
+            steps_per_epoch = approx(
+                self.num_train_examples / (self.args.train_batch_size * self.args.gradient_accumulation_steps)
+            )
             t_total = steps_per_epoch * self.args.num_train_epochs
 
         with self.args.strategy.scope():
@@ -312,15 +317,20 @@ class TFTrainer:
             self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=self.args.save_total_limit)
 
             if self.model.ckpt_manager.latest_checkpoint:
-                epochs_trained = self.global_step // (self.num_train_examples // self.args.gradient_accumulation_steps)
-                steps_trained_in_current_epoch = self.global_step % (
-                    self.num_train_examples // self.args.gradient_accumulation_steps
-                )
-
                 logger.info("  Continuing training from checkpoint, will skip to saved global_step")
-                logger.info("  Continuing training from epoch %d", epochs_trained)
                 logger.info("  Continuing training from global step %d", self.global_step)
-                logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+
+                if self.max_steps > 0:
+                    epochs_trained = self.global_step // (
+                        self.num_train_examples // self.args.gradient_accumulation_steps
+                    )
+                    steps_trained_in_current_epoch = self.global_step % (
+                        self.num_train_examples // self.args.gradient_accumulation_steps
+                    )
+
+                    logger.info("  Continuing training from epoch %d", epochs_trained)
+                    logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+
                 logger.info(
                     "Checkpoint file %s found and restoring from checkpoint", self.model.ckpt_manager.latest_checkpoint
                 )
