@@ -241,25 +241,26 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return self._tokenizer.encode(text, pair, add_special_tokens=add_special_tokens).tokens
 
     def set_truncation_and_padding(
-        self, padding_strategy: PaddingStrategy, truncation_strategy: TruncationStrategy, max_length: int, stride: int,
+        self,
+        padding_strategy: PaddingStrategy,
+        truncation_strategy: TruncationStrategy,
+        max_length: int,
+        stride: int,
+        pad_to_multiple_of: Optional[int],
     ):
-        """ This contextmanager is in charge of defining the truncation and the padding strategies for fast tokenizers
+        """ Define the truncation and the padding strategies for fast tokenizers
             (provided by HuggingFace tokenizers library) and restore the tokenizer settings afterwards.
 
-            This contextmanager assumes the provider tokenizer has no padding / truncation strategy
+            The provided tokenizer has no padding / truncation strategy
             before the managed section. If your tokenizer set a padding / truncation strategy before,
             then it will be reset to no padding/truncation when exiting the managed section.
 
             Args:
-                tokenizer (BaseTokenizerFast): The tokenizer which will be used
-                max_length (int): The maximum size of the sequence
-                stride (int): The stride to use when handling overflow
-                strategy (str): Overflowing logic to use
-                pad_to_max_length (bool): Boolean indicating if the output needs to be padded up to max_length
-                padding_side (str): "left" or "right" indicating the direction the output sequence will be padded
-                pad_token_id (int): The integer representation of the padding token to use
-                pad_token_type_id (int): The integer representation of the padding token type to use
-                pad_token (str): The string representation of the padding token to use
+                padding_strategy (:obj:`PaddingStrategy`): The kind of padding that will be applied to the input
+                truncation_strategy (:obj:`TruncationStrategy`): The kind of truncation that will be applied to the input
+                max_length (:obj:`int`): The maximum size of the sequence
+                stride (:obj:`int`): The stride to use when handling overflow
+                pad_to_multiple_of (:obj:`int`, `optional`, defaults to `None`)
 
         """
         # Set truncation and padding on the backend tokenizer
@@ -275,6 +276,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 pad_id=self.pad_token_id,
                 pad_type_id=self.pad_token_type_id,
                 pad_token=self.pad_token,
+                pad_to_multiple_of=pad_to_multiple_of,
             )
         else:
             self._tokenizer.no_padding()
@@ -290,6 +292,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -315,6 +318,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
         )
 
         # Avoid thread overhead if only one example.
@@ -383,6 +387,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -403,6 +408,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
