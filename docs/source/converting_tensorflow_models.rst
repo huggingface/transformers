@@ -26,10 +26,10 @@ Here is an example of the conversion process for a pre-trained ``BERT-Base Uncas
 
    export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
-   transformers-cli convert --model_type bert \
-     --tf_checkpoint $BERT_BASE_DIR/bert_model.ckpt \
-     --config $BERT_BASE_DIR/bert_config.json \
-     --pytorch_dump_output $BERT_BASE_DIR/pytorch_model.bin
+   transformers-cli convert \
+     --tf_checkpoint_path $BERT_BASE_DIR/bert_model.ckpt \
+     --bert_config_file $BERT_BASE_DIR/bert_config.json \
+     --pytorch_dump_path $BERT_BASE_DIR/pytorch_model.bin
 
 You can download Google's pre-trained models for the conversion `here <https://github.com/google-research/bert#pre-trained-models>`__.
 
