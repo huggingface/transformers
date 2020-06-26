@@ -38,17 +38,20 @@ DPR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class DPREncoder(BertModel):
+class DPREncoder(PreTrainedModel):
     def __init__(self, config: DPRConfig):
-        BertModel.__init__(self, BertConfig(**config.encoder_model_config))
-        assert self.config.hidden_size > 0, "Encoder hidden_size can't be zero"
-        self.encode_proj = nn.Linear(config.hidden_size, config.projection_dim) if config.projection_dim != 0 else None
+        super().__init__(config)
+        self.bert_model = BertModel(BertConfig(**config.encoder_model_config))
+        assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        self.projection_dim = config.projection_dim
+        if self.projection_dim > 0:
+            self.encode_proj = nn.Linear(self.bert_model.config.hidden_size, config.projection_dim)
         self.init_weights()
 
     def forward(
         self, input_ids: Tensor, token_type_ids: Optional[Tensor], attention_mask: Optional[Tensor]
     ) -> Tuple[Tensor, ...]:
-        outputs = super().forward(
+        outputs = self.bert_model.forward(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,
@@ -56,23 +59,27 @@ class DPREncoder(BertModel):
         )
         sequence_output, pooled_output, hidden_states = outputs
         pooled_output = sequence_output[:, 0, :]
-        if self.encode_proj:
+        if self.projection_dim > 0:
             pooled_output = self.encode_proj(pooled_output)
         return sequence_output, pooled_output, hidden_states
 
     @property
     def embeddings_size(self) -> int:
-        if self.encode_proj:
+        if self.projection_dim > 0:
             return self.encode_proj.out_features
-        return self.config.hidden_size
+        return self.bert_model.config.hidden_size
+
+    def init_weights(self):
+        self.bert_model.init_weights()
 
 
-class DPRSpanPredictor(nn.Module):
-    def __init__(self, encoder: DPREncoder):
-        super().__init__()
-        self.encoder = encoder
-        self.qa_outputs = nn.Linear(encoder.config.hidden_size, 2)
-        self.qa_classifier = nn.Linear(encoder.config.hidden_size, 1)
+class DPRSpanPredictor(PreTrainedModel):
+    def __init__(self, config: DPRConfig):
+        super().__init__(config)
+        self.encoder = DPREncoder(config)
+        self.qa_outputs = nn.Linear(self.encoder.embeddings_size, 2)
+        self.qa_classifier = nn.Linear(self.encoder.embeddings_size, 1)
+        self.init_weights()
 
     def forward(self, input_ids: Tensor, attention_mask: Tensor):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
@@ -90,6 +97,9 @@ class DPRSpanPredictor(nn.Module):
         relevance_logits = self.qa_classifier(sequence_output[:, 0, :])
         # resize and return
         return start_logits.view(N, M, L), end_logits.view(N, M, L), relevance_logits.view(N, M)
+
+    def init_weights(self):
+        self.encoder.init_weights()
 
 
 ##################
@@ -124,11 +134,14 @@ class DPRPretrainedContextEncoder(PreTrainedModel):
             logger.info("Loading DPR biencoder from {}".format(self.config.bi_encoder_model_file))
             saved_state = load_states_from_checkpoint(self.config.bi_encoder_model_file)
             encoder, prefix = self.ctx_encoder, "ctx_model."
-            prefix_len = len(prefix)
-            ctx_state = {
-                key[prefix_len:]: value for (key, value) in saved_state.model_dict.items() if key.startswith(prefix)
-            }
-            encoder.load_state_dict(ctx_state)
+            state_dict = {}
+            for key, value in saved_state.model_dict.items():
+                if key.startswith(prefix):
+                    key = key[len(prefix) :]
+                    if not key.startswith("encode_proj."):
+                        key = "bert_model." + key
+                    state_dict[key] = value
+            encoder.load_state_dict(state_dict)
         else:
             self.ctx_encoder.init_weights()
 
@@ -148,11 +161,14 @@ class DPRPretrainedQuestionEncoder(PreTrainedModel):
             logger.info("Loading DPR biencoder from {}".format(self.config.bi_encoder_model_file))
             saved_state = load_states_from_checkpoint(self.config.bi_encoder_model_file)
             encoder, prefix = self.question_encoder, "question_model."
-            prefix_len = len(prefix)
-            ctx_state = {
-                key[prefix_len:]: value for (key, value) in saved_state.model_dict.items() if key.startswith(prefix)
-            }
-            encoder.load_state_dict(ctx_state)
+            state_dict = {}
+            for key, value in saved_state.model_dict.items():
+                if key.startswith(prefix):
+                    key = key[len(prefix) :]
+                    if not key.startswith("encode_proj."):
+                        key = "bert_model." + key
+                    state_dict[key] = value
+            encoder.load_state_dict(state_dict)
         else:
             self.question_encoder.init_weights()
 
@@ -171,7 +187,12 @@ class DPRPretrainedReader(PreTrainedModel):
         if self.config.reader_model_file is not None:
             logger.info("Loading DPR reader from {}".format(self.config.reader_model_file))
             saved_state = load_states_from_checkpoint(self.config.reader_model_file)
-            self.span_predictor.load_state_dict(saved_state.model_dict)
+            state_dict = {}
+            for key, value in saved_state.model_dict.items():
+                if key.startswith("encoder.") and not key.startswith("encoder.encode_proj"):
+                    key = "encoder.bert_model." + key[len("encoder.") :]
+                state_dict[key] = value
+            self.span_predictor.load_state_dict(state_dict)
         else:
             self.span_predictor.encoder.init_weights()
 
@@ -380,7 +401,7 @@ class DPRReader(DPRPretrainedReader):
     def __init__(self, config: DPRConfig):
         super().__init__(config)
         self.config = config
-        self.span_predictor = DPRSpanPredictor(DPREncoder(config))
+        self.span_predictor = DPRSpanPredictor(config)
         self.init_weights()
 
     def forward(self, question_and_titles_ids: List[Tensor], texts_ids: List[Tensor],) -> Tuple[Tensor, ...]:
