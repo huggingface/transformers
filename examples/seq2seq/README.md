@@ -41,11 +41,17 @@ The `.source` files are the input, the `.target` files are the desired output.
 
 To create summaries for each article in dataset, run:
 ```bash
-python run_eval.py <path_to_test.source> test_generations.txt <model-name>  --score_path rouge_scores.txt
+python run_eval.py <path_to_test.source> test_generations.txt \ <model-name>  --score_path rouge_scores.txt
 ```
 The default batch size, 4, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
 
 
+For example
+```bash
+python run_eval.py $ENRO_DIR/val.source mbart_val_generations.txt \
+    facebook/mbart-large-en-ro --reference_path $ENRO_DIR/val.target
+    --device cuda:1 --fp16
+```
 ### Summarization Finetuning
 Run/modify `finetune.sh`
 
