@@ -198,7 +198,7 @@ def test_run_eval_bart(model):
     assert not output_file_name.exists()
     articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
     _dump_articles(input_file_name, articles)
-    testargs = ["run_eval.py", str(input_file_name), str(output_file_name), model]  # TODO: test score_path
+    testargs = ["run_eval.py", model, str(input_file_name), str(output_file_name)]  # TODO: test score_path
     with patch.object(sys, "argv", testargs):
         run_generate()
         assert Path(output_file_name).exists()
