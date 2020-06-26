@@ -454,7 +454,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.LonmgformerTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
@@ -970,7 +970,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        >>> encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
+        >>> encoding = tokenizer(question, text, return_tensors="pt")
         >>> input_ids = encoding["input_ids"]
 
         >>> # default is local attention everywhere

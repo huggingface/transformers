@@ -55,7 +55,7 @@ model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-squadv2")
 
 def get_answer(question, context):
   input_text = "question: %s  context: %s </s>" % (question, context)
-  features = tokenizer.batch_encode_plus([input_text], return_tensors='pt')
+  features = tokenizer([input_text], return_tensors='pt')
 
   output = model.generate(input_ids=features['input_ids'], 
                attention_mask=features['attention_mask'])

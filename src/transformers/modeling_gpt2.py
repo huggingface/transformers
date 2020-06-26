@@ -302,7 +302,7 @@ GPT2_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
 

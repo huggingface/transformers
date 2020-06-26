@@ -120,7 +120,9 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
 
     spans = []
 
-    truncated_query = tokenizer.encode(example.question_text, add_special_tokens=False, max_length=max_query_length)
+    truncated_query = tokenizer.encode(
+        example.question_text, add_special_tokens=False, truncation=True, max_length=max_query_length
+    )
     sequence_added_tokens = (
         tokenizer.max_len - tokenizer.max_len_single_sentence + 1
         if "roberta" in str(type(tokenizer)) or "camembert" in str(type(tokenizer))
@@ -131,14 +133,14 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
 
-        encoded_dict = tokenizer.encode_plus(
+        encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
             truncated_query if tokenizer.padding_side == "right" else span_doc_tokens,
             span_doc_tokens if tokenizer.padding_side == "right" else truncated_query,
+            truncation="only_second" if tokenizer.padding_side == "right" else "only_first",
+            padding="max_length",
             max_length=max_seq_length,
             return_overflowing_tokens=True,
-            pad_to_max_length=True,
             stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
-            truncation_strategy="only_second" if tokenizer.padding_side == "right" else "only_first",
             return_token_type_ids=True,
         )
 
@@ -176,7 +178,9 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
 
         spans.append(encoded_dict)
 
-        if "overflowing_tokens" not in encoded_dict:
+        if "overflowing_tokens" not in encoded_dict or (
+            "overflowing_tokens" in encoded_dict and len(encoded_dict["overflowing_tokens"]) == 0
+        ):
             break
         span_doc_tokens = encoded_dict["overflowing_tokens"]
 

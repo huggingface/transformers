@@ -125,7 +125,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
     def set_lang(self, lang: str) -> None:
-        """Set the current language code in order to call batch_encode_plus properly."""
+        """Set the current language code in order to call tokenizer properly."""
         self.cur_lang_code = self.lang_code_to_id[lang]
 
     def prepare_translation_batch(
