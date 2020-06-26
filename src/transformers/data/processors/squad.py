@@ -176,7 +176,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
 
         spans.append(encoded_dict)
 
-        if "overflowing_tokens" not in encoded_dict:
+        if "overflowing_tokens" not in encoded_dict or "overflowing_tokens" in encoded_dict and len(encoded_dict["overflowing_tokens"]) == 0:
             break
         span_doc_tokens = encoded_dict["overflowing_tokens"]
 
