@@ -917,10 +917,7 @@ class TokenClassificationPipeline(Pipeline):
             with self.device_placement():
 
                 tokens = self.tokenizer(
-                    sentence,
-                    return_attention_mask=False,
-                    return_tensors=self.framework,
-                    truncation=True,
+                    sentence, return_attention_mask=False, return_tensors=self.framework, truncation=True,
                 )
 
                 # Forward
