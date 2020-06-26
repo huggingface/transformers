@@ -375,10 +375,11 @@ class T5ModelIntegrationTests(unittest.TestCase):
         summarization_config = task_specific_config.get("summarization", {})
         model.config.update(summarization_config)
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [model.config.prefix + x for x in [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY]],
             max_length=512,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
         self.assertEqual(512, dct["input_ids"].shape[1])
