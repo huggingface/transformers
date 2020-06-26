@@ -45,9 +45,9 @@ def generate_summaries_or_translations(
     for batch in tqdm(list(chunks(examples, batch_size))):
         if "t5" in model_name:
             batch = [model.config.prefix + text for text in batch]
-        batch = tokenizer.batch_encode_plus(
-            batch, max_length=1024, return_tensors="pt", truncation=True, pad_to_max_length=True
-        ).to(device)
+        batch = tokenizer(batch, max_length=1024, return_tensors="pt", truncation=True, padding="max_length").to(
+            device
+        )
         summaries = model.generate(**batch, **gen_kwargs)
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         for hypothesis in dec:

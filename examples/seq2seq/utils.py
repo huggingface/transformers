@@ -41,12 +41,12 @@ def encode_file(
     assert lns, f"found empty file at {data_path}"
     examples = []
     for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
-        tokenized = tokenizer.batch_encode_plus(
+        tokenized = tokenizer(
             [text],
             max_length=max_length,
-            pad_to_max_length=pad_to_max_length,
-            add_prefix_space=True,
+            padding="max_length" if pad_to_max_length else None,
             truncation=True,
+            add_prefix_space=True,
             return_tensors=return_tensors,
         )
         assert tokenized.input_ids.shape[1] == max_length
