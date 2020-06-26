@@ -37,16 +37,17 @@ export ENRO_DIR=${PWD}/wmt_en_ro
 If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target.  
 The `.source` files are the input, the `.target` files are the desired output.
 
-### Evaluation
+### Evaluation Commands
 
-To create summaries for each article in dataset, use `run_eval.py`:
+To create summaries for each article in dataset, we use `run_eval.py`, here are a few commands that run eval for different tasks and models.
+If 'translation' is in your task name, the computed metric will be BLEU. Otherwise, ROUGE will be used.
 
-
-t5_base
+For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
 ```bash
+export DATA_DIR=wmt_en_ro
 python run_eval.py t5_base \
-    $ENRO_DIR/val.source mbart_val_generations.txt \
-    --reference_path $ENRO_DIR/val.target \
+    $DATA_DIR/val.source mbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \
     --task translation_en_to_ro \
     --n_obs 100 \
@@ -55,7 +56,7 @@ python run_eval.py t5_base \
     --bs 32
 ```
 
-This command works for MBART, although the BLEU score is low.
+This command works for MBART, although the BLEU score is suspiciously low.
 ```bash
 export DATA_DIR=wmt_en_ro
 python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
@@ -68,7 +69,7 @@ python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_gen
     --bs 32
 ```
 
-distilbart-cnn (summarization)
+Summarization (xsum will be very similar):
 ```bash
 export DATA_DIR=cnn_dm
 python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
@@ -79,32 +80,9 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
     --device cuda \
     --fp16 \
     --bs 32
-
-python run_eval.py facebook/distilbart-cnn-12-6 $CNN_DIR/val.source mbart_val_generations.txt \
-    --reference_path $ENRO_DIR/val.target \
-    --score_path enro_bleu.json \
-    --task translation \
-    --n_obs 100 \
-    --device cuda \
-    --fp16 \
-    --bs 32
-
-
 ```
-For t5, you need to specify the language pair
-```bash
-export ENDE_DIR=wmt_en_de
 
-python run_eval.py $ENDE_DIR/val.source t5_val_generations.txt \
-    t5_small \
-    --reference_path $ENDE_DIR/val.target \
-    --score_path t5_ende_bleu.json \
-    --task translation_en_to_ro \
-    --n_obs 100 \
-    --device cuda \
-    --fp16 \
-    --bs 32 
-```
+
 ### Summarization Finetuning
 Run/modify `finetune.sh`
 
