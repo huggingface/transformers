@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/bart-base",
     "facebook/bart-large",
     "facebook/bart-large-mnli",
     "facebook/bart-large-cnn",
