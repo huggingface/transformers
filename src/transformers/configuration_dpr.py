@@ -19,6 +19,7 @@ import logging
 from typing import Optional
 
 from .configuration_utils import PretrainedConfig
+from .configuration_bert import BertConfig
 
 
 logger = logging.getLogger(__name__)
@@ -39,8 +40,8 @@ class DPRConfig(PretrainedConfig):
         It is used to instantiate the components of the DPR model.
 
         Args:
-            pretrained_model_config_name (:obj:`str`, optional, defaults to bert-base-uncased):
-                Configuration of the encoders inside each DPR component
+            encoder_model_config (:obj:`dict`, optional, defaults to `BertConfig.from_pretrained("bert-base-uncased").to_dict()`):
+                Configuration of the encoder inside each DPR component.
             projection_dim (:obj:`int`, optional, defaults to 0):
                 Dimension of the projection for the context and question encoders.
                 If it is set to zero (default), then no projection is done.
@@ -59,7 +60,7 @@ class DPRConfig(PretrainedConfig):
 
     def __init__(
         self,
-        pretrained_model_config_name: str = "bert-base-uncased",  # base config
+        encoder_model_config: Optional[dict] = None,  # base config
         projection_dim: int = 0,  # projection of the encoders, 0 for no projection
         sequence_length: int = 512,
         bi_encoder_model_file: Optional[str] = None,  # load weights from official repo
@@ -68,7 +69,7 @@ class DPRConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
-        self.pretrained_model_config_name = pretrained_model_config_name
+        self.encoder_model_config: dict = encoder_model_config or BertConfig.from_pretrained("bert-base-uncased").to_dict()
         self.projection_dim = projection_dim
         self.sequence_length = sequence_length
         self.bi_encoder_model_file = bi_encoder_model_file

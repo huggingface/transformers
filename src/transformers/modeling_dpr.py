@@ -40,7 +40,7 @@ DPR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class DPREncoder(BertModel):
     def __init__(self, config: DPRConfig):
-        BertModel.__init__(self, BertConfig.from_pretrained(config.pretrained_model_config_name))
+        BertModel.__init__(self, BertConfig(**config.encoder_model_config))
         assert self.config.hidden_size > 0, "Encoder hidden_size can't be zero"
         self.encode_proj = nn.Linear(config.hidden_size, config.projection_dim) if config.projection_dim != 0 else None
         self.init_weights()
