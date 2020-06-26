@@ -24,10 +24,10 @@ import os
 import pickle
 import re
 from collections import Counter, OrderedDict
-from typing import Optional, List
-import sacremoses as sm
+from typing import List, Optional
 
 import numpy as np
+import sacremoses as sm
 from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
@@ -71,8 +71,7 @@ PRETRAINED_CORPUS_ARCHIVE_MAP = {
 CORPUS_NAME = "corpus.bin"
 
 MATCH_NUMBERS = r"(?<=\d)[,.](?=\d)", r" @\g<0>@ "
-DETOKENIZE_NUMBERS = [(r" @,@ ", r","),
-                      (r" @.@ ", r".")]
+DETOKENIZE_NUMBERS = [(r" @,@ ", r","), (r" @.@ ", r".")]
 
 
 def tokenize_numbers(text_array: List[str]) -> List[str]:
@@ -357,8 +356,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return self.moses_punct_normalizer.normalize(text)
 
     def moses_tokenize(self, text):
-        return self.moses_tokenizer.tokenize(text, aggressive_dash_splits=True, return_str=False, escape=False,
-                                             protected_patterns=self.never_split)
+        return self.moses_tokenizer.tokenize(
+            text, aggressive_dash_splits=True, return_str=False, escape=False, protected_patterns=self.never_split
+        )
 
     def moses_pipeline(self, text: str) -> List[str]:
         """

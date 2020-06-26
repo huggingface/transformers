@@ -86,16 +86,40 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer_moses_numbers(self):
         tokenizer = TransfoXLTokenizer(lower_case=False)
         text_in = "Hello (bracket) and side-scrolled [and] Henry's $5,000 with 3.34 m. What's up!?"
-        tokens_out = ['Hello', '(', 'bracket', ')', 'and', 'side', '@-@', 'scrolled', '[', 'and', ']', 'Henry', "'s",
-                      '$', '5', '@,@', '000', 'with', '3', '@.@', '34', 'm', '.', 'What', "'s", 'up', '!', '?']
+        tokens_out = [
+            "Hello",
+            "(",
+            "bracket",
+            ")",
+            "and",
+            "side",
+            "@-@",
+            "scrolled",
+            "[",
+            "and",
+            "]",
+            "Henry",
+            "'s",
+            "$",
+            "5",
+            "@,@",
+            "000",
+            "with",
+            "3",
+            "@.@",
+            "34",
+            "m",
+            ".",
+            "What",
+            "'s",
+            "up",
+            "!",
+            "?",
+        ]
 
-        self.assertListEqual(
-            tokenizer.tokenize(text_in), tokens_out
-        )
+        self.assertListEqual(tokenizer.tokenize(text_in), tokens_out)
 
-        self.assertEqual(
-            tokenizer.convert_tokens_to_string(tokens_out), text_in
-        )
+        self.assertEqual(tokenizer.convert_tokens_to_string(tokens_out), text_in)
 
     def test_move_added_token(self):
         tokenizer = self.get_tokenizer()
