@@ -962,7 +962,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
-                Start token for the decoder. Defaults to `decoder_start_token_id` as defined the model's config or to the `bos_token_id`
+                Start token id for the decoder. Defaults to `decoder_start_token_id` as defined the model's config or to the `bos_token_id`
                 if no `decoder_start_token_id` is found in the config.
                 This is only relevant for encoder-decoder models.
 
