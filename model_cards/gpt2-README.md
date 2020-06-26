@@ -1,5 +1,5 @@
 ---
-language: en
+language: english
 tags:
 - exbert
 
