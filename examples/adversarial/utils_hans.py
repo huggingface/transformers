@@ -298,12 +298,13 @@ def hans_convert_examples_to_features(
         if ex_index % 10000 == 0:
             logger.info("Writing example %d" % (ex_index))
 
-        inputs = tokenizer.encode_plus(
+        inputs = tokenizer(
             example.text_a,
             example.text_b,
             add_special_tokens=True,
             max_length=max_length,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_overflowing_tokens=True,
         )
 

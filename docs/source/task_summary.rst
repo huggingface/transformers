@@ -74,7 +74,7 @@ of each other. The process is the following:
   with the weights stored in the checkpoint.
 - Build a sequence from the two sentences, with the correct model-specific separators token type ids
   and attention masks (:func:`~transformers.PreTrainedTokenizer.encode` and
-  :func:`~transformers.PreTrainedTokenizer.encode_plus` take care of this)
+  :func:`~transformers.PreTrainedTokenizer.__call__` take care of this)
 - Pass this sequence through the model so that it is classified in one of the two available classes: 0
   (not a paraphrase) and 1 (is a paraphrase)
 - Compute the softmax of the result to get probabilities over the classes
@@ -95,8 +95,8 @@ of each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
-    >>> paraphrase = tokenizer.encode_plus(sequence_0, sequence_2, return_tensors="pt")
-    >>> not_paraphrase = tokenizer.encode_plus(sequence_0, sequence_1, return_tensors="pt")
+    >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="pt")
+    >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="pt")
 
     >>> paraphrase_classification_logits = model(**paraphrase)[0]
     >>> not_paraphrase_classification_logits = model(**not_paraphrase)[0]
@@ -128,8 +128,8 @@ of each other. The process is the following:
     >>> sequence_1 = "Apples are especially bad for your health"
     >>> sequence_2 = "HuggingFace's headquarters are situated in Manhattan"
 
-    >>> paraphrase = tokenizer.encode_plus(sequence_0, sequence_2, return_tensors="tf")
-    >>> not_paraphrase = tokenizer.encode_plus(sequence_0, sequence_1, return_tensors="tf")
+    >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="tf")
+    >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="tf")
 
     >>> paraphrase_classification_logits = model(paraphrase)[0]
     >>> not_paraphrase_classification_logits = model(not_paraphrase)[0]
@@ -221,7 +221,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ... ]
 
     >>> for question in questions:
-    ...     inputs = tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="pt")
+    ...     inputs = tokenizer(question, text, add_special_tokens=True, return_tensors="pt")
     ...     input_ids = inputs["input_ids"].tolist()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
@@ -263,7 +263,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ... ]
 
     >>> for question in questions:
-    ...     inputs = tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="tf")
+    ...     inputs = tokenizer(question, text, add_special_tokens=True, return_tensors="tf")
     ...     input_ids = inputs["input_ids"].numpy()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
