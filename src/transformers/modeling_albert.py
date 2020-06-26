@@ -24,12 +24,14 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .configuration_albert import AlbertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "AlbertTokenizer"
 
 
 ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -485,6 +487,7 @@ class AlbertModel(AlbertPreTrainedModel):
             self.encoder.albert_layer_groups[group_idx].albert_layers[inner_group_idx].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def forward(
         self,
         input_ids=None,
@@ -521,18 +524,6 @@ class AlbertModel(AlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Example::
-
-        from transformers import AlbertModel, AlbertTokenizer
-        import torch
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertModel.from_pretrained('albert-base-v2')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -657,16 +648,16 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
     Examples::
 
-        from transformers import AlbertTokenizer, AlbertForPreTraining
-        import torch
+        >>> from transformers import AlbertTokenizer, AlbertForPreTraining
+        >>> import torch
 
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertForPreTraining.from_pretrained('albert-base-v2')
+        >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> outputs = model(input_ids)
 
-        prediction_scores, sop_scores = outputs[:2]
+        >>> prediction_scores, sop_scores = outputs[:2]
 
         """
 
@@ -763,6 +754,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         return self.predictions.decoder
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def forward(
         self,
         input_ids=None,
@@ -802,18 +794,6 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Example::
-
-        from transformers import AlbertTokenizer, AlbertForMaskedLM
-        import torch
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertForMaskedLM.from_pretrained('albert-base-v2')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, prediction_scores = outputs[:2]
-
         """
         if "masked_lm_labels" in kwargs:
             warnings.warn(
@@ -863,6 +843,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def forward(
         self,
         input_ids=None,
@@ -899,19 +880,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-        Examples::
-
-            from transformers import AlbertTokenizer, AlbertForSequenceClassification
-            import torch
-
-            tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            model = AlbertForSequenceClassification.from_pretrained('albert-base-v2')
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-            labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids, labels=labels)
-            loss, logits = outputs[:2]
-
         """
 
         outputs = self.albert(
@@ -962,6 +930,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def forward(
         self,
         input_ids=None,
@@ -996,21 +965,6 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import AlbertTokenizer, AlbertForTokenClassification
-        import torch
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertForTokenClassification.from_pretrained('albert-base-v2')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-
-        loss, scores = outputs[:2]
-
         """
 
         outputs = self.albert(
@@ -1062,6 +1016,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def forward(
         self,
         input_ids=None,
@@ -1104,21 +1059,6 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        # The checkpoint albert-base-v2 is not fine-tuned for question answering. Please see the
-        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
-
-        from transformers import AlbertTokenizer, AlbertForQuestionAnswering
-        import torch
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertForQuestionAnswering.from_pretrained('albert-base-v2')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='pt')
-        start_scores, end_scores = model(**input_dict)
-
         """
 
         outputs = self.albert(
@@ -1176,6 +1116,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def forward(
         self,
         input_ids=None,
@@ -1213,25 +1154,6 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import AlbertTokenizer, AlbertForMultipleChoice
-        import torch
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = AlbertForMultipleChoice.from_pretrained('albert-base-v2')
-
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        choice0 = "It is eaten with a fork and a knife."
-        choice1 = "It is eaten while held in the hand."
-        labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
-
-        encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='pt', pad_to_max_length=True)
-        outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
-
-        # the linear classifier still needs to be trained
-        loss, logits = outputs[:2]
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 

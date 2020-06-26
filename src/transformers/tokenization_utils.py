@@ -409,6 +409,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -461,6 +462,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
@@ -487,6 +489,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -541,6 +544,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -561,6 +565,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -576,18 +581,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Args:
             batch_ids_pairs: list of tokenized input ids or input ids pairs
         """
-        if padding_strategy == PaddingStrategy.LONGEST:
-            # For simplicity we keep the single sentnce path here
-            def total_sequence_length(input_pairs):
-                first_ids, second_ids = input_pairs
-                return len(first_ids) + (
-                    self.num_special_tokens_to_add()
-                    if second_ids is None
-                    else (len(second_ids) + self.num_special_tokens_to_add(pair=True))
-                )
-
-            max_length = max([total_sequence_length(input_pairs) for input_pairs in batch_ids_pairs])
-            padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for first_ids, second_ids in batch_ids_pairs:
@@ -595,16 +588,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 first_ids,
                 second_ids,
                 add_special_tokens=add_special_tokens,
-                padding_strategy=padding_strategy,
+                padding_strategy=PaddingStrategy.DO_NOT_PAD,  # we pad in batch afterward
                 truncation_strategy=truncation_strategy,
                 max_length=max_length,
                 stride=stride,
-                return_attention_mask=return_attention_mask,
+                pad_to_multiple_of=None,  # we pad in batch afterward
+                return_attention_mask=False,  # we pad in batch afterward
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_length=return_length,
-                return_tensors=None,  # We will convert the whole batch to tensors at the end
+                return_tensors=None,  # We convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
             )
@@ -613,6 +607,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
+
+        batch_outputs = self.pad(
+            batch_outputs,
+            padding=padding_strategy.value,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask,
+        )
 
         batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
@@ -628,6 +630,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         prepend_batch_axis: bool = False,
         return_token_type_ids: Optional[bool] = None,
@@ -659,8 +662,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         encoded_inputs = {}
 
-        # Truncation: Handle max sequence length
+        # Compute the total size of the returned encodings
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+
+        # Truncation: Handle max sequence length
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -700,12 +705,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             )
 
         # Padding
-        encoded_inputs = self.pad(
-            encoded_inputs,
-            max_length=max_length,
-            padding=padding_strategy.value,
-            return_attention_mask=return_attention_mask,
-        )
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
+            encoded_inputs = self.pad(
+                encoded_inputs,
+                max_length=max_length,
+                padding=padding_strategy.value,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_attention_mask=return_attention_mask,
+            )
 
         if return_length:
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
@@ -768,15 +775,29 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 else:
                     pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
-            assert len(ids) > num_tokens_to_remove
-            window_len = min(len(ids), stride + num_tokens_to_remove)
-            overflowing_tokens = ids[-window_len:]
-            ids = ids[:-num_tokens_to_remove]
-        elif truncation_strategy == TruncationStrategy.ONLY_SECOND:
-            assert pair_ids is not None and len(pair_ids) > num_tokens_to_remove
-            window_len = min(len(pair_ids), stride + num_tokens_to_remove)
-            overflowing_tokens = pair_ids[-window_len:]
-            pair_ids = pair_ids[:-num_tokens_to_remove]
+            if len(ids) > num_tokens_to_remove:
+                window_len = min(len(ids), stride + num_tokens_to_remove)
+                overflowing_tokens = ids[-window_len:]
+                ids = ids[:-num_tokens_to_remove]
+            else:
+                logger.error(
+                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"but the first sequence has a length {len(ids)}. "
+                    f"Please select another truncation strategy than {truncation_strategy}, "
+                    f"for instance 'longest_first' or 'only_second'."
+                )
+        elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
+            if len(pair_ids) > num_tokens_to_remove:
+                window_len = min(len(pair_ids), stride + num_tokens_to_remove)
+                overflowing_tokens = pair_ids[-window_len:]
+                pair_ids = pair_ids[:-num_tokens_to_remove]
+            else:
+                logger.error(
+                    f"We need to remove {num_tokens_to_remove} to truncate the input"
+                    f"but the second sequence has a length {len(pair_ids)}. "
+                    f"Please select another truncation strategy than {truncation_strategy}, "
+                    f"for instance 'longest_first' or 'only_first'."
+                )
 
         return (ids, pair_ids, overflowing_tokens)
 

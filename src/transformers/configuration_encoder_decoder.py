@@ -42,20 +42,20 @@ class EncoderDecoderConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
+            >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 
-            # Initializing a BERT bert-base-uncased style configuration
-            config_encoder = BertConfig()
-            config_decoder = BertConfig()
+            >>> # Initializing a BERT bert-base-uncased style configuration
+            >>> config_encoder = BertConfig()
+            >>> config_decoder = BertConfig()
 
-            config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+            >>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-            # Initializing a Bert2Bert model from the bert-base-uncased style configurations
-            model = EncoderDecoderModel(config=config)
+            >>> # Initializing a Bert2Bert model from the bert-base-uncased style configurations
+            >>> model = EncoderDecoderModel(config=config)
 
-            # Accessing the model configuration
-            config_encoder = model.config.encoder
-            config_decoder  = model.config.decoder
+            >>> # Accessing the model configuration
+            >>> config_encoder = model.config.encoder
+            >>> config_decoder  = model.config.decoder
     """
     model_type = "encoder_decoder"
 

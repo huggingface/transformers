@@ -62,7 +62,6 @@ if __name__ == "__main__":
     parser = HfArgumentParser((TrainingArguments,))
     training_args = parser.parse_args_into_dataclasses(sys.argv + ["--output_dir", "./examples"])[0]
 
-    logging.basicConfig(level=logging.INFO)
     logger.warning(
         "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
         training_args.local_rank,
