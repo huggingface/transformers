@@ -29,6 +29,7 @@ def generate_summaries_or_translations(
     batch_size: int = 8,
     device: str = DEFAULT_DEVICE,
     fp16=False,
+    task="summarization",
     **gen_kwargs,
 ) -> None:
     fout = Path(out_file).open("w", encoding="utf-8")
@@ -40,7 +41,7 @@ def generate_summaries_or_translations(
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # update config with summarization specific params
-    use_task_specific_params(model, "summarization")
+    use_task_specific_params(model, task)
 
     for batch in tqdm(list(chunks(examples, batch_size))):
         if "t5" in model_name:
@@ -63,8 +64,8 @@ def run_generate():
     parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test_reference_summaries.txt")
     parser.add_argument("--score_path", type=str, required=False, help="where to save the rouge score in json format")
-    parser.add_argument("--metric", type=str, choices=["bleu", "rouge"], default="rouge")
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
+    parser.add_argument("--task", type=str, default="summarization", help="typically translation or summarization")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument(
         "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
@@ -76,17 +77,23 @@ def run_generate():
         examples = examples[: args.n_obs]
 
     generate_summaries_or_translations(
-        examples, args.save_path, args.model_name, batch_size=args.bs, device=args.device, fp16=args.fp16,
+        examples,
+        args.save_path,
+        args.model_name,
+        batch_size=args.bs,
+        device=args.device,
+        fp16=args.fp16,
+        task=args.task,
     )
-
+    if args.reference_path is None:
+        return
+    # Compute scores
+    score_fn = calculate_bleu_score if "translation" in args.task else calculate_rouge
     output_lns = [x.rstrip() for x in open(args.save_path).readlines()]
-    scores = {}
-    if args.reference_path is not None:
-        score_fn = {"bleu": calculate_bleu_score, "rouge": calculate_rouge}[args.metric]
-        reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][: len(output_lns)]
-        scores: dict = score_fn(output_lns, reference_lns)
-        if args.score_path is not None:
-            json.dump(scores, open(args.score_path, "w+"))
+    reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][: len(output_lns)]
+    scores: dict = score_fn(output_lns, reference_lns)
+    if args.score_path is not None:
+        json.dump(scores, open(args.score_path, "w+"))
     return scores
 
 

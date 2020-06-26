@@ -39,20 +39,34 @@ The `.source` files are the input, the `.target` files are the desired output.
 
 ### Evaluation
 
-To create summaries for each article in dataset, run:
-```bash
-python run_eval.py <path_to_test.source> test_generations.txt \ <model-name>  --score_path rouge_scores.txt
-```
-The default batch size, 4, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
+To create summaries for each article in dataset, use `run_eval.py`:
 
-
-For example
+For example, this command works for MBART, although the BLEU score is low.
 ```bash
 python run_eval.py $ENRO_DIR/val.source mbart_val_generations.txt \
     facebook/mbart-large-en-ro \
     --reference_path $ENRO_DIR/val.target \
-    --score_path enro_bleu.json --metric bleu \
-    --n_obs 100 --device cuda:1 --fp16
+    --score_path enro_bleu.json \
+    --task translation \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32 
+```
+
+For t5, you need to specify the language pair
+```bash
+export ENDE_DIR=wmt_en_de
+
+python run_eval.py $ENDE_DIR/val.source t5_val_generations.txt \
+    t5_small \
+    --reference_path $ENDE_DIR/val.target \
+    --score_path t5_ende_bleu.json \
+    --task translation_en_to_ro \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32 
 ```
 ### Summarization Finetuning
 Run/modify `finetune.sh`
