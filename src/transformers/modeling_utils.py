@@ -35,7 +35,7 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
-from .modeling_generation import GenerationMixin
+from .modeling_generation_utils import GenerationMixin
 
 
 logger = logging.getLogger(__name__)
