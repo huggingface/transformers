@@ -56,6 +56,7 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
+        AutoModelForSeq2SeqLM,
     )
 
 if TYPE_CHECKING:
@@ -1643,8 +1644,8 @@ SUPPORTED_TASKS = {
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "facebook/bart-large-cnn", "tf": "t5-small"}},
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
     },
     "translation_en_to_fr": {
         "impl": TranslationPipeline,
