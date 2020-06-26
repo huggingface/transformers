@@ -46,9 +46,5 @@ jobs:
         USE_CUDA: yes
       run: |
         source .env/bin/activate
-        python -m pytest -n 1 --dist=loadfile -s -v ./tests/  | tee output.txt
-    - name: Upload output.txt
-      uses: actions/upload-artifact@v1
-      with:
-        name: pytest_output
-        path: output.txt
+        python -m pytest -n 1 --dist=loadfile -s -v ./tests/
+        
