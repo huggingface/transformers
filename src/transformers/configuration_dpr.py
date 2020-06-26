@@ -30,23 +30,23 @@ DPR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class DprConfig(PretrainedConfig):
+class DPRConfig(PretrainedConfig):
     r"""
-        :class:`~transformers.DprConfig` is the configuration class to store the configuration of a
-        `DprModel`.
+        :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a
+        `DPRModel`.
 
-        This is the configuration class to store the configuration of a `DprContextEncoder`, `DprQuestionEncoder`, or a `DprReader`.
+        This is the configuration class to store the configuration of a `DPRContextEncoder`, `DPRQuestionEncoder`, or a `DPRReader`.
         It is used to instantiate the components of the DPR model.
 
         Args:
-            pretrained_model_cfg (:obj:`str`, optional, defaults to bert-base-uncased):
+            pretrained_model_config_name (:obj:`str`, optional, defaults to bert-base-uncased):
                 Configuration of the encoders inside each DPR component
             projection_dim (:obj:`int`, optional, defaults to 0):
                 Dimension of the projection for the context and question encoders.
                 If it is set to zero (default), then no projection is done.
             sequence_length (:obj:`int`, optional, defaults to 512):
                 Maximum length of the sequence.
-            biencoder_model_file (:obj:`str`, optional, defaults to None):
+            bi_encoder_model_file (:obj:`str`, optional, defaults to None):
                 If not None, load weights from files provided in the official DPR repository for the context
                 and question encoders
             reader_model_file (:obj:`str`, optional, defaults to None):
@@ -59,17 +59,17 @@ class DprConfig(PretrainedConfig):
 
     def __init__(
         self,
-        pretrained_model_cfg: str = "bert-base-uncased",  # base config
+        pretrained_model_config_name: str = "bert-base-uncased",  # base config
         projection_dim: int = 0,  # projection of the encoders, 0 for no projection
         sequence_length: int = 512,
-        biencoder_model_file: Optional[str] = None,  # load weights from official repo
+        bi_encoder_model_file: Optional[str] = None,  # load weights from official repo
         reader_model_file: Optional[str] = None,  # load weights from official repo
         pad_token_id: int = 0,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
-        self.pretrained_model_cfg = pretrained_model_cfg
+        self.pretrained_model_config_name = pretrained_model_config_name
         self.projection_dim = projection_dim
         self.sequence_length = sequence_length
-        self.biencoder_model_file = biencoder_model_file
+        self.bi_encoder_model_file = bi_encoder_model_file
         self.reader_model_file = reader_model_file

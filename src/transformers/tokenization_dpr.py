@@ -40,11 +40,11 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-class DprTokenizer(BertTokenizer):
+class DPRTokenizer(BertTokenizer):
     r"""
-    Constructs a  DprBertTokenizer.
+    Constructs a  DPRBertTokenizer.
 
-    :class:`~transformers.DprBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    :class:`~transformers.DPRBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
@@ -58,11 +58,11 @@ class DprTokenizer(BertTokenizer):
     model_input_names = ["attention_mask"]
 
 
-class DprTokenizerFast(BertTokenizerFast):
+class DPRTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a  "Fast" DprBertTokenizer (backed by HuggingFace's `tokenizers` library).
+    Constructs a  "Fast" DPRBertTokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.DprBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
+    :class:`~transformers.DPRBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
