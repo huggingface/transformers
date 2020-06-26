@@ -51,7 +51,7 @@ class DPREncoder(PreTrainedModel):
     def forward(
         self, input_ids: Tensor, token_type_ids: Optional[Tensor], attention_mask: Optional[Tensor]
     ) -> Tuple[Tensor, ...]:
-        outputs = self.bert_model.forward(
+        outputs = self.bert_model(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,
@@ -299,7 +299,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
 
         tokenizer = DPRTokenizer.from_pretrained('dpr-base-uncased')
         model = DPRContextEncoder.from_pretrained('dpr-ctx_encoder-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         embeddings = model(input_ids)  # the embeddings of the given context.
 
     """
@@ -337,7 +337,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
         tokenizer = DPRTokenizer.from_pretrained('dpr-base-uncased')
         model = DPRQuestionEncoder.from_pretrained('dpr-ctx_encoder-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, is my dog cute ?")).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer("Hello, is my dog cute ?")).unsqueeze(0)  # Batch size 1
         embeddings = model(input_ids)  # the embeddings of the given question.
 
     """
@@ -387,10 +387,10 @@ class DPRReader(DPRPretrainedReader):
         tokenizer = DPRReader.from_pretrained('dpr-base-uncased')
         model = DPRModel.from_pretrained('dpr-reader-base')
         question_and_titles_ids = [
-            torch.tensor(tokenizer.encode("Hello, is my dog cute ?", "Dog cuteness"))
+            torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
             ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
         texts_ids = [
-            torch.tensor(tokenizer.encode("Hello, my dog is definitely cute", add_special_tokens=False))
+            torch.tensor(tokenizer("Hello, my dog is definitely cute", add_special_tokens=False))
             ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
         outputs = model(question_and_titles_ids, texts_ids)
         start_logits = outputs[1]  # The logits of the start of the span
@@ -405,7 +405,11 @@ class DPRReader(DPRPretrainedReader):
         self.init_weights()
 
     def forward(self, question_and_titles_ids: List[Tensor], texts_ids: List[Tensor],) -> Tuple[Tensor, ...]:
-        assert len(question_and_titles_ids) == len(texts_ids)
+        assert len(question_and_titles_ids) == len(
+            texts_ids
+        ), "There should be as many `question_and_titles_ids` than `texts_ids` but got sizes {}!={}".format(
+            len(question_and_titles_ids), len(texts_ids)
+        )
         device = question_and_titles_ids[0].device
         n_contexts = len(question_and_titles_ids)
         input_ids = torch.ones((n_contexts, self.config.sequence_length), dtype=torch.int64, device=device) * int(
@@ -449,10 +453,10 @@ class DPRReader(DPRPretrainedReader):
             tokenizer = DPRTokenizer.from_pretrained('dpr-base-uncased')
             model = DPRModel.from_pretrained('dpr-reader-base')
             question_and_titles_ids = [
-                torch.tensor(tokenizer.encode("Hello, is my dog cute ?", "Dog cuteness"))
+                torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
                 ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
             texts_ids = [
-                torch.tensor(tokenizer.encode("Hello, my dog is definitely cute", add_special_tokens=False))
+                torch.tensor(tokenizer("Hello, my dog is definitely cute", add_special_tokens=False))
                 ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
             predicted_spans = model.generate(question_and_titles_ids, texts_ids)
             # get best answer
@@ -518,9 +522,9 @@ class DPRReader(DPRPretrainedReader):
         chosen_span_intervals = []
         best_spans = []
         for (start_index, end_index), score in scores:
-            assert start_index <= end_index
+            assert start_index <= end_index, "Wrong span indices: [{}:{}]".format(start_index, end_index)
             length = end_index - start_index + 1
-            assert length <= max_answer_length
+            assert length <= max_answer_length, "Span is too long: {} > {}".format(length, max_answer_length)
             if any(
                 [
                     start_index <= prev_start_index <= prev_end_index <= end_index
