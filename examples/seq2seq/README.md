@@ -41,19 +41,56 @@ The `.source` files are the input, the `.target` files are the desired output.
 
 To create summaries for each article in dataset, use `run_eval.py`:
 
-For example, this command works for MBART, although the BLEU score is low.
+
+t5_base
 ```bash
-python run_eval.py $ENRO_DIR/val.source mbart_val_generations.txt \
-    facebook/mbart-large-en-ro \
+python run_eval.py t5_base \
+    $ENRO_DIR/val.source mbart_val_generations.txt \
+    --reference_path $ENRO_DIR/val.target \
+    --score_path enro_bleu.json \
+    --task translation_en_to_ro \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+```
+
+This command works for MBART, although the BLEU score is low.
+```bash
+export DATA_DIR=wmt_en_ro
+python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path enro_bleu.json \
+    --task translation \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+```
+
+distilbart-cnn (summarization)
+```bash
+export DATA_DIR=cnn_dm
+python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path cnn_rouge.json \
+    --task summarization \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+
+python run_eval.py facebook/distilbart-cnn-12-6 $CNN_DIR/val.source mbart_val_generations.txt \
     --reference_path $ENRO_DIR/val.target \
     --score_path enro_bleu.json \
     --task translation \
     --n_obs 100 \
     --device cuda \
     --fp16 \
-    --bs 32 
-```
+    --bs 32
 
+
+```
 For t5, you need to specify the language pair
 ```bash
 export ENDE_DIR=wmt_en_de
