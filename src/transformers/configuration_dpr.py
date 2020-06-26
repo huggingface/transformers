@@ -18,8 +18,8 @@
 import logging
 from typing import Optional
 
-from .configuration_utils import PretrainedConfig
 from .configuration_bert import BertConfig
+from .configuration_utils import PretrainedConfig
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,9 @@ class DPRConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
-        self.encoder_model_config: dict = encoder_model_config or BertConfig.from_pretrained("bert-base-uncased").to_dict()
+        self.encoder_model_config: dict = encoder_model_config or BertConfig.from_pretrained(
+            "bert-base-uncased"
+        ).to_dict()
         self.projection_dim = projection_dim
         self.sequence_length = sequence_length
         self.bi_encoder_model_file = bi_encoder_model_file
