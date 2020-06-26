@@ -14,7 +14,7 @@ Therefore, this model does not need a tokenizer. The following function can inst
 import torch
 
 # Encoding
-def encode(list_of_strings, pad_to_max_length=True, pad_token_id=0):
+def encode(list_of_strings, pad_token_id=0):
     max_length = max([len(string) for string in list_of_strings])
 
     # create emtpy tensors
