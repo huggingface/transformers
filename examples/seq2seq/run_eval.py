@@ -86,7 +86,7 @@ def run_generate():
         reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][: len(output_lns)]
         scores: dict = score_fn(output_lns, reference_lns)
         if args.score_path is not None:
-            json.dump(scores, open("score_path", "w+"))
+            json.dump(scores, open(args.score_path, "w+"))
     return scores
 
 

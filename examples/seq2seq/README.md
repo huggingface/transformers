@@ -49,8 +49,10 @@ The default batch size, 4, fits in 16GB GPU memory, but may need to be adjusted 
 For example
 ```bash
 python run_eval.py $ENRO_DIR/val.source mbart_val_generations.txt \
-    facebook/mbart-large-en-ro --reference_path $ENRO_DIR/val.target
-    --device cuda:1 --fp16
+    facebook/mbart-large-en-ro \
+    --reference_path $ENRO_DIR/val.target \
+    --score_path enro_bleu.json --metric bleu \
+    --n_obs 100 --device cuda:1 --fp16
 ```
 ### Summarization Finetuning
 Run/modify `finetune.sh`
