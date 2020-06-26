@@ -25,13 +25,13 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     Examples::
 
-        from transformers import MarianTokenizer
-        tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-        src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
-        tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-        batch_enc: BatchEncoding = tok.prepare_translation_batch(src_texts, tgt_texts=tgt_texts)
-        # keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask].
-        # model(**batch) should work
+        >>> from transformers import MarianTokenizer
+        >>> tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
+        >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
+        >>> batch_enc: BatchEncoding = tok.prepare_translation_batch(src_texts, tgt_texts=tgt_texts)
+        >>> # keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask].
+        >>> # model(**batch) should work
     """
 
     vocab_files_names = vocab_files_names

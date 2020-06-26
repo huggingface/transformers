@@ -74,12 +74,6 @@ class BenchmarkArguments:
             "help": "Don't use multiprocessing for memory and speed measurement. It is highly recommended to use multiprocessing for accurate CPU and GPU memory measurements. This option should only be used for debugging / testing and on TPU."
         },
     )
-    with_lm_head: bool = field(
-        default=False,
-        metadata={
-            "help": "Use model with its language model head (MODEL_WITH_LM_HEAD_MAPPING instead of MODEL_MAPPING)"
-        },
-    )
     inference_time_csv_file: str = field(
         default=f"inference_time_{round(time())}.csv",
         metadata={"help": "CSV filename used if saving time results to csv."},

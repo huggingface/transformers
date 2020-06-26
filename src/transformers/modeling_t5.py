@@ -33,6 +33,8 @@ from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, p
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
+
 ####################################################
 # This dict contrains shortcut names and associated url
 # for the pretrained weights provided with the models
@@ -924,16 +926,17 @@ class T5Model(T5PreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-    Examples::
+        Example::
 
-        from transformers import T5Tokenizer, T5Model
+            >>> from transformers import T5Tokenizer, T5Model
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5Model.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5Model.from_pretrained('t5-small')
 
+            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+
+            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
@@ -1068,18 +1071,18 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, T5ForConditionalGeneration
+        >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
-        loss, prediction_scores = outputs[:2]
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+        >>> loss, prediction_scores = outputs[:2]
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model.generate(input_ids)
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        >>> outputs = model.generate(input_ids)
         """
 
         if "lm_labels" in kwargs:

@@ -73,9 +73,13 @@ class BartConfig(PretrainedConfig):
     ):
         r"""
             :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
-            Examples:
-                config = BartConfig.from_pretrained('bart-large')
-                model = BartModel(config)
+
+            Examples::
+
+                >>> from transformers import BartConfig, BartModel
+
+                >>> config = BartConfig.from_pretrained('facebook/bart-large')
+                >>> model = BartModel(config)
         """
         if "hidden_size" in common_kwargs:
             raise ValueError("hidden size is called d_model")
