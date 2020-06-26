@@ -123,7 +123,7 @@ class BaseTransformer(pl.LightningModule):
             optimizer.step()
         optimizer.zero_grad()
         self.lr_scheduler.step()
-        lrs = {f'lr_group_{i}': lr for i, lr in self.lr_scheduler.get_lr()}
+        lrs = {f'lr_group_{i}': lr for i, lr in enumerate(self.lr_scheduler.get_lr())}
         self.logger.log_metrics(lrs)
 
     def test_step(self, batch, batch_nb):
