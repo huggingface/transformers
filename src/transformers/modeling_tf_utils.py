@@ -642,8 +642,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
-                If an encoder-decoder model starts decoding with a different token than BOS.
-                Defaults to `None` and is changed to `BOS` later.
+                Start token id for the decoder. Defaults to ``decoder_start_token_id`` as defined the model's config or to the ``bos_token_id``
+                if no ``decoder_start_token_id`` is found in the config.
+                This is only relevant for encoder-decoder models.
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
