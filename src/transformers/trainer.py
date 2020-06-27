@@ -348,7 +348,6 @@ class Trainer:
             model_path:
                 (Optional) Local path to model if model to train has been instantiated from a local path
                 If present, we will try reloading the optimizer/scheduler states from there.
-            
             close_tb_writer:
                 (Optional) Whether or not to close tb_writer after training is done.
         """
