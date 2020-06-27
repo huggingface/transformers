@@ -340,7 +340,7 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
-    def train(self, model_path: Optional[str] = None):
+    def train(self, model_path: Optional[str] = None, close_tb_writer: Optional[bool] = True):
         """
         Main training entry point.
 
@@ -348,6 +348,9 @@ class Trainer:
             model_path:
                 (Optional) Local path to model if model to train has been instantiated from a local path
                 If present, we will try reloading the optimizer/scheduler states from there.
+            
+            close_tb_writer:
+                (Optional) Whether or not to close tb_writer after training is done.
         """
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
@@ -533,7 +536,7 @@ class Trainer:
                 # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                 xm.master_print(met.metrics_report())
 
-        if self.tb_writer:
+        if self.tb_writer and close_tb_writer:
             self.tb_writer.close()
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
