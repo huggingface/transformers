@@ -139,9 +139,8 @@ conversion utilities for the following models:
 
     task_summary
     model_summary
-    training
     preprocessing
-    serialization
+    training
     model_sharing
     multilingual
 
