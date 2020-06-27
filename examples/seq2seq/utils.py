@@ -14,8 +14,6 @@ from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 
-from transformers.tokenization_utils_base import BatchEncoding
-
 
 def encode_file(
     tokenizer,
@@ -65,20 +63,6 @@ def lmap(f: Callable, x: Iterable) -> List:
 def calculate_bleu_score(output_lns, refs_lns, **kwargs) -> dict:
     """Uses sacrebleu's corpus_bleu implementation."""
     return {"bleu": corpus_bleu(output_lns, [refs_lns], **kwargs).score}
-
-
-
-
-def remove_all_pad_columns(batch: BatchEncoding) -> BatchEncoding:
-    """Reduce padding computation by removing input columns with all pad tokens."""
-    keep_column_mask = batch["attention_mask"].eq(1).any(dim=0)
-    batch["input_ids"] = batch["input_ids"][:, keep_column_mask]
-    batch["attention_mask"] = batch["attention_mask"][:, keep_column_mask]
-    if "decoder_attention_mask" in batch:
-        keep_column_mask = batch["decoder_attention_mask"].eq(1).any(dim=0)
-        batch["decoder_input_ids"] = batch["decoder_input_ids"][:, keep_column_mask]
-        batch["decoder_attention_mask"] = batch["decoder_attention_mask"][:, keep_column_mask]
-    return batch
 
 
 def trim_batch(

@@ -43,7 +43,6 @@ if is_torch_available():
         pipeline,
     )
     from transformers.modeling_bart import (
-        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
         shift_tokens_right,
         invert_mask,
         _prepare_bart_decoder_inputs,
