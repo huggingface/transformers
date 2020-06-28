@@ -1,4 +1,40 @@
-# Benchmarks
+Benchmarks
+==========
+
+Let's take a look at how 🤗 Transformer models can be benchmarked, best practices and already available benchmarks.
+
+How to benchmark 🤗 Transformer models
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The classes :obj:`PyTorchBenchmark` and :obj:`TensorflowBenchmark` allow to flexibly benchmark ðŸ¤— Transformer models.
+The benchmark classes allow to measure the `peak memory usage` and `required time` for both 
+`inference` and `training`. 
+
+.. note::
+Hereby, inference is defined by a single forward pass and training is defined by a single forward pass and a single backward pass.
+
+`PyTorchBenchmark` and `TensorflowBenchmark` expect an object of type `PyTorchBenchmarkArguments` and `TensorflowBenchmarkArguments` to be instantiated. `PyTorchBenchmarkArguments` and `TensorflowBenchmarkArguments` are data classes and contain all relevant configurations for their corresponding benchmark class.
+In the following example, it is shown how a BERT model of type ``bert-base-cased`` can be benchmarked.
+
+.. code-block::
+
+    >>> ## PYTORCH CODE
+    >>> from transformers import PyTorchBenchmark, PyTorchBenchmarkArguments
+
+    >>> args = PyTorchBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_length=[8, 32, 128, 512])
+    >>> benchmark = PyTorchBenchmark(args)
+
+    >>> ## TENSORFLOW CODE
+    >>> from transformers import TensorflowBenchmark, TensorflowBenchmarkArguments
+
+    >>> args = TensorflowBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
+    >>> benchmark = TensorflowBenchmark(args)
+
+Here three arguments are given to the benchmark args data classes, namely ``models``, ``batch_sizes`` and ``sequence_lengths``. The argument ``models`` is required and expects a :obj:`list` of model identifiers from the [model hub](https://huggingface.co/models). 
+The :obj:`list` arguments ``batch_sizes`` and ``sequence_lengths`` define the size of the ``input_ids`` on which the model is benchmarked. 
+
+
+
 
 This section is dedicated to the Benchmarks done by the library, both by maintainers, contributors and users. These 
 benchmark will help keep track of the preformance improvements that are brought to our models across versions.
