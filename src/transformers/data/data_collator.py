@@ -172,7 +172,7 @@ class DataCollatorForXLNetLanguageModeling:
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         The mask is determined by iteratively performing the following steps until the end of the sequence:
-            1. Sample an n-gram length (n) from [1, ..., max_ngram] (L in the paper)
+            1. Sample an n-gram length (n) from [1, ..., max_gram] (L in the paper)
             2. Reserve a context of length of n-gram length / mlm_probability (In the paper, context size is K*n, where K is close to the inverse of mlm_probability)
             3. Sample a starting point and mask n tokens continuously from then
         """
@@ -185,7 +185,7 @@ class DataCollatorForXLNetLanguageModeling:
         labels = inputs.clone()
         # Creating the mask and target mapping tensors
         masked_indices = torch.full(labels.shape, 0, dtype=torch.bool)
-        target_mapping = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.FloatTensor)
+        target_mapping = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.float)
 
         for i in range(labels.size(0)):
             cur_len = 0
@@ -194,9 +194,9 @@ class DataCollatorForXLNetLanguageModeling:
             # the i-th label corresponds to the i-th token. 
             target_mapping[i] = torch.eye(labels.size(1))
             while cur_len < max_len:
-                n = torch.randint(1, self.max_gram + 1, 1).item()
+                n = torch.randint(1, self.max_gram + 1, (1,)).item()
                 ctx_size = int(n / self.mlm_probability)
-                start = cur_len + torch.randint(ctx_size - n + 1, 1).item()
+                start = cur_len + torch.randint(ctx_size - n + 1, (1,)).item()
                 end = start + 1
                 while end < max_len and end < start + n:
                     end += 1
@@ -217,7 +217,7 @@ class DataCollatorForXLNetLanguageModeling:
         inputs[masked_indices] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
-        perm_mask = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.FloatTensor)
+        perm_mask = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.float)
 
         for i in range(labels.size(0)):
             # Generate permutation indices
@@ -232,7 +232,7 @@ class DataCollatorForXLNetLanguageModeling:
             # smallest index (-1): 
             # (1) they can be seen by all other positions
             # (2) they cannot see masked positions, so there won't be information leak            
-            perm_idx.masked_fill_(~masked_indices & non_func_mask, -1)
+            perm_idx.masked_fill_(~masked_indices[i] & non_func_mask[i], -1)
             # 1: cannot attend if i <= j and j is not non-masked (masked_or_func_tokens)
             # 0: can attend if i > j or j is non-masked
             perm_mask[i] = (perm_idx.reshape((labels.size(1), 1)) <= perm_idx.reshape((1, labels.size(1)))) & masked_indices[i] 
