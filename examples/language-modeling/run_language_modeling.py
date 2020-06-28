@@ -101,9 +101,7 @@ class DataTrainingArguments:
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
-    max_gram: int = field(
-        default=5, metadata={"help": "Maximum individual mask span length for XLNet training"}
-    )
+    max_gram: int = field(default=5, metadata={"help": "Maximum individual mask span length for XLNet training"})
 
     block_size: int = field(
         default=-1,
@@ -226,8 +224,10 @@ def main():
     eval_dataset = get_dataset(data_args, tokenizer=tokenizer, evaluate=True) if training_args.do_eval else None
     if config.model_type == "xlnet":
         data_collator = DataCollatorForXLNetLanguageModeling(
-            tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability,
-            max_gram=data_args.max_gram
+            tokenizer=tokenizer,
+            mlm=data_args.mlm,
+            mlm_probability=data_args.mlm_probability,
+            max_gram=data_args.max_gram,
         )
     else:
         data_collator = DataCollatorForLanguageModeling(

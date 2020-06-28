@@ -134,6 +134,7 @@ class DataCollatorForLanguageModeling:
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
 
+
 @dataclass
 class DataCollatorForXLNetLanguageModeling:
     """
@@ -145,8 +146,8 @@ class DataCollatorForXLNetLanguageModeling:
     tokenizer: PreTrainedTokenizer
     mlm: bool = True
     mlm_probability: float = 0.15
-    max_gram: int = 5 # maximum individual mask span length L
-    
+    max_gram: int = 5  # maximum individual mask span length L
+
     def collate_batch(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
         batch = self._tensorize_batch(examples)
         if self.mlm:
@@ -168,7 +169,6 @@ class DataCollatorForXLNetLanguageModeling:
                 )
             return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
-
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         The mask is determined by iteratively performing the following steps until the end of the sequence:
@@ -181,7 +181,7 @@ class DataCollatorForXLNetLanguageModeling:
             raise ValueError(
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
             )
-        
+
         labels = inputs.clone()
         # Creating the mask and target mapping tensors
         masked_indices = torch.full(labels.shape, 0, dtype=torch.bool)
@@ -191,7 +191,7 @@ class DataCollatorForXLNetLanguageModeling:
             cur_len = 0
             max_len = labels.size(1)
             # Since we're replacing non-masked (non-functional) tokens with -100 in the labels tensor,
-            # the i-th label corresponds to the i-th token. 
+            # the i-th label corresponds to the i-th token.
             target_mapping[i] = torch.eye(labels.size(1))
             while cur_len < max_len:
                 n = torch.randint(1, self.max_gram + 1, (1,)).item()
@@ -202,10 +202,11 @@ class DataCollatorForXLNetLanguageModeling:
                     end += 1
                 masked_indices[i, start:end] = 1
                 cur_len += ctx_size
-        
-        special_tokens_mask = torch.tensor([
-            self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
-        ], dtype=torch.bool)
+
+        special_tokens_mask = torch.tensor(
+            [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()],
+            dtype=torch.bool,
+        )
         masked_indices.masked_fill_(special_tokens_mask, value=0.0)
         if self.tokenizer._pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
@@ -213,7 +214,7 @@ class DataCollatorForXLNetLanguageModeling:
 
         # Mask indicating non-functional tokens, where functional tokens are [SEP], [CLS], padding, etc.
         non_func_mask = ~(padding_mask & special_tokens_mask)
- 
+
         inputs[masked_indices] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
@@ -221,7 +222,7 @@ class DataCollatorForXLNetLanguageModeling:
 
         for i in range(labels.size(0)):
             # Generate permutation indices
-            # Maximum permutation length has to be less than or equal reused sequence length, 
+            # Maximum permutation length has to be less than or equal reused sequence length,
             # otherwise leakage will occur. We assume that reused length is half of sequence length
             # and equality is enforced. This requires that sequence length be even.
             perm_idx = torch.arange(labels.size(1))
@@ -229,12 +230,14 @@ class DataCollatorForXLNetLanguageModeling:
             perm_idx = perm_idx[torch.randperm(labels.size(1) // 2)]
             perm_idx = torch.flatten(perm_idx.transpose(0, 1))
             # Set the permutation indices of non-masked (non-functional) tokens to the
-            # smallest index (-1): 
+            # smallest index (-1):
             # (1) they can be seen by all other positions
-            # (2) they cannot see masked positions, so there won't be information leak            
+            # (2) they cannot see masked positions, so there won't be information leak
             perm_idx.masked_fill_(~masked_indices[i] & non_func_mask[i], -1)
             # 1: cannot attend if i <= j and j is not non-masked (masked_or_func_tokens)
             # 0: can attend if i > j or j is non-masked
-            perm_mask[i] = (perm_idx.reshape((labels.size(1), 1)) <= perm_idx.reshape((1, labels.size(1)))) & masked_indices[i] 
+            perm_mask[i] = (
+                perm_idx.reshape((labels.size(1), 1)) <= perm_idx.reshape((1, labels.size(1)))
+            ) & masked_indices[i]
 
         return inputs, perm_mask, target_mapping, labels
