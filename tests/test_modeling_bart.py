@@ -40,7 +40,6 @@ if is_torch_available():
         pipeline,
     )
     from transformers.modeling_bart import (
-        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
         shift_tokens_right,
         invert_mask,
         _prepare_bart_decoder_inputs,
@@ -201,11 +200,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             tiny(**inputs_dict)
 
 
-
-
-
-
-
 @require_torch
 class BartHeadTests(unittest.TestCase):
     vocab_size = 99
@@ -355,24 +349,13 @@ class BartHeadTests(unittest.TestCase):
             bart_toks = tokenizer.encode(ex, return_tensors="pt")
             _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = BartForConditionalGeneration(config).eval().to(torch_device).half()
-        model.generate(input_ids, attention_mask=attention_mask, do_sample=False, early_stopping=True)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_base_model_fp16(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        attention_mask = input_ids.ne(1).to(torch_device)
-        lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
-        lm_model(input_ids, attention_mask=attention_mask)
-
-    def test_default_generate_kwargs(self):
-        config, input_ids, _ = self._get_config_and_data()
         model = BartForConditionalGeneration(config).eval().to(torch_device)
-        model.generate(input_ids)
+        if torch_device == "cuda":
+            model.half()
+        model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     def test_dummy_inputs(self):
@@ -427,7 +410,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
 
 
 def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device,)
+    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
 
 
 TOLERANCE = 1e-4
@@ -491,13 +474,6 @@ class BartModelIntegrationTests(unittest.TestCase):
             logits2 = model(**inputs_dict)[0]
         _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
         _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
-
-    @unittest.skip("This is just too slow")
-    def test_model_from_pretrained(self):
-        # Forces 1.6GB download from S3 for each model
-        for model_name in BART_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = BartModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
