@@ -148,7 +148,7 @@ class DataCollatorForXLNetLanguageModeling:
     mlm_probability: float = 0.15
     max_gram: int = 5  # maximum individual mask span length L
 
-    def collate_batch(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def __call__(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
         batch = self._tensorize_batch(examples)
         if self.mlm:
             inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
