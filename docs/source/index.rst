@@ -140,7 +140,7 @@ conversion utilities for the following models:
     task_summary
     model_summary
     preprocessing
-    serialization
+    training
     model_sharing
     multilingual
 

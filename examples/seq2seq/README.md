@@ -37,13 +37,50 @@ export ENRO_DIR=${PWD}/wmt_en_ro
 If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target.  
 The `.source` files are the input, the `.target` files are the desired output.
 
-### Evaluation
+### Evaluation Commands
 
-To create summaries for each article in dataset, run:
+To create summaries for each article in dataset, we use `run_eval.py`, here are a few commands that run eval for different tasks and models.
+If 'translation' is in your task name, the computed metric will be BLEU. Otherwise, ROUGE will be used.
+
+For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
 ```bash
-python run_eval.py <path_to_test.source> test_generations.txt <model-name>  --score_path rouge_scores.txt
+export DATA_DIR=wmt_en_ro
+python run_eval.py t5_base \
+    $DATA_DIR/val.source mbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path enro_bleu.json \
+    --task translation_en_to_ro \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
 ```
-The default batch size, 4, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
+
+This command works for MBART, although the BLEU score is suspiciously low.
+```bash
+export DATA_DIR=wmt_en_ro
+python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path enro_bleu.json \
+    --task translation \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+```
+
+Summarization (xsum will be very similar):
+```bash
+export DATA_DIR=cnn_dm
+python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path cnn_rouge.json \
+    --task summarization \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+```
 
 
 ### Summarization Finetuning
@@ -64,6 +101,7 @@ The following command should work on a 16GB GPU:
 
 Tips:
 - 1 epoch at batch size 1 for bart-large takes 24 hours and requires 13GB GPU RAM with fp16 on an NVIDIA-V100. 
+- since you need to run from `examples/seq2seq`, and likely need to modify code, it is easiest to fork, then clone transformers and run `pip install -e .` before you get started.   
 - try `bart-base`, `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr/epoch with bs=8, see the "xsum_shared_task" command below)
 - `fp16_opt_level=O1` (the default works best).
 - If you are finetuning on your own dataset, start from `distilbart-cnn-12-6` if you want long summaries and `distilbart-xsum-12-6` if you want short summaries.
@@ -125,10 +163,17 @@ Here is an example command, but you can do whatever you want. Hopefully this wil
     --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100
 ```
 
-Results can be viewed [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
+You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
 
+### DistilBART
 
-### Distilbart
+For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
+you just copy alternating layers from `bart-large-cnn` and finetune more on the same data. 
+
+For the XSUM dataset, that didn’t work as well so we used that same initialization strategy followed by a combination of Distillbert’s ce_loss and the hidden states MSE loss used in the tinybert paper.
+
+You can see the performance tradeoffs of model sizes [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=0).
+and more granular timing results [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=1753259047&range=B2:I23).
 
 #### No Teacher Distillation
 To run the simpler distilbart-cnn style distillation all you need is data, a GPU, and a properly initialized student.

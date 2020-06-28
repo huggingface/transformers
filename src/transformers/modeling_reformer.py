@@ -29,11 +29,19 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import gelu, gelu_fast, gelu_new, swish
 from .configuration_reformer import ReformerConfig
-from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "ReformerTokenizer"
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/reformer-crime-and-punishment",
@@ -1479,7 +1487,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.ReformerTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1543,6 +1551,7 @@ class ReformerModel(ReformerPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
     def forward(
         self,
         input_ids=None,
@@ -1570,19 +1579,6 @@ class ReformerModel(ReformerPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ReformerModel, ReformerTokenizer
-        import torch
-
-        tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
-        model =  ReformerModel.from_pretrained('google/reformer-crime-and-punishment')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1738,6 +1734,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         pass
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
     def forward(
         self,
         input_ids=None,
@@ -1774,19 +1771,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ReformerModelWithLMHead, ReformerTokenizer
-        import torch
-
-        tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
-        model =  ReformerModelWithLMHead.from_pretrained('google/reformer-crime-and-punishment')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-
-        loss, prediction_scores = outputs[:2]
         """
 
         reformer_outputs = self.reformer(

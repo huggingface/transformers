@@ -59,7 +59,7 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Share your models ](#Quick-tour-of-model-sharing) | Upload and share your fine-tuned models with the community |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
-| Documentation [(master)](https://huggingface.co/transformers/master) [(stable)](https://huggingface.co/transformers/) [(v2.10.0)](https://huggingface.co/transformers/v2.10.0) [(v2.9.0/v2.9.1)](https://huggingface.co/transformers/v2.9.1) [(v2.8.0)](https://huggingface.co/transformers/v2.8.0) [(v2.7.0)](https://huggingface.co/transformers/v2.7.0) [(v2.6.0)](https://huggingface.co/transformers/v2.6.0) [(v2.5.0/v2.5.1)](https://huggingface.co/transformers/v2.5.1) [(v2.4.0/v2.4.1)](https://huggingface.co/transformers/v2.4.0)[(v2.3.0)](https://huggingface.co/transformers/v2.3.0)[(v2.2.0/v2.2.1/v2.2.2)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) | Full API documentation and more |
+| [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
 
 ## Installation
 
@@ -287,8 +287,8 @@ pytorch_model = BertForSequenceClassification.from_pretrained('./save/', from_tf
 sentence_0 = "This research was consistent with his findings."
 sentence_1 = "His findings were compatible with this research."
 sentence_2 = "His findings were not compatible with this research."
-inputs_1 = tokenizer.encode_plus(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
-inputs_2 = tokenizer.encode_plus(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
+inputs_1 = tokenizer(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
+inputs_2 = tokenizer(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
 
 pred_1 = pytorch_model(inputs_1['input_ids'], token_type_ids=inputs_1['token_type_ids'])[0].argmax().item()
 pred_2 = pytorch_model(inputs_2['input_ids'], token_type_ids=inputs_2['token_type_ids'])[0].argmax().item()

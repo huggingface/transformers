@@ -193,13 +193,12 @@ class TestSummarizationDistiller(unittest.TestCase):
 
 @pytest.mark.parametrize(["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY)])
 def test_run_eval_bart(model):
-    tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
-
-    output_file_name = Path(tempfile.gettempdir()) / "utest_output_bart_sum.hypo"
+    input_file_name = Path(tempfile.mkdtemp()) / "utest_input.source"
+    output_file_name = input_file_name.parent / "utest_output.txt"
     assert not output_file_name.exists()
     articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
-    _dump_articles(tmp, articles)
-    testargs = ["run_eval.py", str(tmp), str(output_file_name), model]  # TODO: test score_path
+    _dump_articles(input_file_name, articles)
+    testargs = ["run_eval.py", model, str(input_file_name), str(output_file_name)]  # TODO: test score_path
     with patch.object(sys, "argv", testargs):
         run_generate()
         assert Path(output_file_name).exists()

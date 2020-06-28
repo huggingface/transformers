@@ -16,5 +16,6 @@ python distillation.py \
   --alpha_hid=3. --length_penalty=0.5 \
   --train_batch_size=$BS --eval_batch_size=$BS --gradient_accumulation_steps=$GAS --num_train_epochs=6 \
   --tokenizer_name facebook/bart-large \
+  --warmup_steps 500 \
   --output_dir distilbart_xsum_12_6 \
   $@

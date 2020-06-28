@@ -253,9 +253,9 @@ class MBartIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             logits, *other_stuff = model(**net_input)
 
-        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=torch_device, dtype=model.dtype)
-        result_slice = logits[0][0][:3]
-        self.assertTrue(torch.allclose(expected_slice, result_slice, atol=TOLERANCE))
+        expected_slice = [9.0078, 10.1113, 14.4787]
+        result_slice = logits[0][0][:3].tolist()
+        self.assertListEqual(expected_slice, result_slice)
 
     @slow
     def test_enro_generate(self):
@@ -626,9 +626,9 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
-        dct = tok.batch_encode_plus([PGE_ARTICLE], max_length=1024, pad_to_max_length=True, return_tensors="pt",).to(
-            torch_device
-        )
+        dct = tok.batch_encode_plus(
+            [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
+        ).to(torch_device)
 
         hypotheses_batch = model.generate(
             input_ids=dct["input_ids"],
@@ -672,7 +672,8 @@ class BartModelIntegrationTests(unittest.TestCase):
         dct = tok.batch_encode_plus(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
 
