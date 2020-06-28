@@ -134,12 +134,7 @@ class PretrainedConfig(object):
         """
         if os.path.isfile(save_directory):
             raise AssertionError("Provided path ({}) should be a directory, not a file".format(save_directory))
-        if not os.path.exists(save_directory):
-            os.path.makedirs(save_directory)
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
-
+        os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 

@@ -408,9 +408,7 @@ class Pipeline(_ScikitCompat):
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
-        elif not os.path.exists(save_directory):
-            os.path.makedirs(save_directory)
-        assert os.path.isdir(save_directory), f"Failed to find or create {save_directory}"
+        os.makedirs(save_directory, exist_ok=True)
 
         self.model.save_pretrained(save_directory)
         self.tokenizer.save_pretrained(save_directory)

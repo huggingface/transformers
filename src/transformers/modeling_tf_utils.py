@@ -318,11 +318,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
-        elif not os.path.exists(save_directory):
-            os.path.makedirs(save_directory)
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
+        os.makedirs(save_directory, exist_ok=True)
 
         # Save configuration file
         self.config.save_pretrained(save_directory)
