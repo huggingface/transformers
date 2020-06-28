@@ -315,9 +315,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         """ Save a model and its configuration file to a directory, so that it
             can be re-loaded using the :func:`~transformers.PreTrainedModel.from_pretrained` class method.
         """
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
 
         # Save configuration file
         self.config.save_pretrained(save_directory)
@@ -504,13 +505,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         unexpected_keys = list(hdf5_layer_names - model_layer_names)
         error_msgs = []
 
-        if len(missing_keys) > 0:
-            logger.info(
-                "Layers of {} not initialized from pretrained model: {}".format(model.__class__.__name__, missing_keys)
-            )
         if len(unexpected_keys) > 0:
-            logger.info(
-                "Layers from pretrained model not used in {}: {}".format(model.__class__.__name__, unexpected_keys)
+            logger.warning(
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+            )
+        else:
+            logger.warning(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+        if len(missing_keys) > 0:
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized: {missing_keys}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+        else:
+            logger.warning(
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"If your task is similar to the task the model of the ckeckpoint was trained on, "
+                f"you can already use {model.__class__.__name__} for predictions without further training."
             )
         if len(error_msgs) > 0:
             raise RuntimeError(
@@ -627,8 +643,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
-                If an encoder-decoder model starts decoding with a different token than BOS.
-                Defaults to `None` and is changed to `BOS` later.
+                Start token id for the decoder. Defaults to ``decoder_start_token_id`` as defined the model's config or to the ``bos_token_id``
+                if no ``decoder_start_token_id`` is found in the config.
+                This is only relevant for encoder-decoder models.
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.

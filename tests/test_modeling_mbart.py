@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from transformers import BartConfig, BartForConditionalGeneration, BatchEncoding, MBartTokenizer
+from transformers import BartConfig, BartForConditionalGeneration, BatchEncoding, MBartTokenizer, AutoModelForSeq2SeqLM
 from transformers.file_utils import cached_property
 
 from .test_modeling_bart import TOLERANCE, _long_tensor
@@ -26,11 +26,10 @@ class MBartIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
         """Only load the model if needed."""
-        model = BartForConditionalGeneration.from_pretrained(self.checkpoint_name).to(torch_device)
+        model = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
         if "cuda" in torch_device:
             model = model.half()
         return model
-
 
 @require_torch
 class MBartEnroIntegrationTest(MBartIntegrationTests):

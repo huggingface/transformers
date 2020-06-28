@@ -78,6 +78,9 @@ from .file_utils import (
     add_end_docstrings,
     add_start_docstrings,
     cached_path,
+    is_apex_available,
+    is_psutil_available,
+    is_py3nvml_available,
     is_tf_available,
     is_torch_available,
     is_torch_tpu_available,
@@ -398,7 +401,8 @@ if is_torch_available():
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
     # Benchmarks
-    from .benchmark import PyTorchBenchmark, PyTorchBenchmarkArguments
+    from .benchmark.benchmark import PyTorchBenchmark
+    from .benchmark.benchmark_args import PyTorchBenchmarkArguments
 
 # TensorFlow
 if is_tf_available():
@@ -607,6 +611,10 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
+
+    # Benchmarks
+    from .benchmark.benchmark_tf import TensorflowBenchmark
+    from .benchmark.benchmark_args_tf import TensorflowBenchmarkArguments
 
 
 if not is_tf_available() and not is_torch_available():

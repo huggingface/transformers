@@ -80,6 +80,7 @@ class ElectraConfig(PretrainedConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.ElectraForMultipleChoice`.
                 Is one of the following options:
+
                     - 'last' => take the last token hidden state (like XLNet)
                     - 'first' => take the first token hidden state (like Bert)
                     - 'mean' => take the mean of all tokens hidden states
@@ -100,16 +101,16 @@ class ElectraConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import ElectraModel, ElectraConfig
+            >>> from transformers import ElectraModel, ElectraConfig
 
-            # Initializing a ELECTRA electra-base-uncased style configuration
-            configuration = ElectraConfig()
+            >>> # Initializing a ELECTRA electra-base-uncased style configuration
+            >>> configuration = ElectraConfig()
 
-            # Initializing a model from the electra-base-uncased style configuration
-            model = ElectraModel(configuration)
+            >>> # Initializing a model from the electra-base-uncased style configuration
+            >>> model = ElectraModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
     model_type = "electra"
 

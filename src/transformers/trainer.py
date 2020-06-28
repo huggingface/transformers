@@ -7,7 +7,7 @@ import shutil
 import warnings
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -20,22 +20,15 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
+from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available
-from .training_args import TrainingArguments, is_torch_tpu_available
+from .training_args import TrainingArguments
 
 
-try:
+if is_apex_available():
     from apex import amp
-
-    _has_apex = True
-except ImportError:
-    _has_apex = False
-
-
-def is_apex_available():
-    return _has_apex
 
 
 if is_torch_tpu_available():
@@ -577,11 +570,12 @@ class Trainer:
             logger.info(output)
 
     def _training_step(
-        self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], optimizer: torch.optim.Optimizer
     ) -> float:
         model.train()
         for k, v in inputs.items():
-            inputs[k] = v.to(self.args.device)
+            if isinstance(v, torch.Tensor):
+                inputs[k] = v.to(self.args.device)
 
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
@@ -765,7 +759,8 @@ class Trainer:
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
             for k, v in inputs.items():
-                inputs[k] = v.to(self.args.device)
+                if isinstance(v, torch.Tensor):
+                    inputs[k] = v.to(self.args.device)
 
             with torch.no_grad():
                 outputs = model(**inputs)

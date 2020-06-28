@@ -49,16 +49,16 @@ class LongformerConfig(RobertaConfig):
 
         Example::
 
-            from transformers import LongformerConfig, LongformerModel
+            >>> from transformers import LongformerConfig, LongformerModel
 
-            # Initializing a Longformer configuration
-            configuration = LongformerConfig()
+            >>> # Initializing a Longformer configuration
+            >>> configuration = LongformerConfig()
 
-            # Initializing a model from the configuration
-            model = LongformerModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = LongformerModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
     model_type = "longformer"
 

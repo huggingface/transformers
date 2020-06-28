@@ -90,19 +90,21 @@ class BertConfig(PretrainedConfig):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
                 The epsilon used by the layer normalization layers.
+            gradient_checkpointing (:obj:`bool`, optional, defaults to False):
+                If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
         Example::
 
-            from transformers import BertModel, BertConfig
+            >>> from transformers import BertModel, BertConfig
 
-            # Initializing a BERT bert-base-uncased style configuration
-            configuration = BertConfig()
+            >>> # Initializing a BERT bert-base-uncased style configuration
+            >>> configuration = BertConfig()
 
-            # Initializing a model from the bert-base-uncased style configuration
-            model = BertModel(configuration)
+            >>> # Initializing a model from the bert-base-uncased style configuration
+            >>> model = BertModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
     model_type = "bert"
 
@@ -121,6 +123,7 @@ class BertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        gradient_checkpointing=False,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -137,3 +140,4 @@ class BertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.gradient_checkpointing = gradient_checkpointing

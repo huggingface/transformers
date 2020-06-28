@@ -50,7 +50,7 @@ MobileBertTokenizer
 
 
 MobileBertTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.MobileBertTokenizerFast
     :members:

@@ -477,9 +477,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             Arguments:
                 save_directory: directory to which to save.
         """
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
 
         # Only save the model itself if we are using distributed training
         model_to_save = self.module if hasattr(self, "module") else self
@@ -750,17 +751,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
                 missing_keys.extend(head_model_state_dict_without_base_prefix - base_model_state_dict)
 
-            if len(missing_keys) > 0:
-                logger.info(
-                    "Weights of {} not initialized from pretrained model: {}".format(
-                        model.__class__.__name__, missing_keys
-                    )
-                )
             if len(unexpected_keys) > 0:
+                logger.warning(
+                    f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                )
+            else:
+                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+            if len(missing_keys) > 0:
+                logger.warning(
+                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                    f"and are newly initialized: {missing_keys}\n"
+                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                )
+            else:
                 logger.info(
-                    "Weights from pretrained model not used in {}: {}".format(
-                        model.__class__.__name__, unexpected_keys
-                    )
+                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                    f"If your task is similar to the task the model of the ckeckpoint was trained on, "
+                    f"you can already use {model.__class__.__name__} for predictions without further training."
                 )
             if len(error_msgs) > 0:
                 raise RuntimeError(
@@ -951,8 +963,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
-                If an encoder-decoder model starts decoding with a different token than BOS.
-                Defaults to `None` and is changed to `BOS` later.
+                Start token id for the decoder. Defaults to ``decoder_start_token_id`` as defined the model's config or to the ``bos_token_id``
+                if no ``decoder_start_token_id`` is found in the config.
+                This is only relevant for encoder-decoder models.
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
@@ -967,13 +980,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         Examples::
 
+            from transformers import AutoTokenizer, AutoModelForCausalLM
+
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             outputs = model.generate(max_length=40)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
             outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
@@ -981,22 +996,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True)  # 3 generate sequences using by sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
             input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
+            model = AutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
             input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
             bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
             input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
@@ -2077,20 +2092,6 @@ class SequenceSummary(nn.Module):
         output = self.last_dropout(output)
 
         return output
-
-
-def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """ Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
-
-    :param torch.Tensor x:
-    :return torch.Tensor:
-    """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
-    return incremental_indices.long() + padding_idx
 
 
 def prune_linear_layer(layer, index, dim=0):

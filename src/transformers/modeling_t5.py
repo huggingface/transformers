@@ -33,6 +33,8 @@ from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, p
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
+
 ####################################################
 # This dict contrains shortcut names and associated url
 # for the pretrained weights provided with the models
@@ -629,7 +631,6 @@ class T5PreTrainedModel(PreTrainedModel):
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
-        self.output_hidden_states = config.output_hidden_states
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
@@ -660,11 +661,16 @@ class T5Stack(T5PreTrainedModel):
         inputs_embeds=None,
         head_mask=None,
         past_key_value_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -726,7 +732,7 @@ class T5Stack(T5PreTrainedModel):
         hidden_states = self.dropout(inputs_embeds)
 
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
@@ -761,14 +767,14 @@ class T5Stack(T5PreTrainedModel):
         hidden_states = self.dropout(hidden_states)
 
         # Add last layer
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
             outputs = outputs + (present_key_value_states,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if output_attentions:
             outputs = outputs + (all_attentions,)
@@ -851,6 +857,7 @@ class T5Model(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
@@ -890,11 +897,12 @@ class T5Model(T5PreTrainedModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_past_key_value_states=None,
-        use_cache=True,
+        use_cache=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
     Returns:
@@ -906,29 +914,31 @@ class T5Model(T5PreTrainedModel):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `hidden-state` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-    Examples::
+        Example::
 
-        from transformers import T5Tokenizer, T5Model
+            >>> from transformers import T5Tokenizer, T5Model
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5Model.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5Model.from_pretrained('t5-small')
 
+            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+
+            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -938,6 +948,7 @@ class T5Model(T5PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
         hidden_states = encoder_outputs[0]
@@ -961,6 +972,7 @@ class T5Model(T5PreTrainedModel):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         if use_cache is True:
@@ -979,6 +991,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
@@ -1015,12 +1028,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_past_key_value_states=None,
-        use_cache=True,
+        use_cache=None,
         labels=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
         output_attentions=None,
+        output_hidden_states=None,
         **kwargs
     ):
         r"""
@@ -1043,29 +1057,32 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `prediction_score` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
-        from transformers import T5Tokenizer, T5ForConditionalGeneration
+        >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
-        loss, prediction_scores = outputs[:2]
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+        >>> loss, prediction_scores = outputs[:2]
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model.generate(input_ids)
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        >>> outputs = model.generate(input_ids)
         """
 
         if "lm_labels" in kwargs:
@@ -1076,6 +1093,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             labels = kwargs.pop("lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
@@ -1085,6 +1104,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1113,6 +1133,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         # insert decoder past at right place

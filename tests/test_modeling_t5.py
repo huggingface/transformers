@@ -193,7 +193,14 @@ class T5ModelTester:
         model.eval()
 
         # first forward pass
-        output, past_key_value_states = model(input_ids, use_cache=True)
+        outputs = model(input_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past_key_value_states = outputs
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -368,10 +375,11 @@ class T5ModelIntegrationTests(unittest.TestCase):
         summarization_config = task_specific_config.get("summarization", {})
         model.config.update(summarization_config)
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [model.config.prefix + x for x in [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY]],
             max_length=512,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
         self.assertEqual(512, dct["input_ids"].shape[1])

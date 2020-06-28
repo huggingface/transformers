@@ -18,11 +18,10 @@
 import logging
 from typing import List, Optional
 
-from tokenizers import AddedToken
 from tokenizers.processors import RobertaProcessing
 
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import AddedToken
 
 
 logger = logging.getLogger(__name__)
@@ -135,8 +134,19 @@ class RobertaTokenizer(GPT2Tokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
+        add_prefix_space=False,
         **kwargs
     ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file=vocab_file,
             merges_file=merges_file,
@@ -148,6 +158,7 @@ class RobertaTokenizer(GPT2Tokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -182,7 +193,7 @@ class RobertaTokenizer(GPT2Tokenizer):
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        special tokens using the tokenizer ``prepare_for_model`` method.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -231,14 +242,11 @@ class RobertaTokenizer(GPT2Tokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def prepare_for_tokenization(self, text, add_special_tokens=False, **kwargs):
-        if "add_prefix_space" in kwargs:
-            add_prefix_space = kwargs["add_prefix_space"]
-        else:
-            add_prefix_space = add_special_tokens
-        if add_prefix_space and not text[0].isspace():
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if (is_pretokenized or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
-        return text
+        return (text, kwargs)
 
 
 class RobertaTokenizerFast(GPT2TokenizerFast):
@@ -300,10 +308,13 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=True,
+        add_prefix_space=False,
         trim_offsets=True,
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         kwargs.setdefault("pad_token", pad_token)
         kwargs.setdefault("sep_token", sep_token)
         kwargs.setdefault("cls_token", cls_token)
@@ -320,22 +331,15 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             **kwargs,
         )
 
+        # This will add the necessary special tokens to the vocabulary if needed
+        self.sanitize_special_tokens()
+
         self.backend_tokenizer._tokenizer.post_processor = RobertaProcessing(
             sep=(sep_token, self.sep_token_id),
             cls=(cls_token, self.cls_token_id),
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
         )
-
-        self.backend_tokenizer.add_special_tokens([kwargs["mask_token"]])
-
-    @PreTrainedTokenizer.mask_token.setter
-    def mask_token(self, value):
-        if not isinstance(value, AddedToken):
-            value = AddedToken(value, lstrip=True)
-
-        self._mask_token = str(value)
-        self._maybe_update_backend([value])
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

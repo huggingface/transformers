@@ -150,6 +150,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_advanced_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
             config, inputs_dict["input_ids"]
@@ -198,6 +199,11 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
         with torch.no_grad():
             tiny(**inputs_dict)
+
+
+
+
+
 
 
 @require_torch
@@ -501,9 +507,9 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
-        dct = tok.batch_encode_plus([PGE_ARTICLE], max_length=1024, pad_to_max_length=True, return_tensors="pt",).to(
-            torch_device
-        )
+        dct = tok.batch_encode_plus(
+            [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
+        ).to(torch_device)
 
         hypotheses_batch = model.generate(
             input_ids=dct["input_ids"],
@@ -547,7 +553,8 @@ class BartModelIntegrationTests(unittest.TestCase):
         dct = tok.batch_encode_plus(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
 

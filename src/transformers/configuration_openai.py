@@ -98,16 +98,16 @@ class OpenAIGPTConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import OpenAIGPTConfig, OpenAIGPTModel
+            >>> from transformers import OpenAIGPTConfig, OpenAIGPTModel
 
-            # Initializing a GPT configuration
-            configuration = OpenAIGPTConfig()
+            >>> # Initializing a GPT configuration
+            >>> configuration = OpenAIGPTConfig()
 
-            # Initializing a model from the configuration
-            model = OpenAIGPTModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = OpenAIGPTModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
     model_type = "openai-gpt"

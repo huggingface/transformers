@@ -31,18 +31,18 @@ class MarianMTModel(BartForConditionalGeneration):
 
     Examples::
 
-        from transformers import MarianTokenizer, MarianMTModel
-        from typing import List
-        src = 'fr'  # source language
-        trg = 'en'  # target language
-        sample_text = "où est l'arrêt de bus ?"
-        mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+        >>> from transformers import MarianTokenizer, MarianMTModel
+        >>> from typing import List
+        >>> src = 'fr'  # source language
+        >>> trg = 'en'  # target language
+        >>> sample_text = "où est l'arrêt de bus ?"
+        >>> mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
-        model = MarianMTModel.from_pretrained(mname)
-        tok = MarianTokenizer.from_pretrained(mname)
-        batch = tok.prepare_translation_batch(src_texts=[sample_text])  # don't need tgt_text for inference
-        gen = model.generate(**batch)  # for forward pass: model(**batch)
-        words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
+        >>> model = MarianMTModel.from_pretrained(mname)
+        >>> tok = MarianTokenizer.from_pretrained(mname)
+        >>> batch = tok.prepare_translation_batch(src_texts=[sample_text])  # don't need tgt_text for inference
+        >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
+        >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
 
     """
 

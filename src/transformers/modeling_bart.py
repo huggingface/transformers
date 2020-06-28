@@ -27,14 +27,22 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import ACT2FN
 from .configuration_bart import BartConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
+from .file_utils import (
+    add_code_sample_docstrings,
+    add_end_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "BartTokenizer"
+
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/bart-base",
     "facebook/bart-large",
     "facebook/bart-large-mnli",
     "facebook/bart-large-cnn",
@@ -56,14 +64,17 @@ BART_START_DOCSTRING = r"""
 
 """
 BART_GENERATION_EXAMPLE = r"""
-    Examples::
+    Summarization example::
 
         from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
+
         # see ``examples/summarization/bart/run_eval.py`` for a longer example
-        model = BartForConditionalGeneration.from_pretrained('bart-large-cnn')
-        tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
+        model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
+
         ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+
         # Generate Summary
         summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
         print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
@@ -96,6 +107,7 @@ BART_INPUTS_DOCSTRING = r"""
 
 
 def invert_mask(attention_mask):
+    """Turns 1->0, 0->1, False->True, True-> False"""
     assert attention_mask.dim() == 2
     return attention_mask.eq(0)
 
@@ -248,7 +260,6 @@ class BartEncoder(nn.Module):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.output_hidden_states = config.output_hidden_states
 
         embed_dim = embed_tokens.embedding_dim
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
@@ -262,14 +273,14 @@ class BartEncoder(nn.Module):
             )
         else:
             self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings, embed_dim, self.padding_idx,
+                config.max_position_embeddings, embed_dim, self.padding_idx, config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
-    def forward(self, input_ids, attention_mask=None, output_attentions=False):
+    def forward(self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -281,7 +292,7 @@ class BartEncoder(nn.Module):
                   shape `(src_len, batch, embed_dim)`
                 - **encoder_states** (List[Tensor]): all intermediate
                   hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *self.output_hidden_states:* is True.
+                  Only populated if *output_hidden_states:* is True.
                 - **all_attentions** (List[Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
@@ -300,7 +311,7 @@ class BartEncoder(nn.Module):
 
         encoder_states, all_attentions = [], []
         for encoder_layer in self.layers:
-            if self.output_hidden_states:
+            if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
@@ -314,7 +325,7 @@ class BartEncoder(nn.Module):
 
         if self.layer_norm:
             x = self.layer_norm(x)
-        if self.output_hidden_states:
+        if output_hidden_states:
             encoder_states.append(x)
 
         # T x B x C -> B x T x C
@@ -424,7 +435,6 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
-        self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
@@ -437,7 +447,7 @@ class BartDecoder(nn.Module):
             )
         else:
             self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings, config.d_model, self.padding_idx,
+                config.max_position_embeddings, config.d_model, self.padding_idx, config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
@@ -455,6 +465,7 @@ class BartDecoder(nn.Module):
         decoder_cached_states=None,
         use_cache=False,
         output_attentions=False,
+        output_hidden_states=False,
         **unused,
     ):
         """
@@ -502,7 +513,7 @@ class BartDecoder(nn.Module):
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states += (x,)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
@@ -746,23 +757,23 @@ class LearnedPositionalEmbedding(nn.Embedding):
     position ids are passed to the forward function.
     """
 
-    def __init__(
-        self, num_embeddings: int, embedding_dim: int, padding_idx: int,
-    ):
-        # if padding_idx is specified then offset the embedding ids by
-        # this index and adjust num_embeddings appropriately
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models dont have this hack
+        self.offset = offset
         assert padding_idx is not None
-        num_embeddings += padding_idx + 1  # WHY?
+        num_embeddings += offset
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
-    def forward(self, input, use_cache=False):
+    def forward(self, input_ids, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
-        if use_cache:  # the position is our current step in the decoded sequence
-            pos = int(self.padding_idx + input.size(1))
-            positions = input.data.new(1, 1).fill_(pos)
+        bsz, seq_len = input_ids.shape[:2]
+        if use_cache:
+            positions = input_ids.data.new(1, 1).fill_(seq_len - 1)  # called before slicing
         else:
-            positions = create_position_ids_from_input_ids(input, self.padding_idx)
-        return super().forward(positions)
+            # starts at 0, ends at 1-seq_len
+            positions = torch.arange(seq_len, dtype=torch.long, device=self.weight.device)
+        return super().forward(positions + self.offset)
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -797,7 +808,6 @@ def _get_shape(t):
 class BartModel(PretrainedBartModel):
     def __init__(self, config: BartConfig):
         super().__init__(config)
-        self.output_hidden_states = config.output_hidden_states
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
@@ -808,6 +818,7 @@ class BartModel(PretrainedBartModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="facebook/bart-large")
     def forward(
         self,
         input_ids,
@@ -816,10 +827,19 @@ class BartModel(PretrainedBartModel):
         encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
+
+        if decoder_input_ids is None:
+            use_cache = False
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -837,7 +857,10 @@ class BartModel(PretrainedBartModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
         assert isinstance(encoder_outputs, tuple)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -849,6 +872,7 @@ class BartModel(PretrainedBartModel):
             decoder_causal_mask=causal_mask,
             decoder_cached_states=decoder_cached_states,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             use_cache=use_cache,
         )
 
@@ -871,8 +895,7 @@ class BartModel(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.",
-    BART_START_DOCSTRING + BART_GENERATION_EXAMPLE,
+    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
@@ -899,6 +922,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         self.register_buffer("final_logits_bias", new_bias)
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_end_docstrings(BART_GENERATION_EXAMPLE)
     def forward(
         self,
         input_ids,
@@ -908,8 +932,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_attention_mask=None,
         decoder_cached_states=None,
         labels=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
+        output_hidden_states=None,
         **unused,
     ):
         r"""
@@ -926,30 +951,33 @@ class BartForConditionalGeneration(PretrainedBartModel):
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-    Examples::
+    Conditional generation example::
 
             # Mask filling only works for bart-large
             from transformers import BartTokenizer, BartForConditionalGeneration
-            tokenizer = BartTokenizer.from_pretrained('bart-large')
+            tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
             TXT = "My friends are <mask> but they eat too many carbs."
-            model = BartForConditionalGeneration.from_pretrained('bart-large')
-            input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
+
+            model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
+            input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
             logits = model(input_ids)[0]
+
             masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
             probs = logits[0, masked_index].softmax(dim=0)
             values, predictions = probs.topk(5)
+
             tokenizer.decode(predictions).split()
             # ['good', 'great', 'all', 'really', 'very']
         """
@@ -960,6 +988,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
             )
             labels = unused.pop("lm_labels")
 
+        if labels is not None:
+            use_cache = False
+
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -969,6 +1000,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_cached_states=decoder_cached_states,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
         outputs = (lm_logits,) + outputs[1:]  # Add cache, hidden states and attention if they are here
@@ -1051,6 +1083,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         self.model._init_weights(self.classification_head.out_proj)
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="facebook/bart-large")
     def forward(
         self,
         input_ids,
@@ -1060,6 +1093,8 @@ class BartForSequenceClassification(PretrainedBartModel):
         decoder_attention_mask=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
+        use_cache=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1082,21 +1117,10 @@ class BartForSequenceClassification(PretrainedBartModel):
                 Attentions weights after the attention softmax, used to compute the weighted average in the
                 self-attention
                 heads.
-
-    Examples::
-
-        from transformers import BartTokenizer, BartForSequenceClassification
-        import torch
-
-        tokenizer = BartTokenizer.from_pretrained('bart-large')
-        model = BartForSequenceClassification.from_pretrained('bart-large')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute",
-        add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
+        if labels is not None:
+            use_cache = False
+
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -1104,6 +1128,8 @@ class BartForSequenceClassification(PretrainedBartModel):
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_id)
@@ -1138,6 +1164,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
         self.model._init_weights(self.qa_outputs)
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="facebook/bart-large")
     def forward(
         self,
         input_ids,
@@ -1148,6 +1175,8 @@ class BartForQuestionAnswering(PretrainedBartModel):
         start_positions=None,
         end_positions=None,
         output_attentions=None,
+        output_hidden_states=None,
+        use_cache=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1167,37 +1196,17 @@ class BartForQuestionAnswering(PretrainedBartModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        # The checkpoint bart-large is not fine-tuned for question answering. Please see the
-        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
-
-        from transformers import BartTokenizer, BartForQuestionAnswering
-        import torch
-
-        tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-        model = BartForQuestionAnswering.from_pretrained('facebook/bart-large')
-
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_ids = tokenizer.encode(question, text)
-        start_scores, end_scores = model(torch.tensor([input_ids]))
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-        answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
-
         """
+        if start_positions is not None and end_positions is not None:
+            use_cache = False
 
         outputs = self.model(
             input_ids,
@@ -1206,6 +1215,8 @@ class BartForQuestionAnswering(PretrainedBartModel):
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
         )
 
         sequence_output = outputs[0]
@@ -1233,7 +1244,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             total_loss = (start_loss + end_loss) / 2
             outputs = (total_loss,) + outputs
 
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        return outputs  # return outputs  # (loss), start_logits, end_logits, encoder_outputs, (hidden_states), (attentions)
 
 
 class SinusoidalPositionalEmbedding(nn.Embedding):

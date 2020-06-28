@@ -1,8 +1,8 @@
 # Migrating from previous packages
 
-## Migrating from pytorch-transformers to transformers
+## Migrating from pytorch-transformers to 🤗 Transformers
 
-Here is a quick summary of what you should take care of when migrating from `pytorch-transformers` to `transformers`.
+Here is a quick summary of what you should take care of when migrating from `pytorch-transformers` to 🤗 Transformers.
 
 ### Positional order of some models' keywords inputs (`attention_mask`, `token_type_ids`...) changed
 
@@ -14,17 +14,17 @@ If you used to call the models with positional inputs for keyword arguments, e.g
 
 ## Migrating from pytorch-pretrained-bert
 
-Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `transformers`
+Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to 🤗 Transformers
 
 ### Models always output `tuples`
 
-The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
+The main breaking change when migrating from `pytorch-pretrained-bert` to 🤗 Transformers is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
 The exact content of the tuples for each model are detailled in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
 
 In pretty much every case, you will be fine by taking the first element of the output as the output you previously used in `pytorch-pretrained-bert`.
 
-Here is a `pytorch-pretrained-bert` to `transformers` conversion example for a `BertForSequenceClassification` classification model:
+Here is a `pytorch-pretrained-bert` to 🤗 Transformers conversion example for a `BertForSequenceClassification` classification model:
 
 ```python
 # Let's load our model
@@ -33,11 +33,11 @@ model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
 # If you used to have this line in pytorch-pretrained-bert:
 loss = model(input_ids, labels=labels)
 
-# Now just use this line in transformers to extract the loss from the output tuple:
+# Now just use this line in 🤗 Transformers to extract the loss from the output tuple:
 outputs = model(input_ids, labels=labels)
 loss = outputs[0]
 
-# In transformers you can also have access to the logits:
+# In 🤗 Transformers you can also have access to the logits:
 loss, logits = outputs[:2]
 
 # And even the attention weights if you configure the model to output them (and other outputs too, see the docstrings and documentation)
@@ -109,7 +109,7 @@ for batch in train_data:
     loss.backward()
     optimizer.step()
 
-### In Transformers, optimizer and schedules are splitted and instantiated like this:
+### In 🤗 Transformers, optimizer and schedules are splitted and instantiated like this:
 optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
 scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)  # PyTorch scheduler
 ### and used like this:
