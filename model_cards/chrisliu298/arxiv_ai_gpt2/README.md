@@ -12,13 +12,13 @@ datasets:
 
 ## Model description
 
-This GPT-2 (774M) model is capable of generating abstracts given paper titles. It was trained using all research papers under aritficial intelligence (AI), machine learning (LG), computation and language (CL), and computer vision and pattern recognition (CV) on arXiv.
+This GPT-2 (774M) model is capable of generating abstracts given paper titles. It was trained using all research paper titles and abstracts under artificial intelligence (AI), machine learning (LG), computation and language (CL), and computer vision and pattern recognition (CV) on arXiv.
 
 ## Intended uses & limitations
 
 #### How to use
 
-To generate paper abstracts, use the provided `generate.py`. This file is very similar to HuggingFace's `run_generation.py` [here](https://github.com/huggingface/transformers/tree/master/examples/text-generation). You can simply replace the text with with your own model path (line 89) and change the input string to your paper title (line 127).
+To generate paper abstracts, use the provided `generate.py` [here](https://gist.github.com/chrisliu298/ccb8144888eace069da64ad3e6472d64). This is very similar to the HuggingFace's `run_generation.py` [here](https://github.com/huggingface/transformers/tree/master/examples/text-generation). You can simply replace the text with with your own model path (line 89) and change the input string to your paper title (line 127).
 
 ## Training data
 I selected a subset of the [arXiv Archive](https://github.com/staeiou/arxiv_archive) dataset (Geiger, 2019) as the training and evaluation data to fine-tune GPT-2. The original arXiv Archive dataset contains a full archive of metadata about papers on arxiv.org, from the start of the site in 1993 to the end of 2019. Our subset includes all the paper titles (query) and abstracts (context) under the Artificial Intelligence (cs.AI), Machine Learning (cs.LG), Computation and Language (cs.CL), and Computer Vision and Pattern Recognition (cs.CV) categories. I provide the information  of the sub-dataset and the distribution of the training and evaluation dataset as follows.
