@@ -12,25 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BART model, ported from the fairseq repo."""
+"""TF BART model, ported from the fairseq repo."""
 import logging
+import math
 import random
 from typing import Dict, List, Optional, Tuple
 
-
-
-from .configuration_bart import BartConfig
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-#from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
-
-
-import logging
-
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Dense, LayerNormalization, Dropout
 from tensorflow import Tensor
+from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
+
+from .configuration_bart import BartConfig
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
+
+
+# from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -45,8 +43,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     mask = input_ids.ne(padding_idx).int()
     incremental_indicies = tf.cumsum(mask, dim=1).type_as(mask) * mask
     return incremental_indicies.long() + padding_idx
-
-
 
 
 logger = logging.getLogger(__name__)
@@ -85,6 +81,7 @@ BART_INPUTS_DOCSTRING = r"""
             See diagram 1 in the paper for more info on the default strategy
 """
 LARGE_NEGATIVE = -1e8
+T = tf.Tensor
 
 
 def causal_attention_mask(nd, ns, dtype):
@@ -96,30 +93,30 @@ def causal_attention_mask(nd, ns, dtype):
     m = i < j - ns + nd
     return tf.cast(m, dtype) * LARGE_NEGATIVE
 
+
+def invert_mask(attention_mask: T):
+    """Turns 1->0, 0->1, False->True, True-> False"""
+    assert attention_mask.dim() == 2
+    return attention_mask.eq(0)
+
+
 def _prepare_bart_decoder_inputs(
-    config, input_ids, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
+    config, input_ids: T, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
 ):
     """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
     """
     pad_token_id = config.pad_token_id
-    need_causal_mask = not config.output_past
     if decoder_input_ids is None:
         decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
     bsz, tgt_len = decoder_input_ids.shape[:2]
     if decoder_attn_mask is None:
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
-        if need_causal_mask:
-            causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
-        else:
-            causal_lm_mask = None
-        new_shape = (bsz, tgt_len, tgt_len)
-        # make it broadcastable so can just be added to the attention coefficients
-        decoder_attn_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape).to(device=input_ids.device)
-        if mask_dtype is not None:
-            decoder_attn_mask = decoder_attn_mask.to(mask_dtype)
-    assert decoder_attn_mask is None or decoder_attn_mask.shape == (bsz, 1, tgt_len, tgt_len)
-    return decoder_input_ids, decoder_attn_mask
+    else:
+        decoder_padding_mask = invert_mask(T)
+
+    causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
+    return decoder_input_ids, decoder_padding_mask, causal_lm_mask
 
 
 class TFPretrainedBartModel(TFPreTrainedModel):
@@ -127,36 +124,26 @@ class TFPretrainedBartModel(TFPreTrainedModel):
     base_model_prefix = "model"
     pretrained_model_archive_map = TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP
 
-    def _init_weights(self, module):
-        std = self.config.init_std
-
-        # called init_bert_params in fairseq
-        if isinstance(module, Dense):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        if isinstance(module, TFSharedEmbeddings):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
     @property
     def dummy_inputs(self):
         pad_token = 1
-        input_ids = tf.cast(tf.Tensor(
-            [
-                [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
-                [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 2, pad_token],
-            ]
-        ), tf.int8)
-        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(
-            self.config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None
+        input_ids = tf.cast(
+            tf.Tensor(
+                [
+                    [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
+                    [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 2, pad_token],
+                ]
+            ),
+            tf.int8,
+        )
+        decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(
+            self.config, input_ids, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=tf.float32
         )
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": input_ids.ne(pad_token),
             "input_ids": input_ids,
-            "decoder_attention_mask": decoder_attn_mask,
+            "decoder_attention_mask": decoder_padding_mask,
         }
         return dummy_inputs
 
@@ -167,44 +154,30 @@ def _check_shapes(shape_1, shape2):
         raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
 
 
-def _combine_masks(key_padding_mask, causal_lm_mask, targ_size):
-    # targ_size = (bsz, tgt_len, src_len)
-    a = tf.zeros(targ_size)
-    b = tf.zeros(targ_size)
-    if key_padding_mask is not None:  # (bsz, tgt_len) -> targ_size
-        _check_shapes(key_padding_mask.shape, targ_size[:2])
-        reshaped = key_padding_mask.unsqueeze(2).expand(*targ_size)
-        a[reshaped] = LARGE_NEGATIVE
-
-    if causal_lm_mask is not None:  # (tgt_len, src_len) -> targ_size
-        _check_shapes(causal_lm_mask.shape, targ_size[-2:])
-        b = causal_lm_mask.unsqueeze(0).expand(*targ_size)
-    return tf.expand_dims(a + b, 1)
-
-
 def shift_tokens_right(input_ids, pad_token_id):
     """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
     prev_output_tokens = tf.identity(input_ids)
     index_of_eos = tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), tf.int8), axis=1) - 1
     index_of_eos = tf.expand_dims(index_of_eos, -1)
-    gathered  = tf.gather(input_ids, index_of_eos, axis=1)
+    gathered = tf.gather(input_ids, index_of_eos, axis=1)
     return tf.concat([gathered, input_ids[:, :-1]], axis=1)
     #    prev_output_tokens[:, 1:] = input_ids[:, :-1]
     #    return prev_output_tokens
-    #index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    # index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
 
 
 def make_padding_mask(input_ids, padding_idx=1):
     """True for pad tokens"""
-    padding_mask = tf.math.equal(input_ids, padding_idx) # bool tensor
+    padding_mask = tf.math.equal(input_ids, padding_idx)  # bool tensor
     if not tf.math.reduce_any(padding_mask):
         padding_mask = None
     return padding_mask
 
 
 # Helper Modules
-def TFDropout(x, **kwargs): # FIXME
+def TFDropout(x, **kwargs):  # FIXME
     return x
+
 
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig):
@@ -214,16 +187,17 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.self_attn = SelfAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
         )
+        assert not config.normalize_before, "MBART Not Supported"
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
+        self.dropout_wt = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = gelu
-        self.activation_dropout = config.activation_dropout
+        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
         self.fc1 = Dense(config.encoder_ffn_dim)
         self.fc2 = Dense(self.embed_dim)
         self.final_layer_norm = LayerNormalization(epsilon=1e-5)
         # TODO(SS): could use sequential
 
-    def call(self, x, encoder_padding_mask):
+    def call(self, x, encoder_padding_mask, output_attentions=False):
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -236,20 +210,19 @@ class EncoderLayer(tf.keras.layers.Layer):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
-        x, attn_weights = self.self_attn(
-            query=x, key=x, value=x, key_padding_mask=encoder_padding_mask,
-        )
-        x = TFDropout(x, p=self.dropout, training=self.training)
+        x, attn_weights = self.self_attn(query=x, key=x, value=x, key_padding_mask=encoder_padding_mask,)
+        x = self.dropout_wt(x, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
 
         residual = x
         x = self.activation_fn(self.fc1(x))
-        x = TFDropout(x, p=self.activation_dropout, training=self.training)
+        x = self.activation_dropout(x, training=self.training)
         x = self.fc2(x)
-        x = TFDropout(x, p=self.dropout, training=self.training)
+        x = self.dropout_wt(x, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
+
         return x, attn_weights
 
 
@@ -262,27 +235,25 @@ class BartEncoder(tf.keras.layers.Layer):
         config: BartConfig
     """
 
-    def __init__(self, config: BartConfig, embed_tokens):
+    def __init__(self, config: BartConfig, embed_tokens: TFSharedEmbeddings):
         super().__init__()
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
-        embed_dim = embed_tokens.embedding_dim
-        self.padding_idx = embed_tokens.padding_idx
+        embed_dim = embed_tokens.vocab_size
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
 
         self.embed_tokens = embed_tokens
-
-        self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, self.padding_idx,)
-        self.layers = tf.keras.layers.LayerList([EncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.embed_positions = LearnedPositionalEmbedding(
+            config.max_position_embeddings, embed_dim, self.padding_idx, config.extra_pos_embeddings,
+        )
+        self.layers = [EncoderLayer(config) for _ in range(config.encoder_layers)]
         self.layernorm_embedding = LayerNorm(embed_dim)
 
-    def call(
-        self, input_ids=None, attention_mask=None,
-    ):
+    def call(self, input_ids=None, attention_mask=None, output_attentions=False, output_hidden_states=False):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -363,12 +334,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def call(
-        self,
-        x,
-        encoder_hidden_states,
-        encoder_attn_mask=None,
-        layer_state=None,
-        attention_mask=None,
+        self, x, encoder_hidden_states, encoder_attn_mask=None, layer_state=None, attention_mask=None,
     ):
         """
         Args:
@@ -438,19 +404,16 @@ class BartDecoder(tf.keras.layers.Layer):
         super().__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
+        self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.embed_tokens = embed_tokens
         self.embed_positions = LearnedPositionalEmbedding(
-            config.max_position_embeddings, config.d_model, self.padding_idx,
+            config.max_position_embeddings, config.d_model, self.padding_idx, config.extra_pos_embeddings
         )
-        self.layers = tf.keras.layers.LayerList(
-            [DecoderLayer(config) for _ in range(config.decoder_layers)]
-        )  # type: List[DecoderLayer]
+        self.layers = [DecoderLayer(config) for _ in range(config.decoder_layers)]
         self.layernorm_embedding = LayerNorm(config.d_model)
-        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
 
     def call(
         self,
@@ -480,7 +443,7 @@ class BartDecoder(tf.keras.layers.Layer):
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
         x = self.layernorm_embedding(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = self.dropout(x)
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = x.transpose(0, 1)
@@ -559,15 +522,15 @@ class SelfAttention(tf.keras.layers.Layer):
 
         self.encoder_decoder_attention = encoder_decoder_attention
 
-        self.k_proj = Dense(embed_dim, bias=bias, name='k_proj')
-        self.q_proj = Dense(embed_dim, bias=bias, name='k_proj')
-        self.v_proj = Dense(embed_dim, bias=bias, name='k_proj')
-        self.out_proj = Dense(embed_dim, bias=bias, name='out__proj')
+        self.k_proj = Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.v_proj = Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.out_proj = Dense(embed_dim, use_bias=bias, name="out_proj")
 
         self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
-    def _shape(self, tensor, dim_0, bsz):
-        return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+    def _shape(self, tensor: T, dim_0, bsz):
+        return tf.reshape(tensor, (dim_0, bsz * self.num_heads, self.head_dim)).transpose(0, 1)
 
     def call(
         self,
@@ -592,7 +555,7 @@ class SelfAttention(tf.keras.layers.Layer):
         """
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
-        assert list(query.size()) == [tgt_len, bsz, embed_dim]
+        # assert list(query.size()) == [tgt_len, bsz, embed_dim]
         # get here for encoder decoder cause of static_kv
         if layer_state is not None:  # get the last k,v and mask for reuse
             saved_state = layer_state.get(self.cache_key, {})
@@ -636,7 +599,8 @@ class SelfAttention(tf.keras.layers.Layer):
 
         assert k is not None
         src_len = k.size(1)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
+        attn_weights = tf.matmul(q, k, transpose_b=True)
+        # attn_weights = torch.bmm(q, k.transpose(1, 2))
 
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
@@ -650,16 +614,18 @@ class SelfAttention(tf.keras.layers.Layer):
         assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len,)
 
         if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool)
+            attn_weights: T = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2).to(tf.bool)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-        attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_probs = TFDropout(attn_weights, p=self.dropout, training=self.training,)
+
+        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_probs = TFDropout(attn_weights, training=self.training,)
 
         assert v is not None
-        attn_output = torch.bmm(attn_probs, v)
-        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
+        attn_output = tf.matmul(attn_weights, v)
+        assert attn_output.shape == (bsz * self.num_heads, tgt_len, self.head_dim)
+        tf.reshape(tf.transpose(x, perm=(0, 2, 1, 3)), (bs, -1, self.inner_dim))
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
         attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -704,19 +670,19 @@ class SelfAttention(tf.keras.layers.Layer):
         if prev_key_padding_mask is not None and static_kv:
             new_key_padding_mask = prev_key_padding_mask
         elif prev_key_padding_mask is not None and key_padding_mask is not None:
-            new_key_padding_mask = torch.cat([prev_key_padding_mask.float(), key_padding_mask.float()], dim=1)
+            new_key_padding_mask = tf.concat([prev_key_padding_mask.float(), key_padding_mask.float()], axis=1)
         # During incremental decoding, as the padding token enters and
         # leaves the frame, there will be a time when prev or current is None
         elif prev_key_padding_mask is not None:
-            filler = torch.zeros(batch_size, src_len - prev_key_padding_mask.size(1))
+            filler = tf.zeros(batch_size, src_len - prev_key_padding_mask.size(1))
             if prev_key_padding_mask.is_cuda:
                 filler = filler.to(prev_key_padding_mask.device)
-            new_key_padding_mask = torch.cat([prev_key_padding_mask.float(), filler.float()], dim=1)
+            new_key_padding_mask = tf.concat([prev_key_padding_mask.float(), filler.float()], axis=1)
         elif key_padding_mask is not None:
-            filler = torch.zeros(batch_size, src_len - key_padding_mask.size(1))
+            filler = tf.zeros(batch_size, src_len - key_padding_mask.size(1))
             if key_padding_mask.is_cuda:
                 filler = filler.cuda()
-            new_key_padding_mask = torch.cat([filler.float(), key_padding_mask.float()], dim=1)
+            new_key_padding_mask = tf.concat([filler.float(), key_padding_mask.float()], axis=1)
         else:
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
@@ -732,6 +698,7 @@ def gelu(x):
     cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
     return x * cdf
 
+
 class BartClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
@@ -741,8 +708,9 @@ class BartClassificationHead(tf.keras.layers.Layer):
         self, input_dim, inner_dim, num_classes, pooler_dropout,
     ):
         super().__init__()
-        self.dense = Dense(input_dim, inner_dim)
-        self.dropout = Dropout(p=pooler_dropout)
+
+        self.dense = Dense(inner_dim)
+        self.dropout = Dropout(pooler_dropout)
         self.out_proj = Dense(num_classes)
 
     def call(self, x):
@@ -762,23 +730,23 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
     position ids are passed to the forward function.
     """
 
-    def __init__(
-        self, num_embeddings: int, embedding_dim: int, padding_idx: int,
-    ):
-        # if padding_idx is specified then offset the embedding ids by
-        # this index and adjust num_embeddings appropriately
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models dont have this hack
+        self.offset = offset
         assert padding_idx is not None
-        num_embeddings += padding_idx + 1  # WHY?
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        num_embeddings += offset
+        super().__init__(num_embeddings, embedding_dim)
 
-    def call(self, input, generation_mode=False):
+    def forward(self, input_ids, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
-        if generation_mode:  # the position is our current step in the decoded sequence
-            pos = int(self.padding_idx + input.size(1))
-            positions = input.data.new(1, 1).fill_(pos)
+        bsz, seq_len = input_ids.shape[:2]
+        if use_cache:
+            positions = input_ids.data.new(1, 1).fill_(seq_len - 1)  # called before slicing
         else:
-            positions = create_position_ids_from_input_ids(input, self.padding_idx)
-        return super()(positions)
+            # starts at 0, ends at 1-seq_len
+            positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
+        return super().forward(positions + self.offset)
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -813,44 +781,63 @@ class TFBartModel(TFPretrainedBartModel):
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
 
-        self.init_weights()
-
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def call(
         self,
         input_ids,
         attention_mask=None,
         decoder_input_ids=None,
-        encoder_outputs=None,  # type: Tuple
+        encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
-
         # make masks if user doesn't supply
-        if not self.decoder.generation_mode:
-            decoder_input_ids, decoder_attention_mask = _prepare_bart_decoder_inputs(
+        if decoder_input_ids is None:
+            use_cache = False
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        if not use_cache:
+            decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(
                 self.config,
                 input_ids,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attn_mask=decoder_attention_mask,
-                mask_dtype=self.shared.weight.dtype,
+                # mask_dtype=self.shared.weight.dtype,
             )
+        else:
+            decoder_padding_mask, causal_mask = None, None
+
         assert decoder_input_ids is not None
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
         assert isinstance(encoder_outputs, tuple)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
             encoder_outputs[0],
             attention_mask,
-            decoder_attention_mask,
+            decoder_padding_mask,
+            decoder_causal_mask=causal_mask,
             decoder_cached_states=decoder_cached_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
         )
         # Attention and hidden_states will be [] or None if they aren't needed
-        decoder_outputs = _filter_out_falsey_values(decoder_outputs)  # type: tuple
-        assert isinstance(decoder_outputs[0], tf.Tensor)
-        encoder_outputs = _filter_out_falsey_values(encoder_outputs)  # type: tuple
+        decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
+        assert isinstance(decoder_outputs[0], T)
+        encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
         return decoder_outputs + encoder_outputs
 
     def get_input_embeddings(self):
@@ -864,8 +851,7 @@ class TFBartModel(TFPretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.",
-    BART_START_DOCSTRING,
+    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
@@ -945,7 +931,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            #loss_fct = nn.CrossEntropyLoss()
+            # loss_fct = nn.CrossEntropyLoss()
             # TODO(SS): do we need to ignore pad tokens in lm_labels?
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
@@ -984,7 +970,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         for layer_past in decoder_cached_states:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
-                attn_key: reorder_attn_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
+                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
             # reordered_layer_past = [layer_past[:, i].unsqueeze(1).clone().detach() for i in beam_idx]
             # reordered_layer_past = torch.cat(reordered_layer_past, dim=1)
@@ -1010,8 +996,6 @@ class TFBartForSequenceClassification(TFPretrainedBartModel):
         self.classification_head = BartClassificationHead(
             config.d_model, config.d_model, config.num_labels, config.classif_dropout,
         )
-        self.model._init_weights(self.classification_head.dense)
-        self.model._init_weights(self.classification_head.out_proj)
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def call(
@@ -1021,7 +1005,7 @@ class TFBartForSequenceClassification(TFPretrainedBartModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        #labels=None,
+        # labels=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1066,7 +1050,7 @@ class TFBartForSequenceClassification(TFPretrainedBartModel):
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_ids[0])
-        if len(torch.unique(eos_mask.sum(1))) > 1:
+        if len(tf.unique(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
