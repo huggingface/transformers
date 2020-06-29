@@ -25,7 +25,7 @@ Basic steps
     When #5258 is merged, we can remove the need to create the directory.
 
 First, pick a directory with the name you want your model to have on the model hub (its full name will then be
-`username/awesome-name-you-picked` of `organization/awesome-name-you-picked`) and create it with either
+`username/awesome-name-you-picked` or `organization/awesome-name-you-picked`) and create it with either
 
 ::
 
@@ -60,7 +60,7 @@ Make your model work on all frameworks
 
 You probably have your favorite framework, but so will other users! That's why it's best to upload your model with both
 PyTorch `and` TensorFlow checkpoints to make it easier to use (if you skip this step, users will still be able to load
-your model in another framework, but it will be slower). Don't worry, it's super easy to do (and in a future version,
+your model in another framework, but it will be slower, as it will have to be converted on the fly). Don't worry, it's super easy to do (and in a future version,
 it will all be automatic). You will need to install both PyTorch and TensorFlow for this step, but you don't need to
 worry about the GPU, so it should be very easy. Check the
 `TensorFlow installation page <https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available>`__ 
@@ -165,14 +165,14 @@ so for instance:
     transformers-cli upload path/to/awesome-name-you-picked/ --organization organization_name
 
 Your model will then be accessible through its identifier, which is, as we saw above,
-`username/awesome-name-you-picked` of `organization/awesome-name-you-picked`.
+`username/awesome-name-you-picked` or `organization/awesome-name-you-picked`.
 
 Add a model card
 ^^^^^^^^^^^^^^^^
 
 To make sure everyone knows what your model can do, what its limitations and potential bias or ethetical
 considerations, please add a README.md model card to the 🤗 Transformers repo under `model_cards/`. It should be named
-`awesome-name-you-picked-READMED.md` and follow `this template <https://github.com/huggingface/model_card>`__.
+`README.md` and follow `this template <https://github.com/huggingface/model_card>`__.
 
 If your model is fine-tuned from another model coming from the model hub (all 🤗 Transformers pretrained models do),
 don't forget to link to its model card so that people can fully trace how your model was built.
