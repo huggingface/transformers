@@ -170,9 +170,9 @@ class Trainer:
             prediction_loss_only:
                 (Optional) in evaluation and prediction, only return the loss
             keep_tb_writer_open:
-                (Optional) Whether or not to keep tb_writer open after training 
-                is done. If kept open, this allows you to write additional 
-                data/metrics to tensorboard after the model is done training 
+                (Optional) Whether or not to keep tb_writer open after training
+                is done. If kept open, this allows you to write additional
+                data/metrics to tensorboard after the model is done training
                 by accessing the `tb_writer` class attribute.
         """
         self.model = model.to(args.device)
