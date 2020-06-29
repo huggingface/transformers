@@ -65,7 +65,7 @@ if stale_egg_info.exists():
 
 extras = {}
 
-extras["mecab"] = ["mecab-python3<1"]
+extras["mecab"] = ["mecab-python3>=1.0"]
 extras["sklearn"] = ["scikit-learn"]
 
 # keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
@@ -92,7 +92,7 @@ extras["quality"] = [
     "isort",
     "flake8",
 ]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3<1", "scikit-learn", "tensorflow", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3>=1.0", "scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",
