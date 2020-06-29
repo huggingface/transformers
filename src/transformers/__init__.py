@@ -272,7 +272,7 @@ if is_torch_available():
         XLMForQuestionAnsweringSimple,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from .modeling_blenderbot import BlenderbotConditionalGeneration, BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from .modeling_blenderbot import BlenderbotForConditionalGeneration, BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
     from .modeling_bart import (
         PretrainedBartModel,
         BartForSequenceClassification,

@@ -77,6 +77,8 @@ class BlenderbotConfig(BartConfig):
         scale_embedding=False,
         normalize_embedding=True,
         static_position_embeddings=False,
+        extra_pos_embeddings=0,
+        is_encoder_decoder=True,
         **kwargs
     ):
         super().__init__(
@@ -105,7 +107,7 @@ class BlenderbotConfig(BartConfig):
             scale_embedding=scale_embedding,
             normalize_embedding=normalize_embedding,
             add_final_layer_norm=add_final_layer_norm,
-            is_encoder_decoder=True,
-            extra_pos_embeddings=0,
+            is_encoder_decoder=is_encoder_decoder,
+            extra_pos_embeddings=extra_pos_embeddings,
             **kwargs,
         )

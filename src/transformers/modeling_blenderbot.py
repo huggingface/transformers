@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,7 +16,7 @@ from .modeling_bart import (
 )
 
 
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/blenderbot-90M"]
+BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["sshleifer/blenderbot-3B"]
 
 
 class BlenderEncoder(BartEncoder):
@@ -44,7 +46,7 @@ class PretrainedBlenderbotModel(PretrainedBartModel):
     """
 
     config_class = BlenderbotConfig
-    base_model_prefix = "blenderbot"
+    base_model_prefix = "blenderbot"  # TODO(mariama): this seems wrong. I dont see self.blenderbot -SS
 
     def _init_weights(self, module):
         """
@@ -94,7 +96,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
 """
 
 
-class BlenderbotConditionalGeneration(PretrainedBlenderbotModel):
+class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
     def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
         # self.config = config

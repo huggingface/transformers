@@ -19,7 +19,7 @@ import logging
 
 import torch
 
-from transformers import BlenderbotConditionalGeneration, BlenderbotConfig
+from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration
 
 
 logging.basicConfig(level=logging.INFO)
@@ -69,7 +69,7 @@ def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_
     model = torch.load(checkpoint_path, map_location="cpu")
     sd = model["model"]
     cfg = BlenderbotConfig.from_json_file(config_json_path)
-    m = BlenderbotConditionalGeneration(cfg)
+    m = BlenderbotForConditionalGeneration(cfg)
     failures = []
     mapping = {}
     for k, v in sd.items():

@@ -2,6 +2,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
 from transformers.modeling_bart import _prepare_bart_decoder_inputs
 
 from .test_configuration_common import ConfigTester
@@ -16,13 +17,12 @@ if is_torch_available():
         AutoTokenizer,
         BlenderbotTokenizer,
         BlenderbotConfig,
-        BlenderbotConditionalGeneration,
+        BlenderbotForConditionalGeneration,
         BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
-weights_path = (
-    "/home/mariama/PycharmProjects/blender/blender_90M"  # won't be needed  once the pretrained weights uploaded on S3
-)
+
+weights_path = "sshleifer/blenderbot-3B"
 
 
 @require_torch
@@ -92,7 +92,7 @@ class BlenderbotModelTester:
 
 @require_torch
 class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
-    all_generative_model_classes = (BlenderbotConditionalGeneration,) if is_torch_available else ()
+    all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available else ()
 
     is_encoder_decoder = True
     test_head_masking = False
@@ -108,16 +108,9 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_from_pretrained(self):
-        for model_name in BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = BlenderbotConditionalGeneration.from_pretrained(
-                model_name
-            )  # will change weight_path to model_name once the pretrained weights uploaded on S3
-            self.assertIsNotNone(model)
-
     def test_initialization_module(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = BlenderbotConditionalGeneration(config)
+        model = BlenderbotForConditionalGeneration(config)
         model.to(torch_device)
         model.eval()
         self.assertTrue((model.encoder.embed_tokens.weight == model.shared.weight).all().item())
@@ -127,13 +120,6 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class BlenderbotIntegrationTests(unittest.TestCase):
-    vocab_size = 100
-
-    @property
-    def model(self):
-        model = BlenderbotConditionalGeneration.from_pretrained(weights_path)
-        return model.to(torch_device)
-
     def get_config_data(self):
         input_ids = torch.tensor(
             [
@@ -159,7 +145,7 @@ class BlenderbotIntegrationTests(unittest.TestCase):
         batch_size = input_ids.size(0)
         config = BlenderbotConfig(
             d_model=16,
-            vocab_size=self.vocab_size,
+            vocab_size=100,
             encoder_layers=2,
             decoder_layers=2,
             encoder_attention_heads=2,
@@ -173,61 +159,18 @@ class BlenderbotIntegrationTests(unittest.TestCase):
         )
         return config, input_ids, mask, batch_size
 
-    def test_generation_with_labels_forward(self):
-        config, input_ids, mask, batch_size = self.get_config_data()
-        labels = input_ids
-        model = BlenderbotConditionalGeneration(config)
-        model.to(torch_device)
-        outputs = model(input_ids=input_ids, attention_mask=mask, decoder_input_ids=input_ids, labels=labels)
-        loss = outputs[0]
-        self.assertIsInstance(loss.item(), float)
-        scores = outputs[1]
-
-        expected_shape = (batch_size, input_ids.size(1), self.vocab_size)
-        self.assertEqual(scores.size(), expected_shape)
-
-    def test_generate_beam_search(self):
-        config, input_ids, mask, batch_size = self.get_config_data()
-
-        model = BlenderbotConditionalGeneration(config)
-        model.eval()
-        max_seq_len = 10
-        generated_ids = model.generate(
-            input_ids.clone(),
-            do_sample=True,
-            num_return_sequences=1,
-            num_beams=2,
-            no_repeat_ngram_size=3,
-            max_length=max_seq_len,
-        )
-        self.assertTrue(generated_ids.size(), (batch_size, max_seq_len))
-
-    @unittest.skipIf(torch_device == "cpu", "half precision can't be used on cpu")
-    def test_model_fp16_forward(self):
-        config, input_ids, mask, batch_size = self.get_config_data()
-        model = BlenderbotConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        output = model(input_ids, attention_mask=mask)[0]
-        self.assertFalse(torch.isnan(output).any().item())
-
-    @unittest.skipIf(torch_device == "cpu", "half precision can't be used on cpu")
-    def test_model_fp16_generate(self, config, input_ids, input_mask):
-        config, input_ids, mask, batch_size = self.get_config_data()
-        model = BlenderbotConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        output = model.generate(input_ids, attention_mask=mask, do_sample=False)
-        self.assertFalse(torch.isnan(output).any().item())
+    @cached_property
+    def model(self):
+        model = BlenderbotForConditionalGeneration.from_pretrained(weights_path).to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        return model
 
     @slow
     def test_inference(self):
-        model = BlenderbotConditionalGeneration.from_pretrained(weights_path).to(device)
         config, input_ids, mask, batch_size = self.get_config_data()
         inputs_dict = {"input_ids": input_ids, "attention_mask": mask}
         with torch.no_grad():
-            output = model(**inputs_dict)[0]
-        expected_shape = torch.Size((batch_size, input_ids.size(1), model.config.vocab_size))
+            output = self.model(**inputs_dict)[0]
+        expected_shape = torch.Size((batch_size, input_ids.size(1), self.model.config.vocab_size))
         self.assertEqual(output.size(), expected_shape)
