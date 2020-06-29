@@ -1,20 +1,20 @@
 Benchmarks
 ==========
 
-Let's take a look at how 🤗 Transformer models can be benchmarked, best practices and already available benchmarks.
+Let's take a look at how 🤗 Transformer models can be benchmarked, best practices, and already available benchmarks.
 
-A notebook explaining in more detail how to benchmark 🤗 Transformer can be found `here <https://github.com/huggingface/transformers/blob/master/notebooks/05-benchmark.ipynb>`__ .
+A notebook explaining in more detail how to benchmark 🤗 Transformer models can be found `here <https://github.com/huggingface/transformers/blob/master/notebooks/05-benchmark.ipynb>`__.
 
 How to benchmark 🤗 Transformer models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The classes :obj:`PyTorchBenchmark` and :obj:`TensorflowBenchmark` allow to flexibly benchmark ðŸ¤— Transformer models.
-The benchmark classes allow to measure the `peak memory usage` and `required time` for both 
+The benchmark classes allow us to measure the `peak memory usage` and `required time` for both 
 `inference` and `training`. 
 
 .. note::
 
-  Hereby, `inference` is defined by a single forward pass and `training` is defined by a single forward pass and backward pass.
+  Hereby, `inference` is defined by a single forward pass, and `training` is defined by a single forward pass and backward pass.
 
 The benchmark classes :obj:`PyTorchBenchmark` and :obj:`TensorflowBenchmark` expect an object of type :obj:`PyTorchBenchmarkArguments` and :obj:`TensorflowBenchmarkArguments`, respectively, for instantiation. :obj:`PyTorchBenchmarkArguments` and :obj:`TensorflowBenchmarkArguments` are data classes and contain all relevant configurations for their corresponding benchmark class.
 In the following example, it is shown how a BERT model of type `bert-base-cased` can be benchmarked.
@@ -34,7 +34,7 @@ In the following example, it is shown how a BERT model of type `bert-base-cased`
     >>> benchmark = TensorflowBenchmark(args)
 
 
-Here, three arguments are given to the benchmark argument data classes, namely ``models``, ``batch_sizes`` and ``sequence_lengths``. The argument ``models`` is required and expects a :obj:`list` of model identifiers from the `model hub <https://huggingface.co/models>`__
+Here, three arguments are given to the benchmark argument data classes, namely ``models``, ``batch_sizes``, and ``sequence_lengths``. The argument ``models`` is required and expects a :obj:`list` of model identifiers from the `model hub <https://huggingface.co/models>`__
 The :obj:`list` arguments ``batch_sizes`` and ``sequence_lengths`` define the size of the ``input_ids`` on which the model is benchmarked. 
 There are many more parameters that can be configured via the benchmark argument data classes. For more detail on these one can either directly consult the files 
 ``src/transformers/benchmark/benchmark_args_utils.py``, ``src/transformers/benchmark/benchmark_args.py`` (for PyTorch) and ``src/transformers/benchmark/benchmark_args_tf.py`` (for Tensorflow). 
@@ -145,14 +145,14 @@ An instantiated benchmark object can then simply be run by calling ``benchmark.r
     - gpu_performance_state: 2
     - use_tpu: False
 
-By default, the `time` and the `required memory` for `inference` is benchmarked. 
-In the example output above he first two sections show the result corresponding to `inference time` and `inference memory`. 
-In addition, all relevant environment information regarding `e.g.` the GPU type, the system, the library versions, etc... are printed out in the third section under `ENVIRONMENT INFORMATION`.
-These informations can optionally be saved in a `.csv` file when adding the argument :obj:`save_to_csv=True` to :obj:`PyTorchBenchmarkArguments` and :obj:`TensorflowBenchmarkArguments` respectively.
-In this case every section is saved in a separated `.csv` file. The path to each `.csv` file can optionally be defined via the argument data classes.
+By default, the `time` and the `required memory` for `inference` are benchmarked. 
+In the example output above the first two sections show the result corresponding to `inference time` and `inference memory`. 
+In addition, all relevant information about the computing environment, `e.g.` the GPU type, the system, the library versions, etc... are printed out in the third section under `ENVIRONMENT INFORMATION`.
+This information can optionally be saved in a `.csv` file when adding the argument :obj:`save_to_csv=True` to :obj:`PyTorchBenchmarkArguments` and :obj:`TensorflowBenchmarkArguments` respectively.
+In this case, every section is saved in a separate `.csv` file. The path to each `.csv` file can optionally be defined via the argument data classes.
 
-Instead of benchmarking pretrained models via their model identifier, `e.g.` `bert-base-uncased`, the user can alternatively benchmark an arbitrary configuration of any available model class. 
-In this case a :obj:`list` of configurations must be inserted with the benchmark args as follows.
+Instead of benchmarking pre-trained models via their model identifier, `e.g.` `bert-base-uncased`, the user can alternatively benchmark an arbitrary configuration of any available model class. 
+In this case, a :obj:`list` of configurations must be inserted with the benchmark args as follows.
 
 .. code-block::
 
@@ -307,10 +307,7 @@ This section lists a couple of best practices one should be aware of when benchm
 - Currently, only single device benchmarking is supported. When benchmarking on GPU, it is recommended that the user 
   specifies on which device the code should be run by setting the ``CUDA_VISIBLE_DEVICES`` environment variable in the shell, `e.g.` ``export CUDA_VISIBLE_DEVICES=0`` before running the code.
 - The option :obj:`no_multi_processing` should only be set to :obj:`True` for testing and debugging. To ensure accurate memory measurement it is recommended to run each memory benchmark in a separate process by making sure :obj:`no_multi_processing` is set to :obj:`True`.
-- One should always state the environment information when sharing results of a model benchmark. Results can vary heavily between different GPU devices, library versions, etc., so that benchmark results on their own are not very useful for the community.
-
-This section is dedicated to the Benchmarks done by the library, both by maintainers, contributors and users. These 
-benchmark will help keep track of the preformance improvements that are brought to our models across versions.
+- One should always state the environment information when sharing the results of a model benchmark. Results can vary heavily between different GPU devices, library versions, etc., so that benchmark results on their own are not very useful for the community.
 
 
 Sharing your benchmark
@@ -320,8 +317,6 @@ Previously all available core models (10 at the time) have been benchmarked for 
 and without TorchScript, using TensorFlow, with and without XLA. All of those tests were done across CPUs (except for
 TensorFlow XLA) and GPUs.
 
-The approach is detailed in the `following blogpost <https://medium.com/huggingface/benchmarking-transformers-pytorch-and-tensorflow-e2917fb891c2>`__
+The approach is detailed in the `following blogpost <https://medium.com/huggingface/benchmarking-transformers-pytorch-and-tensorflow-e2917fb891c2>`__ and the results are available `here <https://docs.google.com/spreadsheets/d/1sryqufw2D0XlUH4sq3e9Wnxu5EAQkaohzrJbd5HdQ_w/edit?usp=sharing>`__.
 
-The results are available `here <https://docs.google.com/spreadsheets/d/1sryqufw2D0XlUH4sq3e9Wnxu5EAQkaohzrJbd5HdQ_w/edit?usp=sharing>`__ .
-
-With the new `benchmark` tools, it is easier than ever to share your benchmark results with the community `here <https://github.com/huggingface/transformers/blob/master/examples/benchmarking/README.md`__ .
+With the new `benchmark` tools, it is easier than ever to share your benchmark results with the community `here <https://github.com/huggingface/transformers/blob/master/examples/benchmarking/README.md>`__.
