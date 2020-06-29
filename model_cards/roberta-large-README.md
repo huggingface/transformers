@@ -178,7 +178,8 @@ with `<s>` and the end of one by `</s>`
 
 The details of the masking procedure for each sentence are the following:
 - 15% of the tokens are masked.
-- In 80% of the cases, the masked tokens are replaced by `[MASK]`.
+- In 80% of the cases, the masked tokens are replaced by `<mask>`.
+
 - In 10% of the cases, the masked tokens are replaced by a random token (different) from the one they replace.
 - In the 10% remaining cases, the masked tokens are left as is.
 

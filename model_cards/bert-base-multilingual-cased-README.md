@@ -1,5 +1,5 @@
 ---
-language: english
+language: multilingual
 license: apache-2.0
 datasets:
 - wikipedia
@@ -150,4 +150,3 @@ The details of the masking procedure for each sentence are the following:
   bibsource = {dblp computer science bibliography, https://dblp.org}
 }
 ```
-
