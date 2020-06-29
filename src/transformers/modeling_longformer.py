@@ -25,8 +25,9 @@ from torch.nn import functional as F
 
 from .configuration_longformer import LongformerConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_bert import BertPreTrainedModel
-from .modeling_roberta import RobertaLMHead, RobertaModel
+from .modeling_bert import BertIntermediate, BertLayerNorm, BertOutput, BertPooler, BertPreTrainedModel, BertSelfOutput
+from .modeling_roberta import RobertaEmbeddings, RobertaLMHead
+from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
@@ -237,13 +238,7 @@ class LongformerSelfAttention(nn.Module):
         return context.view(batch_size, num_heads, seqlen, head_dim).transpose(1, 2)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
@@ -254,11 +249,7 @@ class LongformerSelfAttention(nn.Module):
               0: local attention
             +ve: global attention
 
-        `encoder_hidden_states` and `encoder_attention_mask` are not supported and should be None
         """
-        # TODO: add support for `encoder_hidden_states` and `encoder_attention_mask`
-        assert encoder_hidden_states is None, "`encoder_hidden_states` is not supported and should be None"
-        assert encoder_attention_mask is None, "`encoder_attention_mask` is not supported and shiould be None"
 
         if attention_mask is not None:
             attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
@@ -435,6 +426,129 @@ class LongformerSelfAttention(nn.Module):
         return outputs
 
 
+class LongformerAttention(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.self = LongformerSelfAttention(config, layer_id)
+        self.output = BertSelfOutput(config)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+    ):
+        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions,)
+        attention_output = self.output(self_outputs[0], hidden_states)
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
+
+
+class LongformerLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.attention = LongformerAttention(config, layer_id)
+        self.intermediate = BertIntermediate(config)
+        self.output = BertOutput(config)
+
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+    ):
+        self_attention_outputs = self.attention(
+            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
+        )
+        attention_output = self_attention_outputs[0]
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+        outputs = (layer_output,) + outputs
+        return outputs
+
+
+class LongformerEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([LongformerLayer(config, layer_id=i) for i in range(config.num_hidden_layers)])
+
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False,
+    ):
+        all_hidden_states = ()
+        all_attentions = ()
+        for i, layer_module in enumerate(self.layer):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if getattr(self.config, "gradient_checkpointing", False):
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module), hidden_states, attention_mask, head_mask[i],
+                )
+            else:
+                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions,)
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        # Add last layer
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        outputs = (hidden_states,)
+        if output_hidden_states:
+            outputs = outputs + (all_hidden_states,)
+        if output_attentions:
+            outputs = outputs + (all_attentions,)
+        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+
+
+class LongformerPreTrainedModel(PreTrainedModel):
+    """ An abstract class to handle weights initialization and
+        a simple interface for downloading and loading pretrained
+        models.
+    """
+
+    config_class = LongformerConfig
+    base_model_prefix = "longformer"
+
+    def _init_weights(self, module):
+        """ Initialize the weights """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, BertLayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
+
+
 LONGFORMER_START_DOCSTRING = r"""
 
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
@@ -498,7 +612,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
     "The bare Longformer Model outputting raw hidden-states without any specific head on top.",
     LONGFORMER_START_DOCSTRING,
 )
-class LongformerModel(RobertaModel):
+class LongformerModel(LongformerPreTrainedModel):
     """
     This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
     long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
@@ -530,11 +644,25 @@ class LongformerModel(RobertaModel):
                 f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
             )
 
-        for i, layer in enumerate(self.encoder.layer):
-            # replace the `modeling_bert.BertSelfAttention` object with `LongformerSelfAttention`
-            layer.attention.self = LongformerSelfAttention(config, layer_id=i)
+        self.embeddings = RobertaEmbeddings(config)
+        self.encoder = LongformerEncoder(config)
+        self.pooler = BertPooler(config)
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """ Prunes heads of the model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+            See base class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
 
     def _pad_to_window_size(
         self,
@@ -587,6 +715,7 @@ class LongformerModel(RobertaModel):
         global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
+        head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -634,6 +763,22 @@ class LongformerModel(RobertaModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
         # padding
         attention_window = (
             self.config.attention_window
@@ -663,19 +808,34 @@ class LongformerModel(RobertaModel):
             pad_token_id=self.config.pad_token_id,
         )
 
-        # embed
-        output = super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=None,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
+
+        outputs = (sequence_output, pooled_output,) + encoder_outputs[
+            1:
+        ]  # add hidden_states and attentions if they are here
 
         # undo padding
         if padding_len > 0:
@@ -684,13 +844,13 @@ class LongformerModel(RobertaModel):
             # `pooled_output`: independent of the sequence length
             # `hidden_states`: mainly used for debugging and analysis, so keep the padding
             # `attentions`: mainly used for debugging and analysis, so keep the padding
-            output = output[0][:, :-padding_len], *output[1:]
+            outputs = outputs[0][:, :-padding_len], *outputs[1:]
 
-        return output
+        return outputs
 
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top. """, LONGFORMER_START_DOCSTRING)
-class LongformerForMaskedLM(BertPreTrainedModel):
+class LongformerForMaskedLM(LongformerPreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
 
