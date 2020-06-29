@@ -269,7 +269,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_encoder", action="store_true")
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
-        parser.add_argument("--logger", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
+        parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
@@ -301,18 +301,18 @@ def main(args, model=None) -> SummarizationModule:
 
     dataset = Path(args.data_dir).name
     if (
-        args.logger == "default"
+        args.logger_name == "default"
         or args.fast_dev_run
         or str(args.output_dir).startswith("/tmp")
         or str(args.output_dir).startswith("/var")
     ):
         logger = True  # don't pollute wandb logs unnecessarily
-    elif args.logger == "wandb":
+    elif args.logger_name == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
         logger = WandbLogger(name=model.output_dir.name, project=dataset)
 
-    elif args.logger == "wandb_shared":
+    elif args.logger_name == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
         logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
@@ -334,13 +334,17 @@ def main(args, model=None) -> SummarizationModule:
         model.hparams.test_checkpoint = checkpoints[-1]
         trainer.resume_from_checkpoint = checkpoints[-1]
     trainer.logger.log_hyperparams(model.hparams)
-    trainer.test(model)  # this breaks in DDP, known lightning issue. See evaluate_checkpoint to recover metrics.
+    
+    # test() without a model tests using the best checkpoint automatically
+    trainer.test()
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
     parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
+
     args = parser.parse_args()
 
     main(args)
