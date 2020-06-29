@@ -108,6 +108,6 @@ class BlenderbotConfig(BartConfig):
             normalize_embedding=normalize_embedding,
             add_final_layer_norm=add_final_layer_norm,
             is_encoder_decoder=is_encoder_decoder,
-            extra_pos_embeddings=extra_pos_embeddings,
             **kwargs,
         )
+        self.extra_pos_embeddings = extra_pos_embeddings

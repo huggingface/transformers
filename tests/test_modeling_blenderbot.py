@@ -117,6 +117,13 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         self.assertAlmostEqual(torch.std(model.encoder.embed_tokens.weight).item(), config.init_std, 2)
         self.assertAlmostEqual(torch.std(model.encoder.embed_positions.weight).item(), config.init_std, 2)
 
+    def test_embed_pos_shape(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = BlenderbotForConditionalGeneration(config)
+        expected_shape = (config.max_position_embeddings, config.d_model)
+        self.assertEqual(model.encoder.embed_positions.weight.shape, expected_shape)
+        self.assertEqual(model.decoder.embed_positions.weight.shape, expected_shape)
+
 
 @require_torch
 class BlenderbotIntegrationTests(unittest.TestCase):
