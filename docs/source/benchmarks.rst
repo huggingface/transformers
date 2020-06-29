@@ -43,10 +43,10 @@ Alternatively, running the following shell commands from root will print out a d
 .. code-block::
 
     >>> ## PYTORCH CODE
-    >>> python examples/benchmarking/run_benchmark.py --help
+    python examples/benchmarking/run_benchmark.py --help
 
     >>> ## TENSORFLOW CODE
-    >>> python examples/benchmarking/run_benchmark_tf.py --help
+    python examples/benchmarking/run_benchmark_tf.py --help
 
 
 An instantiated benchmark object can then simply be run by calling ``benchmark.run()``.
