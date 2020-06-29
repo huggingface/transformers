@@ -613,8 +613,8 @@ if is_tf_available():
     from .trainer_tf import TFTrainer
 
     # Benchmarks
-    from .benchmark.benchmark_tf import TensorflowBenchmark
-    from .benchmark.benchmark_args_tf import TensorflowBenchmarkArguments
+    from .benchmark.benchmark_tf import TensorFlowBenchmark
+    from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
 
 if not is_tf_available() and not is_torch_available():
