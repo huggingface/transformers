@@ -211,10 +211,7 @@ class TrainingArguments:
         Sanitized serialization to use with TensorBoard’s hparams
         """
         d = dataclasses.asdict(self)
-        d = {
-            **d,
-            **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size,},
-        }
+        d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
 
         valid_types = [bool, int, float, str]
         if is_torch_available():
