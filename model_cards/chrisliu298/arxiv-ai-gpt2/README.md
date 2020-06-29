@@ -1,15 +1,11 @@
 ---
 language: "en"
-thumbnail: ""
 tags:
 - gpt2
 - arxiv
 - transformers
-license: ""
 datasets:
 - https://github.com/staeiou/arxiv_archive/tree/v1.0.1
-metrics:
-- 
 ---
 
 # ArXiv AI GPT-2
