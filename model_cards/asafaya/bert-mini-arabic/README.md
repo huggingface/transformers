@@ -1,5 +1,8 @@
 ---
 language: arabic
+datasets:
+- oscar
+- wikipedia
 ---
 
 # Arabic BERT Mini Model
@@ -55,5 +58,4 @@ For further details on the models performance or any other queries, please refer
 ## Acknowledgement
 
 Thanks to Google for providing free TPU for the training process and for Huggingface for hosting this model on their servers 😊
-
 
