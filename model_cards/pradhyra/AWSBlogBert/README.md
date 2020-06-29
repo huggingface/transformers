@@ -1,5 +1,5 @@
 This model is pre-trained on blog articles from AWS Blogs. 
-Training code can be found at this [url]()
+Training code can be found at this.
 
 ## Pre-training corpora
 The input text contains around 3000 blog articles on [AWS Blogs website](https://aws.amazon.com/blogs/) technical subject matter including AWS products, tools and tutorials. 
