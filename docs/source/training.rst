@@ -77,7 +77,7 @@ other than bias and layer normalization terms:
     optimizer = AdamW(optimizer_grouped_parameters, lr=1e-5)
     
 Now we can set up a simple dummy training batch using
-:func:`~transformers.PreTrainedTokenizer.batch_encode_plus`. This returns a
+:func:`~transformers.PreTrainedTokenizer.__call__`. This returns a
 :func:`~transformers.BatchEncoding` instance which
 prepares everything we might need to pass to the model.
 

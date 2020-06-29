@@ -478,9 +478,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             Arguments:
                 save_directory: directory to which to save.
         """
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
 
         # Only save the model itself if we are using distributed training
         model_to_save = self.module if hasattr(self, "module") else self

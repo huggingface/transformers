@@ -60,7 +60,7 @@ tokenizer = BartTokenizer.from_pretrained('a-ware/bart-squadv2')
 model = BartForQuestionAnswering.from_pretrained('a-ware/bart-squadv2')
 
 question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-encoding = tokenizer.encode_plus(question, text, return_tensors='pt')
+encoding = tokenizer(question, text, return_tensors='pt')
 input_ids = encoding['input_ids']
 attention_mask = encoding['attention_mask']
 

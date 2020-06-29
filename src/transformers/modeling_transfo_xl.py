@@ -609,7 +609,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.TransfoXLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):

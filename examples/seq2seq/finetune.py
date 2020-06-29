@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 import time
+import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -216,6 +217,8 @@ class SummarizationModule(BaseTransformer):
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
         )
+        if max(scheduler.get_last_lr()) > 0:
+            warnings.warn("All learning rates are 0")
         self.lr_scheduler = scheduler
         return dataloader
 

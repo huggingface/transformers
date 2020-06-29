@@ -282,7 +282,7 @@ Models are standard `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#to
 `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ so you can use them in your usual
 training loop. 🤗 Transformers also provides a :class:`~transformers.Trainer` (or :class:`~transformers.TFTrainer` if
 you are using TensorFlow) class to help with your training (taking care of things such as distributed training, mixed
-precision, etc.). See the training tutorial (coming soon) for more details.
+precision, etc.). See the :doc:`training tutorial <training>` for more details.
 
 Once your model is fine-tuned, you can save it with its tokenizer the following way:
 
