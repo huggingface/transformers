@@ -213,11 +213,7 @@ class TrainingArguments:
         d = dataclasses.asdict(self)
         d = {
             **d,
-            **{
-                "train_batch_size": self.train_batch_size,
-                "eval_batch_size": self.eval_batch_size,
-                "n_gpu": self.n_gpu,
-            },
+            **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size,},
         }
 
         valid_types = [bool, int, float, str]
