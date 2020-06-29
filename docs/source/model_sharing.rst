@@ -111,32 +111,12 @@ Make sure there are no garbage files in the directory you'll upload. It should o
 - a `pytorch_model.bin` file, which is the PyTorch checkpoint (unless you can't have it for some reason) ;
 - a `tf_model.h5` file, which is the TensorFlow checkpoint (unless you can't have it for some reason) ;
 - a `special_tokens_map.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save;
-- a `tokenizer_config.json`, which is part of your :doc:`tokenizerawesome-name-you-picked <main_classes/tokenizer>` save;
+- a `tokenizer_config.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save;
 - a `vocab.txt`, which is the vocabulary of your tokenizer, part of your :doc:`tokenizer <main_classes/tokenizer>`
   save;
 - maybe a `added_tokens.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save.
 
 Other files can safely be deleted.
-
-Add a model card
-^^^^^^^^^^^^^^^^
-
-To make sure everyone knows what your model can do, what its limitations and potential bias or ethetical
-considerations, please add a model card in this folder. It should be named `README.md` and follow
-`this template <https://github.com/huggingface/model_card>`__.
-
-If your model is fine-tuned from another model coming from the model hub (all 🤗 Transformers pretrained models do),
-don't forget to link to its model card so that people can fully trace how your model was built.
-
-.. Note::
-
-    You can also send your model card in separately as a PR to the 
-    `🤗 Transformers repo <https://github.com/huggingface/transformers>`__. It should then be placed in the
-    `model_cards` folder, in a subfolder with your username or organization, then another subfolder named like your
-    mode (`awesome-name-you-picked`). 
-    
-    If you have never made a pull request to
-    it,look at the :doc:`contributing guide <contributing>` to see the steps to follow.
 
 Upload your model with the CLI
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -191,14 +171,21 @@ Add a model card
 ^^^^^^^^^^^^^^^^
 
 To make sure everyone knows what your model can do, what its limitations and potential bias or ethetical
-considerations, please add a README.md model card to the 🤗 Transformers repo under `model_cards/`. It should be named
-`README.md` and follow `this template <https://github.com/huggingface/model_card>`__.
+considerations, please add a README.md model card to the 🤗 Transformers repo under `model_cards/`. It should then be
+placed in a subfolder with your username or organization, then another subfolder named like your model
+(`awesome-name-you-picked`). It should be named `README.md` and follow
+`this template <https://github.com/huggingface/model_card>`__.
 
 If your model is fine-tuned from another model coming from the model hub (all 🤗 Transformers pretrained models do),
 don't forget to link to its model card so that people can fully trace how your model was built.
 
 If you have never made a pull request to the 🤗 Transformers repo, look at the
 :doc:`contributing guide <contributing>` to see the steps to follow.
+
+.. Note::
+
+    You can also send your model card in the folder you uploaded with the CLI by placing it in a `README.md` file
+    inside `path/to/awesome-name-you-picked/`.
 
 Using your model
 ^^^^^^^^^^^^^^^^
