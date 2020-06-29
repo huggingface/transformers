@@ -80,7 +80,7 @@ output = model(encoded_input)
 ### Limitations and bias
 
 The training data used for this model has not been released as a dataset one can browse. We know it contains a lot of
-unfiltered from the internet, which is far from neutral. As the openAI team themselves point out in their
+unfiltered content from the internet, which is far from neutral. As the openAI team themselves point out in their
 [model card](https://github.com/openai/gpt-2/blob/master/model_card.md#out-of-scope-use-cases):
 
 > Because large-scale language models like GPT-2 do not distinguish fact from fiction, we don’t support use-cases
