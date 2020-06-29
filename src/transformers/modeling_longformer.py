@@ -117,11 +117,11 @@ class LongformerSelfAttention(nn.Module):
         self.one_sided_attention_window_size = attention_window // 2
 
     @staticmethod
-    def _skew(x, direction):
+    def _skew(hidden_states, direction):
         """Convert diagonals into columns (or columns into diagonals depending on `direction`"""
-        x_padded = F.pad(x, direction)  # padding value is not important because it will be overwritten
-        x_padded = x_padded.view(*x_padded.size()[:-2], x_padded.size(-1), x_padded.size(-2))
-        return x_padded
+        hidden_states_padded = F.pad(hidden_states, direction)  # padding value is not important because it will be overwritten
+        hidden_states_padded = hidden_states_padded.view(*hidden_states_padded.size()[:-2], hidden_states_padded.size(-1), hidden_states_padded.size(-2))
+        return hidden_states_padded
 
     @staticmethod
     def _skew2(x):
@@ -238,7 +238,10 @@ class LongformerSelfAttention(nn.Module):
         return context.view(batch_size, num_heads, seqlen, head_dim).transpose(1, 2)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
@@ -452,9 +455,14 @@ class LongformerAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
     ):
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions,)
+        self_outputs = self.self(
+            hidden_states, attention_mask, output_attentions,
+        )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -468,10 +476,13 @@ class LongformerLayer(nn.Module):
         self.output = BertOutput(config)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
     ):
         self_attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
+            hidden_states, attention_mask, output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -489,7 +500,11 @@ class LongformerEncoder(nn.Module):
         self.layer = nn.ModuleList([LongformerLayer(config, layer_id=i) for i in range(config.num_hidden_layers)])
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
     ):
         all_hidden_states = ()
         all_attentions = ()
@@ -506,10 +521,16 @@ class LongformerEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, attention_mask, head_mask[i],
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions,)
+                layer_outputs = layer_module(
+                    hidden_states,
+                    attention_mask,
+                    output_attentions,
+                )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -715,7 +736,6 @@ class LongformerModel(LongformerPreTrainedModel):
         global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -812,13 +832,6 @@ class LongformerModel(LongformerPreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
@@ -826,7 +839,6 @@ class LongformerModel(LongformerPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
