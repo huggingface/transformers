@@ -3,8 +3,7 @@ from typing import Iterable, List, Optional
 
 from transformers import pipeline
 from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline
-
-from .utils import require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import require_tf, require_torch, slow, torch_device
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
