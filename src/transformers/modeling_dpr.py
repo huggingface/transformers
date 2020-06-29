@@ -251,35 +251,35 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
 DPR_READER_INPUTS_DOCSTRING = r"""
     Inputs:
-        **question_and_titles_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **input_ids**: ``torch.LongTensor`` of shape ``(n_passages, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
-            It has to be a sequence pair with 1) the question and 2) the context title:
-            To match pre-training, DPR `question_and_titles_ids` sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            It has to be a sequence triplet with 1) the question and 2) the passages titles and 3) the passages texts
+            To match pre-training, DPR `input_ids` sequence should be formatted with [CLS] and [SEP] tokens as follows:
 
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] jack ##son ##ville page [SEP]``
+                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] jack ##son ##ville page [SEP] this is jack ##son ##ville .``
 
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
 
-            Indices can be obtained using :class:`transformers.DPRTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **text_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary.
-            It has to be a single sequence with the context text (content of the passage):
-            To match pre-training, DPR `text_ids` sequence should be formatted without [CLS] and [SEP] tokens as follows:
-
-                ``tokens:         this is jack ##son ##ville .``
-
-            This is because the `text_ids` are then concatenated after the `question_and_titles_ids`
-
-            DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
-
-            Indices can be obtained using :class:`transformers.DPRTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+            Indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` for more details
 """
+
+DPR_READER_GENERATE_INPUTS_DOCSTRING = (
+    DPR_READER_INPUTS_DOCSTRING
+    + r"""
+        **passage_offsets**: ``List[int]``:
+            The indices of the beginning of each passage text in the `input_ids`
+
+            These indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` for more details
+        **sequence_lenghts**: ``List[int]``:
+            The indices of the beginning of each passage text in the `input_ids`
+
+            These indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` for more details
+"""
+)
 
 
 @add_start_docstrings(
@@ -404,34 +404,18 @@ class DPRReader(DPRPretrainedReader):
         self.span_predictor = DPRSpanPredictor(config)
         self.init_weights()
 
-    def forward(self, question_and_titles_ids: List[Tensor], texts_ids: List[Tensor],) -> Tuple[Tensor, ...]:
-        assert len(question_and_titles_ids) == len(
-            texts_ids
-        ), "There should be as many `question_and_titles_ids` than `texts_ids` but got sizes {}!={}".format(
-            len(question_and_titles_ids), len(texts_ids)
-        )
-        device = question_and_titles_ids[0].device
-        n_contexts = len(question_and_titles_ids)
-        input_ids = torch.ones((n_contexts, self.config.sequence_length), dtype=torch.int64, device=device) * int(
-            self.config.pad_token_id
-        )
-        for i in range(n_contexts):
-            question_and_title_ids = question_and_titles_ids[i]
-            text_ids = texts_ids[i]
-            len_question_and_title = question_and_title_ids.shape[1]
-            _, len_txt = text_ids.size()
-            input_ids[i, 0:len_question_and_title] = question_and_title_ids
-            input_ids[i, len_question_and_title : len_question_and_title + len_txt] = text_ids
-        input_ids = input_ids.unsqueeze(0)
+    def forward(self, input_ids: Tensor) -> Tuple[Tensor, ...]:
+        """Compute logits from batched inputs of size (n_questions, n_passages, sequence_length)"""
         attention_mask = input_ids != self.config.pad_token_id
-        attention_mask = attention_mask.to(device=device)
+        attention_mask = attention_mask.to(device=input_ids.device)
         start_logits, end_logits, relevance_logits = self.span_predictor(input_ids, attention_mask)
-        return input_ids, start_logits, end_logits, relevance_logits
+        return start_logits, end_logits, relevance_logits
 
     def generate(
         self,
-        question_and_titles_ids: List[Tensor],
-        texts_ids: List[Tensor],
+        input_ids: Tensor,
+        passage_offsets: List[int],
+        sequence_lenghts: List[int],
         num_spans: int = 16,
         max_answer_length: int = 64,
         num_spans_per_passage: int = 4,
@@ -450,24 +434,22 @@ class DPRReader(DPRPretrainedReader):
 
         Examples::
 
-            tokenizer = DPRTokenizer.from_pretrained('dpr-base-uncased')
+            tokenizer = DPRReaderTokenizer.from_pretrained('dpr-base-uncased')
             model = DPRModel.from_pretrained('dpr-reader-base')
-            question_and_titles_ids = [
-                torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
-                ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
-            texts_ids = [
-                torch.tensor(tokenizer("Hello, my dog is definitely cute", add_special_tokens=False))
-                ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
-            predicted_spans = model.generate(question_and_titles_ids, texts_ids)
+            tokenized_input = tokenizer(question, titles, texts, return_tensors="pt")
+            predicted_spans = reader.generate(**tokenized_input)
             # get best answer
             best_span = predicted_spans[0]
-            best_span_ids = texts_ids[best_span.doc_id].numpy().flatten()
+            best_span_ids = tokenized_input["input_ids"][best_span.doc_id]
             best_span_ids = best_span_ids[best_span.start_index:best_span.end_index + 1]
-            print(tokenizer.decode(best_span_ids))
+            print(tokenizer.decode(best_span_ids.numpy()))
 
         """
+        assert (
+            input_ids.ndim == 2
+        ), "`.generate` expects a matrix of size (n_passages, sequence_length) for one question only."
 
-        input_ids, start_logits, end_logits, relevance_logits = self.forward(question_and_titles_ids, texts_ids)
+        start_logits, end_logits, relevance_logits = self.forward(input_ids.unsqueeze(0))
 
         questions_num, docs_per_question = relevance_logits.size()
         assert (
@@ -477,18 +459,20 @@ class DPRReader(DPRPretrainedReader):
         nbest_spans_predictions: List[DPRReaderOutput] = []
         for p in range(docs_per_question):
             doc_id = idxs[0, p].item()
-            sequence_ids = input_ids[0, doc_id]
-            sequence_len = sequence_ids.size(0)
+            sequence_ids = input_ids[doc_id]
+            sequence_len = sequence_lenghts[p]
             # assuming question & title information is at the beginning of the sequence
-            passage_offset = question_and_titles_ids[p].size(1)
+            passage_offset = passage_offsets[p]
 
-            p_start_logits = start_logits[0, doc_id].tolist()[passage_offset:sequence_len]
-            p_end_logits = end_logits[0, doc_id].tolist()[passage_offset:sequence_len]
-            ctx_ids = sequence_ids.tolist()[passage_offset:]
+            p_start_logits = start_logits[0, doc_id].tolist()
+            p_end_logits = end_logits[0, doc_id].tolist()
+            ctx_ids = sequence_ids.tolist()
             best_spans = self._get_best_spans(
                 start_logits=p_start_logits,
                 end_logits=p_end_logits,
                 ctx_ids=ctx_ids,
+                passage_offset=passage_offset,
+                sequence_len=sequence_len,
                 max_answer_length=max_answer_length,
                 doc_id=doc_id,
                 relevance_score=relevance_logits[0, doc_id].item(),
@@ -501,9 +485,11 @@ class DPRReader(DPRPretrainedReader):
 
     def _get_best_spans(
         self,
-        start_logits: List,
-        end_logits: List,
-        ctx_ids: List,
+        start_logits: List[int],
+        end_logits: List[int],
+        ctx_ids: List[int],
+        passage_offset: List[int],
+        sequence_len: List[int],
         max_answer_length: int,
         doc_id: int,
         relevance_score: float,
@@ -515,6 +501,9 @@ class DPRReader(DPRPretrainedReader):
         Spans longer that `max_answer_length` are ignored.
         """
         scores = []
+        start_logits = start_logits[passage_offset:sequence_len]
+        end_logits = end_logits[passage_offset:sequence_len]
+        ctx_ids = ctx_ids[passage_offset:sequence_len]
         for (start_index, start_score) in enumerate(start_logits):
             for (answer_length, end_score) in enumerate(end_logits[start_index : start_index + max_answer_length]):
                 scores.append(((start_index, start_index + answer_length), start_score + end_score))
@@ -533,7 +522,11 @@ class DPRReader(DPRPretrainedReader):
                 ]
             ):
                 continue
-            best_spans.append(DPRReaderOutput(score, relevance_score, doc_id, start_index, end_index))
+            best_spans.append(
+                DPRReaderOutput(
+                    score, relevance_score, doc_id, passage_offset + start_index, passage_offset + end_index
+                )
+            )
             chosen_span_intervals.append((start_index, end_index))
 
             if len(chosen_span_intervals) == top_spans:
