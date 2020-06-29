@@ -1552,6 +1552,9 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
+        print(f"logits: {logits.shape}")
+        print(f"pooled_output: {pooled_output.shape}")
+        print(f"num_choices: {num_choices}")
         reshaped_logits = logits.view(-1, num_choices)
 
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here

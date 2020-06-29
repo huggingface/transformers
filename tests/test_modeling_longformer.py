@@ -285,7 +285,8 @@ class LongformerModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        global_attention_mask = torch.zeros_like(input_ids)
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask, "global_attention_mask": global_attention_mask}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_question_answering(self):
@@ -319,11 +320,10 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
         (
             LongformerModel,
             LongformerForMaskedLM,
-            # TODO: make tests pass for those models
-            # LongformerForSequenceClassification,
-            # LongformerForQuestionAnswering,
-            # LongformerForTokenClassification,
-            # LongformerForMultipleChoice,
+            LongformerForSequenceClassification,
+            LongformerForQuestionAnswering,
+            LongformerForTokenClassification,
+            LongformerForMultipleChoice,
         )
         if is_torch_available()
         else ()
