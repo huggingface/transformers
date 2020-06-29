@@ -144,6 +144,7 @@ class Trainer:
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
     prediction_loss_only: bool
     tb_writer: Optional["SummaryWriter"] = None
+    keep_tb_writer_open: Optional[bool] = False
     optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
     global_step: Optional[int] = None
     epoch: Optional[float] = None
@@ -158,6 +159,7 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
         tb_writer: Optional["SummaryWriter"] = None,
+        keep_tb_writer_open: Optional[bool] = False,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None,
     ):
         """
@@ -167,6 +169,11 @@ class Trainer:
         Args:
             prediction_loss_only:
                 (Optional) in evaluation and prediction, only return the loss
+            keep_tb_writer_open:
+                (Optional) Whether or not to keep tb_writer open after training 
+                is done. If kept open, this allows you to write additional 
+                data/metrics to tensorboard after the model is done training 
+                by accessing the `tb_writer` class attribute.
         """
         self.model = model.to(args.device)
         self.args = args
@@ -340,7 +347,7 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
-    def train(self, model_path: Optional[str] = None, close_tb_writer: Optional[bool] = True):
+    def train(self, model_path: Optional[str] = None):
         """
         Main training entry point.
 
@@ -348,8 +355,6 @@ class Trainer:
             model_path:
                 (Optional) Local path to model if model to train has been instantiated from a local path
                 If present, we will try reloading the optimizer/scheduler states from there.
-            close_tb_writer:
-                (Optional) Whether or not to close tb_writer after training is done.
         """
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
@@ -535,7 +540,7 @@ class Trainer:
                 # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                 xm.master_print(met.metrics_report())
 
-        if self.tb_writer and close_tb_writer:
+        if self.tb_writer and not self.keep_tb_writer_open:
             self.tb_writer.close()
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
