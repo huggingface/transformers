@@ -35,9 +35,73 @@ class TrainingArguments:
     TrainingArguments is the subset of the arguments we use in our example scripts
     **which relate to the training loop itself**.
 
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on the command line.
+
+    Parameters:
+        output_dir (:obj:`str`):
+            The output directory where the model predictions and checkpoints will be written.
+        overwrite_output_dir (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If :obj:`True`, overwrite the content of the output directory. Use this to continue training if
+            :obj:`output_dir` points to a checkpoint directory.
+        do_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to run training or not.
+        do_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to run evaluation on the dev set or not.
+        do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to run predictions on the test set or not.
+        evaluate_during_training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to run evaluation during training at each logging step or not.
+        per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
+            The batch size per GPU/TPU core/CPU for training.
+        per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
+            The batch size per GPU/TPU core/CPU for evaluation.
+        gradient_accumulation_steps: (:obj:`int`, `optional`, defaults to 1):
+            Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
+        learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
+            The initial learning rate for Adam.
+        weight_decay (:obj:`float`, `optional`, defaults to 0):
+            The weight decay to apply (if not zero).
+        adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
+            Epsilon for the Adam optimizer.
+        max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
+            Maximum gradient norm (for gradient clipping).
+        num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
+            Total number of training epochs to perform.
+        max_steps (:obj:`int`, `optional`, defaults to -1):
+            If set to a positive number, the total number of training steps to perform. Overrides
+            :obj:`num_train_epochs`.
+        warmup_steps (:obj:`int`, `optional`, defaults to 0):
+            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
+        logging_dir (:obj:`str`, `optional`):
+            Tensorboard log directory. Will default to `runs/**CURRENT_DATETIME_HOSTNAME**`.
+        logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter to log and evalulate the first :obj:`global_step` or not.
+        logging_steps (:obj:`int`, `optional`, defaults to 500):
+            Number of update steps between two logs.
+        save_steps (:obj:`int`, `optional`, defaults to 500):
+            Number of updates steps before two checkpoint saves.
+        save_total_limit (:obj:`int`, `optional`):
+            If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
+            :obj:`output_dir`.
+        no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wherher to not use CUDA even when it is available or not.
+        seed (:obj:`int`, `optional`, defaults to 42):
+            Random seed for initialization.
+        fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use 16-bit (mixed) precision training (through NVIDIA apex) instead of 32-bit training.
+        fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
+            For :obj:`fp16` training, apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
+            on the `apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+        local_rank (:obj:`int`, `optional`, defaults to -1):
+            During distributed training, the rank of the process.
+        tpu_num_cores (:obj:`int`, `optional`):
+            When training on TPU, the mumber of TPU cores (automatically passed by launcher script).
+        tpu_metrics_debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            When training on TPU, whether to print debug metrics or not.
+        dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
+            or not.
     """
 
     output_dir: str = field(
@@ -141,6 +205,9 @@ class TrainingArguments:
 
     @property
     def train_batch_size(self) -> int:
+        """
+        The actual batch size for training (may differ for :obj:`per_gpu_train_batch_size` in distributed training).
+        """
         if self.per_gpu_train_batch_size:
             logger.warning(
                 "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
@@ -151,6 +218,9 @@ class TrainingArguments:
 
     @property
     def eval_batch_size(self) -> int:
+        """
+        The actual batch size for evaluation (may differ for :obj:`per_gpu_eval_batch_size` in distributed training).
+        """
         if self.per_gpu_eval_batch_size:
             logger.warning(
                 "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
@@ -193,11 +263,21 @@ class TrainingArguments:
     @property
     @torch_required
     def device(self) -> "torch.device":
+        """
+        The device used by this process.
+        """
         return self._setup_devices[0]
 
     @property
     @torch_required
     def n_gpu(self):
+        """
+        The number of GPUs used by this process.
+
+        Note:
+            This will only be greater than one when you have multiple GPUs available but are not using distributed
+            training. For distributed training, it will always be 1.
+        """
         return self._setup_devices[1]
 
     def to_json_string(self):

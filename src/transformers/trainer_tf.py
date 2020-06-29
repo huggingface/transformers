@@ -29,6 +29,32 @@ def set_seed(seed: int):
 
 
 class TFTrainer:
+    """
+    TFTrainer is a simple but feature-complete training and eval loop for TensorFlow,
+    optimized for 🤗 Transformers.
+
+    Args:
+        model (:class:`~transformers.TFPreTrainedModel`):
+            The model to train, evaluate or use for predictions.
+        args (:class:`~transformers.TFTrainingArguments`):
+            The arguments to tweak training.
+        train_dataset (:class:`~tf.data.Dataset`, `optional`):
+            The dataset to use for training.
+        eval_dataset (:class:`~tf.data.Dataset`, `optional`):
+            The dataset to use for evaluation.
+        compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
+            The function that will be used to compute metrics at evaluation. Must take a
+            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
+        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
+            When performing evaluation and predictions, only returns the loss.
+        tb_writer (:obj:`SummaryWriter`, `optional`):
+            Object to write to TensorBoard.
+        optimizers (:obj:`Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]`, `optional`):
+            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
+            :class:`~transformers.AdamW` on your model and a scheduler given by
+            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+    """
+
     model: TFPreTrainedModel
     args: TFTrainingArguments
     train_dataset: Optional[tf.data.Dataset]
@@ -78,6 +104,9 @@ class TFTrainer:
         set_seed(self.args.seed)
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
+        """
+        Returns the training :class:`~tf.data.Datasetr`.
+        """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
@@ -101,6 +130,13 @@ class TFTrainer:
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_eval_tfdataset(self, eval_dataset: Optional[tf.data.Dataset] = None) -> tf.data.Dataset:
+        """
+        Returns the evaluation :class:`~tf.data.Dataset`.
+
+        Args:
+            eval_dataset (:class:`~tf.data.Dataset`, `optional`):
+                If provided, will override `self.eval_dataset`.
+        """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
@@ -114,6 +150,12 @@ class TFTrainer:
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
+        """
+        Returns a test :class:`~tf.data.Dataset`.
+
+        Args:
+            test_dataset (:class:`~tf.data.Dataset`): The dataset to use.
+        """
         ds = test_dataset.batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
 
         return self.args.strategy.experimental_distribute_dataset(ds)
@@ -124,9 +166,8 @@ class TFTrainer:
         """
         Setup the optimizer and the learning rate scheduler.
 
-        We provide a reasonable default that works well.
-        If you want to use something else, you can pass a tuple in the Trainer's init,
-        or override this method in a subclass.
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        TFTrainer's init through :obj:`optimizers`, or override this method in a subclass.
         """
         if self.optimizers is not None:
             return self.optimizers
@@ -263,11 +304,18 @@ class TFTrainer:
 
         logger.info(output)
 
-    def evaluate(
-        self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None
-    ) -> Dict[str, float]:
+    def evaluate(self, eval_dataset: Optional[tf.data.Dataset] = None) -> Dict[str, float]:
         """
-        Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
+        Run evaluation and returns metrics.
+
+        The calling script will be responsible for providing a method to compute metrics, as they are
+        task-dependent (pass it to the init :obj:`compute_metrics` argument).
+
+        Args:
+            eval_dataset (:class:`~tf.data.Dataset`, `optional`):
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+        Returns:
+            A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
         eval_ds = self.get_eval_tfdataset(eval_dataset)
 
@@ -478,12 +526,22 @@ class TFTrainer:
 
     def predict(self, test_dataset: tf.data.Dataset) -> PredictionOutput:
         """
-        Run prediction and return predictions and potential metrics.
+        Run prediction and returns predictions and potential metrics.
+
         Depending on the dataset and your use case, your test dataset may contain labels.
-        In that case, this method will also return metrics, like in evaluate().
+        In that case, this method will also return metrics, like in :obj:`evaluate()`.
+
         Args:
-          test_dataset: something similar to a PT Dataset. This is just
-            temporary before to have a framework-agnostic approach for datasets.
+            test_dataset (:class:`~tf.data.Dataset`):
+                Dataset to run the predictions on.
+        Returns:
+            `NamedTuple`:
+            predictions (:obj:`np.ndarray`):
+                The predictions on :obj:`test_dataset`.
+            label_ids (:obj:`np.ndarray`, `optional`):
+                The labels (if the dataset contained some).
+            metrics (:obj:`Dict[str, float]`, `optional`):
+                The potential dictionary of metrics (if the dataset contained labels).
         """
         test_ds = self.get_test_tfdataset(test_dataset)
 
@@ -491,7 +549,7 @@ class TFTrainer:
 
     def save_model(self, output_dir: Optional[str] = None):
         """
-        Save the pretrained model.
+        Will save the model, so you can reload it using :obj:`from_pretrained()`.
         """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
 
