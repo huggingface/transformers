@@ -19,10 +19,7 @@ import logging
 
 import torch
 
-from transformers import (
-    BlenderbotConditionalGeneration,
-    BlenderbotConfig,
-)
+from transformers import BlenderbotConditionalGeneration, BlenderbotConfig
 
 
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +41,8 @@ PATTERNS = [
 
 
 def rename_state_dict_key(k):
-    if k == 'embeddings.weight': return 'shared.weight'
+    if k == "embeddings.weight":
+        return "shared.weight"
 
     for parlai_name, hf_name in PATTERNS:
         k = k.replace(parlai_name, hf_name)

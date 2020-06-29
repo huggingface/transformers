@@ -35,8 +35,10 @@ from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
+from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
@@ -77,8 +79,12 @@ from .file_utils import (
     add_end_docstrings,
     add_start_docstrings,
     cached_path,
+    is_apex_available,
+    is_psutil_available,
+    is_py3nvml_available,
     is_tf_available,
     is_torch_available,
+    is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
 
@@ -118,7 +124,7 @@ from .pipelines import (
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from .tokenization_bart import BartTokenizer, MBartTokenizer
+from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_blenderbot import BlenderbotTokenizer
@@ -129,15 +135,28 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
-from .tokenization_utils import PreTrainedTokenizer, TensorType
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import (
+    BatchEncoding,
+    CharSpan,
+    PreTrainedTokenizerBase,
+    SpecialTokensMixin,
+    TensorType,
+    TokenSpan,
+)
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+
+# Trainer
 from .trainer_utils import EvalPrediction
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
@@ -159,15 +178,36 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelWithLMHead,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
+        AutoModelForSeq2SeqLM,
         AutoModelForTokenClassification,
         AutoModelForMultipleChoice,
         MODEL_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+    )
+
+    from .modeling_mobilebert import (
+        MobileBertPreTrainedModel,
+        MobileBertModel,
+        MobileBertForPreTraining,
+        MobileBertForSequenceClassification,
+        MobileBertForQuestionAnswering,
+        MobileBertForMaskedLM,
+        MobileBertForNextSentencePrediction,
+        MobileBertForMultipleChoice,
+        MobileBertForTokenClassification,
+        load_tf_weights_in_mobilebert,
+        MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MobileBertLayer,
     )
 
     from .modeling_bert import (
@@ -175,6 +215,7 @@ if is_torch_available():
         BertModel,
         BertForPreTraining,
         BertForMaskedLM,
+        BertLMHeadModel,
         BertForNextSentencePrediction,
         BertForSequenceClassification,
         BertForMultipleChoice,
@@ -231,10 +272,13 @@ if is_torch_available():
         XLMForQuestionAnsweringSimple,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+    from .modeling_blenderbot import BlenderbotConditionalGeneration, BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
     from .modeling_bart import (
+        PretrainedBartModel,
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
+        BartForQuestionAnswering,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_marian import MarianMTModel
@@ -252,6 +296,7 @@ if is_torch_available():
         DistilBertPreTrainedModel,
         DistilBertForMaskedLM,
         DistilBertModel,
+        DistilBertForMultipleChoice,
         DistilBertForSequenceClassification,
         DistilBertForQuestionAnswering,
         DistilBertForTokenClassification,
@@ -279,6 +324,7 @@ if is_torch_available():
         AlbertModel,
         AlbertForPreTraining,
         AlbertForMaskedLM,
+        AlbertForMultipleChoice,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
         AlbertForTokenClassification,
@@ -291,6 +337,7 @@ if is_torch_available():
         XLMRobertaForMultipleChoice,
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
+        XLMRobertaForQuestionAnswering,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
@@ -309,7 +356,9 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
+        ElectraForMultipleChoice,
         ElectraForSequenceClassification,
+        ElectraForQuestionAnswering,
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -332,7 +381,12 @@ if is_torch_available():
         LongformerForQuestionAnswering,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from .modeling_blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotConditionalGeneration
+
+    from .modeling_retribert import (
+        RetriBertPreTrainedModel,
+        RetriBertModel,
+        RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
 
     # Optimization
     from .optimization import (
@@ -346,11 +400,12 @@ if is_torch_available():
 
     # Trainer
     from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
-    from .data.data_collator import DefaultDataCollator, DataCollator, DataCollatorForLanguageModeling
+    from .data.data_collator import default_data_collator, DataCollator, DataCollatorForLanguageModeling
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
     # Benchmarks
-    from .benchmark import PyTorchBenchmark, PyTorchBenchmarkArguments
+    from .benchmark.benchmark import PyTorchBenchmark
+    from .benchmark.benchmark_args import PyTorchBenchmarkArguments
 
 # TensorFlow
 if is_tf_available():
@@ -464,6 +519,20 @@ if is_tf_available():
         TFGPT2PreTrainedModel,
     )
 
+    from .modeling_tf_mobilebert import (
+        TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFMobileBertModel,
+        TFMobileBertPreTrainedModel,
+        TFMobileBertForPreTraining,
+        TFMobileBertForSequenceClassification,
+        TFMobileBertForQuestionAnswering,
+        TFMobileBertForMaskedLM,
+        TFMobileBertForNextSentencePrediction,
+        TFMobileBertForMultipleChoice,
+        TFMobileBertForTokenClassification,
+        TFMobileBertMainLayer,
+    )
+
     from .modeling_tf_openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
@@ -545,6 +614,10 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
+
+    # Benchmarks
+    from .benchmark.benchmark_tf import TensorFlowBenchmark
+    from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
 
 if not is_tf_available() and not is_torch_available():

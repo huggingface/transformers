@@ -52,7 +52,7 @@ class BlenderbotConfig(BartConfig):
 
     def __init__(
         self,
-        hidden_size=512,
+        d_model=512,
         dropout=0.1,
         encoder_ffn_dim=2048,
         encoder_layers=8,
@@ -84,7 +84,7 @@ class BlenderbotConfig(BartConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             unk_token_id=unk_token_id,
-            d_model=hidden_size,
+            d_model=d_model,
             init_std=init_std,
             max_position_embeddings=max_position_embeddings,
             static_position_embeddings=static_position_embeddings,
@@ -106,5 +106,6 @@ class BlenderbotConfig(BartConfig):
             normalize_embedding=normalize_embedding,
             add_final_layer_norm=add_final_layer_norm,
             is_encoder_decoder=True,
-            extra_pos_embeddings=0 ** kwargs,
+            extra_pos_embeddings=0,
+            **kwargs,
         )

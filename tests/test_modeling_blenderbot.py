@@ -111,7 +111,7 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_name in BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = BlenderbotConditionalGeneration.from_pretrained(
-                weights_path
+                model_name
             )  # will change weight_path to model_name once the pretrained weights uploaded on S3
             self.assertIsNotNone(model)
 
@@ -158,7 +158,7 @@ class BlenderbotIntegrationTests(unittest.TestCase):
 
         batch_size = input_ids.size(0)
         config = BlenderbotConfig(
-            hidden_size=16,
+            d_model=16,
             vocab_size=self.vocab_size,
             encoder_layers=2,
             decoder_layers=2,
