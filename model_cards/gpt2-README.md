@@ -13,8 +13,9 @@ Pretrained model on English language using a causal language modeling (CLM) obje
 [this paper](https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)
 and first released at [this page](https://openai.com/blog/better-language-models/).
 
-Disclaimer: The team releasing GPT-2 did not write a model card for this model so this model card has been written by
-the Hugging Face team.
+Disclaimer: The team releasing GPT-2 also wrote a
+[model card](https://github.com/openai/gpt-2/blob/master/model_card.md) for their model. Content from this model card
+has been written by the Hugging Face team to complete the information they provided and give specific examples of bias.
 
 ## Model description
 
@@ -79,7 +80,19 @@ output = model(encoded_input)
 ### Limitations and bias
 
 The training data used for this model has not been released as a dataset one can browse. We know it contains a lot of
-unfiltered from the internet, which is far from neutral. Therefore, the model can have biased predictions:
+unfiltered from the internet, which is far from neutral. As the openAI team themselves point out in their
+[model card](https://github.com/openai/gpt-2/blob/master/model_card.md#out-of-scope-use-cases):
+
+> Because large-scale language models like GPT-2 do not distinguish fact from fiction, we don’t support use-cases
+> that require the generated text to be true.
+>
+> Additionally, language models like GPT-2 reflect the biases inherent to the systems they were trained on, so we do
+> not recommend that they be deployed into systems that interact with humans > unless the deployers first carry out a
+> study of biases relevant to the intended use-case. We found no statistically significant difference in gender, race,
+> and religious bias probes between 774M and 1.5B, implying all versions of GPT-2 should be approached with similar
+> levels of caution around use cases that are sensitive to biases around human attributes.
+
+Here's an example of how the model can have biased predictions:
 
 ```python
 >>> from transformers import pipeline, set_seed
@@ -110,7 +123,8 @@ This bias will also affect all fine-tuned versions of this model.
 The OpenAI team wanted to train this model on a corpus as large as possible. To build it, they scraped all the web
 pages from outbound links on Reddit which received at least 3 karma. Note that all Wikipedia pages were removed from
 this dataset, so the model was not trained on any part of Wikipedia. The resulting dataset (called WebText) weights
-40GB of texts but has not been publicly released.
+40GB of texts but has not been publicly released. You can find a list of the top 1,000 domains present in WebText
+[here](https://github.com/openai/gpt-2/blob/master/domains.txt).
 
 ## Training procedure
 
