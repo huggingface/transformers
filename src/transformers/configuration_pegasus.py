@@ -39,7 +39,7 @@ class PegasusConfig(PretrainedConfig):
             max_target_len=256,
             max_decode_len=256,
             hidden_size=1024,
-            filter_size=4096,
+            ffn_dim=4096,
             num_heads=16,
             num_encoder_layers=16,
             num_decoder_layers=16,
@@ -57,7 +57,7 @@ class PegasusConfig(PretrainedConfig):
         self.max_target_len = max_target_len
         self.max_decode_len = max_decode_len
         self.hidden_size = hidden_size
-        self.filter_size = filter_size
+        self.ffn_dim = ffn_dim
         self.num_heads = num_heads
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
@@ -65,7 +65,7 @@ class PegasusConfig(PretrainedConfig):
 
     @property
     def max_position_embeddings(self):
-        return self.num_encoder_layers
+        return self.max_input_len
 
     @property
     def num_attention_heads(self):
