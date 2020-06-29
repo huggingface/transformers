@@ -106,7 +106,7 @@ def _prepare_bart_decoder_inputs(
     need_causal_mask = not config.output_past
     if decoder_input_ids is None:
         decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
-    bsz, tgt_len = decoder_input_ids.size()[:2]
+    bsz, tgt_len = decoder_input_ids.shape[:2]
     if decoder_attn_mask is None:
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         if need_causal_mask:
@@ -436,7 +436,6 @@ class BartDecoder(tf.keras.layers.Layer):
 
     def __init__(self, config: BartConfig, embed_tokens):
         super().__init__()
-        self.output_past = config.output_past
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
@@ -451,105 +450,91 @@ class BartDecoder(tf.keras.layers.Layer):
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model)
-        self.generation_mode = False
+        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
     def call(
         self,
         input_ids,
         encoder_hidden_states,
         encoder_padding_mask,
-        combined_mask,
+        decoder_padding_mask,
+        decoder_causal_mask,
         decoder_cached_states=None,
-        **unused
+        use_cache=False,
+        output_attentions=False,
+        output_hidden_states=False,
+        **unused,
     ):
-        """
-        Includes several features from "Jointly Learning to Align and
-        Translate with Transformer Models" (Garg et al., EMNLP 2019).
-
-        Args:
-            input_ids (LongTensor): previous decoder outputs of shape
-                `(batch, tgt_len)`, for teacher forcing
-            encoder_hidden_states: output from the encoder, used for
-                encoder-side attention
-            encoder_padding_mask: for ignoring pad tokens
-            decoder_cached_states (dict or None): dictionary used for storing state during generation
-
-        Returns:
-            tuple:
-                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                - hidden states
-                - attentions
-        """
         # check attention mask and invert
         if encoder_padding_mask is not None:
-            assert encoder_padding_mask.dim() == 2
-
-            encoder_padding_mask = (1.0 - encoder_padding_mask.long()) * -10000.0
-            assert encoder_padding_mask.max() <= 0
+            encoder_padding_mask = invert_mask(encoder_padding_mask)
 
         # embed positions
-        positions = self.embed_positions(input_ids, generation_mode=self.generation_mode)
+        positions = self.embed_positions(input_ids, use_cache=use_cache)
 
-        if self.generation_mode:
+        if use_cache:
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]  # happens after we embed them
-            assert input_ids.ne(self.padding_idx).any()
+            # assert input_ids.ne(self.padding_idx).any()
 
-        x = self.embed_tokens(input_ids)
+        x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
-
         x = self.layernorm_embedding(x)
-        x = TFDropout(x, p=self.dropout, training=self.training)
-        x = x.transpose(0, 1)  # (seq_len, BS, model_dim)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
+        x = x.transpose(0, 1)
+        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
+
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
         next_decoder_cache = []
-
-        for i, decoder_layer in enumerate(self.layers):
-            decoder_layer  # type: DecoderLayer
+        for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            if output_hidden_states:
+                all_hidden_states += (x,)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            layer_state = decoder_cached_states[i] if decoder_cached_states is not None else None
+            layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
+
             x, layer_self_attn, layer_past = decoder_layer(
                 x,
                 encoder_hidden_states,
-                encoder_padding_mask,
+                encoder_attn_mask=encoder_padding_mask,
+                decoder_padding_mask=decoder_padding_mask,
                 layer_state=layer_state,
-                attention_mask=combined_mask,
-                need_attn_weights=self.output_attentions,
+                causal_mask=decoder_causal_mask,
+                output_attentions=output_attentions,
             )
 
-            if self.output_past:
+            if use_cache:
                 next_decoder_cache.append(layer_past.copy())
-            if self.output_hidden_states:
-                all_hidden_states += (x,)
-            if self.output_attentions:
+
+            if self.layer_norm and (idx == len(self.layers) - 1):  # last layer of mbart
+                x = self.layer_norm(x)
+            if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-        # Convert shapes from (seq_len, BS, model_dim) to (BS, seq_len, model_dim)
+        # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
+        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
-        if self.output_past:
+        if use_cache:
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
         return x, next_cache, all_hidden_states, list(all_self_attns)
 
 
-def reorder_attn_buffer(input_buffer, new_order):
-    """Reorder buffered internal state (for incremental generation)."""
-    # input_buffer = self._get_input_buffer(incremental_state)
-    for k in input_buffer.keys():
-        input_buffer_k = input_buffer[k]
+def _reorder_buffer(attn_cache, new_order):
+    for k, input_buffer_k in attn_cache.items():
         if input_buffer_k is not None:
-            input_buffer[k] = input_buffer_k.index_select(0, new_order)
-        # incremental_state = self._set_input_buffer(incremental_state, input_buffer)
-    return input_buffer
+            attn_cache[k] = input_buffer_k.index_select(0, new_order)
+    return attn_cache
 
 
 class SelfAttention(tf.keras.layers.Layer):
