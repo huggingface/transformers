@@ -21,7 +21,7 @@ from transformers import is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor, require_tf
-from .utils import CACHE_DIR, slow
+from .utils import slow
 
 # hack
 DEFAULT_DEVICE = 'cpu'
@@ -434,13 +434,6 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         logits2 = model(**inputs_dict)[0]
         _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
         _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
-
-    @unittest.skip("This is just too slow")
-    def test_model_from_pretrained(self):
-        # Forces 1.6GB download from S3 for each model
-        for model_name in list(TFBart_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
-            model = TFBartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
-            self.assertIsNotNone(model)
 
     @slow
     def test_cnn_summarization_same_as_fairseq_easy(self):

@@ -11,7 +11,7 @@ A baseline model for question-answering in french ([CamemBERT](https://camembert
 ## Training hyperparameters
 
 ```shell
-python3 ./examples/run_squad.py \
+python3 ./examples/question-answering/run_squad.py \
 --model_type camembert \
 --model_name_or_path camembert-base \
 --do_train \

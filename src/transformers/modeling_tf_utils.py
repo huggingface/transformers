@@ -84,6 +84,7 @@ def keras_serializable(cls):
         else:
             raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
         self._transformers_config = config
+        self._kwargs = kwargs
 
     cls.__init__ = wrapped_init
 
@@ -94,6 +95,7 @@ def keras_serializable(cls):
         def get_config(self):
             cfg = super(cls, self).get_config()
             cfg["transformers_config"] = self._transformers_config.to_dict()
+            cfg.update(self._kwargs)
             return cfg
 
         cls.get_config = get_config
@@ -104,6 +106,44 @@ def keras_serializable(cls):
     return cls
 
 
+class TFQuestionAnsweringLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        start_loss = loss_fn(labels["start_position"], logits[0])
+        end_loss = loss_fn(labels["end_position"], logits[1])
+
+        return (start_loss + end_loss) / 2.0
+
+
+class TFTokenClassificationLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        active_loss = tf.reshape(labels, (-1,)) != -1
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+
+        return loss_fn(labels, reduced_logits)
+
+
+class TFSequenceClassificationLoss:
+    def compute_loss(self, labels, logits):
+        if shape_list(logits)[1] == 1:
+            loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+        else:
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+            )
+
+        return loss_fn(labels, logits)
+
+
+TFMultipleChoiceLoss = TFSequenceClassificationLoss
+
+
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
     r""" Base class for all TF models.
 
@@ -112,7 +152,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Class attributes (overridden by derived classes):
             - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-            - ``pretrained_model_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained weights as values.
             - ``load_tf_weights``: a python ``method`` for loading a TensorFlow checkpoint in a PyTorch model, taking as arguments:
 
                 - ``model``: an instance of the relevant subclass of :class:`~transformers.PreTrainedModel`,
@@ -122,7 +161,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
     """
     config_class = None
-    pretrained_model_archive_map = {}
     base_model_prefix = ""
 
     @property
@@ -161,6 +199,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             raise NotImplementedError
 
+    def set_input_embeddings(self, value):
+        """
+        Set model's input embeddings
+
+        Args:
+            value (:obj:`tf.keras.layers.Layer`):
+                A module mapping vocabulary to hidden states.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            base_model.set_input_embeddings(value)
+        else:
+            raise NotImplementedError
+
     def get_output_embeddings(self):
         """
         Returns the model's output embeddings.
@@ -170,40 +222,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
-
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Variable from a provided token Embedding Module.
-            Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end
-
-        Args:
-            new_num_tokens: (`optional`) int
-                New number of tokens in the embedding matrix.
-                Increasing the size will add newly initialized vectors at the end
-                Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
-        Return: ``tf.Variable``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
-        """
-        # if new_num_tokens is None:
-        #     return old_embeddings
-
-        # old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
-        # if old_num_tokens == new_num_tokens:
-        #     return old_embeddings
-
-        # # Build new embeddings
-        # new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        # new_embeddings.to(old_embeddings.weight.device)
-
-        # # initialize all new embeddings (in particular added tokens)
-        # self._init_weights(new_embeddings)
-
-        # # Copy token embeddings from the previous weights
-        # num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        # new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
-
-        # return new_embeddings
 
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
@@ -218,7 +236,71 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        raise NotImplementedError
+        model_embeds = self._resize_token_embeddings(new_num_tokens)
+        if new_num_tokens is None:
+            return model_embeds
+
+        return model_embeds
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
+        base_model = getattr(self, self.base_model_prefix, self)
+        old_embeddings = base_model.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        base_model.set_input_embeddings(new_embeddings)
+        # Update base model and current model config
+        self.config.vocab_size = new_num_tokens
+        base_model.vocab_size = new_num_tokens
+        return base_model.get_input_embeddings()
+
+    def _get_word_embeddings(self, embeddings):
+        if hasattr(embeddings, "word_embeddings"):
+            # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+            return embeddings.word_embeddings
+        elif hasattr(embeddings, "weight"):
+            # TFSharedEmbeddings
+            return embeddings.weight
+        else:
+            raise ValueError("word embedding is not defined.")
+
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Variable from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end.
+
+        Args:
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``tf.Variable``
+            Pointer to the resized word Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        word_embeddings = self._get_word_embeddings(old_embeddings)
+        if new_num_tokens is None:
+            return word_embeddings
+        old_num_tokens, old_embedding_dim = word_embeddings.shape
+        if old_num_tokens == new_num_tokens:
+            return word_embeddings
+
+        # initialize new embeddings
+        # todo: initializer range is not always passed in config.
+        init_range = getattr(self.config, "initializer_range", 0.02)
+        new_embeddings = self.add_weight(
+            "weight",
+            shape=[new_num_tokens, old_embedding_dim],
+            initializer=get_initializer(init_range),
+            dtype=tf.float32,
+        )
+        init_weights = new_embeddings.numpy()
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        new_embeddings.assign(init_weights)
+
+        return new_embeddings
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
@@ -231,11 +313,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
     def save_pretrained(self, save_directory):
         """ Save a model and its configuration file to a directory, so that it
-            can be re-loaded using the `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
+            can be re-loaded using the :func:`~transformers.PreTrainedModel.from_pretrained` class method.
         """
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
 
         # Save configuration file
         self.config.save_pretrained(save_directory)
@@ -256,7 +339,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Parameters:
             pretrained_model_name_or_path: either:
-
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
@@ -268,11 +350,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             config: (`optional`) one of:
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
                     - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
 
-                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
-                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
-                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+                    - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                    - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                    - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             from_pt: (`optional`) boolean, default False:
                 Load the model weights from a PyTorch state_dict save file (see docstring of pretrained_model_name_or_path argument).
@@ -319,6 +401,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        local_files_only = kwargs.pop("local_files_only", False)
+        use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -330,6 +414,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 return_unused_kwargs=True,
                 force_download=force_download,
                 resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
                 **kwargs,
             )
         else:
@@ -337,9 +423,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
-            if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            elif os.path.isdir(pretrained_model_name_or_path):
+            if os.path.isdir(pretrained_model_name_or_path):
                 if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
@@ -358,32 +442,30 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME)
+                    pretrained_model_name_or_path,
+                    filename=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME),
+                    use_cdn=use_cdn,
                 )
 
-            # redirect to the cache, if necessary
             try:
+                # Load from URL or cache if already cached
                 resolved_archive_file = cached_path(
                     archive_file,
                     cache_dir=cache_dir,
                     force_download=force_download,
-                    resume_download=resume_download,
                     proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
                 )
-            except EnvironmentError as e:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    logger.error("Couldn't reach server at '{}' to download pretrained weights.".format(archive_file))
-                else:
-                    logger.error(
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url but couldn't find any file "
-                        "associated to this path or url.".format(
-                            pretrained_model_name_or_path,
-                            ", ".join(cls.pretrained_model_archive_map.keys()),
-                            archive_file,
-                        )
-                    )
-                raise e
+                if resolved_archive_file is None:
+                    raise EnvironmentError
+            except EnvironmentError:
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {TF2_WEIGHTS_NAME}, {WEIGHTS_NAME}.\n\n"
+                )
+                raise EnvironmentError(msg)
             if resolved_archive_file == archive_file:
                 logger.info("loading weights file {}".format(archive_file))
             else:
@@ -423,13 +505,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         unexpected_keys = list(hdf5_layer_names - model_layer_names)
         error_msgs = []
 
-        if len(missing_keys) > 0:
-            logger.info(
-                "Layers of {} not initialized from pretrained model: {}".format(model.__class__.__name__, missing_keys)
-            )
         if len(unexpected_keys) > 0:
-            logger.info(
-                "Layers from pretrained model not used in {}: {}".format(model.__class__.__name__, unexpected_keys)
+            logger.warning(
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+            )
+        else:
+            logger.warning(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+        if len(missing_keys) > 0:
+            logger.warning(
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized: {missing_keys}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+        else:
+            logger.warning(
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"If your task is similar to the task the model of the ckeckpoint was trained on, "
+                f"you can already use {model.__class__.__name__} for predictions without further training."
             )
         if len(error_msgs) > 0:
             raise RuntimeError(
@@ -444,36 +541,36 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         return {"inputs": inputs}
 
-    def _do_output_past(self, outputs):
-        has_output_past = hasattr(self.config, "output_past") and self.config.output_past
-        has_mem_len = hasattr(self.config, "mem_len") and self.config.mem_len
-
-        if has_output_past and not has_mem_len and len(outputs) > 1:
-            return True
-        elif has_mem_len and self.config.mem_len > 0 and len(outputs) > 1:
-            return True
-
-        return False
+    def _use_cache(self, outputs, use_cache):
+        """During generation, decide whether to pass the `past` variable to the next forward pass."""
+        if len(outputs) <= 1 or use_cache is False:
+            return False
+        if hasattr(self.config, "mem_len") and self.config.mem_len == 0:
+            return False
+        return True
 
     def generate(
         self,
         input_ids=None,
         max_length=None,
         min_length=None,
-        do_sample=True,
-        early_stopping=False,
+        do_sample=None,
+        early_stopping=None,
         num_beams=None,
         temperature=None,
         top_k=None,
         top_p=None,
         repetition_penalty=None,
+        bad_words_ids=None,
         bos_token_id=None,
         pad_token_id=None,
-        eos_token_ids=None,
+        eos_token_id=None,
         length_penalty=None,
         no_repeat_ngram_size=None,
         num_return_sequences=None,
         attention_mask=None,
+        decoder_start_token_id=None,
+        use_cache=None,
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
@@ -486,15 +583,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Parameters:
 
-            input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
+            input_ids: (`optional`) `tf.Tensor` of `dtype=tf.int32` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `torch.LongTensor` of shape `(1,)`.
+                it as an empty `tf.Tensor` of shape `(1,)`.
 
             max_length: (`optional`) int
                 The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
 
+            min_length: (`optional`) int
+                The min length of the sequence to be generated.  Between 0 and infinity. Default to 0.
             do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `True`.
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
+
+            early_stopping: (`optional`) bool
+                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
 
             num_beams: (`optional`) int
                 Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
@@ -512,64 +614,97 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
 
             bos_token_id: (`optional`) int
-                Beginning of sentence token if no prompt is provided. Default to 0.
+                Beginning of sentence token if no prompt is provided. Default to specicic model bos_token_id or None if it does not exist.
 
-            eos_token_ids: (`optional`) int or list of int
-                End of sequence token or list of tokens to stop the generation. Default to 0.
+            pad_token_id: (`optional`) int
+                Pad token. Defaults to pad_token_id as defined in the models config.
+
+            eos_token_id: (`optional`) int
+                EOS token. Defaults to eos_token_id as defined in the models config.
+
             length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
+
+            no_repeat_ngram_size: (`optional`) int
+                If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
+
+            bad_words_ids: (`optional`) list of lists of int
+                `bad_words_ids` contains tokens that are not allowed to be generated. In order to get the tokens of the words that should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
 
             num_return_sequences: (`optional`) int
                 The number of independently computed returned sequences for each element in the batch. Default to 1.
 
+            attention_mask (`optional`) obj: `tf.Tensor` with `dtype=tf.int32` of same shape as `input_ids`
+                Mask to avoid performing attention on padding token indices.
+                Mask values selected in ``[0, 1]``:
+                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+                Defaults to `None`.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+
+            decoder_start_token_id=None: (`optional`) int
+                Start token id for the decoder. Defaults to ``decoder_start_token_id`` as defined the model's config or to the ``bos_token_id``
+                if no ``decoder_start_token_id`` is found in the config.
+                This is only relevant for encoder-decoder models.
+
+            use_cache: (`optional`) bool
+                If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
+
         Return:
 
-            output: `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
+            output: `tf.Tensor` of `dtype=tf.int32` shape `(batch_size * num_return_sequences, sequence_length)`
                 sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
 
         Examples::
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding
+            model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            outputs = model.generate(max_length=40)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # 3 generate sequences using by sampling
+            input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
+            tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
+            model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
+            input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
+            bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
+            input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
         """
 
         # We cannot generate if the model does not have a LM head
         if self.get_output_embeddings() is None:
             raise AttributeError(
                 "You tried to generate sequences with a model that does not have a LM Head."
-                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5WithLMHeadModel`, `TFTransfoXLLMHeadModel`)"
+                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
         min_length = min_length if min_length is not None else self.config.min_length
         do_sample = do_sample if do_sample is not None else self.config.do_sample
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         temperature = temperature if temperature is not None else self.config.temperature
         top_k = top_k if top_k is not None else self.config.top_k
@@ -577,26 +712,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
-        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
         )
+        bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
         )
 
         if input_ids is not None:
             batch_size = shape_list(input_ids)[0]  # overriden by the input batch_size
         else:
             batch_size = 1
-        if isinstance(eos_token_ids, int):
-            eos_token_ids = [eos_token_ids]
 
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
         assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
         assert isinstance(early_stopping, bool), "`early_stopping` should be a boolean."
+        assert isinstance(use_cache, bool), "`use_cache` should be a boolean."
         assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictely positive integer."
         assert temperature > 0, "`temperature` should be strictely positive."
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
@@ -608,13 +746,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         assert pad_token_id is None or (
             isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
-        assert (eos_token_ids is None) or (
-            isinstance(eos_token_ids, (list, tuple)) and ((isinstance(e, int) and e >= 0) for e in eos_token_ids)
-        ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
+        assert (eos_token_id is None) or (
+            isinstance(eos_token_id, int) and (eos_token_id >= 0)
+        ), "`eos_token_id` should be a positive integer."
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
         assert (
             isinstance(num_return_sequences, int) and num_return_sequences > 0
         ), "`num_return_sequences` should be a strictely positive integer."
+        assert (
+            bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
+        ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
 
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
@@ -646,11 +787,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         elif attention_mask is None:
             attention_mask = tf.ones_like(input_ids)
 
-        if pad_token_id is None and eos_token_ids is not None:
+        if pad_token_id is None and eos_token_id is not None:
             logger.warning(
-                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
+                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_id)
             )
-            pad_token_id = eos_token_ids[0]
+            pad_token_id = eos_token_id
 
         # current position and vocab size
         cur_len = shape_list(input_ids)[1]
@@ -663,6 +804,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             effective_batch_size = batch_size
             effective_batch_mult = 1
+
+        if self.config.is_encoder_decoder:
+            if decoder_start_token_id is None:
+                decoder_start_token_id = bos_token_id
+
+            assert (
+                decoder_start_token_id is not None
+            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
+            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
+
+            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
@@ -680,6 +836,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 attention_mask, (effective_batch_size * num_beams, input_ids_len)
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
+        if self.config.is_encoder_decoder:
+
+            # create empty decoder_input_ids
+            input_ids = tf.ones((effective_batch_size * num_beams, 1), dtype=tf.int32,) * decoder_start_token_id
+            cur_len = 1
+
+            assert (
+                batch_size == encoder_outputs[0].shape[0]
+            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
+
+            # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
+            expanded_batch_idxs = tf.reshape(
+                tf.repeat(tf.expand_dims(tf.range(batch_size), -1), repeats=num_beams * effective_batch_mult, axis=1),
+                shape=(-1,),
+            )
+            # expand encoder_outputs
+            encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0), *encoder_outputs[1:])
+
+        else:
+            encoder_outputs = None
+            cur_len = shape_list(input_ids)[-1]
+
         if num_beams > 1:
             output = self._generate_beam_search(
                 input_ids,
@@ -693,14 +871,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                eos_token_ids=eos_token_ids,
+                eos_token_id=eos_token_id,
+                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
                 length_penalty=length_penalty,
                 num_beams=num_beams,
                 vocab_size=vocab_size,
+                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
+                use_cache=use_cache,
             )
         else:
             output = self._generate_no_beam_search(
@@ -714,11 +897,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                eos_token_ids=eos_token_ids,
+                eos_token_id=eos_token_id,
+                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 vocab_size=vocab_size,
+                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
+                use_cache=use_cache,
             )
 
         return output
@@ -735,11 +923,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
+        bad_words_ids,
+        bos_token_id,
         pad_token_id,
-        eos_token_ids,
+        eos_token_id,
+        decoder_start_token_id,
         batch_size,
         vocab_size,
+        encoder_outputs,
         attention_mask,
+        use_cache,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
@@ -749,15 +942,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         unfinished_sents = tf.ones_like(input_ids[:, 0])
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
 
-        past = None
+        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+            )
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
 
             # if model has past, then set the past variable to speed up decoding
-            if self._do_output_past(outputs):
+            if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
@@ -770,7 +965,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
                 # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_tokens = calc_banned_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
+                banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
                 # create banned_tokens boolean mask
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
@@ -782,11 +977,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
                 )
 
+            if bad_words_ids is not None:
+                # calculate a list of banned tokens according to bad words
+                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
+
+                banned_tokens_indices_mask = []
+                for banned_tokens_slice in banned_tokens:
+                    banned_tokens_indices_mask.append(
+                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+                    )
+
+                next_token_logits = set_tensor_by_indices_to_value(
+                    next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                )
+
             # set eos token prob to zero if min_length is not reached
-            if eos_token_ids is not None and cur_len < min_length:
-                # create eos_token_ids boolean mask
+            if eos_token_id is not None and cur_len < min_length:
+                # create eos_token_id boolean mask
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
 
@@ -809,34 +1018,39 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 next_token = tf.math.argmax(next_token_logits, axis=-1, output_type=tf.int32)
 
             # update generations and finished sentences
-            if eos_token_ids is not None:
-                # pad finished sentences if eos_token_ids exist
+            if eos_token_id is not None:
+                # pad finished sentences if eos_token_id exist
                 tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
 
+            # add token and increase length by one
             input_ids = tf.concat([input_ids, tf.expand_dims(tokens_to_add, -1)], 1)
+            cur_len = cur_len + 1
 
-            if eos_token_ids is not None:
-                for eos_token_id in eos_token_ids:
-                    eos_in_sents = tokens_to_add == eos_token_id
-                    # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
-                    is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
-                        unfinished_sents, tf.cast(eos_in_sents, tf.int32)
-                    )
-                    sent_lengths = (
-                        sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
-                        + cur_len * is_sents_unfinished_and_token_to_add_is_eos
-                    )
+            if eos_token_id is not None:
+                eos_in_sents = tokens_to_add == eos_token_id
+                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
+                is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
+                    unfinished_sents, tf.cast(eos_in_sents, tf.int32)
+                )
+                sent_lengths = (
+                    sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
+                    + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                )
 
-                    # unfinished_sents is set to zero if eos in sentence
-                    unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
+                # unfinished_sents is set to zero if eos in sentence
+                unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
             if tf.math.reduce_max(unfinished_sents) == 0:
                 break
 
-            cur_len = cur_len + 1
+            # extend attention_mask for new generated input if only decoder
+            if self.config.is_encoder_decoder is False:
+                attention_mask = tf.concat(
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                )
 
         # if there are different sentences lengths in the batch, some batches have to be padded
         min_sent_length = tf.math.reduce_min(sent_lengths)
@@ -851,7 +1065,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 tf.expand_dims(sent_lengths, -1), [batch_size, max_sent_length]
             )
             broad_casted_range = tf.transpose(
-                tf.broadcast_to(tf.expand_dims(tf.range(max_length), -1), [max_length, batch_size])
+                tf.broadcast_to(tf.expand_dims(tf.range(max_sent_length), -1), [max_sent_length, batch_size])
             )
 
             decoded = tf.where(broad_casted_range < broad_casted_sent_lengths, input_ids, padding)
@@ -873,14 +1087,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
+        bad_words_ids,
+        bos_token_id,
         pad_token_id,
-        eos_token_ids,
+        decoder_start_token_id,
+        eos_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,
         num_beams,
         vocab_size,
+        encoder_outputs,
         attention_mask,
+        use_cache,
     ):
         """ Generate sequences for each example with beam search.
         """
@@ -900,19 +1119,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             beam_scores = tf.zeros((batch_size, num_beams), dtype=tf.float32)
 
         beam_scores = tf.reshape(beam_scores, (batch_size * num_beams,))
+
         # cache compute states
-        past = None
+        past = encoder_outputs
 
         # done sentences
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+            )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
 
             # if model has past, then set the past variable to speed up decoding
-            if self._do_output_past(outputs):
+            if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
@@ -930,12 +1152,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
 
             # set eos token prob to zero if min_length is not reached
-            if eos_token_ids is not None and cur_len < min_length:
-                # create eos_token_ids boolean mask
+            if eos_token_id is not None and cur_len < min_length:
+                # create eos_token_id boolean mask
+                num_batch_hypotheses = batch_size * num_beams
+
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
-                eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
+                eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
 
                 scores = set_tensor_by_indices_to_value(scores, eos_token_indices_mask, -float("inf"))
 
@@ -943,8 +1167,24 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
                 # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
                 num_batch_hypotheses = batch_size * num_beams
-                banned_tokens = calc_banned_tokens(input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len)
+                banned_tokens = calc_banned_ngram_tokens(
+                    input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
+                )
                 # create banned_tokens boolean mask
+                banned_tokens_indices_mask = []
+                for banned_tokens_slice in banned_tokens:
+                    banned_tokens_indices_mask.append(
+                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+                    )
+
+                scores = set_tensor_by_indices_to_value(
+                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                )
+
+            if bad_words_ids is not None:
+                # calculate a list of banned tokens according to bad words
+                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
+
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
                     banned_tokens_indices_mask.append(
@@ -969,8 +1209,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
                 _scores = tf.reshape(_scores, (batch_size, num_beams * vocab_size))
 
-                next_tokens = tf.random.categorical(
-                    _scores, dtype=tf.int32, num_samples=2 * num_beams
+                next_tokens = sample_without_replacement(
+                    _scores, num_samples=2 * num_beams
                 )  # (batch_size, 2 * num_beams)
                 # Compute next scores
                 next_scores = tf.gather(_scores, next_tokens, batch_dims=1)  # (batch_size, 2 * num_beams)
@@ -995,18 +1235,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             assert shape_list(next_scores) == shape_list(next_tokens) == [batch_size, 2 * num_beams]
 
             # next batch beam content
-            # list of (batch_size * num_beams) tuple(next hypothesis score, next token, current position in the batch)
             next_batch_beam = []
 
             # for each sentence
             for batch_idx in range(batch_size):
 
+                # if we are done with this sentence
                 if done[batch_idx]:
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
                     ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
                     assert (
-                        eos_token_ids is not None and pad_token_id is not None
+                        eos_token_id is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
@@ -1018,14 +1258,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
                     zip(next_tokens[batch_idx], next_scores[batch_idx])
                 ):
-
                     # get beam and token IDs
                     beam_id = beam_token_id // vocab_size
                     token_id = beam_token_id % vocab_size
 
                     effective_beam_id = batch_idx * num_beams + beam_id
                     # add to generated hypotheses if end of sentence or last iteration
-                    if eos_token_ids is not None and token_id.numpy() in eos_token_ids:
+                    if (eos_token_id is not None) and (token_id.numpy() == eos_token_id):
                         # if beam_token does not belong to top num_beams tokens, it should not be added
                         is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
                         if is_beam_token_worse_than_top_num_beams:
@@ -1041,9 +1280,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     if len(next_sent_beam) == num_beams:
                         break
 
-                # if we are done with this sentence
+                # Check if we are done so that we can save a pad step if all(done)
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    tf.reduce_max(next_scores[batch_idx]).numpy()
+                    tf.reduce_max(next_scores[batch_idx]).numpy(), cur_len
                 )
 
                 # update next beam content
@@ -1061,15 +1300,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int32)
             beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int32)
 
-            # re-order batch
+            # re-order batch and update current length
             input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
             input_ids = tf.concat([input_ids, tf.expand_dims(beam_tokens, 1)], axis=-1)
+            cur_len = cur_len + 1
+
             # re-order internal states
-            if past:
+            if past is not None:
                 past = self._reorder_cache(past, beam_idx)
 
-            # update current length
-            cur_len = cur_len + 1
+            # extend attention_mask for new generated input if only decoder
+            if self.config.is_encoder_decoder is False:
+                attention_mask = tf.concat(
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                )
 
         # finalize all open beam hypotheses and end to generated hypotheses
         for batch_idx in range(batch_size):
@@ -1077,8 +1321,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             if done[batch_idx]:
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
-            if eos_token_ids is not None and all(
-                (token_id % vocab_size).numpy().item() not in eos_token_ids for token_id in next_tokens[batch_idx]
+            if eos_token_id is not None and all(
+                (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
@@ -1122,16 +1366,26 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):
-                padding = tf.ones((sent_max_len - shape_list(hypo)[0],), dtype=tf.int32) * pad_token_id
-                decoded_hypo = tf.concat([hypo, padding], axis=0)
+                assert sent_lengths[i] == shape_list(hypo)[0]
+                # if sent_length is max_len do not pad
+                if sent_lengths[i] == sent_max_len:
+                    decoded_slice = hypo
+                else:
+                    # else pad to sent_max_len
+                    num_pad_tokens = sent_max_len - sent_lengths[i]
+                    padding = pad_token_id * tf.ones((num_pad_tokens,), dtype=tf.int32)
+                    decoded_slice = tf.concat([hypo, padding], axis=-1)
 
-                if sent_lengths[i] < max_length:
-                    decoded_hypo = tf.where(
-                        tf.range(max_length) == sent_lengths[i],
-                        eos_token_ids[0] * tf.ones((sent_max_len,), dtype=tf.int32),
-                        decoded_hypo,
-                    )
-                decoded_list.append(decoded_hypo)
+                    # finish sentence with EOS token
+                    if sent_lengths[i] < max_length:
+                        decoded_slice = tf.where(
+                            tf.range(sent_max_len, dtype=tf.int32) == sent_lengths[i],
+                            eos_token_id * tf.ones((sent_max_len,), dtype=tf.int32),
+                            decoded_slice,
+                        )
+                # add to list
+                decoded_list.append(decoded_slice)
+
             decoded = tf.stack(decoded_list)
         else:
             # none of the hypotheses have an eos_token
@@ -1142,17 +1396,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        reordered_past = []
-        for layer_past in past:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` and `mems` is at 2nd position
-            reordered_layer_past = [tf.identity(tf.expand_dims(layer_past[:, i], 1)) for i in beam_idx]
-            reordered_layer_past = tf.concat(reordered_layer_past, axis=1)
-            # check that shape matches
-            assert shape_list(reordered_layer_past) == shape_list(layer_past)
-            reordered_past.append(reordered_layer_past)
-        past = tuple(reordered_past)
-        return past
+        return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
@@ -1169,7 +1413,7 @@ def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
     return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
 
 
-def calc_banned_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
+def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
     # Copied from fairseq for no_repeat_ngram in beam_search"""
     if cur_len + 1 < no_repeat_ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
@@ -1189,6 +1433,42 @@ def calc_banned_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len)
         return generated_ngrams[hypo_idx].get(ngram_idx, [])
 
     banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
+    return banned_tokens
+
+
+def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
+    banned_tokens = []
+
+    def _tokens_match(prev_tokens, tokens):
+        if len(tokens) == 0:
+            # if bad word tokens is just one token always ban it
+            return True
+        if len(tokens) > len(prev_input_ids):
+            # if bad word tokens are longer then prev input_ids they can't be equal
+            return False
+
+        if prev_tokens[-len(tokens) :] == tokens:
+            # if tokens match
+            return True
+        else:
+            return False
+
+    for prev_input_ids_slice in prev_input_ids:
+        banned_tokens_slice = []
+
+        for banned_token_seq in bad_words_ids:
+            assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
+                bad_words_ids
+            )
+
+            if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
+                # if tokens do not match continue
+                continue
+
+            banned_tokens_slice.append(banned_token_seq[-1])
+
+        banned_tokens.append(banned_tokens_slice)
+
     return banned_tokens
 
 
@@ -1290,7 +1570,7 @@ class BeamHypotheses(object):
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs, cur_len=None):
+    def is_done(self, best_sum_logprobs, cur_len):
         """
         If there are enough hypotheses and that none of the hypotheses being generated
         can become better than the worst one in the heap, then we are done with this sentence.
@@ -1301,8 +1581,6 @@ class BeamHypotheses(object):
         elif self.early_stopping:
             return True
         else:
-            if cur_len is None:
-                cur_len = self.max_length
             cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret
@@ -1354,6 +1632,16 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
             "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
         )
         super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
 
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.
@@ -1510,6 +1798,17 @@ def shape_list(x):
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
+def sample_without_replacement(logits, num_samples):
+    """
+        categorical sampling witouth replacement is currently not implemented
+        the gumbel-max trick will do for now
+        see https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    """
+    z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
+    _, indices = tf.nn.top_k(logits + z, num_samples)
+    return indices
+
+
 def get_initializer(initializer_range=0.02):
     """Creates a `tf.initializers.truncated_normal` with the given range.
     Args:
@@ -1518,3 +1817,24 @@ def get_initializer(initializer_range=0.02):
         TruncatedNormal initializer with stddev = `initializer_range`.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
+
+
+def cast_bool_to_primitive(bool_variable, default_tensor_to_true=False):
+    """Function arguments can be inserted as boolean tensor
+        and bool variables to cope with keras serialization
+        we need to cast `output_attentions` to correct bool
+        if it is a tensor
+
+    Args:
+        default_tensor_to_true: bool, if tensor should default to True
+        in case tensor has no numpy attribute
+    """
+    # if bool variable is tensor and has numpy value
+    if tf.is_tensor(bool_variable):
+        if hasattr(bool_variable, "numpy"):
+            return bool(bool_variable.numpy())
+        elif default_tensor_to_true:
+            return True
+
+    # else variable is bool
+    return bool_variable

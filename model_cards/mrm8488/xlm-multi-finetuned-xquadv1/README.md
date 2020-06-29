@@ -93,8 +93,8 @@ from transformers import pipeline
 
 qa_pipeline = pipeline(
     "question-answering",
-    model="mrm8488/bert-multi-uncased-finetuned-xquadv1",
-    tokenizer="bert-multi-uncased-finetuned-xquadv1"
+    model="mrm8488/xlm-multi-finetuned-xquadv1",
+    tokenizer="mrm8488/xlm-multi-finetuned-xquadv1"
 )
 
 # English
@@ -114,7 +114,7 @@ qa_pipeline({
 
 #Output: {'answer': 'работал в репозитории hugginface /','end': 76, 'score': 0.00012340750456964894, 'start': 42}
 ```
-Try it on a Colab:
+Try it on a Colab (*Do not forget to change the model and tokenizer path in the Colab if necessary*):
 
 <a href="https://colab.research.google.com/github/mrm8488/shared_colab_notebooks/blob/master/Try_mrm8488_xquad_finetuned_uncased_model.ipynb" target="_parent"><img src="https://camo.githubusercontent.com/52feade06f2fecbf006889a904d221e6a730c194/68747470733a2f2f636f6c61622e72657365617263682e676f6f676c652e636f6d2f6173736574732f636f6c61622d62616467652e737667" alt="Open In Colab" data-canonical-src="https://colab.research.google.com/assets/colab-badge.svg"></a>
 

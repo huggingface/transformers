@@ -65,10 +65,7 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        return XLMTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
@@ -96,5 +93,5 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
-        assert encoded_sentence == [1] + text + [1]
-        assert encoded_pair == [1] + text + [1] + text_2 + [1]
+        assert encoded_sentence == [0] + text + [1]
+        assert encoded_pair == [0] + text + [1] + text_2 + [1]

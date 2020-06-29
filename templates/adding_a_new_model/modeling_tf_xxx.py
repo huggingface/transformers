@@ -32,13 +32,13 @@ from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 logger = logging.getLogger(__name__)
 
 ####################################################
-# This dict contrains shortcut names and associated url
-# for the pretrained weights provided with the models
+# This list contrains shortcut names for some of
+# the pretrained weights provided with the models
 ####################################################
-TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-tf_model.h5",
-    "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-tf_model.h5",
-}
+TF_XXX_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xxx-base-uncased",
+    "xxx-large-uncased",
+]
 
 
 ####################################################
@@ -180,7 +180,6 @@ class TFXxxPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = XxxConfig
-    pretrained_model_archive_map = TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
 
@@ -289,7 +288,7 @@ class TFXxxModel(TFXxxPreTrainedModel):
             list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -330,7 +329,7 @@ class TFXxxForMaskedLM(TFXxxPreTrainedModel):
             list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -379,7 +378,7 @@ class TFXxxForSequenceClassification(TFXxxPreTrainedModel):
             list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -434,7 +433,7 @@ class TFXxxForTokenClassification(TFXxxPreTrainedModel):
             list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -491,7 +490,7 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel):
             list of ``Numpy array`` or ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
             of shape ``(batch_size, sequence_length, hidden_size)``:
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+        **attentions**: (`optional`, returned when ``output_attentions=True``)
             list of ``Numpy array`` or ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 

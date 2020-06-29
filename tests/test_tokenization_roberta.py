@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer
+from transformers.tokenization_roberta import VOCAB_FILES_NAMES, AddedToken, RobertaTokenizer, RobertaTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
 from .utils import slow
@@ -68,7 +68,11 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         return RobertaTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_input_output_texts(self):
+    def get_rust_tokenizer(self, **kwargs):
+        kwargs.update(self.special_tokens_map)
+        return RobertaTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+
+    def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
@@ -76,12 +80,12 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_tokenizer(self):
         tokenizer = RobertaTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
-        bpe_tokens = ["\u0120low", "er", "\u0120", "n", "e", "w", "er"]
-        tokens = tokenizer.tokenize(text, add_prefix_space=True)
+        bpe_tokens = ["l", "o", "w", "er", "\u0120", "n", "e", "w", "er"]
+        tokens = tokenizer.tokenize(text)  # , add_prefix_space=True)
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens + [tokenizer.unk_token]
-        input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
+        input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     def roberta_dict_integration_testing(self):
@@ -100,9 +104,11 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text = tokenizer.encode("sequence builders", add_special_tokens=False)
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
-        encoded_text_from_decode = tokenizer.encode("sequence builders", add_special_tokens=True)
+        encoded_text_from_decode = tokenizer.encode(
+            "sequence builders", add_special_tokens=True, add_prefix_space=False
+        )
         encoded_pair_from_decode = tokenizer.encode(
-            "sequence builders", "multi-sequence build", add_special_tokens=True
+            "sequence builders", "multi-sequence build", add_special_tokens=True, add_prefix_space=False
         )
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
@@ -118,7 +124,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
 
         # Testing encoder arguments
-        encoded = tokenizer.encode(sequence, add_special_tokens=False)
+        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=False)
         first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
         self.assertNotEqual(first_char, space_encoding)
 
@@ -129,11 +135,13 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.add_special_tokens({"bos_token": "<s>"})
         encoded = tokenizer.encode(sequence, add_special_tokens=True)
         first_char = tokenizer.convert_ids_to_tokens(encoded[1])[0]
-        self.assertEqual(first_char, space_encoding)
+        self.assertNotEqual(first_char, space_encoding)
 
         # Testing spaces after special tokenss
         mask = "<mask>"
-        tokenizer.add_special_tokens({"mask_token": mask})
+        tokenizer.add_special_tokens(
+            {"mask_token": AddedToken(mask, lstrip=True, rstrip=False)}
+        )  # mask token has a left space
         mask_ind = tokenizer.convert_tokens_to_ids(mask)
 
         sequence = "Encode <mask> sequence"

@@ -30,6 +30,8 @@ Tips:
 - XLM has multilingual checkpoints which leverage a specific `lang` parameter. Check out the
   `multi-lingual <../multilingual.html>`__ page for more information.
 
+The original code can be found `here <https://github.com/facebookresearch/XLM/>`_.
+
 
 XLMConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -98,6 +100,21 @@ TFXLMForSequenceClassification
 
 .. autoclass:: transformers.TFXLMForSequenceClassification
     :members:
+
+
+TFXLMForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMForMultipleChoice
+    :members:
+
+
+TFXLMForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMForTokenClassification
+    :members:
+
 
 
 TFXLMForQuestionAnsweringSimple

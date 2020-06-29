@@ -44,6 +44,8 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "[UNK]",
             "[CLS]",
             "[SEP]",
+            "[PAD]",
+            "[MASK]",
             "want",
             "##want",
             "##ed",
@@ -59,13 +61,10 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_tokenizer(self, **kwargs):
-        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
     def get_rust_tokenizer(self, **kwargs):
         return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00E9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
@@ -75,14 +74,14 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokens = tokenizer.tokenize("UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
             return
 
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer(add_special_tokens=False)
+        rust_tokenizer = self.get_rust_tokenizer()
 
         sequence = "UNwant\u00E9d,running"
 
@@ -91,7 +90,26 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, rust_tokens)
 
         ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
+
+        # With lower casing
+        tokenizer = self.get_tokenizer(do_lower_case=True)
+        rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
+
+        sequence = "UNwant\u00E9d,running"
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
         self.assertListEqual(ids, rust_ids)
 
         rust_tokenizer = self.get_rust_tokenizer()

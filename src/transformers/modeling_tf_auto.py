@@ -22,65 +22,111 @@ from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
     BertConfig,
+    CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    ElectraConfig,
+    FlaubertConfig,
     GPT2Config,
+    MobileBertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMRobertaConfig,
     XLNetConfig,
 )
 from .configuration_utils import PretrainedConfig
 from .modeling_tf_albert import (
-    TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFAlbertForMaskedLM,
+    TFAlbertForMultipleChoice,
+    TFAlbertForPreTraining,
+    TFAlbertForQuestionAnswering,
     TFAlbertForSequenceClassification,
+    TFAlbertForTokenClassification,
     TFAlbertModel,
 )
 from .modeling_tf_bert import (
-    TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertForMaskedLM,
+    TFBertForMultipleChoice,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
     TFBertForTokenClassification,
     TFBertModel,
 )
-from .modeling_tf_ctrl import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, TFCTRLLMHeadModel, TFCTRLModel
+from .modeling_tf_camembert import (
+    TFCamembertForMaskedLM,
+    TFCamembertForMultipleChoice,
+    TFCamembertForQuestionAnswering,
+    TFCamembertForSequenceClassification,
+    TFCamembertForTokenClassification,
+    TFCamembertModel,
+)
+from .modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
 from .modeling_tf_distilbert import (
-    TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFDistilBertForMaskedLM,
+    TFDistilBertForMultipleChoice,
     TFDistilBertForQuestionAnswering,
     TFDistilBertForSequenceClassification,
     TFDistilBertForTokenClassification,
     TFDistilBertModel,
 )
-from .modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, TFGPT2LMHeadModel, TFGPT2Model
-from .modeling_tf_openai import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from .modeling_tf_electra import (
+    TFElectraForMaskedLM,
+    TFElectraForPreTraining,
+    TFElectraForQuestionAnswering,
+    TFElectraForTokenClassification,
+    TFElectraModel,
+)
+from .modeling_tf_flaubert import (
+    TFFlaubertForMultipleChoice,
+    TFFlaubertForQuestionAnsweringSimple,
+    TFFlaubertForSequenceClassification,
+    TFFlaubertForTokenClassification,
+    TFFlaubertModel,
+    TFFlaubertWithLMHeadModel,
+)
+from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
+from .modeling_tf_mobilebert import (
+    TFMobileBertForMaskedLM,
+    TFMobileBertForMultipleChoice,
+    TFMobileBertForPreTraining,
+    TFMobileBertForQuestionAnswering,
+    TFMobileBertForSequenceClassification,
+    TFMobileBertForTokenClassification,
+    TFMobileBertModel,
+)
+from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from .modeling_tf_roberta import (
-    TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFRobertaForMaskedLM,
+    TFRobertaForMultipleChoice,
+    TFRobertaForQuestionAnswering,
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-from .modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP, TFT5Model, TFT5WithLMHeadModel
-from .modeling_tf_transfo_xl import (
-    TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TFTransfoXLLMHeadModel,
-    TFTransfoXLModel,
-)
+from .modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
+from .modeling_tf_transfo_xl import TFTransfoXLLMHeadModel, TFTransfoXLModel
 from .modeling_tf_xlm import (
-    TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
+    TFXLMForTokenClassification,
     TFXLMModel,
     TFXLMWithLMHeadModel,
 )
+from .modeling_tf_xlm_roberta import (
+    TFXLMRobertaForMaskedLM,
+    TFXLMRobertaForMultipleChoice,
+    TFXLMRobertaForQuestionAnswering,
+    TFXLMRobertaForSequenceClassification,
+    TFXLMRobertaForTokenClassification,
+    TFXLMRobertaModel,
+)
 from .modeling_tf_xlnet import (
-    TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFXLNetForMultipleChoice,
     TFXLNetForQuestionAnsweringSimple,
     TFXLNetForSequenceClassification,
     TFXLNetForTokenClassification,
@@ -92,97 +138,127 @@ from .modeling_tf_xlnet import (
 logger = logging.getLogger(__name__)
 
 
-TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
-    (key, value)
-    for pretrained_map in [
-        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
-    ]
-    for key, value, in pretrained_map.items()
-)
-
 TF_MODEL_MAPPING = OrderedDict(
     [
-        (T5Config, TFT5Model),
-        (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
-        (RobertaConfig, TFRobertaModel),
         (BertConfig, TFBertModel),
-        (OpenAIGPTConfig, TFOpenAIGPTModel),
-        (GPT2Config, TFGPT2Model),
-        (TransfoXLConfig, TFTransfoXLModel),
-        (XLNetConfig, TFXLNetModel),
-        (XLMConfig, TFXLMModel),
+        (CamembertConfig, TFCamembertModel),
         (CTRLConfig, TFCTRLModel),
+        (DistilBertConfig, TFDistilBertModel),
+        (ElectraConfig, TFElectraModel),
+        (FlaubertConfig, TFFlaubertModel),
+        (GPT2Config, TFGPT2Model),
+        (MobileBertConfig, TFMobileBertModel),
+        (OpenAIGPTConfig, TFOpenAIGPTModel),
+        (RobertaConfig, TFRobertaModel),
+        (T5Config, TFT5Model),
+        (TransfoXLConfig, TFTransfoXLModel),
+        (XLMConfig, TFXLMModel),
+        (XLMRobertaConfig, TFXLMRobertaModel),
+        (XLNetConfig, TFXLNetModel),
     ]
 )
 
 TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
-        (T5Config, TFT5WithLMHeadModel),
-        (DistilBertConfig, TFDistilBertForMaskedLM),
-        (AlbertConfig, TFAlbertForMaskedLM),
-        (RobertaConfig, TFRobertaForMaskedLM),
+        (AlbertConfig, TFAlbertForPreTraining),
         (BertConfig, TFBertForPreTraining),
-        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
-        (GPT2Config, TFGPT2LMHeadModel),
-        (TransfoXLConfig, TFTransfoXLLMHeadModel),
-        (XLNetConfig, TFXLNetLMHeadModel),
-        (XLMConfig, TFXLMWithLMHeadModel),
+        (CamembertConfig, TFCamembertForMaskedLM),
         (CTRLConfig, TFCTRLLMHeadModel),
+        (DistilBertConfig, TFDistilBertForMaskedLM),
+        (ElectraConfig, TFElectraForPreTraining),
+        (FlaubertConfig, TFFlaubertWithLMHeadModel),
+        (GPT2Config, TFGPT2LMHeadModel),
+        (MobileBertConfig, TFMobileBertForPreTraining),
+        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
+        (RobertaConfig, TFRobertaForMaskedLM),
+        (T5Config, TFT5ForConditionalGeneration),
+        (TransfoXLConfig, TFTransfoXLLMHeadModel),
+        (XLMConfig, TFXLMWithLMHeadModel),
+        (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
+        (XLNetConfig, TFXLNetLMHeadModel),
     ]
 )
 
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
-        (T5Config, TFT5WithLMHeadModel),
-        (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
-        (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
-        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
-        (GPT2Config, TFGPT2LMHeadModel),
-        (TransfoXLConfig, TFTransfoXLLMHeadModel),
-        (XLNetConfig, TFXLNetLMHeadModel),
-        (XLMConfig, TFXLMWithLMHeadModel),
+        (CamembertConfig, TFCamembertForMaskedLM),
         (CTRLConfig, TFCTRLLMHeadModel),
+        (DistilBertConfig, TFDistilBertForMaskedLM),
+        (ElectraConfig, TFElectraForMaskedLM),
+        (FlaubertConfig, TFFlaubertWithLMHeadModel),
+        (GPT2Config, TFGPT2LMHeadModel),
+        (MobileBertConfig, TFMobileBertForMaskedLM),
+        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
+        (RobertaConfig, TFRobertaForMaskedLM),
+        (T5Config, TFT5ForConditionalGeneration),
+        (TransfoXLConfig, TFTransfoXLLMHeadModel),
+        (XLMConfig, TFXLMWithLMHeadModel),
+        (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
+        (XLNetConfig, TFXLNetLMHeadModel),
     ]
 )
 
-TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
+TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
-        (DistilBertConfig, TFDistilBertForSequenceClassification),
-        (AlbertConfig, TFAlbertForSequenceClassification),
-        (RobertaConfig, TFRobertaForSequenceClassification),
-        (BertConfig, TFBertForSequenceClassification),
-        (XLNetConfig, TFXLNetForSequenceClassification),
-        (XLMConfig, TFXLMForSequenceClassification),
+        (AlbertConfig, TFAlbertForMultipleChoice),
+        (BertConfig, TFBertForMultipleChoice),
+        (CamembertConfig, TFCamembertForMultipleChoice),
+        (DistilBertConfig, TFDistilBertForMultipleChoice),
+        (FlaubertConfig, TFFlaubertForMultipleChoice),
+        (MobileBertConfig, TFMobileBertForMultipleChoice),
+        (RobertaConfig, TFRobertaForMultipleChoice),
+        (XLMConfig, TFXLMForMultipleChoice),
+        (XLMRobertaConfig, TFXLMRobertaForMultipleChoice),
+        (XLNetConfig, TFXLNetForMultipleChoice),
     ]
 )
 
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
-        (DistilBertConfig, TFDistilBertForQuestionAnswering),
+        (AlbertConfig, TFAlbertForQuestionAnswering),
         (BertConfig, TFBertForQuestionAnswering),
-        (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
+        (CamembertConfig, TFCamembertForQuestionAnswering),
+        (DistilBertConfig, TFDistilBertForQuestionAnswering),
+        (ElectraConfig, TFElectraForQuestionAnswering),
+        (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
+        (MobileBertConfig, TFMobileBertForQuestionAnswering),
+        (RobertaConfig, TFRobertaForQuestionAnswering),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
+        (XLMRobertaConfig, TFXLMRobertaForQuestionAnswering),
+        (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
+    ]
+)
+
+TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
+    [
+        (AlbertConfig, TFAlbertForSequenceClassification),
+        (BertConfig, TFBertForSequenceClassification),
+        (CamembertConfig, TFCamembertForSequenceClassification),
+        (DistilBertConfig, TFDistilBertForSequenceClassification),
+        (FlaubertConfig, TFFlaubertForSequenceClassification),
+        (MobileBertConfig, TFMobileBertForSequenceClassification),
+        (RobertaConfig, TFRobertaForSequenceClassification),
+        (XLMConfig, TFXLMForSequenceClassification),
+        (XLMRobertaConfig, TFXLMRobertaForSequenceClassification),
+        (XLNetConfig, TFXLNetForSequenceClassification),
     ]
 )
 
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
-        (DistilBertConfig, TFDistilBertForTokenClassification),
-        (RobertaConfig, TFRobertaForTokenClassification),
+        (AlbertConfig, TFAlbertForTokenClassification),
         (BertConfig, TFBertForTokenClassification),
+        (CamembertConfig, TFCamembertForTokenClassification),
+        (DistilBertConfig, TFDistilBertForTokenClassification),
+        (ElectraConfig, TFElectraForTokenClassification),
+        (FlaubertConfig, TFFlaubertForTokenClassification),
+        (MobileBertConfig, TFMobileBertForTokenClassification),
+        (RobertaConfig, TFRobertaForTokenClassification),
+        (XLMConfig, TFXLMForTokenClassification),
+        (XLMRobertaConfig, TFXLMRobertaForTokenClassification),
         (XLNetConfig, TFXLNetForTokenClassification),
     ]
 )
@@ -197,20 +273,18 @@ class TFAutoModel(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The base model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: TFT5Model (T5 model)
-            - contains `distilbert`: TFDistilBertModel (DistilBERT model)
-            - contains `roberta`: TFRobertaModel (RoBERTa model)
-            - contains `bert`: TFBertModel (Bert model)
-            - contains `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
-            - contains `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
-            - contains `xlnet`: TFXLNetModel (XLNet model)
-            - contains `xlm`: TFXLMModel (XLM model)
-            - contains `ctrl`: TFCTRLModel (CTRL model)
+            - `t5`: TFT5Model (T5 model)
+            - `distilbert`: TFDistilBertModel (DistilBERT model)
+            - `roberta`: TFRobertaModel (RoBERTa model)
+            - `bert`: TFBertModel (Bert model)
+            - `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
+            - `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
+            - `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
+            - `xlnet`: TFXLNetModel (XLNet model)
+            - `xlm`: TFXLMModel (XLM model)
+            - `ctrl`: TFCTRLModel (CTRL model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -227,8 +301,15 @@ class TFAutoModel(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: TFDistilBertModel (DistilBERT model)
                     - isInstance of `roberta` configuration class: TFRobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: TFBertModel (Bert model)
@@ -259,17 +340,19 @@ class TFAutoModel(object):
         r""" Instantiates one of the base model classes of the library
         from a pre-trained model configuration.
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: TFT5Model (T5 model)
-            - contains `distilbert`: TFDistilBertModel (DistilBERT model)
-            - contains `roberta`: TFRobertaModel (RoBERTa model)
-            - contains `bert`: TFTFBertModel (Bert model)
-            - contains `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
-            - contains `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
-            - contains `xlnet`: TFXLNetModel (XLNet model)
-            - contains `ctrl`: TFCTRLModel (CTRL model)
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+            - `t5`: TFT5Model (T5 model)
+            - `distilbert`: TFDistilBertModel (DistilBERT model)
+            - `roberta`: TFRobertaModel (RoBERTa model)
+            - `bert`: TFTFBertModel (Bert model)
+            - `openai-gpt`: TFOpenAIGPTModel (OpenAI GPT model)
+            - `gpt2`: TFGPT2Model (OpenAI GPT-2 model)
+            - `transfo-xl`: TFTransfoXLModel (Transformer-XL model)
+            - `xlnet`: TFXLNetModel (XLNet model)
+            - `ctrl`: TFCTRLModel (CTRL model)
 
         Params:
             pretrained_model_name_or_path: either:
@@ -367,6 +450,11 @@ class TFAutoModelForPreTraining(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
@@ -402,21 +490,19 @@ class TFAutoModelForPreTraining(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: :class:`~transformers.TFT5ModelWithLMHead` (T5 model)
-            - contains `distilbert`: :class:`~transformers.TFDistilBertForMaskedLM` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.TFAlbertForMaskedLM` (ALBERT model)
-            - contains `roberta`: :class:`~transformers.TFRobertaForMaskedLM` (RoBERTa model)
-            - contains `bert`: :class:`~transformers.TFBertForPreTraining` (Bert model)
-            - contains `openai-gpt`: :class:`~transformers.TFOpenAIGPTLMHeadModel` (OpenAI GPT model)
-            - contains `gpt2`: :class:`~transformers.TFGPT2LMHeadModel` (OpenAI GPT-2 model)
-            - contains `transfo-xl`: :class:`~transformers.TFTransfoXLLMHeadModel` (Transformer-XL model)
-            - contains `xlnet`: :class:`~transformers.TFXLNetLMHeadModel` (XLNet model)
-            - contains `xlm`: :class:`~transformers.TFXLMWithLMHeadModel` (XLM model)
-            - contains `ctrl`: :class:`~transformers.TFCTRLLMHeadModel` (Salesforce CTRL model)
+            - `t5`: :class:`~transformers.TFT5ModelWithLMHead` (T5 model)
+            - `distilbert`: :class:`~transformers.TFDistilBertForMaskedLM` (DistilBERT model)
+            - `albert`: :class:`~transformers.TFAlbertForPreTraining` (ALBERT model)
+            - `roberta`: :class:`~transformers.TFRobertaForMaskedLM` (RoBERTa model)
+            - `bert`: :class:`~transformers.TFBertForPreTraining` (Bert model)
+            - `openai-gpt`: :class:`~transformers.TFOpenAIGPTLMHeadModel` (OpenAI GPT model)
+            - `gpt2`: :class:`~transformers.TFGPT2LMHeadModel` (OpenAI GPT-2 model)
+            - `transfo-xl`: :class:`~transformers.TFTransfoXLLMHeadModel` (Transformer-XL model)
+            - `xlnet`: :class:`~transformers.TFXLNetLMHeadModel` (XLNet model)
+            - `xlm`: :class:`~transformers.TFXLMWithLMHeadModel` (XLM model)
+            - `ctrl`: :class:`~transformers.TFCTRLLMHeadModel` (Salesforce CTRL model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -503,20 +589,18 @@ class TFAutoModelWithLMHead(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: TFT5WithLMHeadModel (T5 model)
-            - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
-            - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
-            - contains `bert`: TFBertForMaskedLM (Bert model)
-            - contains `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
-            - contains `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
-            - contains `xlnet`: TFXLNetLMHeadModel (XLNet model)
-            - contains `xlm`: TFXLMWithLMHeadModel (XLM model)
-            - contains `ctrl`: TFCTRLLMHeadModel (CTRL model)
+            - `t5`: TFT5ForConditionalGeneration (T5 model)
+            - `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
+            - `roberta`: TFRobertaForMaskedLM (RoBERTa model)
+            - `bert`: TFBertForMaskedLM (Bert model)
+            - `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
+            - `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
+            - `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
+            - `xlnet`: TFXLNetLMHeadModel (XLNet model)
+            - `xlm`: TFXLMWithLMHeadModel (XLM model)
+            - `ctrl`: TFCTRLLMHeadModel (CTRL model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -533,8 +617,15 @@ class TFAutoModelWithLMHead(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
                     - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: BertModel (Bert model)
@@ -567,20 +658,18 @@ class TFAutoModelWithLMHead(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: TFT5WithLMHeadModel (T5 model)
-            - contains `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
-            - contains `roberta`: TFRobertaForMaskedLM (RoBERTa model)
-            - contains `bert`: TFBertForMaskedLM (Bert model)
-            - contains `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
-            - contains `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
-            - contains `xlnet`: TFXLNetLMHeadModel (XLNet model)
-            - contains `xlm`: TFXLMWithLMHeadModel (XLM model)
-            - contains `ctrl`: TFCTRLLMHeadModel (CTRL model)
+            - `t5`: TFT5ForConditionalGeneration (T5 model)
+            - `distilbert`: TFDistilBertForMaskedLM (DistilBERT model)
+            - `roberta`: TFRobertaForMaskedLM (RoBERTa model)
+            - `bert`: TFBertForMaskedLM (Bert model)
+            - `openai-gpt`: TFOpenAIGPTLMHeadModel (OpenAI GPT model)
+            - `gpt2`: TFGPT2LMHeadModel (OpenAI GPT-2 model)
+            - `transfo-xl`: TFTransfoXLLMHeadModel (Transformer-XL model)
+            - `xlnet`: TFXLNetLMHeadModel (XLNet model)
+            - `xlm`: TFXLMWithLMHeadModel (XLM model)
+            - `ctrl`: TFCTRLLMHeadModel (CTRL model)
 
         Params:
             pretrained_model_name_or_path: either:
@@ -643,16 +732,166 @@ class TFAutoModelWithLMHead(object):
 
         """
         config = kwargs.pop("config", None)
+
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         for config_class, model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.items():
-            if isinstance(config, config_class):
+            # Not using isinstance() here to do not take into account inheritance
+            if config_class == type(config):
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_WITH_LM_HEAD_MAPPING.keys())
+            )
+        )
+
+
+class TFAutoModelForMultipleChoice:
+    r"""
+        :class:`~transformers.TFAutoModelForMultipleChoice` is a generic model class
+        that will be instantiated as one of the multiple choice model classes of the library
+        when created with the `TFAutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)`
+        class method.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `albert`: TFAlbertForMultipleChoice (Albert model)
+            - `bert`: TFBertForMultipleChoice (Bert model)
+
+        This class cannot be instantiated using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "TFAutoModelForMultipleChoice is designed to be instantiated "
+            "using the `TFAutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)` or "
+            "`TFAutoModelForMultipleChoice.from_config(config)` methods."
+        )
+
+    @classmethod
+    def from_config(cls, config):
+        r""" Instantiates one of the base model classes of the library
+        from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                The model class to instantiate is selected based on the configuration class:
+                    - isInstance of `albert` configuration class: AlbertModel (Albert model)
+                    - isInstance of `bert` configuration class: BertModel (Bert model)
+
+        Examples::
+
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            model = AutoModelForMulitpleChoice.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+        """
+        for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r""" Instantiates one of the multiple choice model classes of the library
+        from a pre-trained model configuration.
+
+        The `from_pretrained()` method takes care of returning the correct model class instance
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+            - `albert`: TFRobertaForMultiple (Albert model)
+            - `bert`: TFBertForMultipleChoice (Bert model)
+
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
+
+        Params:
+            pretrained_model_name_or_path: either:
+
+                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
+                - a path or url to a `PyTorch, TF 1.X or TF 2.0 checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In the case of a PyTorch checkpoint, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument.
+
+            from_pt: (`Optional`) Boolean
+                Set to True if the Checkpoint is a PyTorch checkpoint.
+
+            model_args: (`optional`) Sequence of positional arguments:
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+
+            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
+
+                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
+                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
+                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+
+            state_dict: (`optional`) dict:
+                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
+                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+
+            cache_dir: (`optional`) string:
+                Path to a directory in which a downloaded pre-trained model
+                configuration should be cached if the standard cache should not be used.
+
+            force_download: (`optional`) boolean, default False:
+                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+
+            resume_download: (`optional`) boolean, default False:
+                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+
+            proxies: (`optional`) dict, default None:
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
+
+            output_loading_info: (`optional`) boolean:
+                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+
+            kwargs: (`optional`) Remaining dictionary of keyword arguments:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+
+                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
+                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
+
+        Examples::
+
+            model = TFAutoModelFormultipleChoice.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelFormultipleChoice.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = TFAutoModelFormultipleChoice.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
+            assert model.config.output_attention == True
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            model = TFAutoModelFormultipleChoice.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
+
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
             )
         )
 
@@ -666,15 +905,13 @@ class TFAutoModelForSequenceClassification(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
-            - contains `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
-            - contains `bert`: TFBertForSequenceClassification (Bert model)
-            - contains `xlnet`: TFXLNetForSequenceClassification (XLNet model)
-            - contains `xlm`: TFXLMForSequenceClassification (XLM model)
+            - `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
+            - `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
+            - `bert`: TFBertForSequenceClassification (Bert model)
+            - `xlnet`: TFXLNetForSequenceClassification (XLNet model)
+            - `xlm`: TFXLMForSequenceClassification (XLM model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -691,8 +928,15 @@ class TFAutoModelForSequenceClassification(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
                     - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: BertModel (Bert model)
@@ -723,15 +967,13 @@ class TFAutoModelForSequenceClassification(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
-            - contains `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
-            - contains `bert`: TFBertForSequenceClassification (Bert model)
-            - contains `xlnet`: TFXLNetForSequenceClassification (XLNet model)
-            - contains `xlm`: TFXLMForSequenceClassification (XLM model)
+            - `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
+            - `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
+            - `bert`: TFBertForSequenceClassification (Bert model)
+            - `xlnet`: TFXLNetForSequenceClassification (XLNet model)
+            - `xlm`: TFXLMForSequenceClassification (XLM model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -822,14 +1064,14 @@ class TFAutoModelForQuestionAnswering(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
-            - contains `bert`: TFBertForQuestionAnswering (Bert model)
-            - contains `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
-            - contains `xlm`: TFXLMForQuestionAnswering (XLM model)
+            - `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
+            - `albert`: TFAlbertForQuestionAnswering (ALBERT model)
+            - `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
+            - `bert`: TFBertForQuestionAnswering (Bert model)
+            - `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
+            - `xlm`: TFXLMForQuestionAnswering (XLM model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -846,9 +1088,18 @@ class TFAutoModelForQuestionAnswering(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
+                    - isInstance of `albert` configuration class: AlbertModel (ALBERT model)
+                    - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: BertModel (Bert model)
                     - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
                     - isInstance of `xlm` configuration class: XLMModel (XLM model)
@@ -856,7 +1107,7 @@ class TFAutoModelForQuestionAnswering(object):
         Examples::
 
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = TFAutoModelForQuestionAnswering.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
             if isinstance(config, config_class):
@@ -877,14 +1128,14 @@ class TFAutoModelForQuestionAnswering(object):
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
-            - contains `bert`: TFBertForQuestionAnswering (Bert model)
-            - contains `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
-            - contains `xlm`: TFXLMForQuestionAnswering (XLM model)
+            - `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
+            - `albert`: TFAlbertForQuestionAnswering (ALBERT model)
+            - `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
+            - `bert`: TFBertForQuestionAnswering (Bert model)
+            - `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
+            - `xlm`: TFXLMForQuestionAnswering (XLM model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -979,8 +1230,15 @@ class TFAutoModelForTokenClassification:
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
+
                     - isInstance of `bert` configuration class: BertModel (Bert model)
                     - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBert model)
@@ -1010,14 +1268,12 @@ class TFAutoModelForTokenClassification:
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `bert`: BertForTokenClassification (Bert model)
-            - contains `xlnet`: XLNetForTokenClassification (XLNet model)
-            - contains `distilbert`: DistilBertForTokenClassification (DistilBert model)
-            - contains `roberta`: RobertaForTokenClassification (Roberta model)
+            - `bert`: BertForTokenClassification (Bert model)
+            - `xlnet`: XLNetForTokenClassification (XLNet model)
+            - `distilbert`: DistilBertForTokenClassification (DistilBert model)
+            - `roberta`: RobertaForTokenClassification (Roberta model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`

@@ -1,0 +1,105 @@
+T5
+----------------------------------------------------
+**DISCLAIMER:** This model is still a work in progress, if you see something strange,
+file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`_
+
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
+The T5 model was presented in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer <https://arxiv.org/pdf/1910.10683.pdf>`_ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu in 
+Here the abstract: 
+
+*Transfer learning, where a model is first pre-trained on a data-rich task before being fine-tuned on a downstream task, has emerged as a powerful technique in natural language processing (NLP). The effectiveness of transfer learning has given rise to a diversity of approaches, methodology, and practice. 
+In this paper, we explore the landscape of transfer learning techniques for NLP by introducing a unified framework that converts every language problem into a text-to-text format. 
+Our systematic study compares pre-training objectives, architectures, unlabeled datasets, transfer approaches, and other factors on dozens of language understanding tasks. 
+By combining the insights from our exploration with scale and our new "Colossal Clean Crawled Corpus", we achieve state-of-the-art results on many benchmarks covering summarization, question answering, text classification, and more. 
+To facilitate future work on transfer learning for NLP, we release our dataset, pre-trained models, and code.*
+
+Tips:
+
+- T5 is an encoder-decoder model pre-trained on a multi-task mixture of unsupervised 
+  and supervised tasks and for which each task is converted into a text-to-text format.
+  T5 works well on a variety of tasks out-of-the-box by prepending a different prefix to the input corresponding to each task, e.g.: for translation: *translate English to German: ..., summarize: ...*.
+  For more information about which prefix to use, it is easiest to look into Appendix D of the `paper <https://arxiv.org/pdf/1910.10683.pdf>`_ .
+- For sequence to sequence generation, it is recommended to use ``T5ForConditionalGeneration.generate()``. The method takes care of feeding the encoded input via cross-attention layers to the decoder and auto-regressively generates the decoder output.
+- T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
+
+The original code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`_.
+
+Training
+~~~~~~~~~~~~~~~~~~~~~
+
+T5 is an encoder-decoder model and converts all NLP problems into a text-to-text format. It is trained using teacher forcing.
+This means that for training we always need an input sequence and a target sequence. 
+The input sequence is fed to the model using ``input_ids``. The target sequence is shifted to the right, *i.e.* prepended by a start-sequence token and fed to the decoder using the `decoder_input_ids`. In teacher-forcing style, the target sequence is then appended by the EOS token and corresponds to the ``labels``. The PAD token is hereby used as the start-sequence token.
+T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
+
+- Unsupervised denoising training
+
+  In this setup spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) 
+  and the output sequence is formed as a concatenation of the same sentinel tokens and the *real* masked tokens. 
+  Each sentinel token represents a unique mask token for this sentence and should start with ``<extra_id_1>``, ``<extra_id_2>``, ... up to ``<extra_id_100>``. As a default 100 sentinel tokens are available in ``T5Tokenizer``.
+  *E.g.* the sentence "The cute dog walks in the park" with the masks put on "cute dog" and "the" should be processed as follows: 
+
+::
+
+  input_ids = tokenizer.encode('The <extra_id_1> walks in <extra_id_2> park', return_tensors='pt')
+  labels = tokenizer.encode('<extra_id_1> cute dog <extra_id_2> the <extra_id_3> </s>', return_tensors='pt')
+  # the forward function automatically creates the correct decoder_input_ids
+  model(input_ids=input_ids, labels=labels)
+
+- Supervised training
+
+  In this setup the input sequence and output sequence are standard sequence to sequence input output mapping.
+  In translation, *e.g.* the input sequence "The house is wonderful." and output sequence "Das Haus ist wunderbar." should 
+  be processed as follows:
+  
+::
+
+  input_ids = tokenizer.encode('translate English to German: The house is wonderful. </s>', return_tensors='pt')
+  labels = tokenizer.encode('Das Haus ist wunderbar. </s>', return_tensors='pt')
+  # the forward function automatically creates the correct decoder_input_ids
+  model(input_ids=input_ids, labels=labels)
+
+
+T5Config
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5Config
+    :members:
+
+
+T5Tokenizer
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5Tokenizer
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
+
+
+T5Model
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5Model
+    :members:
+
+
+T5ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5ForConditionalGeneration
+    :members:
+
+
+TFT5Model
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFT5Model
+    :members:
+
+
+TFT5ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFT5ForConditionalGeneration
+    :members:

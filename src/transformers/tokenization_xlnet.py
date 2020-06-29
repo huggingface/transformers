@@ -138,8 +138,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
         self._pad_token_type_id = 3
 
         try:
@@ -269,7 +267,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        special tokens using the tokenizer ``prepare_for_model`` methods.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -280,7 +278,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
                 Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:

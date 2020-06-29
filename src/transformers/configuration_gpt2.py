@@ -59,6 +59,8 @@ class GPT2Config(PretrainedConfig):
                 Number of hidden layers in the Transformer encoder.
             n_head (:obj:`int`, optional, defaults to 12):
                 Number of attention heads for each attention layer in the Transformer encoder.
+            activation_function (:obj:`str`, optional, defaults to 'gelu'):
+                Activation function selected in the list ["relu", "swish", "gelu", "tanh", "gelu_new"].
             resid_pdrop (:obj:`float`, optional, defaults to 0.1):
                 The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
             embd_pdrop (:obj:`int`, optional, defaults to 0.1):
@@ -98,23 +100,18 @@ class GPT2Config(PretrainedConfig):
 
         Example::
 
-            from transformers import GPT2Model, GPT2Config
+            >>> from transformers import GPT2Model, GPT2Config
 
-            # Initializing a GPT2 configuration
-            configuration = GPT2Config()
+            >>> # Initializing a GPT2 configuration
+            >>> configuration = GPT2Config()
 
-            # Initializing a model from the configuration
-            model = GPT2Model(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = GPT2Model(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
-    pretrained_config_archive_map = GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "gpt2"
 
     def __init__(
@@ -125,6 +122,7 @@ class GPT2Config(PretrainedConfig):
         n_embd=768,
         n_layer=12,
         n_head=12,
+        activation_function="gelu_new",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
@@ -139,7 +137,7 @@ class GPT2Config(PretrainedConfig):
         eos_token_id=50256,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx
@@ -147,6 +145,7 @@ class GPT2Config(PretrainedConfig):
         self.n_embd = n_embd
         self.n_layer = n_layer
         self.n_head = n_head
+        self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
         self.attn_pdrop = attn_pdrop
@@ -159,7 +158,7 @@ class GPT2Config(PretrainedConfig):
         self.summary_proj_to_labels = summary_proj_to_labels
 
         self.bos_token_id = bos_token_id
-        self.eos_token_ids = [eos_token_id]
+        self.eos_token_id = eos_token_id
 
     @property
     def max_position_embeddings(self):

@@ -249,8 +249,8 @@ def main():
                 losses = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
                 loss = args.lm_coef * losses[0] + losses[1]
                 loss.backward()
-                scheduler.step()
                 optimizer.step()
+                scheduler.step()
                 optimizer.zero_grad()
                 tr_loss += loss.item()
                 exp_average_loss = (
