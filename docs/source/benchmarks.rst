@@ -8,7 +8,7 @@ A notebook explaining in more detail how to benchmark 🤗 Transformer models ca
 How to benchmark 🤗 Transformer models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The classes :obj:`PyTorchBenchmark` and :obj:`TensorflowBenchmark` allow to flexibly benchmark ðŸ¤— Transformer models.
+The classes :class:`~transformers.PyTorchBenchmark` and :class:`~transformers.TensorFlowBenchmark` allow to flexibly benchmark 🤗 Transformer models.
 The benchmark classes allow us to measure the `peak memory usage` and `required time` for both 
 `inference` and `training`. 
 
@@ -16,7 +16,7 @@ The benchmark classes allow us to measure the `peak memory usage` and `required 
 
   Hereby, `inference` is defined by a single forward pass, and `training` is defined by a single forward pass and backward pass.
 
-The benchmark classes :obj:`PyTorchBenchmark` and :obj:`TensorflowBenchmark` expect an object of type :obj:`PyTorchBenchmarkArguments` and :obj:`TensorflowBenchmarkArguments`, respectively, for instantiation. :obj:`PyTorchBenchmarkArguments` and :obj:`TensorflowBenchmarkArguments` are data classes and contain all relevant configurations for their corresponding benchmark class.
+The benchmark classes :class:`~transformers.PyTorchBenchmark` and :class:`~transformers.TensorFlowBenchmark` expect an object of type :class:`~transformers.PyTorchBenchmarkArguments` and :class:`~transformers.TensorFlowBenchmarkArguments`, respectively, for instantiation. :class:`~transformers.PyTorchBenchmarkArguments` and :class:`~transformers.TensorFlowBenchmarkArguments` are data classes and contain all relevant configurations for their corresponding benchmark class.
 In the following example, it is shown how a BERT model of type `bert-base-cased` can be benchmarked.
 
 .. code-block::
@@ -28,10 +28,10 @@ In the following example, it is shown how a BERT model of type `bert-base-cased`
     >>> benchmark = PyTorchBenchmark(args)
 
     >>> ## TENSORFLOW CODE
-    >>> from transformers import TensorflowBenchmark, TensorflowBenchmarkArguments
+    >>> from transformers import TensorFlowBenchmark, TensorFlowBenchmarkArguments
 
-    >>> args = TensorflowBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
-    >>> benchmark = TensorflowBenchmark(args)
+    >>> args = TensorFlowBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
+    >>> benchmark = TensorFlowBenchmark(args)
 
 
 Here, three arguments are given to the benchmark argument data classes, namely ``models``, ``batch_sizes``, and ``sequence_lengths``. The argument ``models`` is required and expects a :obj:`list` of model identifiers from the `model hub <https://huggingface.co/models>`__
@@ -148,7 +148,7 @@ An instantiated benchmark object can then simply be run by calling ``benchmark.r
 By default, the `time` and the `required memory` for `inference` are benchmarked. 
 In the example output above the first two sections show the result corresponding to `inference time` and `inference memory`. 
 In addition, all relevant information about the computing environment, `e.g.` the GPU type, the system, the library versions, etc... are printed out in the third section under `ENVIRONMENT INFORMATION`.
-This information can optionally be saved in a `.csv` file when adding the argument :obj:`save_to_csv=True` to :obj:`PyTorchBenchmarkArguments` and :obj:`TensorflowBenchmarkArguments` respectively.
+This information can optionally be saved in a `.csv` file when adding the argument :obj:`save_to_csv=True` to :class:`~transformers.PyTorchBenchmarkArguments` and :class:`~transformers.TensorFlowBenchmarkArguments` respectively.
 In this case, every section is saved in a separate `.csv` file. The path to each `.csv` file can optionally be defined via the argument data classes.
 
 Instead of benchmarking pre-trained models via their model identifier, `e.g.` `bert-base-uncased`, the user can alternatively benchmark an arbitrary configuration of any available model class. 
@@ -226,14 +226,14 @@ In this case, a :obj:`list` of configurations must be inserted with the benchmar
     - use_tpu: False
 
     >>> ## TENSORFLOW CODE
-    >>> from transformers import TensorflowBenchmark, TensorflowBenchmarkArguments, BertConfig
+    >>> from transformers import TensorFlowBenchmark, TensorFlowBenchmarkArguments, BertConfig
 
-    >>> args = TensorflowBenchmarkArguments(models=["bert-base", "bert-384-hid", "bert-6-lay"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
+    >>> args = TensorFlowBenchmarkArguments(models=["bert-base", "bert-384-hid", "bert-6-lay"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
     >>> config_base = BertConfig()
     >>> config_384_hid = BertConfig(hidden_size=384)
     >>> config_6_lay = BertConfig(num_hidden_layers=6)
 
-    >>> benchmark = TensorflowBenchmark(args, configs=[config_base, config_384_hid, config_6_lay])
+    >>> benchmark = TensorFlowBenchmark(args, configs=[config_base, config_384_hid, config_6_lay])
     >>> benchmark.run()
     ====================       INFERENCE - SPEED - RESULT       ====================
     --------------------------------------------------------------------------------

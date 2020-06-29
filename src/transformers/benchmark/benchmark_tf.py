@@ -38,7 +38,7 @@ from .benchmark_utils import (
 
 if is_tf_available():
     import tensorflow as tf
-    from .benchmark_args_tf import TensorflowBenchmarkArguments
+    from .benchmark_args_tf import TensorFlowBenchmarkArguments
     from tensorflow.python.framework.errors_impl import ResourceExhaustedError
 
 if is_py3nvml_available():
@@ -75,11 +75,11 @@ def random_input_ids(batch_size: int, sequence_length: int, vocab_size: int) -> 
     return tf.constant(values, shape=(batch_size, sequence_length), dtype=tf.int32)
 
 
-class TensorflowBenchmark(Benchmark):
+class TensorFlowBenchmark(Benchmark):
 
-    args: TensorflowBenchmarkArguments
+    args: TensorFlowBenchmarkArguments
     configs: PretrainedConfig
-    framework: str = "Tensorflow"
+    framework: str = "TensorFlow"
 
     @property
     def framework_version(self):
@@ -88,7 +88,7 @@ class TensorflowBenchmark(Benchmark):
     def _inference_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
         # initialize GPU on separate process
         strategy = self.args.strategy
-        assert strategy is not None, "A device strategy has to be initialized before using Tensorflow."
+        assert strategy is not None, "A device strategy has to be initialized before using TensorFlow."
         _inference = self._prepare_inference_func(model_name, batch_size, sequence_length)
         return self._measure_speed(_inference)
 
@@ -104,7 +104,7 @@ class TensorflowBenchmark(Benchmark):
         if self.args.is_gpu:
             tf.config.experimental.set_memory_growth(self.args.gpu_list[self.args.device_idx], True)
         strategy = self.args.strategy
-        assert strategy is not None, "A device strategy has to be initialized before using Tensorflow."
+        assert strategy is not None, "A device strategy has to be initialized before using TensorFlow."
         _inference = self._prepare_inference_func(model_name, batch_size, sequence_length)
         return self._measure_memory(_inference)
 
@@ -166,7 +166,7 @@ class TensorflowBenchmark(Benchmark):
 
     def _measure_memory(self, func: Callable[[], None]) -> [Memory, MemorySummary]:
         logger.info(
-            "Note that Tensorflow allocates more memory than"
+            "Note that TensorFlow allocates more memory than"
             "it might need to speed up computation."
             "The memory reported here corresponds to the memory"
             "reported by `nvidia-smi`, which can vary depending"
@@ -210,7 +210,7 @@ class TensorflowBenchmark(Benchmark):
                     # cpu
                     if self.args.trace_memory_line_by_line:
                         logger.info(
-                            "When enabling line by line tracing, the max peak memory for CPU is inaccurate in Tensorflow."
+                            "When enabling line by line tracing, the max peak memory for CPU is inaccurate in TensorFlow."
                         )
                         memory = None
                     else:
