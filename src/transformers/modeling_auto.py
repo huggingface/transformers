@@ -71,9 +71,7 @@ from .modeling_bert import (
     BertLMHeadModel,
     BertModel,
 )
-from .modeling_blenderbot import (
-        BlenderbotConditionalGeneration
-)
+from .modeling_blenderbot import BlenderbotConditionalGeneration
 from .modeling_camembert import (
     CamembertForMaskedLM,
     CamembertForMultipleChoice,
