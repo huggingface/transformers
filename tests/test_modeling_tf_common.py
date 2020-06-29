@@ -194,7 +194,7 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beggining
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             config.output_hidden_states = True
@@ -204,8 +204,9 @@ class TFModelTesterMixin:
 
             # Check we can load pt model in tf and vice-versa with model => model functions
 
+            tf_inputs = self._prepare_for_class(inputs_dict, model_class)
             tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
+                tf_model, pt_model, tf_inputs=tf_inputs
             )
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
