@@ -289,34 +289,10 @@ class LongformerSelfAttention(nn.Module):
 
         attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
 
-        # key tokens to be padded
+        # is index masked or global attention
         is_index_masked = attention_mask < 0
-
-        # all global attention tokens
-        is_index_global_attention = attention_mask > 0
-
-        # how many global attention tokens
-        num_global_attn_indices_per_batch = is_index_global_attention.long().sum(dim=1)
-
-        # max global attention tokens of all batches
-        max_num_global_attn_indices_of_batches = num_global_attn_indices_per_batch.max()
-
-        if max_num_global_attn_indices_of_batches > 0:
-            # To support the case of variable number of global attention in the rows of a batch,
-            # we use the following three selection masks to select global attention embeddings
-            # in a 3d tensor and pad it to `max_num_global_attn_indices_of_batches`
-            # 1) selecting embeddings that correspond to global attention
-            is_index_global_attention_nonzeros = is_index_global_attention.nonzero(as_tuple=True)
-
-            # mask indicating which values are actually going to be padded for global attention computation
-            is_local_index_global_attention = torch.arange(
-                max_num_global_attn_indices_of_batches, device=attention_mask.device
-            ) < num_global_attn_indices_per_batch.unsqueeze(dim=-1)
-
-            # 2) location of the non-padding values in the selected global attention
-            is_local_index_global_attention_indices = is_local_index_global_attention.nonzero(as_tuple=True)
-            # 3) location of the padding values in the selected global attention
-            local_index_no_global_attention_indices = (is_local_index_global_attention == 0).nonzero(as_tuple=True)
+        is_index_global_attn = attention_mask > 0
+        is_global_attn = torch.all(is_index_global_attn).item()
 
         hidden_states = hidden_states.transpose(0, 1)
 
@@ -336,8 +312,8 @@ class LongformerSelfAttention(nn.Module):
         query_vectors = query_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         key_vectors = key_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
 
-        # local_attention_probs = (batch_size, seq_len, num_heads, window*2+1)
-        local_attention_probs = self._sliding_chunks_query_key_matmul(
+        # attention_probs = (batch_size, seq_len, num_heads, window*2+1)
+        attention_probs = self._sliding_chunks_query_key_matmul(
             query_vectors, key_vectors, self.one_sided_attention_window_size
         )
 
@@ -354,65 +330,55 @@ class LongformerSelfAttention(nn.Module):
         )
 
         # pad local attention probs
-        local_attention_probs += diagonal_mask
+        attention_probs += diagonal_mask
 
-        assert list(local_attention_probs.size()) == [
+        assert list(attention_probs.size()) == [
             batch_size,
             seq_len,
             self.num_heads,
             self.one_sided_attention_window_size * 2 + 1,
-        ], f"local_attention_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attention_window_size * 2 + 1}), but is of size {local_attention_probs.size()}"
+        ], f"attention_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attention_window_size * 2 + 1}), but is of size {attention_probs.size()}"
 
         # compute local attention probs from global attention keys and contact over window dim
-        if max_num_global_attn_indices_of_batches > 0:
-            # create only global key vectors
-            key_vectors_only_global = key_vectors.new_zeros(
-                batch_size, max_num_global_attn_indices_of_batches, self.num_heads, self.head_dim
-            )
-            key_vectors_only_global[is_local_index_global_attention_indices] = key_vectors[
-                is_index_global_attention_nonzeros
-            ]
-
-            # (batch_size, seq_len, num_heads, max_num_global_attn_indices_of_batches)
-            attention_probs_from_global_key = torch.einsum("blhd,bshd->blhs", (query_vectors, key_vectors_only_global))
-            attention_probs_from_global_key[
-                local_index_no_global_attention_indices[0], :, :, local_index_no_global_attention_indices[1]
-            ] = -10000.0
-
-            # concat to local_attention_probs
+        if is_global_attn:
+            # compute global attn indices required through out forward fn
+            max_num_global_attn_indices, is_index_global_attn_nonzero, is_local_index_global_attn_nonzero, is_local_index_no_global_attn_nonzero = self._get_global_attn_indices(is_index_global_attn)
+            # calculate global attn probs from global key
+            global_key_attention_probs = self._concat_with_global_key_attn_probs(attention_probs, key_vectors, max_num_global_attn_indices, is_local_index_global_attn_nonzero, is_index_global_attn_nonzero)
+            # concat to attention_probs
             # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
-            local_attention_probs = torch.cat((attention_probs_from_global_key, local_attention_probs), dim=-1)
+            attention_probs = torch.cat((global_key_attention_probs, attention_probs), dim=-1)
 
             # free memory
-            del key_vectors, query_vectors, key_vectors_only_global, attention_probs_from_global_key
+            del global_key_attention_probs
 
-        local_attention_probs_fp32 = F.softmax(
-            local_attention_probs, dim=-1, dtype=torch.float32
+        attention_probs_fp32 = F.softmax(
+            attention_probs, dim=-1, dtype=torch.float32
         )  # use fp32 for numerical stability
-        local_attention_probs = local_attention_probs_fp32.type_as(local_attention_probs)
+        attention_probs = attention_probs_fp32.type_as(attention_probs)
 
         # free memory
-        del local_attention_probs_fp32
+        del attention_probs_fp32
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
-        local_attention_probs = torch.masked_fill(
-            local_attention_probs, is_index_masked.unsqueeze(-1).unsqueeze(-1), 0.0
+        attention_probs = torch.masked_fill(
+            attention_probs, is_index_masked.unsqueeze(-1).unsqueeze(-1), 0.0
         )
 
-        local_attention_probs = F.dropout(local_attention_probs, p=self.dropout, training=self.training)
+        attention_probs = F.dropout(attention_probs, p=self.dropout, training=self.training)
         value_vectors = value_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
 
         # compute local attention output with global attention value and add
-        if max_num_global_attn_indices_of_batches > 0:
-            local_attn_probs_only_global = local_attention_probs.narrow(-1, 0, max_num_global_attn_indices_of_batches)
+        if is_global_attn:
+            local_attn_probs_only_global = attention_probs.narrow(-1, 0, max_num_global_attn_indices)
 
-            #            only_global_value_vectors = value_vectors.new_zeros(batch_size, max_num_global_attn_indices_of_batches, self.num_heads, self.head_dim)
+            #            only_global_value_vectors = value_vectors.new_zeros(batch_size, max_num_global_attn_indices, self.num_heads, self.head_dim)
 
             value_vectors_only_global = value_vectors.new_zeros(
-                batch_size, max_num_global_attn_indices_of_batches, self.num_heads, self.head_dim
+                batch_size, max_num_global_attn_indices, self.num_heads, self.head_dim
             )
-            value_vectors_only_global[is_local_index_global_attention_indices] = value_vectors[
-                is_index_global_attention_nonzeros
+            value_vectors_only_global[is_local_index_global_attn_nonzero] = value_vectors[
+                is_index_global_attn_nonzero
             ]
 
             # use `matmul` because `einsum` crashes sometimes with fp16
@@ -421,10 +387,10 @@ class LongformerSelfAttention(nn.Module):
                 local_attn_probs_only_global.transpose(1, 2), value_vectors_only_global.transpose(1, 2)
             ).transpose(1, 2)
 
-            local_attn_probs_without_global = local_attention_probs.narrow(
+            local_attn_probs_without_global = attention_probs.narrow(
                 -1,
-                max_num_global_attn_indices_of_batches,
-                local_attention_probs.size(-1) - max_num_global_attn_indices_of_batches,
+                max_num_global_attn_indices,
+                attention_probs.size(-1) - max_num_global_attn_indices,
             ).contiguous()
 
             # add computed attention output
@@ -434,6 +400,7 @@ class LongformerSelfAttention(nn.Module):
                 )
                 + local_attention_output_only_global
             )
+#            attn_output_to_global_indices = self._compute_attn_output_to_global_indices(value_vectors, batch_size, max_num_global_attn_indices, is_local_index_global_attn_nonzero)
 
             # free memory
             del (
@@ -445,7 +412,7 @@ class LongformerSelfAttention(nn.Module):
         else:
             # compute local attention
             attention_output = self._sliding_chunks_matmul_attention_probs_value(
-                local_attention_probs, value_vectors, self.one_sided_attention_window_size
+                attention_probs, value_vectors, self.one_sided_attention_window_size
             )
 
         assert attention_output.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
@@ -453,12 +420,12 @@ class LongformerSelfAttention(nn.Module):
 
         # compute value for global attention and overwrite to attention output
         # TODO: remove the redundant computation
-        if max_num_global_attn_indices_of_batches > 0:
+        if is_global_attn:
             only_global_attention_hidden_states = hidden_states.new_zeros(
-                max_num_global_attn_indices_of_batches, batch_size, embed_dim
+                max_num_global_attn_indices, batch_size, embed_dim
             )
-            only_global_attention_hidden_states[is_local_index_global_attention_indices[::-1]] = hidden_states[
-                is_index_global_attention_nonzeros[::-1]
+            only_global_attention_hidden_states[is_local_index_global_attn_nonzero[::-1]] = hidden_states[
+                is_index_global_attn_nonzero[::-1]
             ]
 
             only_global_query_vectors = self.query_global(only_global_attention_hidden_states)
@@ -470,9 +437,9 @@ class LongformerSelfAttention(nn.Module):
 
             only_global_query_vectors = (
                 only_global_query_vectors.contiguous()
-                .view(max_num_global_attn_indices_of_batches, batch_size * self.num_heads, self.head_dim)
+                .view(max_num_global_attn_indices, batch_size * self.num_heads, self.head_dim)
                 .transpose(0, 1)
-            )  # (batch_size * self.num_heads, max_num_global_attn_indices_of_batches, head_dim)
+            )  # (batch_size * self.num_heads, max_num_global_attn_indices, head_dim)
             global_key_vectors = (
                 global_key_vectors.contiguous().view(-1, batch_size * self.num_heads, self.head_dim).transpose(0, 1)
             )  # batch_size * self.num_heads, seq_len, head_dim)
@@ -482,16 +449,16 @@ class LongformerSelfAttention(nn.Module):
             global_attention_probs = torch.bmm(only_global_query_vectors, global_key_vectors.transpose(1, 2))
             assert list(global_attention_probs.size()) == [
                 batch_size * self.num_heads,
-                max_num_global_attn_indices_of_batches,
+                max_num_global_attn_indices,
                 seq_len,
-            ], f"global_attention_probs have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices_of_batches, seq_len)}, but is {global_attention_probs.size()}."
+            ], f"global_attention_probs have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attention_probs.size()}."
 
             global_attention_probs = global_attention_probs.view(
-                batch_size, self.num_heads, max_num_global_attn_indices_of_batches, seq_len
+                batch_size, self.num_heads, max_num_global_attn_indices, seq_len
             )
 
             global_attention_probs[
-                local_index_no_global_attention_indices[0], :, local_index_no_global_attention_indices[1], :
+                is_local_index_no_global_attn_nonzero[0], :, is_local_index_no_global_attn_nonzero[1], :
             ] = -10000.0
 
             global_attention_probs = global_attention_probs.masked_fill(
@@ -499,7 +466,7 @@ class LongformerSelfAttention(nn.Module):
             )
 
             global_attention_probs = global_attention_probs.view(
-                batch_size * self.num_heads, max_num_global_attn_indices_of_batches, seq_len
+                batch_size * self.num_heads, max_num_global_attn_indices, seq_len
             )
             global_attention_probs_float = F.softmax(
                 global_attention_probs, dim=-1, dtype=torch.float32
@@ -513,43 +480,80 @@ class LongformerSelfAttention(nn.Module):
 
             assert list(global_attention_output.size()) == [
                 batch_size * self.num_heads,
-                max_num_global_attn_indices_of_batches,
+                max_num_global_attn_indices,
                 self.head_dim,
-            ], f"global_attention_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices_of_batches, self.head_dim)}, but is {global_attention_output.size()}."
+            ], f"global_attention_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attention_output.size()}."
 
             global_attention_output = global_attention_output.view(
-                batch_size, self.num_heads, max_num_global_attn_indices_of_batches, self.head_dim
+                batch_size, self.num_heads, max_num_global_attn_indices, self.head_dim
             )
             nonzero_global_attention_output = global_attention_output[
-                is_local_index_global_attention_indices[0], :, is_local_index_global_attention_indices[1]
+                is_local_index_global_attn_nonzero[0], :, is_local_index_global_attn_nonzero[1]
             ]
 
             # overwrite values with global attention
-            attention_output[is_index_global_attention_nonzeros[::-1]] = nonzero_global_attention_output.view(
-                len(is_local_index_global_attention_indices[0]), -1
+            attention_output[is_index_global_attn_nonzero[::-1]] = nonzero_global_attention_output.view(
+                len(is_local_index_global_attn_nonzero[0]), -1
             )
 
         attention_output = attention_output.transpose(0, 1)
 
         if output_attentions:
-            if max_num_global_attn_indices_of_batches > 0:
+            if is_global_attn:
                 # With global attention, return global attention probabilities only
                 # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
                 # which is the attention weights from tokens with global attention to all tokens
                 # It doesn't not return local attention
                 # In case of variable number of global attantion in the rows of a batch,
                 # attention_probs are padded with -10000.0 attention scores
-                local_attention_probs = local_attention_probs.view(
-                    batch_size, self.num_heads, max_num_global_attn_indices_of_batches, seq_len
+                attention_probs = attention_probs.view(
+                    batch_size, self.num_heads, max_num_global_attn_indices, seq_len
                 )
             else:
                 # without global attention, return local attention probabilities
                 # batch_size x num_heads x sequence_length x window_size
                 # which is the attention weights of every token attending to its neighbours
-                local_attention_probs = local_attention_probs.permute(0, 2, 1, 3)
+                attention_probs = attention_probs.permute(0, 2, 1, 3)
 
-        outputs = (attention_output, local_attention_probs) if output_attentions else (attention_output,)
+        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
         return outputs
+
+        @staticmethod
+        def _get_global_attn_indices(is_index_global_attn):
+            """ compute global attn indices required through out forward fn """
+            # helper variable
+            num_global_attn_indices = is_index_global_attn.long().sum(dim=1)
+
+            # max number of global attn indices in batch
+            max_num_global_attn_indices = num_global_attn_indices.max()
+
+            # helper variable
+            is_local_index_global_attn = torch.arange(max_num_global_attn_indices, device=is_index_global_attn.device) < num_global_attn_indices.unsqueeze(dim=-1)
+
+            # indices of global attn
+            is_index_global_attn_nonzero = is_index_global_attn.nonzero(as_tuple=True)
+
+            # location of the non-padding values within global attention indices
+            is_local_index_global_attn_nonzero = is_local_index_global_attn.nonzero(as_tuple=True)
+
+            # location of the padding values within global attention indices
+            is_local_index_no_global_attn_nonzero = (is_local_index_global_attn == 0).nonzero(as_tuple=True)
+            return max_num_global_attn_indices, is_index_global_attn_nonzero, is_local_index_global_attn_nonzero, is_local_index_no_global_attn_nonzero
+
+        def _concat_with_global_key_attn_probs(self, key_vectors, query_vectors, max_num_global_attn_indices, is_local_index_global_attention_indices, is_index_global_attn_nonzero):
+            # create only global key vectors
+            key_vectors_only_global = key_vectors.new_zeros(
+                batch_size, max_num_global_attn_indices, self.num_heads, self.head_dim
+            )
+            key_vectors_only_global[is_local_index_global_attention_indices] = key_vectors[
+                is_index_global_attn_nonzero
+            ]
+            # (batch_size, seq_len, num_heads, max_num_global_attn_indices)
+            attention_probs_from_global_key = torch.einsum("blhd,bshd->blhs", (query_vectors, key_vectors_only_global))
+            attention_probs_from_global_key[
+                is_local_index_no_global_attn_nonzero[0], :, :, is_local_index_no_global_attn_nonzero[1]
+            ] = -10000.0
+            return attention_probs_from_global_key
 
 
 class LongformerAttention(nn.Module):
