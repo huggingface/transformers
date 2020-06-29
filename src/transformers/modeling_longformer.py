@@ -119,8 +119,12 @@ class LongformerSelfAttention(nn.Module):
     @staticmethod
     def _skew(hidden_states, direction):
         """Convert diagonals into columns (or columns into diagonals depending on `direction`"""
-        hidden_states_padded = F.pad(hidden_states, direction)  # padding value is not important because it will be overwritten
-        hidden_states_padded = hidden_states_padded.view(*hidden_states_padded.size()[:-2], hidden_states_padded.size(-1), hidden_states_padded.size(-2))
+        hidden_states_padded = F.pad(
+            hidden_states, direction
+        )  # padding value is not important because it will be overwritten
+        hidden_states_padded = hidden_states_padded.view(
+            *hidden_states_padded.size()[:-2], hidden_states_padded.size(-1), hidden_states_padded.size(-2)
+        )
         return hidden_states_padded
 
     @staticmethod
@@ -136,82 +140,100 @@ class LongformerSelfAttention(nn.Module):
         return x
 
     @staticmethod
-    def _chunk(x, w):
+    def _chunk(hidden_states, window_overlap):
         """convert into overlapping chunkings. Chunk size = 2w, overlap size = w"""
 
         # non-overlapping chunks of size = 2w
-        x = x.view(x.size(0), x.size(1) // (w * 2), w * 2, x.size(2))
+        hidden_states = hidden_states.view(
+            hidden_states.size(0),
+            hidden_states.size(1) // (window_overlap * 2),
+            window_overlap * 2,
+            hidden_states.size(2),
+        )
 
         # use `as_strided` to make the chunks overlap with an overlap size = w
-        chunk_size = list(x.size())
+        chunk_size = list(hidden_states.size())
         chunk_size[1] = chunk_size[1] * 2 - 1
 
-        chunk_stride = list(x.stride())
+        chunk_stride = list(hidden_states.stride())
         chunk_stride[1] = chunk_stride[1] // 2
-        return x.as_strided(size=chunk_size, stride=chunk_stride)
+        return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-    def _mask_invalid_locations(self, input_tensor, w) -> torch.Tensor:
-        affected_seqlen = w
-        beginning_mask_2d = input_tensor.new_ones(w, w + 1).tril().flip(dims=[0])
+    def _mask_invalid_locations(self, input_tensor, affected_seq_len) -> torch.Tensor:
+        beginning_mask_2d = input_tensor.new_ones(affected_seq_len, affected_seq_len + 1).tril().flip(dims=[0])
         beginning_mask = beginning_mask_2d[None, :, None, :]
         ending_mask = beginning_mask.flip(dims=(1, 3))
-        beginning_input = input_tensor[:, :affected_seqlen, :, : w + 1]
+        beginning_input = input_tensor[:, :affected_seq_len, :, : affected_seq_len + 1]
         beginning_mask = beginning_mask.expand(beginning_input.size())
         beginning_input.masked_fill_(beginning_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
-        ending_input = input_tensor[:, -affected_seqlen:, :, -(w + 1) :]
+        ending_input = input_tensor[:, -affected_seq_len:, :, -(affected_seq_len + 1) :]
         ending_mask = ending_mask.expand(ending_input.size())
         ending_input.masked_fill_(ending_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
 
-    def _sliding_chunks_matmul_qk(self, q: torch.Tensor, k: torch.Tensor, w: int):
+    def _sliding_chunks_query_key_matmul(self, query: torch.Tensor, key: torch.Tensor, window_overlap: int):
         """Matrix multiplicatio of query x key tensors using with a sliding window attention pattern.
         This implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer)
-        with an overlap of size w"""
-        batch_size, seqlen, num_heads, head_dim = q.size()
-        assert seqlen % (w * 2) == 0, f"Sequence length should be multiple of {w * 2}. Given {seqlen}"
-        assert q.size() == k.size()
+        with an overlap of size window_overlap"""
+        batch_size, seqlen, num_heads, head_dim = query.size()
+        assert (
+            seqlen % (window_overlap * 2) == 0
+        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seqlen}"
+        assert query.size() == key.size()
 
-        chunks_count = seqlen // w - 1
+        chunks_count = seqlen // window_overlap - 1
 
-        # group batch_size and num_heads dimensions into one, then chunk seqlen into chunks of size w * 2
-        q = q.transpose(1, 2).reshape(batch_size * num_heads, seqlen, head_dim)
-        k = k.transpose(1, 2).reshape(batch_size * num_heads, seqlen, head_dim)
+        # group batch_size and num_heads dimensions into one, then chunk seqlen into chunks of size window_overlap * 2
+        query = query.transpose(1, 2).reshape(batch_size * num_heads, seqlen, head_dim)
+        key = key.transpose(1, 2).reshape(batch_size * num_heads, seqlen, head_dim)
 
-        chunk_q = self._chunk(q, w)
-        chunk_k = self._chunk(k, w)
+        chunked_query = self._chunk(query, window_overlap)
+        chunked_key = self._chunk(key, window_overlap)
 
         # matrix multipication
         # bcxd: batch_size * num_heads x chunks x 2w x head_dim
         # bcyd: batch_size * num_heads x chunks x 2w x head_dim
         # bcxy: batch_size * num_heads x chunks x 2w x 2w
-        chunk_attn = torch.einsum("bcxd,bcyd->bcxy", (chunk_q, chunk_k))  # multiply
+        chunked_attention_scores = torch.einsum("bcxd,bcyd->bcxy", (chunked_query, chunked_key))  # multiply
 
         # convert diagonals into columns
-        diagonal_chunk_attn = self._skew(chunk_attn, direction=(0, 0, 0, 1))
+        diagonal_chunked_attention_scores = self._skew(chunked_attention_scores, direction=(0, 0, 0, 1))
 
         # allocate space for the overall attention matrix where the chunks are compined. The last dimension
         # has (w * 2 + 1) columns. The first (w) columns are the w lower triangles (attention from a word to
         # w previous words). The following column is attention score from each word to itself, then
         # followed by w columns for the upper triangle.
 
-        diagonal_attn = diagonal_chunk_attn.new_empty((batch_size * num_heads, chunks_count + 1, w, w * 2 + 1))
+        diagonal_attention_scores = diagonal_chunked_attention_scores.new_empty(
+            (batch_size * num_heads, chunks_count + 1, window_overlap, window_overlap * 2 + 1)
+        )
 
-        # copy parts from diagonal_chunk_attn into the compined matrix of attentions
+        # copy parts from diagonal_chunked_attention_scores into the compined matrix of attentions
         # - copying the main diagonal and the upper triangle
-        diagonal_attn[:, :-1, :, w:] = diagonal_chunk_attn[:, :, :w, : w + 1]
-        diagonal_attn[:, -1, :, w:] = diagonal_chunk_attn[:, -1, w:, : w + 1]
+        diagonal_attention_scores[:, :-1, :, window_overlap:] = diagonal_chunked_attention_scores[
+            :, :, :window_overlap, : window_overlap + 1
+        ]
+        diagonal_attention_scores[:, -1, :, window_overlap:] = diagonal_chunked_attention_scores[
+            :, -1, window_overlap:, : window_overlap + 1
+        ]
         # - copying the lower triangle
-        diagonal_attn[:, 1:, :, :w] = diagonal_chunk_attn[:, :, -(w + 1) : -1, w + 1 :]
-        diagonal_attn[:, 0, 1:w, 1:w] = diagonal_chunk_attn[:, 0, : w - 1, 1 - w :]
+        diagonal_attention_scores[:, 1:, :, :window_overlap] = diagonal_chunked_attention_scores[
+            :, :, -(window_overlap + 1) : -1, window_overlap + 1 :
+        ]
+        diagonal_attention_scores[:, 0, 1:window_overlap, 1:window_overlap] = diagonal_chunked_attention_scores[
+            :, 0, : window_overlap - 1, 1 - window_overlap :
+        ]
 
         # separate batch_size and num_heads dimensions again
-        diagonal_attn = diagonal_attn.view(batch_size, num_heads, seqlen, 2 * w + 1).transpose(2, 1)
+        diagonal_attention_scores = diagonal_attention_scores.view(
+            batch_size, num_heads, seqlen, 2 * window_overlap + 1
+        ).transpose(2, 1)
 
-        self._mask_invalid_locations(diagonal_attn, w)
-        return diagonal_attn
+        self._mask_invalid_locations(diagonal_attention_scores, window_overlap)
+        return diagonal_attention_scores
 
     def _sliding_chunks_matmul_pv(self, prob: torch.Tensor, v: torch.Tensor, w: int):
-        """Same as _sliding_chunks_matmul_qk but for prob and value tensors. It is expecting the same output
-        format from _sliding_chunks_matmul_qk"""
+        """Same as _sliding_chunks_query_key_matmul but for prob and value tensors. It is expecting the same output
+        format from _sliding_chunks_query_key_matmul"""
         batch_size, seqlen, num_heads, head_dim = v.size()
         assert seqlen % (w * 2) == 0
         assert prob.size()[:3] == v.size()[:3]
@@ -238,10 +260,7 @@ class LongformerSelfAttention(nn.Module):
         return context.view(batch_size, num_heads, seqlen, head_dim).transpose(1, 2)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, output_attentions=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
@@ -295,7 +314,7 @@ class LongformerSelfAttention(nn.Module):
         q = q.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         k = k.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         # attn_weights = (batch_size, seqlen, num_heads, window*2+1)
-        attn_weights = self._sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size)
+        attn_weights = self._sliding_chunks_query_key_matmul(q, k, self.one_sided_attention_window_size)
         if remove_from_windowed_attention_mask is not None:
             # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
             # from (batch_size x seqlen) to (batch_size x seqlen x num_heads x hidden_size)
@@ -308,7 +327,7 @@ class LongformerSelfAttention(nn.Module):
             )
             ones = float_mask.new_ones(size=float_mask.size())  # tensor of ones
             # diagonal mask with zeros everywhere and -inf inplace of padding
-            d_mask = self._sliding_chunks_matmul_qk(ones, float_mask, self.one_sided_attention_window_size)
+            d_mask = self._sliding_chunks_query_key_matmul(ones, float_mask, self.one_sided_attention_window_size)
             attn_weights += d_mask
         assert list(attn_weights.size()) == [
             batch_size,
@@ -455,14 +474,9 @@ class LongformerAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, output_attentions=False,
     ):
-        self_outputs = self.self(
-            hidden_states, attention_mask, output_attentions,
-        )
+        self_outputs = self.self(hidden_states, attention_mask, output_attentions,)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -476,14 +490,9 @@ class LongformerLayer(nn.Module):
         self.output = BertOutput(config)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
+        self, hidden_states, attention_mask=None, output_attentions=False,
     ):
-        self_attention_outputs = self.attention(
-            hidden_states, attention_mask, output_attentions=output_attentions,
-        )
+        self_attention_outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions,)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -500,11 +509,7 @@ class LongformerEncoder(nn.Module):
         self.layer = nn.ModuleList([LongformerLayer(config, layer_id=i) for i in range(config.num_hidden_layers)])
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
+        self, hidden_states, attention_mask=None, output_attentions=False, output_hidden_states=False,
     ):
         all_hidden_states = ()
         all_attentions = ()
@@ -521,16 +526,10 @@ class LongformerEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
+                    create_custom_forward(layer_module), hidden_states, attention_mask,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
+                layer_outputs = layer_module(hidden_states, attention_mask, output_attentions,)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
