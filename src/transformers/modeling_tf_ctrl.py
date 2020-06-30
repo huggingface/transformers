@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
@@ -34,6 +34,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "CtrlTokenizer"
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ctrl"
@@ -186,6 +188,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
+        self.use_cache = config.use_cache
 
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
@@ -235,8 +238,9 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
 
@@ -250,7 +254,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
             output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
-            assert len(inputs) <= 9, "Too many inputs."
+            output_hidden_states = inputs[9] if len(inputs) > 9 else output_hidden_states
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -261,11 +266,14 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 9, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.use_cache
 
         # If using past key value states, only the last tokens
         # should be given as an input
@@ -351,7 +359,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         all_hidden_states = ()
         all_attentions = []
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h(
                 [hidden_states, mask, layer_past, attention_mask, head_mask[i], use_cache, output_attentions],
@@ -367,13 +375,13 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         hidden_states = self.layernorm(hidden_states)
         hidden_states = tf.reshape(hidden_states, output_shape)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             outputs = outputs + (presents,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning
@@ -429,7 +437,7 @@ CTRL_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
@@ -483,6 +491,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -493,29 +502,17 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import CTRLTokenizer, TFCTRLModel
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = TFCTRLModel.from_pretrained('ctrl')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
@@ -563,6 +560,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -573,30 +571,17 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import CTRLTokenizer, TFCTRLLMHeadModel
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = TFCTRLLMHeadModel.from_pretrained('ctrl')
-
-        input_ids = tf.constant([tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)])
-        outputs = model(input_ids)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(inputs, **kwargs)
         hidden_states = transformer_outputs[0]

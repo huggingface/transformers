@@ -171,7 +171,7 @@ class XxxTokenizer(PreTrainedTokenizer):
     def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        special tokens using the tokenizer ``prepare_for_model`` methods.
 
         Args:
             token_ids_0: list of ids (must not contain special tokens)

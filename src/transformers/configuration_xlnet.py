@@ -113,16 +113,16 @@ class XLNetConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import XLNetConfig, XLNetModel
+            >>> from transformers import XLNetConfig, XLNetModel
 
-            # Initializing a XLNet configuration
-            configuration = XLNetConfig()
+            >>> # Initializing a XLNet configuration
+            >>> configuration = XLNetConfig()
 
-            # Initializing a model from the configuration
-            model = XLNetModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = XLNetModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
     model_type = "xlnet"

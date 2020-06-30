@@ -24,11 +24,13 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_ctrl import CTRLConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "CTRLTokenizer"
 
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ctrl"
@@ -249,7 +251,7 @@ CTRL_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
@@ -296,7 +298,6 @@ CTRL_INPUTS_DOCSTRING = r"""
 class CTRLModel(CTRLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_hidden_states = config.output_hidden_states
 
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
@@ -327,6 +328,7 @@ class CTRLModel(CTRLPreTrainedModel):
             self.h[layer].multi_head_attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def forward(
         self,
         input_ids=None,
@@ -336,8 +338,9 @@ class CTRLModel(CTRLPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
     Return:
@@ -347,33 +350,23 @@ class CTRLModel(CTRLPreTrainedModel):
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import CTRLTokenizer, CTRLModel
-        import torch
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = CTRLModel.from_pretrained('ctrl')
-
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -446,7 +439,7 @@ class CTRLModel(CTRLPreTrainedModel):
         all_hidden_states = ()
         all_attentions = []
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
             outputs = h(
                 hidden_states,
@@ -466,13 +459,13 @@ class CTRLModel(CTRLPreTrainedModel):
 
         hidden_states = self.layernorm(hidden_states)
         hidden_states = hidden_states.view(*output_shape)
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             outputs = outputs + (presents,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
@@ -506,6 +499,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         return {"input_ids": input_ids, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def forward(
         self,
         input_ids=None,
@@ -516,8 +510,9 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=True,
+        use_cache=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -536,30 +531,17 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import torch
-        from transformers import CTRLTokenizer, CTRLLMHeadModel
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = CTRLLMHeadModel.from_pretrained('ctrl')
-
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -571,6 +553,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         hidden_states = transformer_outputs[0]

@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.11.0"
+__version__ = "3.0.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -78,6 +78,9 @@ from .file_utils import (
     add_end_docstrings,
     add_start_docstrings,
     cached_path,
+    is_apex_available,
+    is_psutil_available,
+    is_py3nvml_available,
     is_tf_available,
     is_torch_available,
     is_torch_tpu_available,
@@ -166,7 +169,8 @@ if is_sklearn_available():
 
 # Modeling
 if is_torch_available():
-    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering, apply_chunking_to_forward
+    from .generation_utils import top_k_top_p_filtering
+    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, apply_chunking_to_forward
     from .modeling_auto import (
         AutoModel,
         AutoModelForPreTraining,
@@ -398,13 +402,14 @@ if is_torch_available():
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
     # Benchmarks
-    from .benchmark import PyTorchBenchmark, PyTorchBenchmarkArguments
+    from .benchmark.benchmark import PyTorchBenchmark
+    from .benchmark.benchmark_args import PyTorchBenchmarkArguments
 
 # TensorFlow
 if is_tf_available():
+    from .generation_tf_utils import tf_top_k_top_p_filtering
     from .modeling_tf_utils import (
         shape_list,
-        tf_top_k_top_p_filtering,
         TFPreTrainedModel,
         TFSequenceSummary,
         TFSharedEmbeddings,
@@ -607,6 +612,10 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
+
+    # Benchmarks
+    from .benchmark.benchmark_tf import TensorFlowBenchmark
+    from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
 
 if not is_tf_available() and not is_torch_available():

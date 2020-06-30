@@ -34,9 +34,8 @@ if is_torch_available():
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
     )
-    from transformers.modeling_roberta import RobertaEmbeddings
+    from transformers.modeling_roberta import RobertaEmbeddings, create_position_ids_from_input_ids
     from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_utils import create_position_ids_from_input_ids
 
 
 class RobertaModelTester:

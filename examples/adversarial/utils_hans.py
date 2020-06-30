@@ -22,7 +22,17 @@ from typing import List, Optional, Union
 import tqdm
 from filelock import FileLock
 
-from transformers import DataProcessor, PreTrainedTokenizer, is_tf_available, is_torch_available
+from transformers import (
+    BartTokenizer,
+    BartTokenizerFast,
+    DataProcessor,
+    PreTrainedTokenizer,
+    RobertaTokenizer,
+    RobertaTokenizerFast,
+    XLMRobertaTokenizer,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -105,6 +115,17 @@ if is_torch_available():
                     "dev" if evaluate else "train", tokenizer.__class__.__name__, str(max_seq_length), task,
                 ),
             )
+            label_list = processor.get_labels()
+            if tokenizer.__class__ in (
+                RobertaTokenizer,
+                RobertaTokenizerFast,
+                XLMRobertaTokenizer,
+                BartTokenizer,
+                BartTokenizerFast,
+            ):
+                # HACK(label indices are swapped in RoBERTa pretrained model)
+                label_list[1], label_list[2] = label_list[2], label_list[1]
+            self.label_list = label_list
 
             # Make sure only the first process in distributed training processes the dataset,
             # and the others will use the cache.
@@ -116,7 +137,6 @@ if is_torch_available():
                     self.features = torch.load(cached_features_file)
                 else:
                     logger.info(f"Creating features from dataset file at {data_dir}")
-                    label_list = processor.get_labels()
 
                     examples = (
                         processor.get_dev_examples(data_dir) if evaluate else processor.get_train_examples(data_dir)
@@ -132,6 +152,9 @@ if is_torch_available():
 
         def __getitem__(self, i) -> InputFeatures:
             return self.features[i]
+
+        def get_labels(self):
+            return self.label_list
 
 
 if is_tf_available():
@@ -156,6 +179,16 @@ if is_tf_available():
         ):
             processor = hans_processors[task]()
             label_list = processor.get_labels()
+            if tokenizer.__class__ in (
+                RobertaTokenizer,
+                RobertaTokenizerFast,
+                XLMRobertaTokenizer,
+                BartTokenizer,
+                BartTokenizerFast,
+            ):
+                # HACK(label indices are swapped in RoBERTa pretrained model)
+                label_list[1], label_list[2] = label_list[2], label_list[1]
+            self.label_list = label_list
 
             examples = processor.get_dev_examples(data_dir) if evaluate else processor.get_train_examples(data_dir)
             self.features = hans_convert_examples_to_features(examples, label_list, max_seq_length, tokenizer)
@@ -205,6 +238,9 @@ if is_tf_available():
 
         def __getitem__(self, i) -> InputFeatures:
             return self.features[i]
+
+        def get_labels(self):
+            return self.label_list
 
 
 class HansProcessor(DataProcessor):
@@ -262,12 +298,13 @@ def hans_convert_examples_to_features(
         if ex_index % 10000 == 0:
             logger.info("Writing example %d" % (ex_index))
 
-        inputs = tokenizer.encode_plus(
+        inputs = tokenizer(
             example.text_a,
             example.text_b,
             add_special_tokens=True,
             max_length=max_length,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_overflowing_tokens=True,
         )
 

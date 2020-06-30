@@ -12,7 +12,7 @@ According to Pytorch's documentation: "TorchScript is a way to create serializab
 Pytorch's two modules `JIT and TRACE <https://pytorch.org/docs/stable/jit.html>`_ allow the developer to export
 their model to be re-used in other programs, such as efficiency-oriented C++ programs.
 
-We have provided an interface that allows the export of `transformers` models to TorchScript so that they can
+We have provided an interface that allows the export of 🤗 Transformers models to TorchScript so that they can
 be reused in a different environment than a Pytorch-based python program. Here we explain how to use our models so that
 they can be exported, and what to be mindful of when using these models with TorchScript.
 

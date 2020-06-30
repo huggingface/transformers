@@ -24,12 +24,13 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .configuration_roberta import RobertaConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
-from .modeling_utils import create_position_ids_from_input_ids
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "roberta-base",
@@ -102,7 +103,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.RobertaTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
@@ -178,6 +179,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         return self.lm_head.decoder
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def forward(
         self,
         input_ids=None,
@@ -188,6 +190,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         **kwargs
     ):
         r"""
@@ -205,29 +208,17 @@ class RobertaForMaskedLM(BertPreTrainedModel):
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import RobertaTokenizer, RobertaForMaskedLM
-        import torch
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = RobertaForMaskedLM.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, prediction_scores = outputs[:2]
-
         """
         if "masked_lm_labels" in kwargs:
             warnings.warn(
@@ -245,6 +236,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -303,6 +295,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def forward(
         self,
         input_ids=None,
@@ -313,6 +306,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -327,30 +321,17 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import RobertaTokenizer, RobertaForSequenceClassification
-        import torch
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = RobertaForSequenceClassification.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         outputs = self.roberta(
             input_ids,
@@ -360,6 +341,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -397,6 +379,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def forward(
         self,
         input_ids=None,
@@ -407,6 +390,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -422,31 +406,17 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import RobertaTokenizer, RobertaForMultipleChoice
-        import torch
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = RobertaForMultipleChoice.from_pretrained('roberta-base')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = torch.tensor([tokenizer.encode(s, add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, classification_scores = outputs[:2]
-
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -468,6 +438,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         pooled_output = outputs[1]
 
@@ -505,6 +476,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def forward(
         self,
         input_ids=None,
@@ -515,6 +487,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -527,30 +500,17 @@ class RobertaForTokenClassification(BertPreTrainedModel):
             Classification loss.
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import RobertaTokenizer, RobertaForTokenClassification
-        import torch
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = RobertaForTokenClassification.from_pretrained('roberta-base')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
 
         outputs = self.roberta(
@@ -561,6 +521,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]
@@ -625,6 +586,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="roberta-base")
     def forward(
         self,
         input_ids=None,
@@ -636,6 +598,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
         start_positions=None,
         end_positions=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -655,36 +618,17 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        # The checkpoint roberta-large is not fine-tuned for question answering. Please see the
-        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
-
-        from transformers import RobertaTokenizer, RobertaForQuestionAnswering
-        import torch
-
-        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        model = RobertaForQuestionAnswering.from_pretrained('roberta-base')
-
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_ids = tokenizer.encode(question, text)
-        start_scores, end_scores = model(torch.tensor([input_ids]))
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-        answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
-
         """
 
         outputs = self.roberta(
@@ -695,6 +639,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]
@@ -723,3 +668,17 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+
+def create_position_ids_from_input_ids(input_ids, padding_idx):
+    """ Replace non-padding symbols with their position numbers. Position numbers begin at
+    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
+    `utils.make_positions`.
+
+    :param torch.Tensor x:
+    :return torch.Tensor:
+    """
+    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+    mask = input_ids.ne(padding_idx).int()
+    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
+    return incremental_indices.long() + padding_idx

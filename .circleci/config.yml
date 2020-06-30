@@ -12,9 +12,11 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,tf-cpu,torch,testing]
             - run: sudo pip install codecov pytest-cov
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ --cov  | tee output.txt
             - run: codecov
-
+            - store_artifacts:
+                  path: ~/transformers/output.txt
+                  destination: test_output.txt
     run_tests_torch:
         working_directory: ~/transformers
         docker:
@@ -26,9 +28,11 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[sklearn,torch,testing]
-            - run: sudo pip install codecov pytest-cov
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
-            - run: codecov
+            - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
+            - store_artifacts:
+                  path: ~/transformers/output.txt
+                  destination: test_output.txt
+
     run_tests_tf:
         working_directory: ~/transformers
         docker:
@@ -40,9 +44,10 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[sklearn,tf-cpu,testing]
-            - run: sudo pip install codecov pytest-cov
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
-            - run: codecov
+            - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
+            - store_artifacts:
+               path: ~/transformers/output.txt
+               destination: test_output.txt
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
@@ -65,7 +70,10 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install -r examples/requirements.txt
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
+            - run: python -m pytest -n 8 --dist=loadfile -s ./examples/ | tee output.txt
+            - store_artifacts:
+                  path: ~/transformers/output.txt
+                  destination: test_output.txt
     build_doc:
         working_directory: ~/transformers
         docker:
@@ -73,7 +81,7 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[tf,torch,docs]
-            - run: cd docs && make html
+            - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
                 path: ./docs/_build
     deploy_doc:

@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import (
     TFQuestionAnsweringLoss,
@@ -18,6 +18,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-small-generator",
@@ -240,6 +241,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -250,7 +252,8 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
-            assert len(inputs) <= 7, "Too many inputs."
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            assert len(inputs) <= 8, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -259,11 +262,15 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 7, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -288,7 +295,8 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             hidden_states = self.embeddings_project(hidden_states, training=training)
 
         hidden_states = self.encoder(
-            [hidden_states, extended_attention_mask, head_mask, output_attentions], training=training
+            [hidden_states, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            training=training,
         )
 
         return hidden_states
@@ -331,7 +339,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.ElectraTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -376,33 +384,24 @@ class TFElectraModel(TFElectraPreTrainedModel):
         self.electra = TFElectraMainLayer(config, name="electra")
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraModel
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = TFElectraModel.from_pretrained('google/electra-small-discriminator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
         outputs = self.electra(inputs, **kwargs)
         return outputs
@@ -433,6 +432,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -440,16 +440,17 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Prediction scores of the head (scores for each token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
@@ -471,6 +472,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states,
             training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -521,6 +523,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         return self.generator_lm_head
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-generator")
     def call(
         self,
         input_ids=None,
@@ -530,6 +533,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -537,28 +541,17 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraForMaskedLM
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
-        model = TFElectraForMaskedLM.from_pretrained('google/electra-small-generator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
 
         generator_hidden_states = self.electra(
@@ -569,6 +562,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
             head_mask,
             inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
         generator_sequence_output = generator_hidden_states[0]
@@ -597,16 +591,18 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         )
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -618,39 +614,34 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraForTokenClassification
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = TFElectraForTokenClassification.from_pretrained('google/electra-small-discriminator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[8] if len(inputs) > 8 else labels
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         discriminator_hidden_states = self.electra(
-            input_ids,
+            inputs,
             attention_mask,
             token_type_ids,
             position_ids,
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states,
             training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -682,20 +673,19 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         )
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
         start_positions=None,
         end_positions=None,
-        cls_index=None,
-        p_mask=None,
-        is_impossible=None,
-        output_attentions=None,
         training=False,
     ):
         r"""
@@ -714,41 +704,36 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraForQuestionAnswering
-
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
-        model = TFElectraForQuestionAnswering.from_pretrained('google/electra-small-generator')
-
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
+        if isinstance(inputs, (tuple, list)):
+            start_positions = inputs[8] if len(inputs) > 8 else start_positions
+            end_positions = inputs[9] if len(inputs) > 9 else end_positions
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
+
         discriminator_hidden_states = self.electra(
-            input_ids,
+            inputs,
             attention_mask,
             token_type_ids,
             position_ids,
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states,
             training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
