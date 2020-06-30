@@ -478,7 +478,7 @@ class TFT5Block(tf.keras.layers.Layer):
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-class _NoLayerEmbedTokens(object):
+class _NoLayerEmbedTokens:
     """
      this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
      class to avoid problem with weight restoring. Also it makes sure that the layer is
