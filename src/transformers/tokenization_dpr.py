@@ -57,7 +57,7 @@ class DPRContextEncoderTokenizer(BertTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 
 
-class DDPRContextEncoderTokenizerFast(BertTokenizerFast):
+class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     r"""
     Constructs a  "Fast" DPRContextEncoderTokenizer (backed by HuggingFace's `tokenizers` library).
 
