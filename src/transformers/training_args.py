@@ -103,7 +103,7 @@ class TrainingArguments:
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
         eval_steps (:obj:`int`, `optional`, defaults to 1000):
-            Number of update steps before two evaluations.
+            Number of update steps between two evaluations.
     """
 
     output_dir: str = field(
