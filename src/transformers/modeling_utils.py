@@ -262,10 +262,6 @@ class ModuleUtilsMixin:
         head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
         return head_mask
 
-    @staticmethod
-    def _gradient_accumulation_hook(module, *args, **kwargs):
-        module.forward = functools.partial(torch.utils.checkpoint.checkpoint, module.forward)
-
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     r""" Base class for all models.
@@ -478,7 +474,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # Gradient accumulation if needed
         if self.config.gradient_checkpointing:
             for layer in self.get_layers():
-                layer.register_forward_pre_hook(self._gradient_accumulation_hook)
+                layer.forward = functools.partial(torch.utils.checkpoint.checkpoint, layer.forward)
 
     def prune_heads(self, heads_to_prune: Dict):
         """ Prunes heads of the base model.
