@@ -205,9 +205,7 @@ class TFModelTesterMixin:
             # Check we can load pt model in tf and vice-versa with model => model functions
 
             tf_inputs = self._prepare_for_class(inputs_dict, model_class)
-            tf_model = transformers.load_pytorch_model_in_tf2_model(
-                tf_model, pt_model, tf_inputs=tf_inputs
-            )
+            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs)
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences

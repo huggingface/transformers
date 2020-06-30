@@ -682,7 +682,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         else:
             encoder_extended_attention_mask = None
 
-        assert head_mask is None, 'Head mask not supported'
+        assert head_mask is None, "Head mask not supported"
         head_mask = [None] * self.num_hidden_layers
 
         present_key_value_states = ()

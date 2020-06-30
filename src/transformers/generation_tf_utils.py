@@ -283,7 +283,7 @@ class TFGenerationMixin:
             pad_token_id = eos_token_id
 
         # current position and vocab size
-        cur_len = shape_list(input_ids)[1]
+        cur_len = shape_list(input_ids)[1]  # unused
         vocab_size = self.config.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
@@ -611,6 +611,7 @@ class TFGenerationMixin:
 
         # cache compute states
         past = encoder_outputs
+        # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
 
         # done sentences
         done = [False for _ in range(batch_size)]

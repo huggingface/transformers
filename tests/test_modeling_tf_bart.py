@@ -25,6 +25,7 @@ from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor, require_tf
 from .utils import slow
 
+
 if is_tf_available():
     import tensorflow as tf
     from transformers import (
@@ -104,13 +105,18 @@ def prepare_bart_inputs_dict(
 class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFBartForConditionalGeneration, TFBartModel, TFBartForSequenceClassification) if is_tf_available() else ()
+        (
+            TFBartForConditionalGeneration,
+            # TFBartModel,
+            # TFBartForSequenceClassification
+        )
+        if is_tf_available()
+        else ()
     )
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False
-    test_torchscript = False
     test_head_masking = False
     test_resize_embeddings = False  # This requires inputs_dict['input_ids']
 
@@ -137,7 +143,7 @@ class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 @require_tf
-@unittest.skip('common tests first')
+@unittest.skip("common tests first")
 class TFBartHeadTests(unittest.TestCase):
 
     vocab_size = 99
@@ -195,13 +201,13 @@ class TFBartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
         )
         lm_model = TFBartForConditionalGeneration(config)
-        context = tf.fill((7,2), 4)
-        summary = tf.fill((7,7), 6)
+        context = tf.fill((7, 2), 4)
+        summary = tf.fill((7, 7), 6)
         logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
 
-    @unittest.skip('borked')
+    @unittest.skip("borked")
     def test_shift_tokens_right(self):
         input_ids = ids_tensor((2, 7), vocab_size=99)
         shifted = shift_tokens_right(input_ids, 1)
@@ -262,9 +268,7 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         output = model(**inputs_dict)[0]
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = tf.Tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
-        )
+        expected_slice = tf.Tensor([[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],)
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     @slow
