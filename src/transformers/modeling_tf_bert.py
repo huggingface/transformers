@@ -751,9 +751,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
-        import ipdb
-
-        ipdb.set_trace()
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 

@@ -111,7 +111,12 @@ class TFCausalLanguageModelingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        return loss_fn(labels, logits)
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        active_loss = tf.reshape(labels, (-1,)) != -100
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+        return loss_fn(labels, reduced_logits)
 
 
 class TFQuestionAnsweringLoss:
@@ -130,7 +135,9 @@ class TFTokenClassificationLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        active_loss = tf.reshape(labels, (-1,)) != -1
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        active_loss = tf.reshape(labels, (-1,)) != -100
         reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
 

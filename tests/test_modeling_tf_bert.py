@@ -252,7 +252,8 @@ class TFBertModelTester:
             "loss": loss.numpy(),
         }
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
-        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size, self.seq_length])
+        # labels cannot be -1 in test so make sure full batch_size * seq_length is returned
+        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size * self.seq_length])
 
     def create_and_check_bert_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -270,7 +271,7 @@ class TFBertModelTester:
         result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy(), "loss": loss.numpy()}
         self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size, self.seq_length])
+        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
