@@ -298,8 +298,6 @@ def main(args, model=None) -> SummarizationModule:
             model: SummarizationModule = SummarizationModule(args)
         else:
             model: SummarizationModule = TranslationModule(args)
-
-    dataset = Path(args.data_dir).name
     if (
         args.logger == "default"
         or args.fast_dev_run
@@ -310,12 +308,12 @@ def main(args, model=None) -> SummarizationModule:
     elif args.logger == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=model.output_dir.name, project=dataset)
+        logger = WandbLogger(name=model.output_dir.name)
 
     elif args.logger == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
+        logger = WandbLogger(name=model.output_dir.name)
     trainer: pl.Trainer = generic_train(
         model,
         args,
