@@ -786,7 +786,11 @@ class TFBartModel(TFPretrainedBartModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = TFSharedEmbeddings(vocab_size, config.d_model, padding_idx)
+        self.shared = TFSharedEmbeddings(vocab_size, config.d_model, padding_idx, name='shared')
+
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
 
         self.encoder = TFBartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
