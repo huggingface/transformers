@@ -157,13 +157,13 @@ class MarianTokenizer(PreTrainedTokenizer):
             truncation_strategy=truncation_strategy,
             padding=padding,
         )
-        model_inputs: BatchEncoding = self.batch_encode_plus(src_texts, **tokenizer_kwargs)
+        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
 
         if tgt_texts is None:
             return model_inputs
 
         self.current_spm = self.spm_target
-        decoder_inputs: BatchEncoding = self.batch_encode_plus(tgt_texts, **tokenizer_kwargs)
+        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
         self.current_spm = self.spm_source
