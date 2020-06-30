@@ -40,11 +40,11 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-class DPRTokenizer(BertTokenizer):
+class DPRContextEncoderTokenizer(BertTokenizer):
     r"""
-    Constructs a  DPRBertTokenizer.
+    Constructs a  DPRContextEncoderTokenizer.
 
-    :class:`~transformers.DPRBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    :class:`~transformers.DPRContextEncoderTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
@@ -55,14 +55,13 @@ class DPRTokenizer(BertTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    model_input_names = ["attention_mask"]
 
 
-class DPRTokenizerFast(BertTokenizerFast):
+class DDPRContextEncoderTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs a  "Fast" DPRBertTokenizer (backed by HuggingFace's `tokenizers` library).
+    Constructs a  "Fast" DPRContextEncoderTokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.DPRBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
+    :class:`~transformers.DDPRContextEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
@@ -73,4 +72,71 @@ class DPRTokenizerFast(BertTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    model_input_names = ["attention_mask"]
+
+
+class DPRQuestionEncoderTokenizer(BertTokenizer):
+    r"""
+    Constructs a  DPRQuestionEncoderTokenizer.
+
+    :class:`~transformers.DPRQuestionEncoderTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    parameters.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+
+
+class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
+    r"""
+    Constructs a  "Fast" DPRQuestionEncoderTokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.DPRQuestionEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    parameters.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+
+
+class DPRReaderTokenizer(BertTokenizer):
+    r"""
+    Constructs a  DPRReaderTokenizer.
+
+    :class:`~transformers.DPRReaderTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    parameters.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+
+
+class DPRReaderTokenizerFast(BertTokenizerFast):
+    r"""
+    Constructs a  "Fast" DPRReaderTokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.DPRReaderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    parameters.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
