@@ -740,7 +740,7 @@ class Benchmark(ABC):
             info["framework"] = self.framework
             if self.framework == "PyTorch":
                 info["use_torchscript"] = self.args.torchscript
-            if self.framework == "Tensorflow":
+            if self.framework == "TensorFlow":
                 info["eager_mode"] = self.args.eager_mode
                 info["use_xla"] = self.args.use_xla
             info["framework_version"] = self.framework_version

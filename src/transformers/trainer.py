@@ -61,6 +61,12 @@ logger = logging.getLogger(__name__)
 
 
 def set_seed(seed: int):
+    """
+    Helper function for reproducible behavior to set the seed in ``random``, ``numpy`` and ``torch``.
+
+    Args:
+        seed (:obj:`int`): The seed to set.
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -72,6 +78,9 @@ def set_seed(seed: int):
 def torch_distributed_zero_first(local_rank: int):
     """
     Decorator to make all processes in distributed training wait for each local_master to do something.
+
+    Args:
+        local_rank (:obj:`int`): The rank of the local process.
     """
     if local_rank not in [-1, 0]:
         torch.distributed.barrier()
@@ -133,7 +142,31 @@ def get_tpu_sampler(dataset: Dataset):
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch,
-    optimized for Transformers.
+    optimized for 🤗 Transformers.
+
+    Args:
+        model (:class:`~transformers.PreTrainedModel`):
+            The model to train, evaluate or use for predictions.
+        args (:class:`~transformers.TrainingArguments`):
+            The arguments to tweak training.
+        data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
+            The function to use to from a batch from a list of elements of :obj:`train_dataset` or
+            :obj:`eval_dataset`.
+        train_dataset (:obj:`Dataset`, `optional`):
+            The dataset to use for training.
+        eval_dataset (:obj:`Dataset`, `optional`):
+            The dataset to use for evaluation.
+        compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
+            The function that will be used to compute metrics at evaluation. Must take a
+            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
+        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
+            When performing evaluation and predictions, only returns the loss.
+        tb_writer (:obj:`SummaryWriter`, `optional`):
+            Object to write to TensorBoard.
+        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
+            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
+            :class:`~transformers.AdamW` on your model and a scheduler given by
+            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
     """
 
     model: PreTrainedModel
@@ -160,14 +193,6 @@ class Trainer:
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None,
     ):
-        """
-        Trainer is a simple but feature-complete training and eval loop for PyTorch,
-        optimized for Transformers.
-
-        Args:
-            prediction_loss_only:
-                (Optional) in evaluation and prediction, only return the loss
-        """
         self.model = model.to(args.device)
         self.args = args
         self.data_collator = data_collator if data_collator is not None else default_data_collator
@@ -210,6 +235,9 @@ class Trainer:
             )
 
     def get_train_dataloader(self) -> DataLoader:
+        """
+        Returns the training :class:`~torch.utils.data.DataLoader`.
+        """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
         if is_torch_tpu_available():
@@ -232,6 +260,13 @@ class Trainer:
         return data_loader
 
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
+        """
+        Returns the evaluation :class:`~torch.utils.data.DataLoader`.
+
+        Args:
+            eval_dataset (:obj:`Dataset`, `optional`):
+                If provided, will override `self.eval_dataset`.
+        """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
@@ -257,6 +292,12 @@ class Trainer:
         return data_loader
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
+        """
+        Returns the test :class:`~torch.utils.data.DataLoader`.
+
+        Args:
+            test_dataset (obj:`Dataset`): The test dataset to use.
+        """
         # We use the same batch_size as for eval.
         if is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
@@ -283,9 +324,8 @@ class Trainer:
         """
         Setup the optimizer and the learning rate scheduler.
 
-        We provide a reasonable default that works well.
-        If you want to use something else, you can pass a tuple in the Trainer's init,
-        or override this method in a subclass.
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        Trainer's init through :obj:`optimizers`, or override this method in a subclass.
         """
         if self.optimizers is not None:
             return self.optimizers
@@ -336,7 +376,7 @@ class Trainer:
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
-        Helper to get num of examples from a DataLoader, by accessing its Dataset.
+        Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its Dataset.
         """
         return len(dataloader.dataset)
 
@@ -345,9 +385,9 @@ class Trainer:
         Main training entry point.
 
         Args:
-            model_path:
-                (Optional) Local path to model if model to train has been instantiated from a local path
-                If present, we will try reloading the optimizer/scheduler states from there.
+            model_path (:obj:`str`, `optional`):
+                Local path to the model if the model to train has been instantiated from a local path. If present,
+                training will resume from the optimizer/scheduler states loaded here.
         """
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
@@ -611,8 +651,7 @@ class Trainer:
 
     def save_model(self, output_dir: Optional[str] = None):
         """
-        Saving best-practices: if you use default names for the model,
-        you can reload it using from_pretrained().
+        Will save the model, so you can reload it using :obj:`from_pretrained()`.
 
         Will only save from the world_master process (unless in TPUs).
         """
@@ -683,22 +722,18 @@ class Trainer:
             logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
             shutil.rmtree(checkpoint)
 
-    def evaluate(
-        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None,
-    ) -> Dict[str, float]:
+    def evaluate(self, eval_dataset: Optional[Dataset] = None) -> Dict[str, float]:
         """
-        Run evaluation and return metrics.
+        Run evaluation and returns metrics.
 
         The calling script will be responsible for providing a method to compute metrics, as they are
-        task-dependent.
+        task-dependent (pass it to the init :obj:`compute_metrics` argument).
 
         Args:
-            eval_dataset: (Optional) Pass a dataset if you wish to override
-            the one on the instance.
+            eval_dataset (:obj:`Dataset`, `optional`):
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
         Returns:
-            A dict containing:
-                - the eval loss
-                - the potential metrics computed from the predictions
+            A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
@@ -714,10 +749,22 @@ class Trainer:
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
         """
-        Run prediction and return predictions and potential metrics.
+        Run prediction and returns predictions and potential metrics.
 
         Depending on the dataset and your use case, your test dataset may contain labels.
-        In that case, this method will also return metrics, like in evaluate().
+        In that case, this method will also return metrics, like in :obj:`evaluate()`.
+
+        Args:
+            test_dataset (:obj:`Dataset`):
+                Dataset to run the predictions on.
+        Returns:
+            `NamedTuple`:
+            predictions (:obj:`np.ndarray`):
+                The predictions on :obj:`test_dataset`.
+            label_ids (:obj:`np.ndarray`, `optional`):
+                The labels (if the dataset contained some).
+            metrics (:obj:`Dict[str, float]`, `optional`):
+                The potential dictionary of metrics (if the dataset contained labels).
         """
         test_dataloader = self.get_test_dataloader(test_dataset)
 
