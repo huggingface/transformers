@@ -820,19 +820,19 @@ class FillMaskPipeline(Pipeline):
 
         self.topk = topk
 
-    def ensure_exactly_one_mask_token(self, masked_index):
+    def ensure_exactly_one_mask_token(self, masked_index: Union[torch.Tensor, np.ndarray]):
         numel = np.prod(masked_index.shape)
         if numel > 1:
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
-                "More than one mask_token ({}) is not supported".format(self.tokenizer.mask_token),
+                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported"
             )
         elif numel < 1:
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
-                "No mask_token ({}) found on the input".format(self.tokenizer.mask_token),
+                f"No mask_token ({self.tokenizer.mask_token}) found on the input",
             )
 
     def __call__(self, *args, **kwargs):
