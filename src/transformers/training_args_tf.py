@@ -147,6 +147,6 @@ class TFTrainingArguments(TrainingArguments):
     @tf_required
     def n_gpu(self) -> int:
         """
-        The number of GPUs used in this training.
+        The number of replicas (GPUs or TPUs) used in this training.
         """
         return self._setup_strategy.num_replicas_in_sync

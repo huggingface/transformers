@@ -47,12 +47,14 @@ class TFTrainer:
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
         prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
             When performing evaluation and predictions, only returns the loss.
-        tb_writer (:obj:`SummaryWriter`, `optional`):
+        tb_writer (:obj:`tf.summary.SummaryWriter`, `optional`):
             Object to write to TensorBoard.
         optimizers (:obj:`Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]`, `optional`):
-            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
-            :class:`~transformers.AdamW` on your model and a scheduler given by
-            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+            A tuple containing the optimizer and the scheduler to use. The optimizer default to an instance of
+            :class:`tf.keras.optimizers.Adam` if :obj:`args.weight_decay_rate` is 0 else an instance of
+            :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
+            :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else
+            an instance of :class:`~transformers.WarmUp`.
     """
 
     model: TFPreTrainedModel
@@ -105,7 +107,7 @@ class TFTrainer:
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
         """
-        Returns the training :class:`~tf.data.Datasetr`.
+        Returns the training :class:`~tf.data.Dataset`.
         """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
