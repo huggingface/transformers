@@ -245,7 +245,7 @@ class TFTrainer:
                 if isinstance(labels, tuple):
                     labels = labels[0]
 
-                if self.args.n_gpu > 1:
+                if self.args.n_replicas > 1:
                     for val in logits.values:
                         if preds is None:
                             preds = val.numpy()
@@ -515,7 +515,7 @@ class TFTrainer:
             loss, logits = self.model(features, training=training, **labels)[:2]
         else:
             loss, logits = self.model(features, labels=labels, training=training)[:2]
-        loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
+        loss += sum(self.model.losses) * (1.0 / self.args.n_replicas)
 
         return loss, logits
 
