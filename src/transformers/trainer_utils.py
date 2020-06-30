@@ -23,8 +23,11 @@ def is_wandb_available():
 
 class EvalPrediction(NamedTuple):
     """
-    Evaluation output (always contains labels), to be used
-    to compute metrics.
+    Evaluation output (always contains labels), to be used to compute metrics.
+
+    Parameters:
+        predictions (:obj:`np.ndarray`): Predictions of the model.
+        label_ids (:obj:`np.ndarray`): Targets to be matched.
     """
 
     predictions: np.ndarray
