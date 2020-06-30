@@ -494,7 +494,7 @@ class Trainer:
                 epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
 
             # Reset the past mems state at the beginning of each epoch if necessary.
-            if args.past_index >= 0:
+            if self.args.past_index >= 0:
                 self._past = None
 
             for step, inputs in enumerate(epoch_iterator):
@@ -624,15 +624,15 @@ class Trainer:
         for k, v in inputs.items():
             if isinstance(v, torch.Tensor):
                 inputs[k] = v.to(self.args.device)
-        
-        if args.past_index >= 0 and self._past is not None:
+
+        if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
 
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
-        if args.past_index >= 0:
-            self._past = outputs[args.past_index]
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -645,7 +645,7 @@ class Trainer:
         else:
             loss.backward()
 
-        return loss.item(), past
+        return loss.item()
 
     def is_local_master(self) -> bool:
         if is_torch_tpu_available():

@@ -106,7 +106,7 @@ class TrainingArguments:
             Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
-            at the next training step under the keyword argument ``mems``. 
+            at the next training step under the keyword argument ``mems``.
     """
 
     output_dir: str = field(
