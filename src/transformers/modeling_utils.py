@@ -351,8 +351,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Returns the model's transformer layers.
 
         Returns:
-            :obj:`nn.Module`:
-                A torch module mapping hidden states to vocabulary.
+            :obj:`List` or :obj:`nn.ModuleList`:
+                A list or :obj:`nn.ModuleList` containing all transformer layers.
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
