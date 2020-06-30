@@ -826,7 +826,7 @@ class FillMaskPipeline(Pipeline):
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
-                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported"
+                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
             )
         elif numel < 1:
             raise PipelineException(
