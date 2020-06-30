@@ -820,7 +820,7 @@ class FillMaskPipeline(Pipeline):
 
         self.topk = topk
 
-    def ensure_exactly_one_mask_token(self, masked_index: Union[torch.Tensor, np.ndarray]):
+    def ensure_exactly_one_mask_token(self, masked_index):
         numel = np.prod(masked_index.shape)
         if numel > 1:
             raise PipelineException(
