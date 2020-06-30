@@ -298,8 +298,6 @@ def main(args, model=None) -> SummarizationModule:
             model: SummarizationModule = SummarizationModule(args)
         else:
             model: SummarizationModule = TranslationModule(args)
-
-    dataset = Path(args.data_dir).name
     if (
         args.logger == "default"
         or args.fast_dev_run
