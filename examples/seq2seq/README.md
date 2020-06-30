@@ -71,7 +71,7 @@ Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_t
 - If you want to run experiments on improving the summarization finetuning process, try the XSUM Shared Task (below). It's faster to train than CNNDM because the summaries are shorter.
 - For CNN/DailyMail, the default `val_max_target_length` and `test_max_target_length` will truncate the ground truth labels, resulting in slightly higher rouge scores. To get accurate rouge scores, you should rerun calculate_rouge on the `{output_dir}/test_generations.txt` file saved by `trainer.test()`
 - `--max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 ` is a reasonable setting for XSUM.
-- `wandb` can be used by specifying `--logger wandb_shared` or `--logger wandb`. It is useful for reproducibility. 
+- `wandb` can be used by specifying `--logger wandb`. It is useful for reproducibility. Specify the environment variable `WANDB_PROJECT='hf_xsum'` to do the XSUM shared task. 
 - This warning can be safely ignored: 
     > "Some weights of BartForConditionalGeneration were not initialized from the model checkpoint at facebook/bart-large-xsum and are newly initialized: ['final_logits_bias']"
 - Both finetuning and eval are 30% faster with `--fp16`. For that you need to [install apex](https://github.com/NVIDIA/apex#quick-start).
@@ -111,11 +111,10 @@ Compare XSUM results with others by using `--logger wandb_shared`. This requires
 
 Here is an example command, but you can do whatever you want. Hopefully this will make debugging and collaboration easier!
 ```bash
-./finetune.sh \
+WANDB_PROJECT='hf_xsum' ./finetune.sh \
     --data_dir $XSUM_DIR \
     --output_dir xsum_frozen_embs \
     --model_name_or_path facebook/bart-large \
-    --logger wandb_shared \
     --train_batch_size 16 --eval_batch_size 16 --freeze_embeds --freeze_encoder \
     --num_train_epochs 6 \
     --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100

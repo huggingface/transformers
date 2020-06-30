@@ -310,12 +310,12 @@ def main(args, model=None) -> SummarizationModule:
     elif args.logger == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=model.output_dir.name, project=dataset)
+        logger = WandbLogger(name=model.output_dir.name)
 
     elif args.logger == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
+        logger = WandbLogger(name=model.output_dir.name)
     trainer: pl.Trainer = generic_train(
         model,
         args,
