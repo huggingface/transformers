@@ -53,7 +53,7 @@ jobs:
         source .env/bin/activate
         python -m pytest -n 2 --dist=loadfile -s ./tests/ | tee output.txt
     - name: cat output.txt
-        run: cat output.txt
+      run: cat output.txt
     - name: Upload output.txt
       uses: actions/upload-artifact@v1
       with:
