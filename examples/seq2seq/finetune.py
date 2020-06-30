@@ -212,7 +212,7 @@ class SummarizationModule(BaseTransformer):
         t_total = (
             (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.gpus)))
             // self.hparams.accumulate_grad_batches
-            * float(self.hparams.num_train_epochs)
+            * float(self.hparams.max_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
