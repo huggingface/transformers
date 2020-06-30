@@ -93,7 +93,7 @@ class PipelineException(Exception):
     """
 
     def __init__(self, task: str, model: str, reason: str):
-        super(reason)
+        super().__init__(reason)
 
         self.task = task
         self.model = model
@@ -820,6 +820,20 @@ class FillMaskPipeline(Pipeline):
 
         self.topk = topk
 
+    def ensure_exactly_one_mask_token(self, masked_index):
+        if masked_index.numel() > 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                "More than one mask_token ({}) is not supported".format(self.tokenizer.mask_token),
+            )
+        elif masked_index.numel() < 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                "No mask_token ({}) found on the input".format(self.tokenizer.mask_token),
+            )
+
     def __call__(self, *args, **kwargs):
         inputs = self._parse_and_tokenize(*args, **kwargs)
         outputs = self._forward(inputs, return_tensors=True)
@@ -835,10 +849,7 @@ class FillMaskPipeline(Pipeline):
                 masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
-                if masked_index.numel() > 1:
-                    raise PipelineException(
-                        "fill-mask", self.model.config.base_model_prefix, "More than one mask_token is not supported"
-                    )
+                self.ensure_exactly_one_mask_token(masked_index)
 
                 logits = outputs[i, masked_index.item(), :]
                 probs = tf.nn.softmax(logits)
@@ -851,10 +862,7 @@ class FillMaskPipeline(Pipeline):
                 masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
-                if masked_index.numel() > 1:
-                    raise PipelineException(
-                        "fill-mask", self.model.config.base_model_prefix, "More than one mask_token is not supported"
-                    )
+                self.ensure_exactly_one_mask_token(masked_index)
 
                 logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
