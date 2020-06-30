@@ -206,7 +206,7 @@ class TrainingArguments:
     @property
     def train_batch_size(self) -> int:
         """
-        The actual batch size for training (may differ for :obj:`per_gpu_train_batch_size` in distributed training).
+        The actual batch size for training (may differ from :obj:`per_gpu_train_batch_size` in distributed training).
         """
         if self.per_gpu_train_batch_size:
             logger.warning(
@@ -219,7 +219,7 @@ class TrainingArguments:
     @property
     def eval_batch_size(self) -> int:
         """
-        The actual batch size for evaluation (may differ for :obj:`per_gpu_eval_batch_size` in distributed training).
+        The actual batch size for evaluation (may differ from :obj:`per_gpu_eval_batch_size` in distributed training).
         """
         if self.per_gpu_eval_batch_size:
             logger.warning(
