@@ -108,9 +108,7 @@ def keras_serializable(cls):
 
 class TFCausalLanguageModelingLoss:
     def compute_loss(self, labels, logits):
-        loss_fn = tf.keras.losses.CategoricalCrossentropy(
-            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
-        )
+        loss_fn = tf.keras.losses.CategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
         labels = tf.one_hot(labels, shape_list(logits)[-1])
         return loss_fn(labels, logits)
 

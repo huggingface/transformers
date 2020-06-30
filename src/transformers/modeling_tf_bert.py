@@ -913,8 +913,9 @@ class TFBertLMHeadModel(TFBertForPreTraining, TFCausalLanguageModelingLoss):
 
         outputs = (logits,) + outputs[2:]  # Add hidden states and attention if they are here
         if labels is not None:
-            logits = logits[: :-1]
-            labels = labels[: 1:]
+            # shift labels to the left and cut last logit token
+            logits = logits[::-1]
+            labels = labels[:1:]
             loss = self.compute_loss(labels, logits)
             outputs = (loss,) + outputs
 
