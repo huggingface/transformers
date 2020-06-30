@@ -25,7 +25,7 @@ from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list, DUMMY_INPUTS
 
 
 # from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
@@ -97,7 +97,11 @@ def causal_attention_mask(nd, ns, dtype):
 def invert_mask(attention_mask: T):
     """Turns 1->0, 0->1, False->True, True-> False"""
     assert attention_mask._rank() == 2
-    return tf.math.equal(attention_mask, 0)
+    attention_mask = tf.cast(attention_mask, tf.bool)
+    ret = tf.math.logical_not(attention_mask)
+    assert ret.dtype == tf.bool
+    return ret
+
 
 
 def _prepare_bart_decoder_inputs(
@@ -127,33 +131,12 @@ class TFPretrainedBartModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         pad_token = 1
-        input_ids = tf.cast(
-            tf.constant(
-                [
-                    [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
-                    [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 2, pad_token],
-                ]
-            ),
-            tf.int32,
-        )
-        decoder_input_ids = tf.cast(
-            tf.constant(
-                [
-                    [0,  1140, 12695, 69, 2],
-                    [0, 31414, 232, 2, pad_token],
-                ]
-            ),
-            tf.int32,
-        )
-        decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(
-            self.config, input_ids, decoder_input_ids=decoder_input_ids, mask_dtype=tf.float32
-        )
+        input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
+        decoder_input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": tf.math.not_equal(input_ids, pad_token),
             "input_ids": input_ids,
-            "decoder_attention_mask": decoder_padding_mask,
-            "decoder_causal_mask": causal_mask,
         }
         return dummy_inputs
 
@@ -426,6 +409,7 @@ class BartDecoder(tf.keras.layers.Layer):
         self.layers = [DecoderLayer(config) for _ in range(config.decoder_layers)]
         self.layernorm_embedding = LayerNorm(config.d_model)
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.layer_norm = None # fix later for mbart
 
     def call(
         self,
@@ -483,7 +467,6 @@ class BartDecoder(tf.keras.layers.Layer):
                 decoder_padding_mask=decoder_padding_mask,
                 layer_state=layer_state,
                 causal_mask=decoder_causal_mask,
-                output_attentions=output_attentions,
             )
 
             if use_cache:
@@ -495,9 +478,9 @@ class BartDecoder(tf.keras.layers.Layer):
                 all_self_attns += (layer_self_attn,)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
-        x = x.transpose(0, 1)
-        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
+        all_hidden_states = [tf.transpose(hidden_state,perm=(1,0,2)) for hidden_state in all_hidden_states]
+        x = tf.transpose(x, perm=(1,0,2))
+        encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1,0,2))
 
         if use_cache:
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
@@ -627,7 +610,8 @@ class SelfAttention(tf.keras.layers.Layer):
         assert key_padding_mask is None or key_padding_mask.shape[:2] == (bsz, src_len,)
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights: T = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-            extended_mask = tf.expand_dims(tf.expand_dims(key_padding_mask*  float("-inf"), 1), 2)
+            neg_mask = tf.cast(key_padding_mask, attn_weights.dtype) *  -1e9
+            extended_mask = tf.expand_dims(tf.expand_dims(neg_mask, 1), 2)
             attn_weights = attn_weights + extended_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
@@ -666,7 +650,7 @@ class SelfAttention(tf.keras.layers.Layer):
         assert k is not None and v is not None
         prev_key_padding_mask = saved_state.get("prev_key_padding_mask", None)  # type: Optional[Tensor]
         key_padding_mask = self._cat_prev_key_padding_mask(
-            key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv
+            key_padding_mask, prev_key_padding_mask, bsz, k.shape[1], static_kv
         )
         return k, v, key_padding_mask
 
@@ -682,19 +666,15 @@ class SelfAttention(tf.keras.layers.Layer):
         if prev_key_padding_mask is not None and static_kv:
             new_key_padding_mask = prev_key_padding_mask
         elif prev_key_padding_mask is not None and key_padding_mask is not None:
-            new_key_padding_mask = tf.concat([prev_key_padding_mask.float(), key_padding_mask.float()], axis=1)
+            new_key_padding_mask = tf.concat([prev_key_padding_mask, key_padding_mask], axis=1)
         # During incremental decoding, as the padding token enters and
         # leaves the frame, there will be a time when prev or current is None
         elif prev_key_padding_mask is not None:
-            filler = tf.zeros(batch_size, src_len - prev_key_padding_mask.size(1))
-            if prev_key_padding_mask.is_cuda:
-                filler = filler.to(prev_key_padding_mask.device)
-            new_key_padding_mask = tf.concat([prev_key_padding_mask.float(), filler.float()], axis=1)
+            filler = tf.zeros((batch_size, src_len - prev_key_padding_mask.shape[1]), dtype=prev_key_padding_mask.dtype)
+            new_key_padding_mask = tf.concat([prev_key_padding_mask, filler], axis=1)
         elif key_padding_mask is not None:
-            filler = tf.zeros(batch_size, src_len - key_padding_mask.size(1))
-            if key_padding_mask.is_cuda:
-                filler = filler.cuda()
-            new_key_padding_mask = tf.concat([filler.float(), key_padding_mask.float()], axis=1)
+            filler = tf.zeros((batch_size, src_len - key_padding_mask.shape[1]), dtype=key_padding_mask.dtype)
+            new_key_padding_mask = tf.concat([filler, key_padding_mask], axis=1)
         else:
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
@@ -759,7 +739,7 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
         else:
             # starts at 0, ends at 1-seq_len
             positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
-        return super().call(positions + self.offset)
+        return super().call(positions + self.offset)  # super object is not callable for some reason
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -923,39 +903,27 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             tokenizer.decode(predictions).split()
             # ['good', 'great', 'all', 'really', 'very']
         """
-        if isinstance(inputs, dict):
-            kwargs.update(**inputs)
-            input_ids = kwargs['input_ids']  # KeyError possible
-        else:
-            assert isinstance(inputs, T)
-            input_ids = inputs
 
-        attention_mask = kwargs.get("attention_mask", None)
-        encoder_outputs = kwargs.get("encoder_outputs", None)
-        decoder_input_ids = kwargs.get("decoder_input_ids", None)
-        decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
-        decoder_cached_states = kwargs.get('decoder_cached_states', None)
+        if isinstance(inputs, T):
+            input_ids = inputs
+        elif isinstance(inputs, dict):
+            kwargs.update(**inputs)
+
+        input_ids = kwargs.pop('input_ids')  # KeyError possible
+
+        # attention_mask = kwargs.get("attention_mask", None)
+        # encoder_outputs = kwargs.get("encoder_outputs", None)
+        # decoder_input_ids = kwargs.get("decoder_input_ids", None)
+        # decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
+        # decoder_cached_states = kwargs.get('decoder_cached_states', None)
         outputs = self.model(
             input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask,
-            decoder_cached_states=decoder_cached_states,
+            **kwargs
         )
-        lm_logits = self.model.shared(outputs[0])  # BORKED need linear
+        lm_logits = self.model.shared(outputs[0], mode='linear')  # BORKED need linear
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
-        return outputs # never compute loss because T5 doesn't
+        return outputs
 
-        # if labels is None:
-        #     return outputs
-        #
-        # loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        # # TODO(SS): do we need to ignore pad tokens in lm_labels?
-        # lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), tf.reshape(labels.view(-1))
-        # outputs = (lm_loss,) + outputs
-        #
-        # return outputs
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, encoder_inputs, attention_mask):
         assert attention_mask.shape == encoder_inputs.shape, "attn_mask.shape != encoder_input.shape: {} =! {}".format(
@@ -1017,12 +985,8 @@ class TFBartForSequenceClassification(TFPretrainedBartModel):
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids,
-        attention_mask=None,
-        encoder_outputs=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        # labels=None,
+        inputs: dict,
+        **kwargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1058,19 +1022,27 @@ class TFBartForSequenceClassification(TFPretrainedBartModel):
         loss, logits = outputs[:2]
 
         """
-        outputs = self.model(
+        if isinstance(inputs, dict):
+            kwargs.update(**inputs)
+            input_ids = kwargs.pop('input_ids')  # KeyError possible
+        else:
+            assert isinstance(inputs, T)
+            input_ids = inputs
+
+        # attention_mask = kwargs.get("attention_mask", None)
+        # encoder_outputs = kwargs.get("encoder_outputs", None)
+        # decoder_input_ids = kwargs.get("decoder_input_ids", None)
+        # decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
+        # decoder_cached_states = kwargs.get('decoder_cached_states', None)
+        x, *other_outputs = self.model(
             input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
+            **kwargs
         )
-        x = outputs[0]  # last hidden state
         eos_mask = tf.math.equal(input_ids, self.config.eos_token_ids[0])
         if len(tf.unique(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = tf.reshape(x[eos_mask, :], (x.shape[0], -1, x.shape[-1]))[:, -1, :]
         logits = self.classification_head(sentence_representation)
         # Prepend logits
-        outputs = (logits,) + outputs[1:]  # Add hidden states and attention if they are here
+        outputs = (logits,) + other_outputs  # Add hidden states and attention if they are here
         return outputs
