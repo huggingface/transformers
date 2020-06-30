@@ -816,12 +816,17 @@ class Trainer:
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
+        if self.args.past_index:
+            past = None
+
         for inputs in tqdm(dataloader, desc=description):
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
             for k, v in inputs.items():
                 if isinstance(v, torch.Tensor):
                     inputs[k] = v.to(self.args.device)
+            if self.args.past_index:
+                inputs["mems"] = past
 
             with torch.no_grad():
                 outputs = model(**inputs)
@@ -830,6 +835,8 @@ class Trainer:
                     eval_losses += [step_eval_loss.mean().item()]
                 else:
                     logits = outputs[0]
+                if self.args.past_index:
+                    past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
 
             if not prediction_loss_only:
                 if preds is None:
