@@ -98,7 +98,7 @@ model class:
 ::
 
     pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
-    pt_model.save_pretrained("path/to/")
+    pt_model.save_pretrained("path/to/awesome-name-you-picked")
 
 That's all there is to it!
 
