@@ -20,7 +20,7 @@ from transformers import is_torch_available, is_tf_available
 
 from .utils import require_multigpu, require_torch, slow, torch_device, require_tf
 
-from transformers.modeling_utils_samplers import (
+from transformers.generation_utils_samplers import (
     IdentitySampler, TopKSampler, TopPSampler, CompositionSampler
 )
 

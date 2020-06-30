@@ -17,7 +17,6 @@
 import inspect
 import logging
 import os
-import warnings
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
@@ -37,7 +36,6 @@ from .file_utils import (
     is_remote_url,
 )
 
-from . import modeling_utils_samplers
 from .generation_utils import GenerationMixin
 
 

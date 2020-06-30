@@ -15,13 +15,14 @@
 # limitations under the License.
 
 import logging
+import warnings
 from typing import Iterable, Optional, Tuple
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
-import generation_utils_samplers
+from . import generation_utils_samplers
 
 
 logger = logging.getLogger(__name__)
@@ -46,49 +47,6 @@ class GenerationMixin:
             return False
         return True
 
-    def postprocess_next_token_scores(
-        self,
-        scores,
-        input_ids,
-        no_repeat_ngram_size,
-        bad_words_ids,
-        cur_len,
-        min_length,
-        max_length,
-        eos_token_id,
-        repetition_penalty,
-        batch_size,
-        num_beams,
-    ):
-        # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
-        if repetition_penalty != 1.0:
-            self.enforce_repetition_penalty_(
-                scores, batch_size, num_beams, input_ids, repetition_penalty,
-            )
-
-        # set eos token prob to zero if min_length is not reached
-        if eos_token_id is not None and cur_len < min_length:
-            scores[:, eos_token_id] = -float("inf")
-
-        if no_repeat_ngram_size > 0:
-            # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-            num_batch_hypotheses = batch_size * num_beams
-            # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-            banned_batch_tokens = calc_banned_ngram_tokens(
-                input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
-            )
-            for i, banned_tokens in enumerate(banned_batch_tokens):
-                scores[i, banned_tokens] = -float("inf")
-
-        if bad_words_ids is not None:
-            # calculate a list of banned tokens according to bad words
-            banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-            for i, banned_tokens in enumerate(banned_tokens):
-                scores[i, banned_tokens] = -float("inf")
-
-        return scores
-
     @torch.no_grad()
     def generate(
         self,
@@ -112,7 +70,7 @@ class GenerationMixin:
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
-        sampler: Option[generation_utils_samplers.GenerationSampler] = None,
+        sampler: Optional[generation_utils_samplers.GenerationSampler] = None,
         **model_specific_kwargs
     ) -> torch.LongTensor:
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
@@ -454,7 +412,6 @@ class GenerationMixin:
                 input_ids,
                 cur_len=cur_len,
                 max_length=max_length,
-                min_length=min_length,
                 do_sample=do_sample,
                 early_stopping=early_stopping,
                 bad_words_ids=bad_words_ids,
@@ -476,7 +433,6 @@ class GenerationMixin:
                 input_ids,
                 cur_len=cur_len,
                 max_length=max_length,
-                min_length=min_length,
                 do_sample=do_sample,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -495,7 +451,6 @@ class GenerationMixin:
         input_ids,
         cur_len,
         max_length,
-        min_length,
         do_sample,
         pad_token_id,
         eos_token_id,
@@ -531,7 +486,7 @@ class GenerationMixin:
 
             if do_sample:
                 # Sample
-                probs = F.softmax(next_token_logscores, dim=-1)
+                probs = F.softmax(next_token_logits, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 # Greedy decoding
@@ -573,7 +528,6 @@ class GenerationMixin:
         input_ids,
         cur_len,
         max_length,
-        min_length,
         do_sample,
         early_stopping,
         bad_words_ids,

@@ -16,10 +16,11 @@
 
 import logging
 
+import warnings
 import numpy as np
 import tensorflow as tf
 
-import generation_utils_samplers
+from . import generation_utils_samplers
 
 
 logger = logging.getLogger(__name__)
@@ -384,7 +385,6 @@ class TFGenerationMixin:
                 input_ids,
                 cur_len=cur_len,
                 max_length=max_length,
-                min_length=min_length,
                 do_sample=do_sample,
                 early_stopping=early_stopping,
                 bos_token_id=bos_token_id,
@@ -406,14 +406,7 @@ class TFGenerationMixin:
                 input_ids,
                 cur_len=cur_len,
                 max_length=max_length,
-                min_length=min_length,
                 do_sample=do_sample,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -433,7 +426,6 @@ class TFGenerationMixin:
         input_ids,
         cur_len,
         max_length,
-        min_length,
         do_sample,
         bos_token_id,
         pad_token_id,
@@ -541,7 +533,6 @@ class TFGenerationMixin:
         input_ids,
         cur_len,
         max_length,
-        min_length,
         do_sample,
         early_stopping,
         bos_token_id,
@@ -606,10 +597,6 @@ class TFGenerationMixin:
                     beam_scores[:, None], (batch_size * num_beams, vocab_size)
                 )  # (batch_size * num_beams, vocab_size)
 
-                # Top-p/top-k filtering
-                _scores = tf_top_k_top_p_filtering(
-                    _scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
-                )  # (batch_size * num_beams, vocab_size)
                 # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
                 _scores = tf.reshape(_scores, (batch_size, num_beams * vocab_size))
 
