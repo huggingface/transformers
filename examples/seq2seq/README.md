@@ -117,7 +117,8 @@ WANDB_PROJECT='hf_xsum' ./finetune.sh \
     --model_name_or_path facebook/bart-large \
     --train_batch_size 16 --eval_batch_size 16 --freeze_embeds --freeze_encoder \
     --num_train_epochs 6 \
-    --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100
+    --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 \
+    --logger wandb
 ```
 
 You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
