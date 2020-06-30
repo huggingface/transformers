@@ -286,7 +286,12 @@ class LongformerModelTester:
             choice_labels,
         ) = config_and_inputs
         global_attention_mask = torch.zeros_like(input_ids)
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask, "global_attention_mask": global_attention_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+            "global_attention_mask": global_attention_mask,
+        }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_question_answering(self):
