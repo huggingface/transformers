@@ -821,13 +821,14 @@ class FillMaskPipeline(Pipeline):
         self.topk = topk
 
     def ensure_exactly_one_mask_token(self, masked_index):
-        if masked_index.numel() > 1:
+        numel = np.prod(masked_index.shape)
+        if numel > 1:
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
                 "More than one mask_token ({}) is not supported".format(self.tokenizer.mask_token),
             )
-        elif masked_index.numel() < 1:
+        elif numel < 1:
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
