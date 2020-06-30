@@ -158,7 +158,8 @@ class TFBertModelTester:
         self.parent.assertListEqual(
             list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
         )
-        self.parent.assertListEqual(list(loss.numpy().shape), [self.batch_size, self.seq_length - 1])
+        # labels cannot be -100 in test so make sure full batch_size * seq_length is returned
+        self.parent.assertListEqual(list(loss.numpy().shape), [self.batch_size * (self.seq_length - 1)])
 
     def create_and_check_bert_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -252,7 +253,7 @@ class TFBertModelTester:
             "loss": loss.numpy(),
         }
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
-        # labels cannot be -1 in test so make sure full batch_size * seq_length is returned
+        # labels cannot be -100 in test so make sure full batch_size * seq_length is returned
         self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size * self.seq_length])
 
     def create_and_check_bert_for_question_answering(
