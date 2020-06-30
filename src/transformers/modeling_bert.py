@@ -409,35 +409,19 @@ class BertEncoder(nn.Module):
     ):
         all_hidden_states = ()
         all_attentions = ()
+        output_attentions = torch.tensor(output_attentions, dtype=torch.bool)
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False):
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,
+                encoder_attention_mask,
+                output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -656,6 +640,9 @@ class BertModel(BertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
+
+    def get_layers(self):
+        return self.encoder.layer
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.

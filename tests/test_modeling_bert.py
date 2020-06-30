@@ -431,6 +431,8 @@ class BertModelTester:
 @require_torch
 class BertModelTest(ModelTesterMixin, unittest.TestCase):
 
+    test_gradient_checkpointing = True
+
     all_model_classes = (
         (
             BertModel,

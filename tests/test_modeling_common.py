@@ -62,6 +62,7 @@ class ModelTesterMixin:
     test_head_masking = True
     test_missing_keys = True
     is_encoder_decoder = False
+    test_gradient_checkpointing = False
 
     def _prepare_for_class(self, inputs_dict, model_class):
         if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
@@ -675,6 +676,31 @@ class ModelTesterMixin:
 
             with torch.no_grad():
                 model(**inputs)
+
+    def test_model_gradient_checkpointing(self):
+        if not self.test_gradient_checkpointing:
+            return
+
+        for model_class in self.all_model_classes:
+            print(model_class)
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            outputs_no_checkpointing = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            config.gradient_checkpointing = True
+            model_with_gc = model_class(config)
+            model_with_gc.load_state_dict(model.state_dict())
+            model_with_gc.to(torch_device)
+            model_with_gc.eval()
+            outputs_with_checkpointing = model_with_gc(**self._prepare_for_class(inputs_dict, model_class))
+
+            for output_no_checkpointing, output_with_checkpointing in zip(
+                outputs_no_checkpointing, outputs_with_checkpointing
+            ):
+                if isinstance(output_with_checkpointing, torch.Tensor):
+                    self.assertTrue(torch.allclose(output_no_checkpointing, output_with_checkpointing))
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

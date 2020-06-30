@@ -327,6 +327,7 @@ class AlbertTransformer(nn.Module):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
         all_attentions = ()
+        output_attentions = torch.tensor(output_attentions, dtype=torch.bool)
 
         if output_hidden_states:
             all_hidden_states = (hidden_states,)
@@ -461,6 +462,9 @@ class AlbertModel(AlbertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
+
+    def get_layers(self):
+        return [layer for layer_group in self.encoder.albert_layer_groups for layer in layer_group.albert_layers]
 
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self.embeddings.word_embeddings

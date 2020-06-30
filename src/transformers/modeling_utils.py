@@ -23,6 +23,7 @@ import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
+import functools
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -261,6 +262,10 @@ class ModuleUtilsMixin:
         head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
         return head_mask
 
+    @staticmethod
+    def _gradient_accumulation_hook(module, *args, **kwargs):
+        module.forward = functools.partial(torch.utils.checkpoint.checkpoint, module.forward)
+
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     r""" Base class for all models.
@@ -344,6 +349,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
+
+    def get_layers(self):
+        """
+        Returns the model's transformer layers.
+
+        Returns:
+            :obj:`nn.Module`:
+                A torch module mapping hidden states to vocabulary.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            return base_model.get_layers()
+        else:
+            raise NotImplementedError
 
     def tie_weights(self):
         """
@@ -455,6 +474,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         # Tie weights if needed
         self.tie_weights()
+
+        # Gradient accumulation if needed
+        if self.config.gradient_checkpointing:
+            for layer in self.get_layers():
+                layer.register_forward_pre_hook(self._gradient_accumulation_hook)
 
     def prune_heads(self, heads_to_prune: Dict):
         """ Prunes heads of the base model.

@@ -260,6 +260,8 @@ class AlbertModelTester:
 @require_torch
 class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
+    test_gradient_checkpointing = True
+
     all_model_classes = (
         (
             AlbertModel,
