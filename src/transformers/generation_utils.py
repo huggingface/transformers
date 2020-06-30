@@ -279,7 +279,7 @@ class GenerationMixin:
 
         if sampler is None:
             samplers = []
-            if top_k is not None:
+            if top_k is not None and top_k != 0:
                 samplers.append(
                     generation_utils_samplers.TopKSampler(k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1))
                 )
