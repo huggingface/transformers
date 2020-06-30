@@ -751,6 +751,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
+        import ipdb
+
+        ipdb.set_trace()
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
@@ -847,7 +850,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         return outputs  # prediction_scores, (hidden_states), (attentions)
 
 
-class TFBertLMHeadModel(TFBertForPreTraining, TFCausalLanguageModelingLoss):
+class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         assert config.is_decoder, "If you want to use `TFBertLMHeadModel` as a standalone, add `is_decoder=True.`"
@@ -873,6 +876,10 @@ class TFBertLMHeadModel(TFBertForPreTraining, TFCausalLanguageModelingLoss):
         training=False,
     ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the cross entropy classification loss.
+            Indices should be in ``[0, ..., config.vocab_size - 1]``.
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -914,8 +921,8 @@ class TFBertLMHeadModel(TFBertForPreTraining, TFCausalLanguageModelingLoss):
         outputs = (logits,) + outputs[2:]  # Add hidden states and attention if they are here
         if labels is not None:
             # shift labels to the left and cut last logit token
-            logits = logits[::-1]
-            labels = labels[:1:]
+            logits = logits[:, :-1]
+            labels = labels[:, 1:]
             loss = self.compute_loss(labels, logits)
             outputs = (loss,) + outputs
 
