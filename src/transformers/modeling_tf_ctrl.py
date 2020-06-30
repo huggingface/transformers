@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
@@ -34,6 +34,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "CtrlTokenizer"
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ctrl"
@@ -435,7 +437,7 @@ CTRL_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
@@ -489,6 +491,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -510,18 +513,6 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import CTRLTokenizer, TFCTRLModel
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = TFCTRLModel.from_pretrained('ctrl')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
@@ -569,6 +560,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -590,19 +582,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import CTRLTokenizer, TFCTRLLMHeadModel
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = TFCTRLLMHeadModel.from_pretrained('ctrl')
-
-        input_ids = tf.constant([tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)])
-        outputs = model(input_ids)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(inputs, **kwargs)
         hidden_states = transformer_outputs[0]

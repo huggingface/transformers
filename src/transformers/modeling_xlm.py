@@ -28,7 +28,7 @@ from torch.nn import functional as F
 
 from .activations import gelu
 from .configuration_xlm import XLMConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
@@ -39,6 +39,8 @@ from .modeling_utils import (
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "XLMTokenizer"
 
 XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-mlm-en-2048",
@@ -257,7 +259,7 @@ XLM_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -395,6 +397,7 @@ class XLMModel(XLMPreTrainedModel):
             self.attentions[layer].prune_heads(heads)
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -425,18 +428,6 @@ class XLMModel(XLMPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMModel
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -632,6 +623,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         return {"input_ids": input_ids, "langs": langs}
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -672,18 +664,6 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMWithLMHeadModel
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -722,6 +702,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -761,19 +742,6 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMForSequenceClassification
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -822,6 +790,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -867,20 +836,6 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMForQuestionAnsweringSimple
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForQuestionAnsweringSimple.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss = outputs[0]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -1006,19 +961,20 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-    Examples::
+    Example::
 
-        from transformers import XLMTokenizer, XLMForQuestionAnswering
-        import torch
+        >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
+        >>> import torch
 
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss = outputs[0]
+        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        >>> model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
 
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
+
+        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs[0]
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -1067,6 +1023,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -1074,6 +1031,8 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         langs=None,
         token_type_ids=None,
         position_ids=None,
+        lengths=None,
+        cache=None,
         head_mask=None,
         labels=None,
         output_attentions=None,
@@ -1101,19 +1060,6 @@ class XLMForTokenClassification(XLMPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMForTokenClassification
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-100-1280')
-        model = XLMForTokenClassification.from_pretrained('xlm-mlm-100-1280')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
         outputs = self.transformer(
             input_ids,
@@ -1121,6 +1067,8 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             langs=langs,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

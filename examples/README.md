@@ -1,7 +1,7 @@
 ## Examples
 
 Version 2.9 of 🤗 Transformers introduces a new [`Trainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) class for PyTorch, and its equivalent [`TFTrainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer_tf.py) for TF 2.
-Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.0+.
+Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.1+.
 
 Here is the list of all our examples:
 - **grouped by task** (all official examples work for multiple models)
@@ -24,8 +24,8 @@ This is still a work-in-progress – in particular documentation is still sparse
 | [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | -  | ✅ | -  | -
 | [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | n/a | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
 | [**`distillation`**](https://github.com/huggingface/transformers/tree/master/examples/distillation)       | All               | -  | -  | -  | -
-| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/summarization)     | CNN/Daily Mail    | -  | -  | -  | -
-| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/translation)         | WMT               | -  | -  | -  | -
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)     | CNN/Daily Mail    | -  | -  | ✅  | -
+| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)         | WMT               | -  | -  | ✅  | -
 | [**`bertology`**](https://github.com/huggingface/transformers/tree/master/examples/bertology)             | -                 | -  | -  | -  | -
 | [**`adversarial`**](https://github.com/huggingface/transformers/tree/master/examples/adversarial)         | HANS              | ✅ | -  | -  | -
 

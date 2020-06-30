@@ -22,7 +22,7 @@ import logging
 import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .modeling_tf_utils import (
     TFPreTrainedModel,
@@ -35,6 +35,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "transfo-xl-wt103",
@@ -692,7 +694,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.TransfoXLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
@@ -722,6 +724,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="transfo-xl-wt103")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -743,18 +746,6 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import TransfoXLTokenizer, TFTransfoXLModel
-
-        tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
-        model = TFTransfoXLModel.from_pretrained('transfo-xl-wt103')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states, mems = outputs[:2]
-
         """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
@@ -811,6 +802,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return self.transformer.init_mems(bsz)
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="transfo-xl-wt103")
     def call(
         self,
         inputs,
@@ -842,18 +834,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import TransfoXLTokenizer, TFTransfoXLLMHeadModel
-
-        tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
-        model = TFTransfoXLLMHeadModel.from_pretrained('transfo-xl-wt103')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores, mems = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -863,7 +843,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             labels = inputs[4] if len(inputs) > 4 else labels
             output_attentions = inputs[5] if len(inputs) > 5 else output_attentions
             assert len(inputs) <= 6, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (BatchEncoding, dict)):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
             head_mask = inputs.get("head_mask", head_mask)

@@ -23,7 +23,12 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
@@ -41,6 +46,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "distilbert-base-uncased",
@@ -539,7 +545,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -575,6 +581,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -592,17 +599,6 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertModel
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertModel.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
         outputs = self.distilbert(inputs, **kwargs)
         return outputs
@@ -647,6 +643,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         return self.vocab_projector.input_embeddings
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(self, inputs, **kwargs):
         r"""
 
@@ -665,18 +662,6 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForMaskedLM
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForMaskedLM.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
         """
         distilbert_output = self.distilbert(inputs, **kwargs)
 
@@ -713,6 +698,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
         self,
         inputs=None,
@@ -746,19 +732,6 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForSequenceClassification
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForSequenceClassification.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[6] if len(inputs) > 6 else labels
@@ -809,6 +782,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         )
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
         self,
         inputs=None,
@@ -840,19 +814,6 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForTokenClassification
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForTokenClassification.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             labels = inputs[6] if len(inputs) > 6 else labels
@@ -916,6 +877,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
         self,
         inputs,
@@ -950,22 +912,6 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForMultipleChoice
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = TFDistilBertForMultipleChoice.from_pretrained('distilbert-base-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1046,6 +992,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
         self,
         inputs=None,
@@ -1085,21 +1032,6 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForQuestionAnswering
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-cased')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
         """
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[6] if len(inputs) > 6 else start_positions

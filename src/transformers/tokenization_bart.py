@@ -66,13 +66,15 @@ class MBartTokenizer(XLMRobertaTokenizer):
     The tokenization method is <tokens> <eos> <language code>. There is no BOS token.
 
     Examples::
-        from transformers import MBartTokenizer
-        tokenizer = MBartTokenizer.from_pretrained('mbart-large-en-ro')
-        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
-        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        batch: dict = tokenizer.prepare_translation_batch(
-            example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
-        )
+
+        >>> from transformers import MBartTokenizer
+        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro')
+        >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        >>> batch: dict = tokenizer.prepare_translation_batch(
+        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
+        ... )
+
     """
 
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
@@ -108,6 +110,12 @@ class MBartTokenizer(XLMRobertaTokenizer):
     id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self._additional_special_tokens = list(self.lang_code_to_id.keys())
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         special_tokens = [self.eos_token_id, self.cur_lang_code]
@@ -116,14 +124,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + special_tokens
 
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.id_to_lang_code:
-            return self.id_to_lang_code[index]
-        return self.sp_model.IdToPiece(index - self.fairseq_offset)
-
     def set_lang(self, lang: str) -> None:
-        """Set the current language code in order to call batch_encode_plus properly."""
+        """Set the current language code in order to call tokenizer properly."""
         self.cur_lang_code = self.lang_code_to_id[lang]
 
     def prepare_translation_batch(
@@ -157,6 +159,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            truncation=True,
         )
         if tgt_texts is None:
             return model_inputs
@@ -167,6 +170,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            truncation=True,
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v

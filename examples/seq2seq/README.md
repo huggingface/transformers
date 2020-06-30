@@ -1,7 +1,10 @@
+## Sequence to Sequence
+
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
 Summarization support is more mature than translation support.
 Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
 For `bertabs` instructions, see `bertabs/README.md`. 
+
 
 ### Data
 
@@ -37,13 +40,6 @@ export ENRO_DIR=${PWD}/wmt_en_ro
 If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target.  
 The `.source` files are the input, the `.target` files are the desired output.
 
-### Evaluation
-
-To create summaries for each article in dataset, run:
-```bash
-python run_eval.py <path_to_test.source> test_generations.txt <model-name>  --score_path rouge_scores.txt
-```
-The default batch size, 4, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
 
 
 ### Summarization Finetuning
@@ -64,6 +60,7 @@ The following command should work on a 16GB GPU:
 
 Tips:
 - 1 epoch at batch size 1 for bart-large takes 24 hours and requires 13GB GPU RAM with fp16 on an NVIDIA-V100. 
+- since you need to run from `examples/seq2seq`, and likely need to modify code, it is easiest to fork, then clone transformers and run `pip install -e .` before you get started.   
 - try `bart-base`, `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr/epoch with bs=8, see the "xsum_shared_task" command below)
 - `fp16_opt_level=O1` (the default works best).
 - If you are finetuning on your own dataset, start from `distilbart-cnn-12-6` if you want long summaries and `distilbart-xsum-12-6` if you want short summaries.
@@ -109,8 +106,7 @@ from transformers import AutoModelForSeq2SeqLM
 model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ```
 
-
-### XSUM Shared Task
+#### XSUM Shared Task
 Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
 
 Here is an example command, but you can do whatever you want. Hopefully this will make debugging and collaboration easier!
@@ -127,7 +123,54 @@ Here is an example command, but you can do whatever you want. Hopefully this wil
 
 You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
 
+### Evaluation Commands
+
+To create summaries for each article in dataset, we use `run_eval.py`, here are a few commands that run eval for different tasks and models.
+If 'translation' is in your task name, the computed metric will be BLEU. Otherwise, ROUGE will be used.
+
+For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
+```bash
+export DATA_DIR=wmt_en_ro
+python run_eval.py t5_base \
+    $DATA_DIR/val.source t5_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path enro_bleu.json \
+    --task translation_en_to_ro \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+```
+
+This command works for MBART, although the BLEU score is suspiciously low.
+```bash
+export DATA_DIR=wmt_en_ro
+python run_eval.py facebook/mbart-large-en-ro $DATA_DIR/val.source mbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path enro_bleu.json \
+    --task translation \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+```
+
+Summarization (xsum will be very similar):
+```bash
+export DATA_DIR=cnn_dm
+python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_generations.txt \
+    --reference_path $DATA_DIR/val.target \
+    --score_path cnn_rouge.json \
+    --task summarization \
+    --n_obs 100 \
+    --device cuda \
+    --fp16 \
+    --bs 32
+```
+
+
 ### DistilBART
+![DBART](https://huggingface.co/front/thumbnails/distilbart_large.png)
 
 For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
 you just copy alternating layers from `bart-large-cnn` and finetune more on the same data. 

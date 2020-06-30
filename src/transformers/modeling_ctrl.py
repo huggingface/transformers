@@ -24,11 +24,13 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_ctrl import CTRLConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "CTRLTokenizer"
 
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ctrl"
@@ -249,7 +251,7 @@ CTRL_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
@@ -326,6 +328,7 @@ class CTRLModel(CTRLPreTrainedModel):
             self.h[layer].multi_head_attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def forward(
         self,
         input_ids=None,
@@ -358,20 +361,6 @@ class CTRLModel(CTRLPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import CTRLTokenizer, CTRLModel
-        import torch
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = CTRLModel.from_pretrained('ctrl')
-
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -510,6 +499,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         return {"input_ids": input_ids, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
     def forward(
         self,
         input_ids=None,
@@ -552,19 +542,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import torch
-        from transformers import CTRLTokenizer, CTRLLMHeadModel
-
-        tokenizer = CTRLTokenizer.from_pretrained('ctrl')
-        model = CTRLLMHeadModel.from_pretrained('ctrl')
-
-        input_ids = torch.tensor(tokenizer.encode("Links Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
