@@ -218,9 +218,15 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
+        invalid_inputs = [
+            "This is <mask> <mask>"  # More than 1 mask_token in the input is not supported
+            "This is"  # No mask_token is not supported
+        ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
             nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
+            )
 
     @require_tf
     def test_tf_fill_mask(self):
@@ -229,9 +235,15 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
+        invalid_inputs = [
+            "This is <mask> <mask>"  # More than 1 mask_token in the input is not supported
+            "This is"  # No mask_token is not supported
+        ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
             nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2,)
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
+            )
 
     @require_torch
     @slow
