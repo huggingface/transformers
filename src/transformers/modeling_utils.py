@@ -17,7 +17,7 @@
 import inspect
 import logging
 import os
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch import Tensor, device, dtype, nn
