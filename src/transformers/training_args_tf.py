@@ -85,10 +85,10 @@ class TFTrainingArguments(TrainingArguments):
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
-        tpu_name (:obj:`str`, `optional`):
-            The name of the TPU the process is running on.
         eval_steps (:obj:`int`, `optional`, defaults to 1000):
             Number of update steps before two evaluations.
+        tpu_name (:obj:`str`, `optional`):
+            The name of the TPU the process is running on.
         debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Wheter to activate the trace to record computation graphs and profiling information or not.
     """
@@ -96,7 +96,6 @@ class TFTrainingArguments(TrainingArguments):
     tpu_name: str = field(
         default=None, metadata={"help": "Name of TPU"},
     )
-    eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
     debug: bool = field(
         default=False, metadata={"help": "Activate the trace to record computation graphs and profiling information"}
     )
