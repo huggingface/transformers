@@ -102,6 +102,8 @@ class TrainingArguments:
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
+        eval_steps (:obj:`int`, `optional`, defaults to 1000):
+            Number of update steps before two evaluations.
     """
 
     output_dir: str = field(
@@ -202,6 +204,7 @@ class TrainingArguments:
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
     )
+    eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
 
     @property
     def train_batch_size(self) -> int:
