@@ -1,3 +1,5 @@
+## Sequence to Sequence
+
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
 Summarization support is more mature than translation support.
 Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
@@ -168,6 +170,7 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
 
 
 ### DistilBART
+![DBART](https://huggingface.co/front/thumbnails/distilbart_large.png)
 
 For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
 you just copy alternating layers from `bart-large-cnn` and finetune more on the same data. 
