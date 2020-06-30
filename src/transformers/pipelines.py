@@ -832,8 +832,15 @@ class FillMaskPipeline(Pipeline):
             result = []
 
             if self.framework == "tf":
-                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy().item()
-                logits = outputs[i, masked_index, :]
+                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
+
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                if masked_index.numel() > 1:
+                    raise PipelineException(
+                        "fill-mask", self.model.config.base_model_prefix, "More than one mask_token is not supported"
+                    )
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = tf.nn.softmax(logits)
                 topk = tf.math.top_k(probs, k=self.topk)
                 values, predictions = topk.values.numpy(), topk.indices.numpy()
@@ -841,6 +848,15 @@ class FillMaskPipeline(Pipeline):
                 masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
 
                 logits = outputs[i, masked_index, :]
+                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
+
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                if masked_index.numel() > 1:
+                    raise PipelineException(
+                        "fill-mask", self.model.config.base_model_prefix, "More than one mask_token is not supported"
+                    )
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
                 values, predictions = probs.topk(self.topk)
 
