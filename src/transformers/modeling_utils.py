@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import functools
 import inspect
 import logging
 import os
@@ -23,7 +24,6 @@ import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
-import functools
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
