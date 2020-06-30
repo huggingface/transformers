@@ -126,7 +126,7 @@ class DPRPretrainedContextEncoder(PreTrainedModel):
 
     config_class = DPRConfig
     load_tf_weights = None
-    base_model_prefix = "dpr"
+    base_model_prefix = "ctx_encoder"
 
     def init_weights(self):
         """Load the weights from the official DPR repo's format if specified."""
@@ -153,7 +153,7 @@ class DPRPretrainedQuestionEncoder(PreTrainedModel):
 
     config_class = DPRConfig
     load_tf_weights = None
-    base_model_prefix = "dpr"
+    base_model_prefix = "question_encoder"
 
     def init_weights(self):
         """Load the weights from the official DPR repo's format if specified."""
@@ -180,7 +180,7 @@ class DPRPretrainedReader(PreTrainedModel):
 
     config_class = DPRConfig
     load_tf_weights = None
-    base_model_prefix = "dpr"
+    base_model_prefix = "span_predictor"
 
     def init_weights(self):
         """Load the weights from the official DPR repo's format if specified."""
