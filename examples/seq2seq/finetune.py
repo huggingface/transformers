@@ -211,7 +211,7 @@ class SummarizationModule(BaseTransformer):
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
             (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.gpus)))
-            // self.hparams.gradient_accumulation_steps
+            // self.hparams.accumulate_grad_batches
             * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
