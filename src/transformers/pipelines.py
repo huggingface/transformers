@@ -87,6 +87,18 @@ def get_framework(model=None):
     return framework
 
 
+class PipelineException(Exception):
+    """
+    Raised by pipelines when handling __call__
+    """
+
+    def __init__(self, task: str, model: str, reason: str):
+        super(reason)
+
+        self.task = task
+        self.model = model
+
+
 class ArgumentHandler(ABC):
     """
     Base interface for handling varargs for each Pipeline
