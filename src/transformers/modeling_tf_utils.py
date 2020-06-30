@@ -17,18 +17,18 @@
 import functools
 import logging
 import os
+import warnings
+from typing import Optional
 
 import h5py
 import numpy as np
 import tensorflow as tf
-import warnings
 from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
-from typing import Optional
 
 
 logger = logging.getLogger(__name__)

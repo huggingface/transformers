@@ -15,8 +15,8 @@
 # limitations under the License.
 
 import logging
-
 import warnings
+
 import numpy as np
 import tensorflow as tf
 
@@ -263,13 +263,16 @@ class TFGenerationMixin:
         else:
             assert len(shape_list(input_ids)) == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
-
         if sampler is None:
             samplers = []
             if top_k is not None:
-                samplers.append(generation_utils_samplers.TopKSampler(k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+                samplers.append(
+                    generation_utils_samplers.TopKSampler(k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1))
+                )
             if top_p is not None:
-                samplers.append(generation_utils_samplers.TopPSampler(p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
+                samplers.append(
+                    generation_utils_samplers.TopPSampler(p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1))
+                )
             if repetition_penalty is not None:
                 samplers.append(generation_utils_samplers.RepetitionPenaltySampler(penalty=repetition_penalty))
             if no_repeat_ngram_size is not None:

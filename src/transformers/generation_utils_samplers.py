@@ -14,24 +14,29 @@
 # limitations under the License.
 
 from abc import ABC
+from typing import Iterable, List, TypeVar, Union
+
 import numpy as np
-from typing import Iterable, Union, TypeVar, List
 
 from .file_utils import is_tf_available, is_torch_available
 
-TorchTensor = TypeVar('TorchTensor')
-TFTensor = TypeVar('TFTensor')
+
+TorchTensor = TypeVar("TorchTensor")
+TFTensor = TypeVar("TFTensor")
 
 if is_torch_available():
     import torch
     from torch.nn import functional as F
+
     TorchTensor = torch.Tensor
 
 if is_tf_available():
     import tensorflow as tf
+
     TFTensor = tf.Tensor
 
 AnyTensor = Union[TorchTensor, TFTensor]
+
 
 def shape_list(x: TFTensor) -> List[int]:
     """Deal with dynamic shape in tensorflow cleanly."""
@@ -39,10 +44,12 @@ def shape_list(x: TFTensor) -> List[int]:
     dynamic = tf.shape(x)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
+
 def set_tensor_by_indices_to_value(tensor, indices, value):
     # create value_tensor since tensor value assignment is not possible in TF
     value_tensor = tf.zeros_like(tensor) + value
     return tf.where(indices, value_tensor, tensor)
+
 
 def scatter_values_on_batch_indices(values, batch_indices):
     shape = shape_list(batch_indices)
@@ -53,23 +60,33 @@ def scatter_values_on_batch_indices(values, batch_indices):
     # scatter values to pair indices
     return tf.scatter_nd(pair_indices, tf.reshape(values, [-1]), shape)
 
+
 class GenerationSampler(ABC):
+    """Abstract base class for all samplers which are probability distribution warps performed during generation."""
+
     def warp(self, input_ids: AnyTensor, next_token_logits: AnyTensor) -> AnyTensor:
+        """Warps distribution to be sampled from into a new one, conditional on past generation."""
         raise NotImplementedError("Warp called on base class")
 
     def warp_torch(self, input_ids: TorchTensor, next_token_logits: TorchTensor) -> TorchTensor:
+        """Torch method for warping a distribution, defaults to `warp`'s implementation."""
         return self.warp(input_ids, next_token_logits)
 
     def warp_tf(self, input_ids: TFTensor, next_token_logits: TFTensor) -> TFTensor:
+        """TensorFlow method for warping a distribution, defaults to `warp`'s implementation."""
         return self.warp(input_ids, next_token_logits)
-    
+
 
 class IdentitySampler(GenerationSampler):
+    """No-op sampler."""
+
     def warp(self, input_ids: AnyTensor, next_token_logits: AnyTensor) -> AnyTensor:
         return next_token_logits
 
 
 class CompositionSampler(GenerationSampler):
+    """Sampler composed of a series of transformations by other samplers."""
+
     def __init__(self, samplers: Iterable[GenerationSampler]):
         self.samplers = list(samplers)
 
@@ -83,7 +100,10 @@ class CompositionSampler(GenerationSampler):
             next_token_logits = warp.warp_tf(input_ids, next_token_logits)
         return next_token_logits
 
+
 class MinLengthSampler(GenerationSampler):
+    """Sampler enforcing a min-length by setting EOS probability to 0."""
+
     def __init__(self, min_length: int, eos_token_id: int):
         self.min_length = min_length
         self.eos_token_id = eos_token_id
@@ -110,20 +130,24 @@ class MinLengthSampler(GenerationSampler):
             )
         return next_token_logits
 
+
 class TemperatureSampler(GenerationSampler):
+    """Sampler for temperature (exponential scaling output probability distribution)."""
+
     def __init__(self, temperature: float):
         self.temperature = temperature
 
     def warp(self, input_ids: AnyTensor, next_token_logits: AnyTensor) -> AnyTensor:
         return next_token_logits / self.temperature
-    
+
 
 class RepetitionPenaltySampler(GenerationSampler):
+    """Sampler enforcing an exponential penalty on repeated sequences."""
+
     def __init__(self, penalty: float):
         self.penalty = penalty
 
     def warp_torch(self, input_ids: TorchTensor, next_token_logits: TorchTensor) -> TorchTensor:
-        # TODO: verify this works for beam search
         for i in range(next_token_logits.shape[0]):
             for previous_token in set(input_ids[i].tolist()):
                 # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
@@ -134,9 +158,7 @@ class RepetitionPenaltySampler(GenerationSampler):
         return next_token_logits
 
     def warp_tf(self, input_ids: TFTensor, next_token_logits: TFTensor) -> TFTensor:
-        next_token_logits_penalties = self._tf_create_next_token_logits_penalties(
-            input_ids, next_token_logits
-        )
+        next_token_logits_penalties = self._tf_create_next_token_logits_penalties(input_ids, next_token_logits)
         next_token_logits = tf.math.multiply(next_token_logits, next_token_logits_penalties)
         return next_token_logits
 
@@ -155,6 +177,8 @@ class RepetitionPenaltySampler(GenerationSampler):
 
 
 class TopPSampler(GenerationSampler):
+    """Sampler that performs top-p, i.e. restricting to top tokens summing to probability <= p."""
+
     def __init__(self, p: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         assert 0 <= p <= 1.0, "P must be a probability between 0 and 1"
         self.p = p
@@ -169,7 +193,7 @@ class TopPSampler(GenerationSampler):
         sorted_indices_to_remove = cumulative_probs > self.p
         if self.min_tokens_to_keep > 1:
             # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., :self.min_tokens_to_keep] = 0
+            sorted_indices_to_remove[..., : self.min_tokens_to_keep] = 0
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
         sorted_indices_to_remove[..., 0] = 0
@@ -194,8 +218,8 @@ class TopPSampler(GenerationSampler):
             # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
             sorted_indices_to_remove = tf.concat(
                 [
-                    tf.zeros_like(sorted_indices_to_remove[:, :self.min_tokens_to_keep]),
-                    sorted_indices_to_remove[:, self.min_tokens_to_keep:],
+                    tf.zeros_like(sorted_indices_to_remove[:, : self.min_tokens_to_keep]),
+                    sorted_indices_to_remove[:, self.min_tokens_to_keep :],
                 ],
                 -1,
             )
@@ -213,6 +237,8 @@ class TopPSampler(GenerationSampler):
 
 
 class TopKSampler(GenerationSampler):
+    """Sampler that performs top-k, i.e. restricting to the k highest probability elements."""
+
     def __init__(self, k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         assert k > 0, "Must specify a positive Top-K value"
 
@@ -226,7 +252,7 @@ class TopKSampler(GenerationSampler):
         indices_to_remove = next_token_logits < torch.topk(next_token_logits, top_k)[0][..., -1, None]
         next_token_logits[indices_to_remove] = self.filter_value
         return next_token_logits
-        
+
     def warp_tf(self, input_ids: TFTensor, next_token_logits: TFTensor) -> TFTensor:
         logits_shape = shape_list(next_token_logits)
         top_k = min(max(self.k, self.min_tokens_to_keep), logits_shape[-1])  # Safety check
@@ -237,10 +263,12 @@ class TopKSampler(GenerationSampler):
 
 
 class NoRepeatNGramSampler(GenerationSampler):
-    # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+    """Sampler that enforces no repetition of n-grams. 
+    See Fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345."""
+
     def __init__(self, ngram_size: int):
         self.ngram_size = ngram_size
-    
+
     def warp_torch(self, input_ids: TorchTensor, next_token_logits: TorchTensor) -> TorchTensor:
         num_batch_hypotheses = next_token_logits.shape[0]
         cur_len = input_ids.shape[-1]
@@ -248,7 +276,7 @@ class NoRepeatNGramSampler(GenerationSampler):
 
         for i, banned_tokens in enumerate(banned_batch_tokens):
             next_token_logits[i, banned_tokens] = -float("inf")
-        
+
         return next_token_logits
 
     def warp_tf(self, input_ids: TFTensor, next_token_logits: TFTensor) -> TFTensor:
@@ -267,7 +295,9 @@ class NoRepeatNGramSampler(GenerationSampler):
         )
         return next_token_logits
 
-    def _torch_calc_banned_ngram_tokens(self, prev_input_ids: TorchTensor, num_hypos: int, cur_len: int) -> List[Iterable[int]]:
+    def _torch_calc_banned_ngram_tokens(
+        self, prev_input_ids: TorchTensor, num_hypos: int, cur_len: int
+    ) -> List[Iterable[int]]:
         """Copied from fairseq for no_repeat_ngram in beam_search"""
         if cur_len + 1 < self.ngram_size:
             # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
@@ -304,7 +334,7 @@ class NoRepeatNGramSampler(GenerationSampler):
 
         def _get_generated_ngrams(hypo_idx):
             # Before decoding the next token, prevent decoding of ngrams that have already appeared
-            start_idx = cur_len + 1 - self.ngram_size 
+            start_idx = cur_len + 1 - self.ngram_size
             ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
             return generated_ngrams[hypo_idx].get(ngram_idx, [])
 
@@ -313,19 +343,21 @@ class NoRepeatNGramSampler(GenerationSampler):
 
 
 class NoBadWordsSampler(GenerationSampler):
-    def __init__(self, bad_words_ids: Iterable[int]):
+    """Sampler that enforces that specified sequences will never be sampled."""
+
+    def __init__(self, bad_words_ids: Iterable[Iterable[int]]):
         self.bad_words_ids = list(bad_words_ids)
         for banned_token_seq in self.bad_words_ids:
             assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
                 bad_words_ids
             )
-    
+
     def warp_torch(self, input_ids: TorchTensor, next_token_logits: TorchTensor) -> TorchTensor:
         banned_tokens = self._torch_calc_banned_bad_words_ids(input_ids)
         for i, banned_tokens in enumerate(banned_tokens):
             next_token_logits[i, banned_tokens] = -float("inf")
         return next_token_logits
-    
+
     def warp_tf(self, input_ids: TFTensor, next_token_logits: TFTensor) -> TFTensor:
         vocab_size = shape_list(next_token_logits)[-1]
         banned_tokens = self._tf_calc_banned_bad_words_ids(input_ids)
@@ -375,7 +407,10 @@ class NoBadWordsSampler(GenerationSampler):
         for prev_input_ids_slice in prev_input_ids:
             banned_tokens_slice = []
             for banned_token_seq in self.bad_words_ids:
-                if self._tokens_match(prev_input_ids, prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
+                if (
+                    self._tokens_match(prev_input_ids, prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1])
+                    is False
+                ):
                     # if tokens do not match continue
                     continue
 

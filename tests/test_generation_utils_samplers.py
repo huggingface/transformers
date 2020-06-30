@@ -14,45 +14,111 @@
 # limitations under the License.
 
 import unittest
-from typing import List
 
-from transformers import is_torch_available, is_tf_available
-
-from .utils import require_multigpu, require_torch, slow, torch_device, require_tf
-
+from transformers import is_tf_available, is_torch_available
 from transformers.generation_utils_samplers import (
-    IdentitySampler, TopKSampler, TopPSampler, CompositionSampler
+    CompositionSampler,
+    IdentitySampler,
+    MinLengthSampler,
+    NoBadWordsSampler,
+    NoRepeatNGramSampler,
+    RepetitionPenaltySampler,
+    TemperatureSampler,
+    TopKSampler,
+    TopPSampler,
 )
+
+from .utils import require_tf, require_torch, torch_device
+
 
 if is_torch_available():
     import torch
-    import numpy as np
 
 if is_tf_available():
     import tensorflow as tf
-    import numpy as np
+
 
 class SamplingUnitTests(unittest.TestCase):
     @require_torch
     def test_identity_torch(self):
         sampler = IdentitySampler()
-        self.assertEqual(sampler.warp_torch(
-            torch.Tensor([1]), torch.Tensor([2])
-        ), torch.Tensor([2]))
+        self.assertEqual(sampler.warp_torch(torch.LongTensor([1]), torch.Tensor([2])), torch.Tensor([2]))
 
     @require_tf
     def test_identity_tf(self):
         sampler = IdentitySampler()
-        self.assertEqual(sampler.warp_tf(
-            tf.convert_to_tensor([1]), tf.convert_to_tensor([2])
-        ), tf.convert_to_tensor([2]))
+        self.assertEqual(
+            sampler.warp_tf(tf.convert_to_tensor([1]), tf.convert_to_tensor([2])), tf.convert_to_tensor([2])
+        )
+
+    @require_torch
+    def test_min_length_sampler_torch(self):
+        hundred_min_length = MinLengthSampler(min_length=100, eos_token_id=1)
+        warped = hundred_min_length.warp_torch(torch.LongTensor([[1]]), torch.Tensor([[10.0, 10.0]]))
+        self.assertTrue(torch.all(torch.eq(warped, torch.Tensor([[10.0, -float("inf")]]))))
+
+    @require_tf
+    def test_min_length_sampler_tf(self):
+        hundred_min_length = MinLengthSampler(min_length=100, eos_token_id=1)
+        warped = hundred_min_length.warp_tf(tf.convert_to_tensor([[1]]), tf.convert_to_tensor([10.0, 10.0]))
+
+        tf.debugging.assert_equal(warped, tf.convert_to_tensor([10.0, -float("inf")]))
+
+    @require_torch
+    def test_temperature_sampler_torch(self):
+        ts = TemperatureSampler(2)
+        warped = ts.warp_torch(torch.LongTensor([1]), torch.Tensor([10.0, 5.0]))
+        self.assertTrue(torch.allclose(warped, torch.Tensor([[5.0, 2.5]]), atol=1e-12))
+
+    @require_tf
+    def test_temperature_sampler_tf(self):
+        ts = TemperatureSampler(2)
+        warped = ts.warp_tf(tf.convert_to_tensor([1]), tf.convert_to_tensor([10.0, 5.0]))
+        tf.debugging.assert_near(warped, tf.convert_to_tensor([[5.0, 2.5]]), rtol=1e-12)
+
+    @require_torch
+    def test_repetition_penalty_sampler_torch(self):
+        rp = RepetitionPenaltySampler(2.0)
+        warped = rp.warp_torch(torch.LongTensor([[1]]), torch.Tensor([[10, 10, 10]]))
+        self.assertTrue(torch.allclose(warped, torch.Tensor([[10, 5, 10]]), atol=1e-12))
+
+    @require_tf
+    def test_repetition_penalty_sampler_tf(self):
+        rp = RepetitionPenaltySampler(2.0)
+        warped = rp.warp_tf(tf.convert_to_tensor([[1]], dtype=tf.int32), tf.convert_to_tensor([[10.0, 10.0, 10.0]]))
+        tf.debugging.assert_near(warped, tf.convert_to_tensor([[10.0, 5.0, 10.0]]), rtol=1e-12)
+
+    @require_torch
+    def test_no_repeat_ngram_sampler_torch(self):
+        nr = NoRepeatNGramSampler(2)
+        warped = nr.warp_torch(torch.LongTensor([[1, 2, 1]]), torch.Tensor([[10, 10, 10]]))
+        self.assertTrue(torch.allclose(warped, torch.Tensor([[10, 10, -float("inf")]]), atol=1e-12))
+
+    @require_tf
+    def test_no_repeat_ngram_sampler_tf(self):
+        nr = NoRepeatNGramSampler(2)
+        warped = nr.warp_tf(
+            tf.convert_to_tensor([[1, 2, 1]], dtype=tf.int32), tf.convert_to_tensor([[10.0, 10.0, 10.0]])
+        )
+        tf.debugging.assert_equal(warped, tf.convert_to_tensor([[10.0, 10.0, -float("inf")]]))
+
+    @require_torch
+    def test_bad_words_torch(self):
+        nb = NoBadWordsSampler([[1, 2]])
+        warped = nb.warp_torch(torch.LongTensor([[1]]), torch.Tensor([[10, 10, 10]]))
+        self.assertTrue(torch.allclose(warped, torch.Tensor([[10, 10, -float("inf")]]), atol=1e-12))
+
+    @require_tf
+    def test_bad_words_tf(self):
+        nr = NoBadWordsSampler([[1, 2]])
+        warped = nr.warp_tf(tf.convert_to_tensor([[1]], dtype=tf.int32), tf.convert_to_tensor([[10.0, 10.0, 10.0]]))
+        tf.debugging.assert_equal(warped, tf.convert_to_tensor([[10.0, 10.0, -float("inf")]]))
 
     @require_torch
     def test_top_k_top_p_filtering_torch(self):
-        sampler = CompositionSampler((
-            TopKSampler(k=10, min_tokens_to_keep=4),
-            TopPSampler(p=0.6, min_tokens_to_keep=4),
-        ))
+        sampler = CompositionSampler(
+            (TopKSampler(k=10, min_tokens_to_keep=4), TopPSampler(p=0.6, min_tokens_to_keep=4),)
+        )
 
         # tests whether the top_k_top_p function behaves as expected
         logits = torch.tensor(
@@ -158,10 +224,9 @@ class SamplingUnitTests(unittest.TestCase):
 
     @require_tf
     def test_top_k_top_p_filtering_tf(self):
-        sampler = CompositionSampler((
-            TopKSampler(k=10, min_tokens_to_keep=4),
-            TopPSampler(p=0.6, min_tokens_to_keep=4),
-        ))
+        sampler = CompositionSampler(
+            (TopKSampler(k=10, min_tokens_to_keep=4), TopPSampler(p=0.6, min_tokens_to_keep=4),)
+        )
         # tests whether the top_k_top_p_filtering function behaves as expected
         logits = tf.convert_to_tensor(
             [
