@@ -1,4 +1,4 @@
-## Examples
+# Examples
 
 Version 2.9 of 🤗 Transformers introduces a new [`Trainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) class for PyTorch, and its equivalent [`TFTrainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer_tf.py) for TF 2.
 Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.1+.
@@ -13,7 +13,7 @@ Here is the list of all our examples:
 This is still a work-in-progress – in particular documentation is still sparse – so please **contribute improvements/pull requests.**
 
 
-# The Big Table of Tasks
+## The Big Table of Tasks
 
 | Task | Example datasets | Trainer support | TFTrainer support | pytorch-lightning | Colab
 |---|---|:---:|:---:|:---:|:---:|
