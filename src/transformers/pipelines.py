@@ -1211,13 +1211,13 @@ class QuestionAnsweringPipeline(Pipeline):
             with self.device_placement():
                 if self.framework == "tf":
                     fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
-                    start, end = self.model(fw_args)
+                    start, end = self.model(fw_args)[:2]
                     start, end = start.numpy(), end.numpy()
                 else:
                     with torch.no_grad():
                         # Retrieve the score for the context tokens only (removing question tokens)
                         fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
-                        start, end = self.model(**fw_args)
+                        start, end = self.model(**fw_args)[:2]
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
             min_null_score = 1000000  # large and positive
