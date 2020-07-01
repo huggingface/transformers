@@ -115,13 +115,13 @@ if __name__ == "__main__":
 
     """Hurricane Florence (2006) / Hurricane Florence was the first Atlantic hurricane to produce hurricane force winds
      on Bermuda since Hurricane Fabian hit the island in September 2003. The seventh tropical storm and second hurricane of the 2006 Atlantic hurricane season,
-      Florence developed from a tropical wave in the tropical Atlantic Ocean on September 3 and followed the track of a Cape Verde-type hurricane. 
-      Because of unfavorable conditions, the system failed to organize at first, and as a result the storm grew to an unusually large size. 
+      Florence developed from a tropical wave in the tropical Atlantic Ocean on September 3 and followed the track of a Cape Verde-type hurricane.
+      Because of unfavorable conditions, the system failed to organize at first, and as a result the storm grew to an unusually large size.
       After several days, Florence encountered an area of lesser wind shear and strengthened into a hurricane on September 10.
     """
 
     """
     Sal Maroni / Salvatore "The Boss" Maroni is a fictional Batman character who is head leader of the Gotham Mafia after Carmine Falcone
-     was killed or taken to Arkham Asylum. In some cases, he was the man who made Havey Dent turn into Two-Face. 
+     was killed or taken to Arkham Asylum. In some cases, he was the man who made Havey Dent turn into Two-Face.
      He was played by Eric Roberts in The Dark Knight. Category:Batman characters Category:DC Comics characters
     """
