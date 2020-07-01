@@ -9,7 +9,6 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import PaddingStrategy
 from .utils import DataProcessor
 
 
@@ -138,7 +137,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
             truncated_query if tokenizer.padding_side == "right" else span_doc_tokens,
             span_doc_tokens if tokenizer.padding_side == "right" else truncated_query,
             truncation="only_second" if tokenizer.padding_side == "right" else "only_first",
-            padding=PaddingStrategy.LONGEST,
+            padding="max_length",
             max_length=max_seq_length,
             return_overflowing_tokens=True,
             stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
