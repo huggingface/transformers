@@ -20,11 +20,11 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
+from transformers.testing_utils import _torch_available
 from transformers.tokenization_marian import MarianTokenizer, save_json, vocab_files_names
 from transformers.tokenization_utils import BatchEncoding
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import _torch_available
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
