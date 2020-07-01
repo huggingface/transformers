@@ -129,6 +129,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         pad_to_max_length: bool = True,
         return_tensors: str = "pt",
+        truncation_strategy="only_first",
+        padding="longest",
     ) -> BatchEncoding:
         """Prepare model inputs for translation. For best performance, translate one sentence at a time.
         Arguments:
@@ -147,24 +149,21 @@ class MarianTokenizer(PreTrainedTokenizer):
             raise ValueError(f"found empty string in src_texts: {src_texts}")
         self.current_spm = self.spm_source
         src_texts = [self.normalize(t) for t in src_texts]  # this does not appear to do much
-        model_inputs: BatchEncoding = self.batch_encode_plus(
-            src_texts,
+        tokenizer_kwargs = dict(
             add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            truncation_strategy=truncation_strategy,
+            padding=padding,
         )
+        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
+
         if tgt_texts is None:
             return model_inputs
 
         self.current_spm = self.spm_target
-        decoder_inputs: BatchEncoding = self.batch_encode_plus(
-            tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            pad_to_max_length=pad_to_max_length,
-        )
+        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
         self.current_spm = self.spm_source

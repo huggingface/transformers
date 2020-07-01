@@ -155,7 +155,7 @@ from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
 # Trainer
-from .trainer_utils import EvalPrediction
+from .trainer_utils import EvalPrediction, set_seed
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
 
@@ -367,6 +367,7 @@ if is_torch_available():
         ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
+        ReformerForQuestionAnswering,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -397,7 +398,7 @@ if is_torch_available():
     )
 
     # Trainer
-    from .trainer import Trainer, set_seed, torch_distributed_zero_first
+    from .trainer import Trainer, torch_distributed_zero_first
     from .data.data_collator import default_data_collator, DataCollator, DataCollatorForLanguageModeling
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
