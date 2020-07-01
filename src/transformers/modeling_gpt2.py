@@ -74,7 +74,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 
     for name, array in zip(names, arrays):
         name = name[6:]  # skip "model/"
-        name = name.split("/")
+        name_parts = name.split("/")
         pointer = model
         try:
             for m_name in name_parts:
