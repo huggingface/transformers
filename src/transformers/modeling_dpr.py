@@ -258,9 +258,9 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
 
     Examples::
 
-        from transformers import DPRQuestionEncoder, DPRContextEncoderTokenizer
+        from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
         tokenizer = DPRContextEncoderTokenizer.from_pretrained('dpr-base-uncased')
-        model = DPRContextEncoder.from_pretrained('dpr-ctx_encoder-base')
+        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-base')
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')
         embeddings = model(input_ids)  # the embeddings of the given context.
 
@@ -299,7 +299,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
         from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
         tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('dpr-base-uncased')
-        model = DPRQuestionEncoder.from_pretrained('dpr-ctx_encoder-base')
+        model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')
         embeddings = model(input_ids)  # the embeddings of the given question.
 
@@ -347,9 +347,9 @@ class DPRReader(DPRPretrainedReader):
 
     Examples::
 
-        from transformers import DPRQuestionEncoder, DPRReaderTokenizer
-        tokenizer = DPRReaderTokenizer.from_pretrained('dpr-base-uncased')
-        model = DPRReader.from_pretrained('dpr-reader-base')
+        from transformers import DPRReader, DPRReaderTokenizer
+        tokenizer = DPRReaderTokenizer.from_pretrained('dpr-reader-base')
+        model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
         question_and_titles_ids = [
             torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
             ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
@@ -414,8 +414,9 @@ class DPRReader(DPRPretrainedReader):
 
         Examples::
 
-            tokenizer = DPRTokenizer.from_pretrained('dpr-base-uncased')
-            model = DPRModel.from_pretrained('dpr-reader-base')
+            from transformers import DPRReaderTokenizer, DPRReader
+            tokenizer = DPRReaderTokenizer.from_pretrained('dpr-reader-base')
+            model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
             question_and_titles_ids = [
                 torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
                 ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
