@@ -24,24 +24,40 @@ logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
+CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+    }
+}
+QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
         "dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+    }
+}
+READER_PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
         "dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "dpr-ctx_encoder-single-nq-base": 512,
+}
+QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "dpr-question_encoder-single-nq-base": 512,
+}
+READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "dpr-reader-single-nq-base": 512,
 }
 
 
-PRETRAINED_INIT_CONFIGURATION = {
+CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
     "dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
+}
+QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
     "dpr-question_encoder-single-nq-base": {"do_lower_case": True},
+}
+READER_PRETRAINED_INIT_CONFIGURATION = {
     "dpr-reader-single-nq-base": {"do_lower_case": True},
 }
 
@@ -58,9 +74,9 @@ class DPRContextEncoderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
 
 class DPRContextEncoderTokenizerFast(BertTokenizerFast):
@@ -75,9 +91,9 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
 
 class DPRQuestionEncoderTokenizer(BertTokenizer):
@@ -92,9 +108,9 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
 
 class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
@@ -109,9 +125,9 @@ class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
 
 class DPRReaderTokenizer(BertTokenizer):
@@ -126,9 +142,9 @@ class DPRReaderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
 
 
 class DPRReaderTokenizerFast(BertTokenizerFast):
@@ -143,6 +159,6 @@ class DPRReaderTokenizerFast(BertTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
