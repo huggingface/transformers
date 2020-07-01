@@ -1,0 +1,5 @@
+boto3
+tensorboard
+tensorboardX
+scikit-learn
+seqeval
