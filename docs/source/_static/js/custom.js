@@ -87,7 +87,7 @@ function addVersionControl() {
     const parts = location.toString().split('/');
     let versionIndex = parts.length - 2;
     // Index page may not have a last part with filename.html so we need to go up
-    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html$/)) {
+    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html$|^search.html?/)) {
         versionIndex = parts.length - 1;
     }
     // Main classes and models are nested so we need to go deeper
