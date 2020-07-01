@@ -22,8 +22,8 @@ import tempfile
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
-from tests.utils import require_tf, require_torch, slow
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
+from transformers.testing_utils import require_tf, require_torch, slow
 
 
 if TYPE_CHECKING:

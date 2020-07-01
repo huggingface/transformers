@@ -4,8 +4,7 @@ import unittest
 from pathlib import Path
 
 from transformers import AutoConfig, is_torch_available
-
-from .utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 
 if is_torch_available():

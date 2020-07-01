@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from transformers import AutoTokenizer
+from transformers.testing_utils import require_multigpu
 
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
@@ -107,7 +108,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
         return cls
 
-    @unittest.skipUnless(torch.cuda.device_count() > 1, "skipping multiGPU test")
+    @require_multigpu
     def test_multigpu(self):
         updates = dict(no_teacher=True, freeze_encoder=True, gpus=2, sortish_sampler=False,)
         self._test_distiller_cli(updates)
