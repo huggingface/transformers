@@ -746,7 +746,7 @@ class Trainer:
 
         self._log(output.metrics)
 
-        if self.args.tpu_metrics_debug or self.debug:
+        if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
