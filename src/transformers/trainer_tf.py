@@ -3,7 +3,6 @@
 import logging
 import math
 import os
-import random
 from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
@@ -11,7 +10,7 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available, set_seed
 from .training_args_tf import TFTrainingArguments
 
 
@@ -20,12 +19,6 @@ if is_wandb_available():
 
 
 logger = logging.getLogger(__name__)
-
-
-def set_seed(seed: int):
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
 
 
 class TFTrainer:
@@ -256,7 +249,7 @@ class TFTrainer:
                 if isinstance(labels, tuple):
                     labels = labels[0]
 
-                if self.args.n_gpu > 1:
+                if self.args.n_replicas > 1:
                     for val in logits.values:
                         if preds is None:
                             preds = val.numpy()
@@ -542,7 +535,7 @@ class TFTrainer:
         loss, logits = outputs[:2]
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
-        loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
+        loss += sum(self.model.losses) * (1.0 / self.args.n_replicas)
 
         return loss, logits
 

@@ -1,4 +1,5 @@
 import logging
+import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
@@ -80,11 +81,13 @@ class TFTrainingArguments(TrainingArguments):
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the mumber of TPU cores (automatically passed by launcher script).
-        tpu_metrics_debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            When training on TPU, whether to print debug metrics or not.
+        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter to activate the trace to record computation graphs and profiling information or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
+        eval_steps (:obj:`int`, `optional`, defaults to 1000):
+            Number of update steps before two evaluations.
         past_index (:obj:`int`, `optional`, defaults to -1):
             Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
@@ -92,18 +95,10 @@ class TFTrainingArguments(TrainingArguments):
             at the next training step under the keyword argument ``mems``.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
-        eval_steps (:obj:`int`, `optional`, defaults to 1000):
-            Number of update steps before two evaluations.
-        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter to activate the trace to record computation graphs and profiling information or not.
     """
 
     tpu_name: str = field(
         default=None, metadata={"help": "Name of TPU"},
-    )
-    eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
-    debug: bool = field(
-        default=False, metadata={"help": "Activate the trace to record computation graphs and profiling information"}
     )
 
     @cached_property
@@ -150,8 +145,46 @@ class TFTrainingArguments(TrainingArguments):
 
     @property
     @tf_required
+    def n_replicas(self) -> int:
+        """
+        The number of replicas (CPUs, GPUs or TPU cores) used in this training.
+        """
+        return self._setup_strategy.num_replicas_in_sync
+
+    @property
+    def train_batch_size(self) -> int:
+        """
+        The actual batch size for training (may differ from :obj:`per_gpu_train_batch_size` in distributed training).
+        """
+        if self.per_gpu_train_batch_size:
+            logger.warning(
+                "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
+                "version. Using `--per_device_train_batch_size` is preferred."
+            )
+        per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
+        return per_device_batch_size * max(1, self.n_replicas)
+
+    @property
+    def eval_batch_size(self) -> int:
+        """
+        The actual batch size for evaluation (may differ from :obj:`per_gpu_eval_batch_size` in distributed training).
+        """
+        if self.per_gpu_eval_batch_size:
+            logger.warning(
+                "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
+                "version. Using `--per_device_eval_batch_size` is preferred."
+            )
+        per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
+        return per_device_batch_size * max(1, self.n_replicas)
+
+    @property
+    @tf_required
     def n_gpu(self) -> int:
         """
-        The number of replicas (GPUs or TPU cores) used in this training.
+        The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
+        warnings.warn(
+            "The n_gpu argument is deprecated and will be removed in a future version, use n_replicas instead.",
+            FutureWarning,
+        )
         return self._setup_strategy.num_replicas_in_sync

@@ -97,11 +97,13 @@ class TrainingArguments:
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the mumber of TPU cores (automatically passed by launcher script).
-        tpu_metrics_debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When training on TPU, whether to print debug metrics or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
+        eval_steps (:obj:`int`, `optional`, defaults to 1000):
+            Number of update steps between two evaluations.
         past_index (:obj:`int`, `optional`, defaults to -1):
             Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
@@ -202,11 +204,16 @@ class TrainingArguments:
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
-    tpu_metrics_debug: bool = field(default=False, metadata={"help": "TPU: Whether to print debug metrics"})
+    tpu_metrics_debug: bool = field(
+        default=False,
+        metadata={"help": "Deprecated, the use of `--debug` is preferred. TPU: Whether to print debug metrics"},
+    )
+    debug: bool = field(default=False, metadata={"help": "Whether to print debug metrics on TPU"})
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
     )
+    eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
 
     past_index: int = field(
         default=-1,

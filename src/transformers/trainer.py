@@ -1,7 +1,6 @@
 import logging
 import math
 import os
-import random
 import re
 import shutil
 import warnings
@@ -23,7 +22,14 @@ from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    EvalPrediction,
+    PredictionOutput,
+    TrainOutput,
+    is_wandb_available,
+    set_seed,
+)
 from .training_args import TrainingArguments
 
 
@@ -58,20 +64,6 @@ if is_wandb_available():
 
 
 logger = logging.getLogger(__name__)
-
-
-def set_seed(seed: int):
-    """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy`` and ``torch``.
-
-    Args:
-        seed (:obj:`int`): The seed to set.
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    # ^^ safe to call this function even if cuda is not available
 
 
 @contextmanager
@@ -541,8 +533,8 @@ class Trainer:
 
                         self._log(logs)
 
-                        if self.args.evaluate_during_training:
-                            self.evaluate()
+                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                        self.evaluate()
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -573,7 +565,7 @@ class Trainer:
             if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                 train_iterator.close()
                 break
-            if self.args.tpu_metrics_debug:
+            if self.args.tpu_metrics_debug or self.args.debug:
                 # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                 xm.master_print(met.metrics_report())
 
@@ -754,7 +746,7 @@ class Trainer:
 
         self._log(output.metrics)
 
-        if self.args.tpu_metrics_debug:
+        if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
