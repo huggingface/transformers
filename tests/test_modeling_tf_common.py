@@ -299,12 +299,12 @@ class TFModelTesterMixin:
 
             # Prepare our model
             model = model_class(config)
-
+            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
             # Let's load it from the disk to be sure we can use pretrained weights
             with tempfile.TemporaryDirectory() as tmpdirname:
-                outputs = model(self._prepare_for_class(inputs_dict, model_class))  # build the model
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
+
 
             outputs_dict = model(input_ids)
             hidden_states = outputs_dict[0]
@@ -321,7 +321,9 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            outputs_dict = model(self._prepare_for_class(inputs_dict, model_class))
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            outputs_dict = model(inputs)
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
             input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "inputs", None,)
@@ -342,6 +344,7 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
+            inputs_dict['use_cache'] = False
             config.output_hidden_states = False
             model = model_class(config)
             model_inputs = self._prepare_for_class(inputs_dict, model_class)
@@ -355,9 +358,7 @@ class TFModelTesterMixin:
             )
             out_len = len(outputs)
             each_len = [len(x) for x in outputs]
-            import ipdb
-
-            ipdb.set_trace()
+            # import ipdb; ipdb.set_trace()
 
             if self.is_encoder_decoder:
                 self.assertEqual(out_len % 2, 0)

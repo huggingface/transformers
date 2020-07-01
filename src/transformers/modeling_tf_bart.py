@@ -29,7 +29,13 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 # Public API
 from .modeling_tf_t5 import _NoLayerEmbedTokens
 from .modeling_tf_utils import DUMMY_INPUTS, TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
-
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSharedEmbeddings,
+    cast_bool_to_primitive,
+    keras_serializable,
+    shape_list,
+)
 
 # from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
@@ -138,7 +144,7 @@ class TFPretrainedBartModel(TFPreTrainedModel):
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "input_ids": input_ids,
+            "inputs": input_ids,
         }
         return dummy_inputs
 
@@ -224,8 +230,9 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
         return x, attn_weights
 
-
+@keras_serializable
 class TFBartEncoder(tf.keras.layers.Layer):
+    config_class = BartConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
     is a :class:`TFEncoderLayer`.
@@ -239,6 +246,8 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
+        self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
 
         embed_dim = embed_tokens.vocab_size
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
@@ -275,6 +284,8 @@ class TFBartEncoder(tf.keras.layers.Layer):
                 - **all_attentions** (List[Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         # check attention mask and invert
         if attention_mask is not None:
             assert attention_mask._rank() == 2
@@ -412,7 +423,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
-
+@keras_serializable
 class TFBartDecoder(tf.keras.layers.Layer):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer
@@ -421,7 +432,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         config: BartConfig
         embed_tokens: output embedding
     """
-
+    config_class = BartConfig
     def __init__(self, config: BartConfig, embed_tokens, **kwargs):
         super().__init__(**kwargs)
         self.layerdrop = config.decoder_layerdrop
@@ -441,6 +452,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layer_norm = None  # fix later for mbart
 
+        self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
+        self.use_cache = config.use_cache
+
     def call(
         self,
         input_ids,
@@ -455,9 +470,14 @@ class TFBartDecoder(tf.keras.layers.Layer):
         training=False,
         **unused,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.use_cache
+
         if unused:
             raise TypeError(f"Ignoring kwargs {unused}")
         # check attention mask and invert
+        use_cache = cast_bool_to_primitive(use_cache)
         if encoder_padding_mask is not None:
             encoder_padding_mask = invert_mask(encoder_padding_mask)
 
@@ -822,6 +842,7 @@ class TFBartModel(TFPretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        **unused
     ):
         # make masks if user doesn't supply
         assert decoder_input_ids is not None
@@ -871,6 +892,7 @@ class TFBartModel(TFPretrainedBartModel):
         decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
         assert isinstance(decoder_outputs[0], T)
         encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
+        import ipdb; ipdb.set_trace()
         return decoder_outputs + encoder_outputs
 
     def get_input_embeddings(self):
@@ -937,13 +959,22 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             # ['good', 'great', 'all', 'really', 'very']
         """
 
-        if isinstance(inputs, T):
-            input_ids = inputs
+        if isinstance(inputs, dict):
+            kwargs.update(inputs)
         else:
-            if isinstance(inputs, dict):
-                kwargs.update(**inputs)
+            kwargs["inputs"] = inputs
+        assert 'input_ids' not in kwargs
 
-            input_ids = kwargs.pop("input_ids", None)  # KeyError possible
+
+        inputs = kwargs.pop('inputs', kwargs.pop('input_ids', None))
+        # if isinstance(inputs, T):
+        #     input_ids = inputs
+        # elif isinstance(inputs, dict):
+        #     kwargs.update(**inputs)
+        #     input_ids = kwargs.pop("input_ids", None)  # KeyError possible
+        #
+        # if kwargs.get('inputs', None) is not None and input_ids is None:
+        #     input_ids = kwargs.pop('inputs')
 
         # attention_mask = kwargs.get("attention_mask", None)
         # encoder_outputs = kwargs.get("encoder_outputs", None)
@@ -951,8 +982,8 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         # decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         # decoder_cached_states = kwargs.get('decoder_cached_states', None)
 
-        outputs = self.model(input_ids, **kwargs)
-        lm_logits = self.model.shared(outputs[0], mode="linear")  # BORKED need linear
+        outputs = self.model(inputs, **kwargs)
+        lm_logits = self.model.shared(outputs[0], mode="linear")
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         return outputs
 

@@ -96,7 +96,7 @@ def prepare_bart_inputs_dict(
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
     return {
-        "input_ids": input_ids,
+        "inputs": input_ids,
         "decoder_input_ids": input_ids,
         "attention_mask": attention_mask,
     }
@@ -128,23 +128,12 @@ class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
-
     @unittest.skip("Passing inputs_embeds not implemented for TFBart.")
     def test_inputs_embeds(self):
         pass
 
 
 @require_tf
-@unittest.skip("common tests first")
 class TFBartHeadTests(unittest.TestCase):
 
     vocab_size = 99
@@ -171,9 +160,8 @@ class TFBartHeadTests(unittest.TestCase):
 
     def test_sequence_classification_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
-        labels = _long_tensor([2] * batch_size)
         model = TFBartForSequenceClassification(config)
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+        outputs = model(inputs=input_ids, decoder_input_ids=input_ids)
         logits = outputs[0]
         expected_shape = (batch_size, config.num_labels)
         self.assertEqual(logits.shape, expected_shape)
@@ -182,12 +170,11 @@ class TFBartHeadTests(unittest.TestCase):
         config, input_ids, batch_size = self._get_config_and_data()
         decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
         lm_model = TFBartForConditionalGeneration(config)
-        loss, logits, enc_features = lm_model(
-            input_ids=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids
+        logits, enc_features = lm_model(
+            inputs=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False
         )
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
-        self.assertIsInstance(loss.item(), float)
 
     def test_lm_uneven_forward(self):
         config = BartConfig(
@@ -204,7 +191,7 @@ class TFBartHeadTests(unittest.TestCase):
         lm_model = TFBartForConditionalGeneration(config)
         context = tf.fill((7, 2), 4)
         summary = tf.fill((7, 7), 6)
-        logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary)
+        logits, enc_features = lm_model(inputs=context, decoder_input_ids=summary, use_cache=False)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
 
