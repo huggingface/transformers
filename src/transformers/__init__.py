@@ -366,6 +366,7 @@ if is_torch_available():
         ReformerAttention,
         ReformerLayer,
         ReformerModel,
+        ReformerForMaskedLM,
         ReformerModelWithLMHead,
         ReformerForQuestionAnswering,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
