@@ -199,11 +199,11 @@ class TrainingArguments:
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
-    tpu_metrics_debug: bool = field(default=False, metadata={
-        "help": "Deprecated, the use of `--debug` is preferred. TPU: Whether to print debug metrics"})
-    debug: bool = field(
-        default=False, metadata={"help": "Whether to print debug metrics on TPU"}
+    tpu_metrics_debug: bool = field(
+        default=False,
+        metadata={"help": "Deprecated, the use of `--debug` is preferred. TPU: Whether to print debug metrics"},
     )
+    debug: bool = field(default=False, metadata={"help": "Whether to print debug metrics on TPU"})
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
