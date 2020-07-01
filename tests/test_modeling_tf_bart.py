@@ -20,10 +20,10 @@ import unittest
 import numpy as np
 
 from transformers import is_tf_available
+from transformers.testing_utils import slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor, require_tf
-from .utils import slow
 
 
 if is_tf_available():

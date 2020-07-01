@@ -334,28 +334,18 @@ class TFModelTesterMixin:
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        decoder_seq_length = (
-            self.model_tester.decoder_seq_length
-            if hasattr(self.model_tester, "decoder_seq_length")
-            else self.model_tester.seq_length
-        )
-        encoder_seq_length = (
-            self.model_tester.encoder_seq_length
-            if hasattr(self.model_tester, "encoder_seq_length")
-            else self.model_tester.seq_length
-        )
-        decoder_key_length = (
-            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else decoder_seq_length
-        )
-        encoder_key_length = (
-            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
-        )
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            model_inputs = self._prepare_for_class(inputs_dict, model_class)
+            outputs = model(model_inputs)
             attentions = [t.numpy() for t in outputs[-1]]
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
@@ -364,6 +354,10 @@ class TFModelTesterMixin:
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
+            each_len = [len(x) for x in outputs]
+            import ipdb
+
+            ipdb.set_trace()
 
             if self.is_encoder_decoder:
                 self.assertEqual(out_len % 2, 0)

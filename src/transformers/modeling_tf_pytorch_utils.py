@@ -159,11 +159,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
         # Find associated numpy array in pytorch model state dict
         if name not in pt_state_dict:
-            if allow_missing_keys:
-                unexpected_keys.append(name)
-                continue
-
-            raise AttributeError("{} not found in PyTorch model".format(name))
+            unexpected_keys.append(name)
+            continue
 
         array = pt_state_dict[name].numpy()
 
@@ -186,7 +183,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)
-
+    if not allow_missing_keys and unexpected_keys:
+        raise AttributeError(f"The following keys were not found in the pytorch state dict: {unexpected_keys}")
     K.batch_set_value(weight_value_tuples)
 
     if tf_inputs is not None:
@@ -312,11 +310,8 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
         # Find associated numpy array in pytorch model state dict
         if pt_weight_name not in tf_weights_map:
-            if allow_missing_keys:
-                missing_keys_pt.append(pt_weight_name)
-                continue
-
-            raise AttributeError("{} not found in TF 2.0 model".format(pt_weight_name))
+            missing_keys_pt.append(pt_weight_name)
+            continue
 
         array, transpose = tf_weights_map[pt_weight_name]
 
@@ -339,7 +334,8 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
         new_pt_params_dict[pt_weight_name] = torch.from_numpy(array)
         loaded_pt_weights_data_ptr[pt_weight.data_ptr()] = torch.from_numpy(array)
         all_tf_weights.discard(pt_weight_name)
-
+    if not allow_missing_keys and missing_keys_pt:
+        raise AttributeError(f"{missing_keys_pt} not found in TF 2.0 model")
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
     missing_keys += missing_keys_pt
 
