@@ -23,8 +23,7 @@ import unittest
 from importlib import import_module
 
 from transformers import is_tf_available, is_torch_available
-
-from .utils import _tf_gpu_memory_limit, require_tf
+from transformers.testing_utils import _tf_gpu_memory_limit, require_tf
 
 
 if is_tf_available():

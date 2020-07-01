@@ -18,12 +18,12 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 # TODO(PVP): this line reruns all the tests in BertModelTest; not sure whether this can be prevented
 # for now only run module with pytest tests/test_modeling_encoder_decoder.py::EncoderDecoderModelTest
 from .test_modeling_bert import BertModelTester
 from .test_modeling_common import ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():

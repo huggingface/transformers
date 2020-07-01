@@ -17,8 +17,7 @@
 import unittest
 
 from transformers import is_tf_available
-
-from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_tf, slow
+from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_tf, slow
 
 
 if is_tf_available():
