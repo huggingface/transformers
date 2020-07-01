@@ -44,6 +44,14 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"].dtype, torch.long)
         self.assertEqual(batch["inputs"].shape, torch.Size([8, 10]))
 
+        # Labels can already be tensors
+        features = [{"label": torch.tensor(i), "inputs": torch.randint(10, [10])} for i in range(8)]
+        batch = default_data_collator(features)
+        self.assertEqual(batch["labels"].dtype, torch.long)
+        self.assertTrue(batch["labels"].equal(torch.tensor(list(range(8)))))
+        self.assertEqual(batch["labels"].dtype, torch.long)
+        self.assertEqual(batch["inputs"].shape, torch.Size([8, 10]))
+
     def test_default_with_no_labels(self):
         features = [{"label": None, "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
         batch = default_data_collator(features)
