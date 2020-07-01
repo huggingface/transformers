@@ -1,10 +1,6 @@
-language: "Pytorch"
-thumbnail: "url to a thumbnail used in social sharing"
-tags:
-- Setswana
-- Bert
-- Pytorch
-license: ""
+---
+language: setswana
+---
 
 # TswanaBert
 
