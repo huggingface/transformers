@@ -132,12 +132,8 @@ class LongformerSelfAttention(nn.Module):
         chunked_hidden_states = F.pad(
             chunked_hidden_states, (0, window_overlap + 1)
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
-        chunked_hidden_states = chunked_hidden_states.view(
-            total_num_heads, num_chunks, -1
-        )  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap+window_overlap
-        chunked_hidden_states = chunked_hidden_states[
-            :, :, :-window_overlap
-        ]  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap
+        chunked_hidden_states = chunked_hidden_states.view(total_num_heads, num_chunks, -1)  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap+window_overlap
+        chunked_hidden_states = chunked_hidden_states[:, :, :-window_overlap]  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap
         chunked_hidden_states = chunked_hidden_states.view(
             total_num_heads, num_chunks, window_overlap, window_overlap + hidden_dim
         )  # total_num_heads x num_chunks, window_overlap x hidden_dim+window_overlap
@@ -294,7 +290,7 @@ class LongformerSelfAttention(nn.Module):
         # is index masked or global attention
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
-        is_global_attn = any(is_index_global_attn.flatten())
+        is_global_attn = any(is_index_global_attn).item()
 
         hidden_states = hidden_states.transpose(0, 1)
 
@@ -402,7 +398,7 @@ class LongformerSelfAttention(nn.Module):
         # compute value for global attention and overwrite to attention output
         # TODO: remove the redundant computation
         if is_global_attn:
-            global_attn_output = self._compute_global_attn_output_from_hidden(
+            global_attn_output = self.compute_global_attn_output_from_hidden(
                 hidden_states=hidden_states,
                 max_num_global_attn_indices=max_num_global_attn_indices,
                 is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
@@ -528,7 +524,7 @@ class LongformerSelfAttention(nn.Module):
         )
         return attn_output_only_global + attn_output_without_global
 
-    def _compute_global_attn_output_from_hidden(
+    def compute_global_attn_output_from_hidden(
         self,
         hidden_states,
         max_num_global_attn_indices,
