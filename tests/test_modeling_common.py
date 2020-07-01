@@ -811,7 +811,7 @@ class ModelTesterMixin:
             # Wrap model in nn.DataParallel
             model = torch.nn.DataParallel(model)
             with torch.no_grad():
-                _ = model(**inputs_dict)
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 global_rng = random.Random()
