@@ -1,10 +1,11 @@
 // These two things need to be updated at each release for the version selector.
 // Last stable version
-const stableVersion = "v2.11.0"
+const stableVersion = "v3.0.0"
 // Dictionary doc folder to label
 const versionMapping = {
     "master": "master",
-    "": "v2.11.0 (stable)",
+    "": "v3.0.0 (stable)",
+    "v2.11.0": "v2.11.0",
     "v2.10.0": "v2.10.0",
     "v2.9.1": "v2.9.0/v2.9.1",
     "v2.8.0": "v2.8.0",
@@ -84,10 +85,14 @@ function addGithubButton() {
 function addVersionControl() {
     // To grab the version currently in view, we parse the url
     const parts = location.toString().split('/');
-    let versionIndex = parts.length - 2
+    let versionIndex = parts.length - 2;
+    // Index page may not have a last part with filename.html so we need to go up
+    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html$/)) {
+        versionIndex = parts.length - 1;
+    }
     // Main classes and models are nested so we need to go deeper
-    if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
-        versionIndex = parts.length - 3
+    else if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
+        versionIndex = versionIndex - 1;
     } 
     const version = parts[versionIndex];
 
@@ -96,8 +101,12 @@ function addVersionControl() {
 
     const htmlLines = [];
     for (const [key, value] of Object.entries(versionMapping)) {
-        var urlParts = (key == "") ? [] : [key];
-        urlParts = urlParts.concat(parts.slice(versionIndex));
+        let baseUrlIndex = (version == "transformers") ? versionIndex + 1: versionIndex;
+        var urlParts = parts.slice(0, baseUrlIndex);
+        if (key != "") {
+            urlParts = urlParts.concat([key]);
+        }
+        urlParts = urlParts.concat(parts.slice(versionIndex+1));
         htmlLines.push(`<a href="${urlParts.join('/')}">${value}</a>`);
     }
 
@@ -149,6 +158,8 @@ function platformToggle() {
     const codeBlocks = Array.from(document.getElementsByClassName("highlight"));
     const pytorchIdentifier = "## PYTORCH CODE";
     const tensorflowIdentifier = "## TENSORFLOW CODE";
+
+    const promptSpanIdentifier = `<span class="gp">&gt;&gt;&gt; </span>`
     const pytorchSpanIdentifier = `<span class="c1">${pytorchIdentifier}</span>`;
     const tensorflowSpanIdentifier = `<span class="c1">${tensorflowIdentifier}</span>`;
 
@@ -161,10 +172,22 @@ function platformToggle() {
         let tensorflowSpans;
 
         if(pytorchSpanPosition < tensorflowSpanPosition){
-            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, tensorflowSpanPosition);
+            const isPrompt = spans.slice(
+                spans.indexOf(tensorflowSpanIdentifier) - promptSpanIdentifier.length,
+                spans.indexOf(tensorflowSpanIdentifier)
+            ) == promptSpanIdentifier;
+            const finalTensorflowSpanPosition = isPrompt ? tensorflowSpanPosition - promptSpanIdentifier.length : tensorflowSpanPosition;
+
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, finalTensorflowSpanPosition);
             tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, spans.length);
         }else{
-            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, pytorchSpanPosition);
+            const isPrompt = spans.slice(
+                spans.indexOf(pytorchSpanIdentifier) - promptSpanIdentifier.length,
+                spans.indexOf(pytorchSpanIdentifier)
+            ) == promptSpanIdentifier;
+            const finalPytorchSpanPosition = isPrompt ? pytorchSpanPosition - promptSpanIdentifier.length : pytorchSpanPosition;
+
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, finalPytorchSpanPosition);
             pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, spans.length);
         }
 

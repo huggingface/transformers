@@ -100,16 +100,16 @@ class TransfoXLConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import TransfoXLConfig, TransfoXLModel
+            >>> from transformers import TransfoXLConfig, TransfoXLModel
 
-            # Initializing a Transformer XL configuration
-            configuration = TransfoXLConfig()
+            >>> # Initializing a Transformer XL configuration
+            >>> configuration = TransfoXLConfig()
 
-            # Initializing a model from the configuration
-            model = TransfoXLModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = TransfoXLModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
     model_type = "transfo-xl"

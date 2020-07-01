@@ -85,16 +85,16 @@ class MobileBertConfig(PretrainedConfig):
 
         Example:
 
-            from transformers import MobileBertModel, MobileBertConfig
+            >>> from transformers import MobileBertModel, MobileBertConfig
 
-            # Initializing a MobileBERT configuration
-            configuration = MobileBertConfig()
+            >>> # Initializing a MobileBERT configuration
+            >>> configuration = MobileBertConfig()
 
-            # Initializing a model from the configuration above
-            model = MobileBertModel(configuration)
+            >>> # Initializing a model from the configuration above
+            >>> model = MobileBertModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
 
         Attributes:
             pretrained_config_archive_map (Dict[str, str]):

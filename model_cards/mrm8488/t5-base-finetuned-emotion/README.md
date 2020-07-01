@@ -32,18 +32,18 @@ The training script is a slightly modified version of [this Colab Notebook](http
 
 ## Test set metrics 🧾
 
-               |precision | recall  | f1-score |support|
-    |----------|----------|---------|----------|-------|
-    |anger     |      0.93|     0.92|      0.93|    275|
-    |fear      |      0.91|     0.87|      0.89|    224|
-    |joy       |      0.97|     0.94|      0.95|    695|
-    |love      |      0.80|     0.91|      0.85|    159|
-    |sadness   |      0.97|     0.97|      0.97|    521|
-    |surpirse  |      0.73|     0.89|      0.80|     66|
-    |----------|----------|---------|----------|-------|
-    |accuracy|            |         |      0.93|   2000|
-    |macro avg|       0.89|     0.92|      0.90|   2000|
-    |weighted avg|    0.94|     0.93|      0.93|   2000|
+|          |precision | recall  | f1-score |support|
+|----------|----------|---------|----------|-------|
+|anger     |      0.93|     0.92|      0.93|    275|
+|fear      |      0.91|     0.87|      0.89|    224|
+|joy       |      0.97|     0.94|      0.95|    695|
+|love      |      0.80|     0.91|      0.85|    159|
+|sadness   |      0.97|     0.97|      0.97|    521|
+|surpirse  |      0.73|     0.89|      0.80|     66|
+|                                                  |
+|accuracy|            |         |      0.93|   2000|
+|macro avg|       0.89|     0.92|      0.90|   2000|
+|weighted avg|    0.94|     0.93|      0.93|   2000|
     
     
                  
@@ -73,7 +73,6 @@ def get_emotion(text):
  get_emotion("i feel as if i havent blogged in ages are at least truly blogged i am doing an update cute") # Output: 'joy'
  
  get_emotion("i have a feeling i kinda lost my best friend") # Output: 'sadness'
-
 ```
 
 > Created by [Manuel Romero/@mrm8488](https://twitter.com/mrm8488) | [LinkedIn](https://www.linkedin.com/in/manuel-romero-cs/)

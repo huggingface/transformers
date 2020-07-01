@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.11.0"
+__version__ = "3.0.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -272,6 +272,7 @@ if is_torch_available():
         XLMForQuestionAnsweringSimple,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+    from .modeling_blenderbot import BlenderbotForConditionalGeneration, BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
     from .modeling_bart import (
         PretrainedBartModel,
         BartForSequenceClassification,
@@ -382,7 +383,7 @@ if is_torch_available():
     )
     from .modeling_blenderbot import (
         BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        BlenderbotConditionalGeneration
+        BlenderbotForConditionalGeneration
     )
 
     from .modeling_retribert import (
@@ -619,8 +620,8 @@ if is_tf_available():
     from .trainer_tf import TFTrainer
 
     # Benchmarks
-    from .benchmark.benchmark_tf import TensorflowBenchmark
-    from .benchmark.benchmark_args_tf import TensorflowBenchmarkArguments
+    from .benchmark.benchmark_tf import TensorFlowBenchmark
+    from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
 
 if not is_tf_available() and not is_torch_available():

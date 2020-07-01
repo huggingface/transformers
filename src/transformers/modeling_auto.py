@@ -71,9 +71,7 @@ from .modeling_bert import (
     BertLMHeadModel,
     BertModel,
 )
-from .modeling_blenderbot import (
-        BlenderbotConditionalGeneration
-)
+from .modeling_blenderbot import BlenderbotForConditionalGeneration
 from .modeling_camembert import (
     CamembertForMaskedLM,
     CamembertForMultipleChoice,
@@ -396,8 +394,8 @@ class AutoModel:
 
         Examples::
 
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            >>> config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            >>> model = AutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_MAPPING.items():
             if isinstance(config, config_class):
@@ -484,8 +482,7 @@ class AutoModel:
         Examples::
 
             model = AutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
-            model = AutoModel.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -551,8 +548,8 @@ class AutoModelForPreTraining:
 
         Examples::
 
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelForPreTraining.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            >>> config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            >>> model = AutoModelForPreTraining.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_FOR_PRETRAINING_MAPPING.items():
             if isinstance(config, config_class):

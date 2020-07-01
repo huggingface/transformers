@@ -740,7 +740,7 @@ class Benchmark(ABC):
             info["framework"] = self.framework
             if self.framework == "PyTorch":
                 info["use_torchscript"] = self.args.torchscript
-            if self.framework == "Tensorflow":
+            if self.framework == "TensorFlow":
                 info["eager_mode"] = self.args.eager_mode
                 info["use_xla"] = self.args.use_xla
             info["framework_version"] = self.framework_version
@@ -752,6 +752,7 @@ class Benchmark(ABC):
             info["time"] = datetime.time(datetime.now())
             info["fp16"] = self.args.fp16
             info["use_multiprocessing"] = self.args.do_multi_processing
+            info["only_pretrain_model"] = self.args.only_pretrain_model
 
             if is_psutil_available():
                 info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
@@ -806,7 +807,7 @@ class Benchmark(ABC):
                     else:
                         result = str(result)
                     self.print_fn(
-                        model_name.center(30) + str(batch_size).center(15),
+                        model_name[:30].center(30) + str(batch_size).center(15),
                         str(sequence_length).center(15),
                         result.center(15),
                     )

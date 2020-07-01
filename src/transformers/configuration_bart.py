@@ -23,6 +23,7 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",
     "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
     "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
     "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
@@ -73,9 +74,13 @@ class BartConfig(PretrainedConfig):
     ):
         r"""
             :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
-            Examples:
-                config = BartConfig.from_pretrained('bart-large')
-                model = BartModel(config)
+
+            Examples::
+
+                >>> from transformers import BartConfig, BartModel
+
+                >>> config = BartConfig.from_pretrained('facebook/bart-large')
+                >>> model = BartModel(config)
         """
         if "hidden_size" in common_kwargs:
             raise ValueError("hidden size is called d_model")

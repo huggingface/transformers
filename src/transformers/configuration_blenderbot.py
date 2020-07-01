@@ -1,8 +1,10 @@
-from transformers.configuration_bart import BartConfig
 import os
 
+from transformers.configuration_bart import BartConfig
+
+
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "blenderbot": os.path.abspath(os.path.expanduser('blenderbot-90M-config.json')) # shold be changed after uploading config file on S3
+    "blenderbot": "sshleifer/blenderbot-3B"
 }
 
 
@@ -46,75 +48,64 @@ class BlenderbotConfig(BartConfig):
     pretrained_config_archive_map = BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "blenderbot"
 
-    def __init__(self,
-                 hidden_size=512,
-                 dropout=0.1,
-                 encoder_ffn_dim=2048,
-                 encoder_layers=8,
-                 encoder_attention_heads=16,
-                 decoder_ffn_dim=2048,
-                 decoder_layers=8,
-                 decoder_attention_heads=16,
-                 encoder_layerdrop=0.0,
-                 decoder_layerdrop=0.0,
-                 attention_dropout=0.0,
-                 max_position_embeddings=512,
-                 vocab_size=54944,
-                 activation_dropout=0.0,
-                 init_std=0.02,
-                 pad_token_id=0,
-                 bos_token_id=1,
-                 eos_token_id=2,
-                 unk_token_id=3,
-                 activation_function='gelu',
-                 normalize_before=False,
-                 add_final_layer_norm=False,
-                 scale_embedding=False,
-                 normalize_embedding=True,
-                 static_position_embeddings=False,
-                 is_encoder_decoder=True,
-                 **kwargs):
-        super().__init__(pad_token_id=pad_token_id,
-                        bos_token_id=bos_token_id,
-                        eos_token_id=eos_token_id,
-                        unk_token_id=unk_token_id,
-                        **kwargs)
-        self.d_model = hidden_size
-        self.max_position_embeddings = max_position_embeddings
-        self.static_position_embeddings = static_position_embeddings
-        self.vocab_size = vocab_size
-        
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.encoder_layerdrop = encoder_layerdrop
-        
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_layerdrop = decoder_layerdrop
-        
-        
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        
-        self.activation_function = activation_function
-        
-        self.init_std = init_std
-        self.normalize_before = normalize_before
-        self.scale_embedding = scale_embedding
-        self.normalize_embedding = normalize_embedding
-        self.add_final_layer_norm = add_final_layer_norm
-        self.is_encoder_decoder = is_encoder_decoder
-        
-        self.pad_token_id = pad_token_id
-        self.bos_token_id =bos_token_id
-        self.eos_token_id = eos_token_id
-        self.unk_token_id = unk_token_id
-        
-        
-        
-        
-            
-        
+    def __init__(
+        self,
+        d_model=2560,
+        dropout=0.1,
+        encoder_ffn_dim=10240,
+        encoder_layers=2,
+        encoder_attention_heads=32,
+        decoder_ffn_dim=10240,
+        decoder_layers=24,
+        decoder_attention_heads=32,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
+        attention_dropout=0.0,
+        max_position_embeddings=128,
+        vocab_size=8008,
+        activation_dropout=0.0,
+        init_std=0.02,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        unk_token_id=3,
+        activation_function='gelu',
+        normalize_before=False,
+        add_final_layer_norm=False,
+        scale_embedding=False,
+        normalize_embedding=True,
+        static_position_embeddings=False,
+        is_encoder_decoder=True,
+        extra_pos_embeddings=0,
+        **kwargs
+    ):
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            unk_token_id=unk_token_id,
+            d_model=d_model,
+            init_std=init_std,
+            max_position_embeddings=max_position_embeddings,
+            static_position_embeddings=static_position_embeddings,
+            vocab_size=vocab_size,
+            encoder_layers=encoder_layers,
+            encoder_ffn_dim=encoder_ffn_dim,
+            encoder_attention_heads=encoder_attention_heads,
+            encoder_layerdrop=encoder_layerdrop,
+            decoder_layers=decoder_layers,
+            decoder_ffn_dim=decoder_ffn_dim,
+            decoder_attention_heads=decoder_attention_heads,
+            decoder_layerdrop=decoder_layerdrop,
+            dropout=dropout,
+            attention_dropout=attention_dropout,
+            activation_dropout=activation_dropout,
+            activation_function=activation_function,
+            normalize_before=normalize_before,
+            scale_embedding=scale_embedding,
+            normalize_embedding=normalize_embedding,
+            add_final_layer_norm=add_final_layer_norm,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
+        self.extra_pos_embeddings = extra_pos_embeddings

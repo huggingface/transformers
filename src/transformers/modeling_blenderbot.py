@@ -1,22 +1,22 @@
-import logging
+from typing import Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F 
-from .modeling_bart import (BartDecoder, 
-                            BartEncoder, 
-                            PretrainedBartModel, 
-                            _prepare_bart_decoder_inputs,
-                            _reorder_buffer,
-                            _filter_out_falsey_values)
-from .modeling_utils import PretrainedConfig
+import torch.nn.functional as F
+
 from .configuration_blenderbot import BlenderbotConfig
 from .file_utils import add_start_docstrings_to_callable
+from .modeling_bart import (
+    BartDecoder,
+    BartEncoder,
+    PretrainedBartModel,
+    _filter_out_falsey_values,
+    _prepare_bart_decoder_inputs,
+    _reorder_buffer,
+)
 
 
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    'facebook/blenderbot-90M'
-]
+BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["sshleifer/blenderbot-3B"]
 
 
 class BlenderEncoder(BartEncoder):
@@ -24,18 +24,19 @@ class BlenderEncoder(BartEncoder):
     This class inherits BartEncoder. Please check the
     superclass for the appropriate documentation alongside usage examples
     """
+
     config_class = BlenderbotConfig
-    
+
+
 class BlenderbotDecoder(BartDecoder):
-    
+
     """
     This class inherits BartDecoder. Please check the
     superclass for documentation and usage examples
     """
-    
+
     config_class = BlenderbotConfig
 
-        
 
 class PretrainedBlenderbotModel(PretrainedBartModel):
     """
@@ -43,8 +44,9 @@ class PretrainedBlenderbotModel(PretrainedBartModel):
         a simple interface for downloading and loading pretrained models.
         it inherits from PretrainedBartModel. Please check the superclass for the documentation and usage examples
     """
+
     config_class = BlenderbotConfig
-    base_model_prefix = 'blenderbot'
+    base_model_prefix = "blenderbot"  # TODO(mariama): this seems wrong. I dont see self.blenderbot -SS
 
     def _init_weights(self, module):
         """
@@ -59,7 +61,6 @@ class PretrainedBlenderbotModel(PretrainedBartModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        
 
 
 BLENDERBOT_START_DOCSTRING = r"""
@@ -94,77 +95,80 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
         labels: (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
 """
 
-class BlenderbotConditionalGeneration(PretrainedBlenderbotModel):
-    def __init__(self, config:BlenderbotConfig):
+
+class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
+    def __init__(self, config: BlenderbotConfig):
         super().__init__(config)
-        #self.config = config
-        self.shared = nn.Embedding(config.vocab_size, config.d_model, config.pad_token_id)        
+        # self.config = config
+        self.shared = nn.Embedding(config.vocab_size, config.d_model, config.pad_token_id)
         self.encoder = BlenderEncoder(config, self.shared)
         self.decoder = BlenderbotDecoder(config, self.shared)
         self.init_weights()
-        
+
     @add_start_docstrings_to_callable(BLENDERBOT_INPUTS_DOCSTRING)
-    def forward(self, 
-                input_ids, 
-                encoder_outputs=None, 
-                decoder_input_ids=None, 
-                attention_mask=None,
-                decodeer_attention_mask=None,
-                labels=None,
-                decoder_cached_states=None,
-                use_cache=False
-                ):
+    def forward(
+        self,
+        input_ids,
+        encoder_outputs=None,
+        decoder_input_ids=None,
+        attention_mask=None,
+        decodeer_attention_mask=None,
+        labels=None,
+        decoder_cached_states=None,
+        use_cache=False,
+    ):
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(input_ids=input_ids,attention_mask=attention_mask)
+            encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
         if use_cache:
             decoder_padding_mask, casual_mask = None, None
         else:
-            decoder_input_ids, decoder_padding_mask, casual_mask = _prepare_bart_decoder_inputs(self.config,
-                                                                                                input_ids,
-                                                                                                decoder_input_ids=decoder_input_ids,
-                                                                                                causal_mask_dtype=self.shared.weight.dtype,
-                                                                                                decoder_padding_mask=decodeer_attention_mask
-                                                                                            )
+            decoder_input_ids, decoder_padding_mask, casual_mask = _prepare_bart_decoder_inputs(
+                self.config,
+                input_ids,
+                decoder_input_ids=decoder_input_ids,
+                causal_mask_dtype=self.shared.weight.dtype,
+                decoder_padding_mask=decodeer_attention_mask,
+            )
         assert decoder_input_ids is not None
-        decoder_outputs = self.decoder(decoder_input_ids, encoder_outputs[0],attention_mask,
-                                       decoder_padding_mask, decoder_causal_mask=casual_mask,
-                                       decoder_cashed_states=decoder_cached_states,
-                                       use_cache=use_cache)
+        decoder_outputs = self.decoder(
+            decoder_input_ids,
+            encoder_outputs[0],
+            attention_mask,
+            decoder_padding_mask,
+            decoder_causal_mask=casual_mask,
+            decoder_cashed_states=decoder_cached_states,
+            use_cache=use_cache,
+        )
         decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
         assert isinstance(decoder_outputs[0], torch.Tensor)
         encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
         outputs = decoder_outputs + encoder_outputs
         scores = F.linear(outputs[0], self.shared.weight)
-        scores = (scores,)+ outputs[1:]
+        outputs = (scores,) + outputs[1:]
         if labels is not None:
             loss_fc = nn.CrossEntropyLoss()
             loss = loss_fc(scores[0].view(-1, self.config.vocab_size), labels.view(-1))
-            scores = (loss,) + scores
-        return scores
-        
+            outputs = (loss,) + outputs
+        return outputs
     def prepare_logits_for_generation(self, logits, cur_len, max_length):
         # force the start token  probability of generation to be 0.
         logits[:, self.config.bos_token_id] = float("-inf")
         return logits
-    
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         # exactly as in BartConditionalGenerator
         assert past is not None, "past has to be defined for encoder_outputs"
         # first step, decoder_cached_states are empty
-        if not past[1]:
-            encoder_outputs, decoder_cached_states = past, None
-        else:
-            encoder_outputs, decoder_cached_states = past
+        encoder_outputs, decoder_cached_states = past
         return {
-            "input_ids": None, 
+            "input_ids": None,
             "encoder_outputs": encoder_outputs,
             "decoder_cached_states": decoder_cached_states,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
-            "use_cache": use_cache, 
+            "use_cache": use_cache,
         }
-    
+
     def get_input_embeddings(self):
         return self.shared
 
@@ -178,10 +182,10 @@ class BlenderbotConditionalGeneration(PretrainedBlenderbotModel):
         lin_layer = nn.Linear(vocab_size, embed_dim, bias=False)
         lin_layer.weight.data = self.shared.weight.data
         return lin_layer
-    
+
     def get_encoder(self):
         return self.encoder
-        
+
     @staticmethod
     def _reorder_cache(past, beam_idx):
         # exactly as in BartConditionalGenerator
