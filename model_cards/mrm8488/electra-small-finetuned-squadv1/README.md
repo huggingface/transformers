@@ -72,14 +72,14 @@ Fast usage with **pipelines**:
 ```python
 from transformers import pipeline
 
-QnA_pipeline = pipeline('question-answering', model='mrm8488/electra-base-finetuned-squadv1')
+QnA_pipeline = pipeline('question-answering', model='mrm8488/electra-small-finetuned-squadv1')
 QnA_pipeline({
     'context': 'A new strain of flu that has the potential to become a pandemic has been identified in China by scientists.',
     'question': 'What has been discovered by scientists from China ?'
 })
 
 # Output:
-{'answer': 'A new strain of flu', 'end': 19, 'score': 0.9995211430099182, 'start': 0}
+{'answer': 'A new strain of flu', 'end': 19, 'score': 0.7950334108113424, 'start': 0}
 ```
 
 > Created by [Manuel Romero/@mrm8488](https://twitter.com/mrm8488) | [LinkedIn](https://www.linkedin.com/in/manuel-romero-cs/)
