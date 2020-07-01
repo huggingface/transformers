@@ -9,8 +9,9 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-from .utils import DataProcessor
 from ...tokenization_utils_base import PaddingStrategy
+from .utils import DataProcessor
+
 
 if is_torch_available():
     import torch
