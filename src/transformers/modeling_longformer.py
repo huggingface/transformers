@@ -122,7 +122,9 @@ class LongformerSelfAttention(nn.Module):
         hidden_states_padded = F.pad(
             hidden_states_padded, padding
         )  # padding value is not important because it will be overwritten
-        hidden_states_padded = hidden_states_padded.transpose(-1, -2)
+        hidden_states_padded = hidden_states_padded.view(
+            *hidden_states_padded.size()[:-2], hidden_states_padded.size(-1), hidden_states_padded.size(-2)
+        )
         return hidden_states_padded
 
     @staticmethod
