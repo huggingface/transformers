@@ -820,7 +820,7 @@ class FillMaskPipeline(Pipeline):
 
         self.topk = topk
 
-    def ensure_exactly_one_mask_token(self, masked_index: Union["torch.Tensor", "np.ndarray"]):
+    def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
         numel = np.prod(masked_index.shape)
         if numel > 1:
             raise PipelineException(
@@ -857,13 +857,10 @@ class FillMaskPipeline(Pipeline):
                 topk = tf.math.top_k(probs, k=self.topk)
                 values, predictions = topk.values.numpy(), topk.indices.numpy()
             else:
-                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
-
-                logits = outputs[i, masked_index, :]
                 masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
-                self.ensure_exactly_one_mask_token(masked_index)
+                self.ensure_exactly_one_mask_token(masked_index.numpy())
 
                 logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
