@@ -30,7 +30,7 @@ Batch = namedtuple("Batch", ["document_names", "batch_size", "src", "segs", "mas
 
 def evaluate(args):
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", do_lower_case=True)
-    model = BertAbs.from_pretrained("bertabs-finetuned-cnndm")
+    model = BertAbs.from_pretrained("remi/bertabs-finetuned-extractive-abstractive-summarization")
     model.to(args.device)
     model.eval()
 

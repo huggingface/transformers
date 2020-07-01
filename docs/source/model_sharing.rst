@@ -171,14 +171,22 @@ Add a model card
 ^^^^^^^^^^^^^^^^
 
 To make sure everyone knows what your model can do, what its limitations and potential bias or ethetical
-considerations, please add a README.md model card to the 🤗 Transformers repo under `model_cards/`. It should be named
-`README.md` and follow `this template <https://github.com/huggingface/model_card>`__.
+considerations, please add a README.md model card to the 🤗 Transformers repo under `model_cards/`. It should then be
+placed in a subfolder with your username or organization, then another subfolder named like your model
+(`awesome-name-you-picked`). Or just click on the "Create a model card on GitHub" button on the model page, it will
+get you directly to the right location. If you need one, `here <https://github.com/huggingface/model_card>`__ is a
+model card template (meta-suggestions are welcome).
 
 If your model is fine-tuned from another model coming from the model hub (all 🤗 Transformers pretrained models do),
 don't forget to link to its model card so that people can fully trace how your model was built.
 
 If you have never made a pull request to the 🤗 Transformers repo, look at the
 :doc:`contributing guide <contributing>` to see the steps to follow.
+
+.. Note::
+
+    You can also send your model card in the folder you uploaded with the CLI by placing it in a `README.md` file
+    inside `path/to/awesome-name-you-picked/`.
 
 Using your model
 ^^^^^^^^^^^^^^^^

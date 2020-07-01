@@ -87,6 +87,18 @@ def get_framework(model=None):
     return framework
 
 
+class PipelineException(Exception):
+    """
+    Raised by pipelines when handling __call__
+    """
+
+    def __init__(self, task: str, model: str, reason: str):
+        super().__init__(reason)
+
+        self.task = task
+        self.model = model
+
+
 class ArgumentHandler(ABC):
     """
     Base interface for handling varargs for each Pipeline
@@ -808,6 +820,21 @@ class FillMaskPipeline(Pipeline):
 
         self.topk = topk
 
+    def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
+        numel = np.prod(masked_index.shape)
+        if numel > 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
+            )
+        elif numel < 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                f"No mask_token ({self.tokenizer.mask_token}) found on the input",
+            )
+
     def __call__(self, *args, **kwargs):
         inputs = self._parse_and_tokenize(*args, **kwargs)
         outputs = self._forward(inputs, return_tensors=True)
@@ -820,14 +847,22 @@ class FillMaskPipeline(Pipeline):
             result = []
 
             if self.framework == "tf":
-                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy().item()
-                logits = outputs[i, masked_index, :]
+                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
+
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                self.ensure_exactly_one_mask_token(masked_index)
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = tf.nn.softmax(logits)
                 topk = tf.math.top_k(probs, k=self.topk)
                 values, predictions = topk.values.numpy(), topk.indices.numpy()
             else:
-                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
-                logits = outputs[i, masked_index, :]
+                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
+
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                self.ensure_exactly_one_mask_token(masked_index.numpy())
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
                 values, predictions = probs.topk(self.topk)
 

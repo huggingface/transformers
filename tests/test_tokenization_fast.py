@@ -3,7 +3,6 @@ import unittest
 from collections import namedtuple
 from itertools import takewhile
 
-from tests.utils import require_torch
 from transformers import (
     BertTokenizer,
     BertTokenizerFast,
@@ -16,6 +15,7 @@ from transformers import (
     TransfoXLTokenizer,
     is_torch_available,
 )
+from transformers.testing_utils import require_torch
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
