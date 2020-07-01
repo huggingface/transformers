@@ -261,7 +261,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         from transformers import DPRQuestionEncoder, DPRContextEncoderTokenizer
         tokenizer = DPRContextEncoderTokenizer.from_pretrained('dpr-base-uncased')
         model = DPRContextEncoder.from_pretrained('dpr-ctx_encoder-base')
-        input_ids = torch.tensor(tokenizer("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')
         embeddings = model(input_ids)  # the embeddings of the given context.
 
     """
@@ -300,7 +300,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
         tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('dpr-base-uncased')
         model = DPRQuestionEncoder.from_pretrained('dpr-ctx_encoder-base')
-        input_ids = torch.tensor(tokenizer("Hello, is my dog cute ?")).unsqueeze(0)  # Batch size 1
+        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')
         embeddings = model(input_ids)  # the embeddings of the given question.
 
     """
