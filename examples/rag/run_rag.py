@@ -8,7 +8,7 @@ from transformers import DprConfig, \
     BartTokenizer, \
     PreTrainedModel, \
     PretrainedConfig
-from modelling_rag import RagModel, Retriever
+from transformers.modelling_rag import RagModel, Retriever
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
