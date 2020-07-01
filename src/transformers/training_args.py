@@ -97,7 +97,7 @@ class TrainingArguments:
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the mumber of TPU cores (automatically passed by launcher script).
-        tpu_metrics_debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When training on TPU, whether to print debug metrics or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
@@ -199,7 +199,11 @@ class TrainingArguments:
     tpu_num_cores: Optional[int] = field(
         default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
     )
-    tpu_metrics_debug: bool = field(default=False, metadata={"help": "TPU: Whether to print debug metrics"})
+    tpu_metrics_debug: bool = field(default=False, metadata={
+        "help": "Deprecated, the use of `--debug` is preferred. TPU: Whether to print debug metrics"})
+    debug: bool = field(
+        default=False, metadata={"help": "Whether to print debug metrics on TPU"}
+    )
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}

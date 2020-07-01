@@ -1,4 +1,5 @@
 import logging
+import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
@@ -80,8 +81,8 @@ class TFTrainingArguments(TrainingArguments):
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the mumber of TPU cores (automatically passed by launcher script).
-        tpu_metrics_debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            When training on TPU, whether to print debug metrics or not.
+        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter to activate the trace to record computation graphs and profiling information or not.
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
@@ -89,15 +90,10 @@ class TFTrainingArguments(TrainingArguments):
             Number of update steps before two evaluations.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
-        debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter to activate the trace to record computation graphs and profiling information or not.
     """
 
     tpu_name: str = field(
         default=None, metadata={"help": "Name of TPU"},
-    )
-    debug: bool = field(
-        default=False, metadata={"help": "Activate the trace to record computation graphs and profiling information"}
     )
 
     @cached_property
@@ -146,7 +142,7 @@ class TFTrainingArguments(TrainingArguments):
     @tf_required
     def n_replicas(self) -> int:
         """
-        The number of replicas (GPUs or TPU cores) used in this training.
+        The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
         return self._setup_strategy.num_replicas_in_sync
 
@@ -175,3 +171,15 @@ class TFTrainingArguments(TrainingArguments):
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
         return per_device_batch_size * max(1, self.n_replicas)
+
+    @property
+    @tf_required
+    def n_gpu(self) -> int:
+        """
+        The number of replicas (CPUs, GPUs or TPU cores) used in this training.
+        """
+        warnings.warn(
+            "The n_gpu argument is deprecated and will be removed in a future version, use n_replicas instead.",
+            FutureWarning,
+        )
+        return self._setup_strategy.num_replicas_in_sync
