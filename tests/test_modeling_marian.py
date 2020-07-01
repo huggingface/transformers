@@ -19,8 +19,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
-
-from .utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 
 if is_torch_available():

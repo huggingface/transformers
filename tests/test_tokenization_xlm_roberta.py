@@ -18,10 +18,10 @@ import os
 import unittest
 
 from transformers.file_utils import cached_property
+from transformers.testing_utils import slow
 from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import slow
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
