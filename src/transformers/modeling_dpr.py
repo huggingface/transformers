@@ -129,21 +129,7 @@ class DPRPretrainedContextEncoder(PreTrainedModel):
     base_model_prefix = "ctx_encoder"
 
     def init_weights(self):
-        """Load the weights from the official DPR repo's format if specified."""
-        if self.config.bi_encoder_model_file is not None:
-            logger.info("Loading DPR biencoder from {}".format(self.config.bi_encoder_model_file))
-            saved_state = load_states_from_checkpoint(self.config.bi_encoder_model_file)
-            encoder, prefix = self.ctx_encoder, "ctx_model."
-            state_dict = {}
-            for key, value in saved_state.model_dict.items():
-                if key.startswith(prefix):
-                    key = key[len(prefix) :]
-                    if not key.startswith("encode_proj."):
-                        key = "bert_model." + key
-                    state_dict[key] = value
-            encoder.load_state_dict(state_dict)
-        else:
-            self.ctx_encoder.init_weights()
+        self.ctx_encoder.init_weights()
 
 
 class DPRPretrainedQuestionEncoder(PreTrainedModel):
@@ -156,21 +142,7 @@ class DPRPretrainedQuestionEncoder(PreTrainedModel):
     base_model_prefix = "question_encoder"
 
     def init_weights(self):
-        """Load the weights from the official DPR repo's format if specified."""
-        if self.config.bi_encoder_model_file is not None:
-            logger.info("Loading DPR biencoder from {}".format(self.config.bi_encoder_model_file))
-            saved_state = load_states_from_checkpoint(self.config.bi_encoder_model_file)
-            encoder, prefix = self.question_encoder, "question_model."
-            state_dict = {}
-            for key, value in saved_state.model_dict.items():
-                if key.startswith(prefix):
-                    key = key[len(prefix) :]
-                    if not key.startswith("encode_proj."):
-                        key = "bert_model." + key
-                    state_dict[key] = value
-            encoder.load_state_dict(state_dict)
-        else:
-            self.question_encoder.init_weights()
+        self.question_encoder.init_weights()
 
 
 class DPRPretrainedReader(PreTrainedModel):
@@ -183,18 +155,7 @@ class DPRPretrainedReader(PreTrainedModel):
     base_model_prefix = "span_predictor"
 
     def init_weights(self):
-        """Load the weights from the official DPR repo's format if specified."""
-        if self.config.reader_model_file is not None:
-            logger.info("Loading DPR reader from {}".format(self.config.reader_model_file))
-            saved_state = load_states_from_checkpoint(self.config.reader_model_file)
-            state_dict = {}
-            for key, value in saved_state.model_dict.items():
-                if key.startswith("encoder.") and not key.startswith("encoder.encode_proj"):
-                    key = "encoder.bert_model." + key[len("encoder.") :]
-                state_dict[key] = value
-            self.span_predictor.load_state_dict(state_dict)
-        else:
-            self.span_predictor.encoder.init_weights()
+        self.span_predictor.encoder.init_weights()
 
 
 ###############
@@ -297,7 +258,8 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
 
     Examples::
 
-        tokenizer = DPRTokenizer.from_pretrained('dpr-base-uncased')
+        from transformers import DPRQuestionEncoder, DPRContextEncoderTokenizer
+        tokenizer = DPRContextEncoderTokenizer.from_pretrained('dpr-base-uncased')
         model = DPRContextEncoder.from_pretrained('dpr-ctx_encoder-base')
         input_ids = torch.tensor(tokenizer("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         embeddings = model(input_ids)  # the embeddings of the given context.
@@ -335,7 +297,8 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
     Examples::
 
-        tokenizer = DPRTokenizer.from_pretrained('dpr-base-uncased')
+        from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
+        tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('dpr-base-uncased')
         model = DPRQuestionEncoder.from_pretrained('dpr-ctx_encoder-base')
         input_ids = torch.tensor(tokenizer("Hello, is my dog cute ?")).unsqueeze(0)  # Batch size 1
         embeddings = model(input_ids)  # the embeddings of the given question.
@@ -384,8 +347,9 @@ class DPRReader(DPRPretrainedReader):
 
     Examples::
 
-        tokenizer = DPRReader.from_pretrained('dpr-base-uncased')
-        model = DPRModel.from_pretrained('dpr-reader-base')
+        from transformers import DPRQuestionEncoder, DPRReaderTokenizer
+        tokenizer = DPRReaderTokenizer.from_pretrained('dpr-base-uncased')
+        model = DPRReader.from_pretrained('dpr-reader-base')
         question_and_titles_ids = [
             torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
             ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.

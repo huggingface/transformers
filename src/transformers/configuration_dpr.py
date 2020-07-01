@@ -63,8 +63,6 @@ class DPRConfig(PretrainedConfig):
         encoder_model_config: Optional[dict] = None,  # base config
         projection_dim: int = 0,  # projection of the encoders, 0 for no projection
         sequence_length: int = 512,
-        bi_encoder_model_file: Optional[str] = None,  # load weights from official repo
-        reader_model_file: Optional[str] = None,  # load weights from official repo
         pad_token_id: int = 0,
         **kwargs
     ):
@@ -74,5 +72,3 @@ class DPRConfig(PretrainedConfig):
         ).to_dict()
         self.projection_dim = projection_dim
         self.sequence_length = sequence_length
-        self.bi_encoder_model_file = bi_encoder_model_file
-        self.reader_model_file = reader_model_file
