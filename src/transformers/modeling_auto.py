@@ -122,7 +122,12 @@ from .modeling_mobilebert import (
     MobileBertModel,
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
-from .modeling_reformer import ReformerForMaskedLM, ReformerForQuestionAnswering, ReformerModel, ReformerModelWithLMHead
+from .modeling_reformer import (
+    ReformerForMaskedLM,
+    ReformerForQuestionAnswering,
+    ReformerModel,
+    ReformerModelWithLMHead,
+)
 from .modeling_retribert import RetriBertModel
 from .modeling_roberta import (
     RobertaForMaskedLM,

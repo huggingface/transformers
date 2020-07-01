@@ -210,9 +210,7 @@ class ReformerModelTester:
         )
         self.check_loss_output(result)
 
-    def create_and_check_reformer_with_mlm(
-        self, config, input_ids, input_mask, choice_labels
-    ):
+    def create_and_check_reformer_with_mlm(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = False
         model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
@@ -227,7 +225,9 @@ class ReformerModelTester:
         )
         self.check_loss_output(result)
 
-    def create_and_check_reformer_model_with_attn_mask(self, config, input_ids, input_mask, is_decoder=False):
+    def create_and_check_reformer_model_with_attn_mask(
+        self, config, input_ids, input_mask, choice_labels, is_decoder=False
+    ):
         # no special position embeddings
         config.axial_pos_embds = False
         config.is_decoder = is_decoder
@@ -268,7 +268,9 @@ class ReformerModelTester:
 
         self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
 
-    def create_and_check_reformer_layer_dropout_seed(self, config, input_ids, input_mask, is_decoder=False):
+    def create_and_check_reformer_layer_dropout_seed(
+        self, config, input_ids, input_mask, choice_labels, is_decoder=False
+    ):
         config.is_decoder = is_decoder
         layer = ReformerLayer(config).to(torch_device)
         layer.train()
