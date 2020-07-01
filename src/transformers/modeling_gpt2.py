@@ -95,9 +95,9 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
                     num = int(scope_names[1])
                     pointer = pointer[num]
         except AttributeError:
-            logger.warn('Unexpected weight {} found, ignoring!'.format(name))
+            logger.warn("Unexpected weight {} found, ignoring!".format(name))
             continue
-            
+
         try:
             assert pointer.shape == array.shape
         except AssertionError as e:
