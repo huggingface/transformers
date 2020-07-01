@@ -28,21 +28,21 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "dpr-ctx_encoder-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
         "dpr-question_encoder-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "dpr-reader-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt"
+        "dpr-reader-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "dpr-ctx_encoder-base": 512,
     "dpr-question_encoder-base": 512,
-    "dpr-reader-base": 512
+    "dpr-reader-base": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
     "dpr-ctx_encoder-base": {"do_lower_case": True},
     "dpr-question_encoder-base": {"do_lower_case": True},
-    "dpr-reader-base": {"do_lower_case": True}
+    "dpr-reader-base": {"do_lower_case": True},
 }
 
 
