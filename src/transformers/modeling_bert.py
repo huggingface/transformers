@@ -20,6 +20,8 @@ import logging
 import math
 import os
 import warnings
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -29,7 +31,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .activations import gelu, gelu_new, swish
 from .configuration_bert import BertConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from .modeling_utils import IgnoreNoneGetter, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
@@ -391,6 +393,13 @@ class BertLayer(nn.Module):
         return outputs
 
 
+@dataclass
+class BertEncoderOutput(IgnoreNoneGetter):
+    last_hidden_state: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -406,6 +415,7 @@ class BertEncoder(nn.Module):
         encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
+        return_tuple=False,
     ):
         all_hidden_states = ()
         all_attentions = ()
@@ -440,19 +450,14 @@ class BertEncoder(nn.Module):
                 )
             hidden_states = layer_outputs[0]
 
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+            all_attentions = all_attentions + (layer_outputs[1],) if output_attentions else None
 
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        outputs = (hidden_states,)
-        if output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+        all_hidden_states = all_hidden_states + (hidden_states,) if output_hidden_states else None
+        if return_tuple:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return BertEncoderOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 class BertPooler(nn.Module):
@@ -622,6 +627,14 @@ BERT_INPUTS_DOCSTRING = r"""
 """
 
 
+@dataclass
+class BertModelOutput(IgnoreNoneGetter):
+    last_hidden_state: torch.FloatTensor
+    pooler_output: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
@@ -681,6 +694,7 @@ class BertModel(BertPreTrainedModel):
         encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_tuple=None,
     ):
         r"""
     Return:
@@ -712,6 +726,7 @@ class BertModel(BertPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -762,14 +777,29 @@ class BertModel(BertPreTrainedModel):
             encoder_attention_mask=encoder_extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_tuple=return_tuple,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
-        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+        if return_tuple:
+            return (sequence_output, pooled_output) + encoder_outputs[2:]
+
+        return BertModelOutput(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+@dataclass
+class BertForPretrainingOutput(IgnoreNoneGetter):
+    loss: Optional[torch.FloatTensor]
+    prediction_scores: torch.FloatTensor
+    seq_relationship_score: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @add_start_docstrings(
@@ -802,6 +832,7 @@ class BertForPreTraining(BertPreTrainedModel):
         next_sentence_label=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_tuple=None,
         **kwargs
     ):
         r"""
@@ -861,6 +892,7 @@ class BertForPreTraining(BertPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         outputs = self.bert(
             input_ids,
@@ -871,23 +903,30 @@ class BertForPreTraining(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_tuple=return_tuple,
         )
 
         sequence_output, pooled_output = outputs[:2]
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
-        outputs = (prediction_scores, seq_relationship_score,) + outputs[
-            2:
-        ]  # add hidden states and attention if they are here
-
+        total_loss = None
         if labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
-            outputs = (total_loss,) + outputs
 
-        return outputs  # (loss), prediction_scores, seq_relationship_score, (hidden_states), (attentions)
+        if return_tuple:
+            output = (prediction_scores, seq_relationship_score) + outputs[2:]
+            return ((total_loss,) + output) if total_loss is not None else output
+
+        return BertForPretrainingOutput(
+            loss=total_loss,
+            prediction_scores=prediction_scores,
+            seq_relationship_score=seq_relationship_score,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(

@@ -131,6 +131,7 @@ class PretrainedConfig(object):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
+        self.return_tuple = kwargs.pop("return_tuple", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
@@ -189,6 +190,11 @@ class PretrainedConfig(object):
             except AttributeError as err:
                 logger.error("Can't set {} with value {} for {}".format(key, value, self))
                 raise err
+
+    @property
+    def use_return_tuple(self):
+        # If torchscript is set, force return_tuple to avoid jit errors
+        return self.return_tuple or self.torchscript
 
     @property
     def num_labels(self) -> int:
