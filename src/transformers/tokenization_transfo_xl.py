@@ -71,7 +71,7 @@ PRETRAINED_CORPUS_ARCHIVE_MAP = {
 CORPUS_NAME = "corpus.bin"
 
 MATCH_NUMBERS = r"(?<=\d)[,.](?=\d)", r" @\g<0>@ "
-DETOKENIZE_NUMBERS = [(r" @,@ ", r","), (r" @.@ ", r".")]
+DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
 
 
 def tokenize_numbers(text_array: List[str]) -> List[str]:
