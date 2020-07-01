@@ -791,8 +791,6 @@ def _filter_out_falsey_values(tup) -> Tuple:
     return tuple(x for x in tup if isinstance(x, tf.Tensor) or x)
 
 
-
-
 @add_start_docstrings(
     "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
 )
