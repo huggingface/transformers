@@ -20,7 +20,7 @@ from transformers import DistilBertConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -32,6 +32,7 @@ if is_tf_available():
         TFDistilBertForSequenceClassification,
         TFDistilBertForTokenClassification,
         TFDistilBertForMultipleChoice,
+        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -118,9 +119,7 @@ class TFDistilBertModelTester:
         model = TFDistilBertForMaskedLM(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         (prediction_scores,) = model(inputs)
-        result = {
-            "prediction_scores": prediction_scores.numpy(),
-        }
+        result = {"prediction_scores": prediction_scores.numpy()}
         self.parent.assertListEqual(
             list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
         )
@@ -129,12 +128,12 @@ class TFDistilBertModelTester:
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFDistilBertForQuestionAnswering(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask}
-        start_logits, end_logits = model(inputs)
-        result = {
-            "start_logits": start_logits.numpy(),
-            "end_logits": end_logits.numpy(),
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
         }
+        start_logits, end_logits = model(inputs)
+        result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()}
         self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
@@ -145,9 +144,7 @@ class TFDistilBertModelTester:
         model = TFDistilBertForSequenceClassification(config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = {"logits": logits.numpy()}
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
     def create_and_check_distilbert_for_multiple_choice(
@@ -162,9 +159,7 @@ class TFDistilBertModelTester:
             "attention_mask": multiple_choice_input_mask,
         }
         (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = {"logits": logits.numpy()}
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
 
     def create_and_check_distilbert_for_token_classification(
@@ -236,8 +231,8 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_token_classification(*config_and_inputs)
 
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     for model_name in list(DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-    #         model = DistilBertModesss.from_pretrained(model_name)
-    #         self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in list(TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]):
+            model = TFDistilBertModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)

@@ -152,20 +152,21 @@ class TFBertModelTester:
             "input_ids": input_ids,
             "attention_mask": input_mask,
             "token_type_ids": token_type_ids,
-            "labels": token_labels,
         }
-        (loss, prediction_scores,) = model(inputs)
+        (prediction_scores,) = model(inputs)
         self.parent.assertListEqual(
             list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
         )
-        # labels cannot be -100 in test so make sure full batch_size * seq_length is returned
-        self.parent.assertListEqual(list(loss.numpy().shape), [self.batch_size * (self.seq_length - 1)])
 
     def create_and_check_bert_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFBertForMaskedLM(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         (prediction_scores,) = model(inputs)
         result = {
             "prediction_scores": prediction_scores.numpy(),
@@ -209,13 +210,11 @@ class TFBertModelTester:
             "input_ids": input_ids,
             "attention_mask": input_mask,
             "token_type_ids": token_type_ids,
-            "labels": sequence_labels,
         }
 
-        loss, logits = model(inputs)[:2]
-        result = {"logits": logits.numpy(), "loss": loss.numpy()}
+        (logits,) = model(inputs)
+        result = {"logits": logits.numpy()}
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
-        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size])
 
     def create_and_check_bert_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -229,12 +228,10 @@ class TFBertModelTester:
             "input_ids": multiple_choice_inputs_ids,
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
-            "labels": choice_labels,
         }
-        loss, logits = model(inputs)
-        result = {"logits": logits.numpy(), "loss": loss.numpy()}
+        (logits,) = model(inputs)
+        result = {"logits": logits.numpy()}
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
-        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size])
 
     def create_and_check_bert_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -245,16 +242,12 @@ class TFBertModelTester:
             "input_ids": input_ids,
             "attention_mask": input_mask,
             "token_type_ids": token_type_ids,
-            "labels": token_labels,
         }
-        loss, logits = model(inputs)
+        (logits,) = model(inputs)
         result = {
             "logits": logits.numpy(),
-            "loss": loss.numpy(),
         }
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
-        # labels cannot be -100 in test so make sure full batch_size * seq_length is returned
-        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size * self.seq_length])
 
     def create_and_check_bert_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -264,15 +257,12 @@ class TFBertModelTester:
             "input_ids": input_ids,
             "attention_mask": input_mask,
             "token_type_ids": token_type_ids,
-            "start_positions": sequence_labels,
-            "end_positions": sequence_labels,
         }
 
-        loss, start_logits, end_logits = model(inputs)
-        result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy(), "loss": loss.numpy()}
+        start_logits, end_logits = model(inputs)
+        result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()}
         self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["loss"].shape), [self.batch_size])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

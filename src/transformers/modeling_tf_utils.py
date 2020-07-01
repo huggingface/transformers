@@ -157,6 +157,7 @@ class TFSequenceClassificationLoss:
 
 
 TFMultipleChoiceLoss = TFSequenceClassificationLoss
+TFMaskedLanguageModelingLoss = TFCausalLanguageModelingLoss
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):

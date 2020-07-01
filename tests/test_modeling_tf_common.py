@@ -39,6 +39,7 @@ if is_tf_available():
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -93,6 +94,8 @@ class TFModelTesterMixin:
             elif model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size)
             elif model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values():
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
+            elif model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
         return inputs_dict
 
