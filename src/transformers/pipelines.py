@@ -20,11 +20,13 @@ import logging
 import os
 import pickle
 import sys
+import uuid
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from uuid import UUID
 
 import numpy as np
 
@@ -36,7 +38,6 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-
 
 if is_tf_available():
     import tensorflow as tf
@@ -56,13 +57,12 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
-        AutoModelForSeq2SeqLM,
+        AutoModelForSeq2SeqLM, AutoModelForCausalLM,
     )
 
 if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
     from .modeling_tf_utils import TFPreTrainedModel
-
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ class PipelineDataFormat:
     SUPPORTED_FORMATS = ["json", "csv", "pipe"]
 
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+            self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         self.output_path = output_path
         self.input_path = input_path
@@ -210,7 +210,7 @@ class PipelineDataFormat:
 
     @staticmethod
     def from_str(
-        format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+            format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         if format == "json":
             return JsonPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
@@ -224,7 +224,7 @@ class PipelineDataFormat:
 
 class CsvPipelineDataFormat(PipelineDataFormat):
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+            self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -247,7 +247,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
 class JsonPipelineDataFormat(PipelineDataFormat):
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+            self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -370,15 +370,15 @@ class Pipeline(_ScikitCompat):
     default_input_names = None
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        task: str = "",
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        binary_output: bool = False,
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            task: str = "",
+            args_parser: ArgumentHandler = None,
+            device: int = -1,
+            binary_output: bool = False,
     ):
 
         if framework is None:
@@ -535,14 +535,14 @@ class FeatureExtractionPipeline(Pipeline):
     """
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        task: str = "",
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            args_parser: ArgumentHandler = None,
+            device: int = -1,
+            task: str = "",
     ):
         super().__init__(
             model=model,
@@ -604,7 +604,7 @@ class TextGenerationPipeline(Pipeline):
     ]
 
     def __call__(
-        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+            self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         if self.model.__class__.__name__ not in self.ALLOWED_MODELS:
             raise NotImplementedError(
@@ -648,7 +648,7 @@ class TextGenerationPipeline(Pipeline):
 
                 # Ensure that batch size = 1 (batch generation not allowed for now)
                 assert (
-                    input_ids is None or input_ids.shape[0] == 1
+                        input_ids is None or input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
 
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
@@ -785,15 +785,15 @@ class FillMaskPipeline(Pipeline):
     """
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        topk=5,
-        task: str = "",
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            args_parser: ArgumentHandler = None,
+            device: int = -1,
+            topk=5,
+            task: str = "",
     ):
         super().__init__(
             model=model,
@@ -893,17 +893,17 @@ class TokenClassificationPipeline(Pipeline):
     default_input_names = "sequences"
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        binary_output: bool = False,
-        ignore_labels=["O"],
-        task: str = "",
-        grouped_entities: bool = False,
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            args_parser: ArgumentHandler = None,
+            device: int = -1,
+            binary_output: bool = False,
+            ignore_labels=["O"],
+            task: str = "",
+            grouped_entities: bool = False,
     ):
         super().__init__(
             model=model,
@@ -973,8 +973,8 @@ class TokenClassificationPipeline(Pipeline):
 
                     # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
                     if (
-                        entity["entity"] == entity_group_disagg[-1]["entity"]
-                        and entity["index"] == entity_group_disagg[-1]["index"] + 1
+                            entity["entity"] == entity_group_disagg[-1]["entity"]
+                            and entity["index"] == entity_group_disagg[-1]["index"] + 1
                     ):
                         entity_group_disagg += [entity]
                         # Group the entities at the last entity
@@ -1119,14 +1119,14 @@ class QuestionAnsweringPipeline(Pipeline):
     default_input_names = "question,context"
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        device: int = -1,
-        task: str = "",
-        **kwargs
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            device: int = -1,
+            task: str = "",
+            **kwargs
     ):
         super().__init__(
             model=model,
@@ -1141,7 +1141,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     @staticmethod
     def create_sample(
-        question: Union[str, List[str]], context: Union[str, List[str]]
+            question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
         QuestionAnsweringPipeline leverages the SquadExample/SquadFeatures internally.
@@ -1248,7 +1248,7 @@ class QuestionAnsweringPipeline(Pipeline):
                         "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
                         "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
                         "answer": " ".join(
-                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                            example.doc_tokens[feature.token_to_orig_map[s]: feature.token_to_orig_map[e] + 1]
                         ),
                     }
                     for s, e, score in zip(starts, ends, scores)
@@ -1402,7 +1402,8 @@ class SummarizationPipeline(Pipeline):
         super().__init__(**kwargs)
 
     def __call__(
-        self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+            self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False,
+            **generate_kwargs
     ):
         r"""
         Args:
@@ -1432,7 +1433,7 @@ class SummarizationPipeline(Pipeline):
 
         if isinstance(documents[0], list):
             assert (
-                self.tokenizer.pad_token_id is not None
+                    self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
             documents = ([prefix + document for document in documents[0]],)
@@ -1530,7 +1531,7 @@ class TranslationPipeline(Pipeline):
     """
 
     def __call__(
-        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+            self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Args:
@@ -1551,7 +1552,7 @@ class TranslationPipeline(Pipeline):
 
         if isinstance(args[0], list):
             assert (
-                self.tokenizer.pad_token_id is not None
+                    self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
             args = ([prefix + text for text in args[0]],)
             padding = True
@@ -1600,6 +1601,150 @@ class TranslationPipeline(Pipeline):
                     )
                 results.append(record)
             return results
+
+
+class Conversation:
+    def __init__(self, text: str = None, conversation_id: UUID = None):
+        if not conversation_id:
+            conversation_id = uuid.uuid4()
+        self.uuid: UUID = conversation_id
+        self.past_user_inputs: List[str] = []
+        self.generated_responses: List[str] = []
+        self.history: List[int] = []
+        self.new_user_input: Optional[str] = text
+
+    def add_user_input(self, text: str, overwrite: False):
+        if self.new_user_input:
+            if overwrite:
+                logger.warning(
+                    "User input added while unprocessed input was existing: \"{}\" was overwritten with: \"{}\".".format(
+                        self.new_user_input, text))
+                self.new_user_input = text
+            else:
+                logger.warning(
+                    "User input added while unprocessed input was existing: \"{}\" new input ignored: \"{}\". Set `overwrite` to True to overwrite unprocessed user input".format(
+                        self.new_user_input, text))
+        else:
+            self.new_user_input = text
+
+    def mark_processed(self):
+        if self.new_user_input:
+            self.past_user_inputs.append(self.new_user_input)
+        self.new_user_input = None
+
+
+class DialoguePipeline(Pipeline):
+    """Multi-turn dialogue.
+    ToDo: complete the docstring"""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert self.tokenizer.eos_token_id is not None, "DialoguePipeline tokenizer should have an EOS token set"
+        if self.tokenizer.pad_token_id is not None:
+            self.pad_token_id = self.tokenizer.pad_token_id
+        else:
+            self.pad_token_id = self.tokenizer.eos_token_id
+        self.max_length = self.model.config.max_length
+
+    def __call__(self, *args, clean_up_tokenization_spaces=False, **generate_kwargs):
+        r"""
+        Args:
+            *args: (list of Conversations) conversations to generate responses for
+            **generate_kwargs: extra kwargs passed to `self.model.generate`_
+        """
+        active_conversations_indices = []
+        active_conversations = []
+        # Input validation
+        if isinstance(args[0], list):
+            for conversation_index, conversation in enumerate(args[0]):
+                assert isinstance(conversation, Conversation), \
+                    "ConversationPipeline expects a Conversation or list of Conversations as an input"
+                if conversation.new_user_input is None:
+                    logger.warning(
+                        "Conversation with id {} does not contain new user input and will not be updated".format(
+                            conversation.uuid)
+                    )
+                else:
+                    active_conversations_indices.append(conversation_index)
+                    active_conversations.append(conversation)
+            assert (
+                    self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
+            ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
+        elif isinstance(args[0], Conversation):
+            active_conversations_indices.append(0)
+            active_conversations.append(args[0])
+        else:
+            raise ValueError("ConversationPipeline expects a Conversation or list of Conversations as an input")
+
+        with self.device_placement():
+
+            inputs = self._parse_and_tokenize([conversation.new_user_input for conversation in active_conversations])
+            histories = [conversation.history for conversation in active_conversations]
+            inputs = self._concat_inputs_history(inputs, histories)
+
+            if self.framework == "pt":
+                inputs = self.ensure_tensor_on_device(**inputs)
+                input_length = inputs["input_ids"].shape[-1]
+
+            elif self.framework == "tf":
+                input_length = tf.shape(inputs["input_ids"])[-1].numpy()
+
+            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+            if input_length > 0.9 * max_length:
+                logger.warning(
+                    "Your input_length: {} is bigger than 0.9 * max_length: {}. You might consider increasing your max_length manually, e.g. translator('...', max_length=400)".format(
+                        input_length, max_length
+                    )
+                )
+
+            translations = self.model.generate(
+                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+            )
+            results = []
+            for translation in translations:
+                record = {}
+                if return_tensors:
+                    record["translation_token_ids"] = translation
+                if return_text:
+                    record["translation_text"] = self.tokenizer.decode(
+                        translation,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
+                results.append(record)
+            return results
+
+    def _parse_and_tokenize(self, *args, **kwargs):
+        """
+        Parse arguments and tokenize
+        """
+        # Parse arguments
+        inputs = self._args_parser(*args, **kwargs)
+        inputs = self.tokenizer.batch_encode_plus(inputs, add_special_tokens=False, padding=False).get('input_ids', [])
+        for input in inputs:
+            input.append(self.tokenizer.eos_token_id)
+        return inputs
+
+    def _concat_inputs_history(self, inputs: List[List[int]], histories: List[Optional[List[int]]]):
+        outputs = []
+        for input, history in zip(inputs, histories):
+            if history is not None:
+                concatenated_input = input + history
+                if len(concatenated_input) > self.max_length:
+                    concatenated_input = concatenated_input[len(concatenated_input) - self.max_length:]
+                outputs.append(concatenated_input)
+            else:
+                if len(input) > self.max_length:
+                    input = input[len(input) - self.max_length:]
+                outputs.append(input)
+        max_len = max([len(item) for item in outputs])
+        outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
+        outputs = self.tokenizer.batch_encode_plus(outputs,
+                                                   add_special_tokens=False,
+                                                   is_pretokenized=True,
+                                                   return_tensors=self.framework,
+                                                   padding=False)
+        return outputs
 
 
 # Register all the supported tasks here
@@ -1676,16 +1821,22 @@ SUPPORTED_TASKS = {
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
+    "dialogue": {
+        "impl": DialoguePipeline,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "default": {"model": {"pt": "microsoft/DialoGPT-small", "tf": "microsoft/DialoGPT-small"}},
+    },
 }
 
 
 def pipeline(
-    task: str,
-    model: Optional = None,
-    config: Optional[Union[str, PretrainedConfig]] = None,
-    tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
-    framework: Optional[str] = None,
-    **kwargs
+        task: str,
+        model: Optional = None,
+        config: Optional[Union[str, PretrainedConfig]] = None,
+        tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+        framework: Optional[str] = None,
+        **kwargs
 ) -> Pipeline:
     """
     Utility factory method to build a pipeline.
