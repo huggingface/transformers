@@ -102,6 +102,11 @@ class TrainingArguments:
         dataloader_drop_last (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to drop the last incomplete batch (if the length of the dataset is not divisible by the batch size)
             or not.
+        past_index (:obj:`int`, `optional`, defaults to -1):
+            Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
+            make use of the past hidden states for their predictions. If this argument is set to a positive int, the
+            ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
+            at the next training step under the keyword argument ``mems``.
     """
 
     output_dir: str = field(
@@ -201,6 +206,11 @@ class TrainingArguments:
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
+    )
+
+    past_index: int = field(
+        default=-1,
+        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
     @property

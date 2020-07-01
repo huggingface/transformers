@@ -493,6 +493,10 @@ class Trainer:
             else:
                 epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
 
+            # Reset the past mems state at the beginning of each epoch if necessary.
+            if self.args.past_index >= 0:
+                self._past = None
+
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -575,6 +579,9 @@ class Trainer:
 
         if self.tb_writer:
             self.tb_writer.close()
+        if self.args.past_index and hasattr(self, "_past"):
+            # Clean the state at the end of training
+            delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         return TrainOutput(self.global_step, tr_loss / self.global_step)
@@ -617,8 +624,14 @@ class Trainer:
             if isinstance(v, torch.Tensor):
                 inputs[k] = v.to(self.args.device)
 
+        if self.args.past_index >= 0 and self._past is not None:
+            inputs["mems"] = self._past
+
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
+
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -802,12 +815,17 @@ class Trainer:
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
+        if self.args.past_index >= 0:
+            past = None
+
         for inputs in tqdm(dataloader, desc=description):
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
             for k, v in inputs.items():
                 if isinstance(v, torch.Tensor):
                     inputs[k] = v.to(self.args.device)
+            if self.args.past_index >= 0:
+                inputs["mems"] = past
 
             with torch.no_grad():
                 outputs = model(**inputs)
@@ -816,6 +834,8 @@ class Trainer:
                     eval_losses += [step_eval_loss.mean().item()]
                 else:
                     logits = outputs[0]
+                if self.args.past_index >= 0:
+                    past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
 
             if not prediction_loss_only:
                 if preds is None:
