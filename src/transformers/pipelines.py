@@ -827,6 +827,7 @@ class FillMaskPipeline(Pipeline):
                 values, predictions = topk.values.numpy(), topk.indices.numpy()
             else:
                 masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
+
                 logits = outputs[i, masked_index, :]
                 probs = logits.softmax(dim=0)
                 values, predictions = probs.topk(self.topk)

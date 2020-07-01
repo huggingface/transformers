@@ -104,6 +104,11 @@ class TrainingArguments:
             or not.
         eval_steps (:obj:`int`, `optional`, defaults to 1000):
             Number of update steps between two evaluations.
+        past_index (:obj:`int`, `optional`, defaults to -1):
+            Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
+            make use of the past hidden states for their predictions. If this argument is set to a positive int, the
+            ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
+            at the next training step under the keyword argument ``mems``.
     """
 
     output_dir: str = field(
@@ -209,6 +214,11 @@ class TrainingArguments:
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
     )
     eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
+
+    past_index: int = field(
+        default=-1,
+        metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
+    )
 
     @property
     def train_batch_size(self) -> int:

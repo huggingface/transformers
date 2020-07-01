@@ -233,6 +233,10 @@ class TFTrainer:
 
         step: int = 1
 
+        # Reset the past mems state at the beginning of the evaluation if necessary.
+        if self.args.past_index >= 0:
+            self._past = None
+
         for features, labels in dataset:
             step = tf.convert_to_tensor(step, dtype=tf.int64)
             loss, logits = self._evaluate_steps(features, labels)
@@ -280,6 +284,10 @@ class TFTrainer:
         for key in list(metrics.keys()):
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
+
+        if self.args.past_index and hasattr(self, "_past"):
+            # Clean the state at the end of training
+            delattr(self, "_past")
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
@@ -398,6 +406,9 @@ class TFTrainer:
         logger.info("  Total optimization steps = %d", t_total)
 
         for epoch_iter in range(epochs_trained, int(epochs + 1)):
+            # Reset the past mems state at the beginning of each epoch if necessary.
+            if self.args.past_index >= 0:
+                self._past = None
             for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
                 self.global_step = iterations.numpy()
                 self.epoch_logging = epoch_iter - 1 + (step + 1) / steps_per_epoch
@@ -436,6 +447,10 @@ class TFTrainer:
 
                 if self.args.max_steps > 0 and self.global_step % self.args.max_steps == 0:
                     break
+
+        if self.args.past_index and hasattr(self, "_past"):
+            # Clean the state at the end of training
+            delattr(self, "_past")
 
     def _training_steps(self, ds, optimizer):
         """
@@ -511,10 +526,15 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
+        if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
+            features["mems"] = self._past
         if isinstance(labels, (dict)):
-            loss, logits = self.model(features, training=training, **labels)[:2]
+            outputs = self.model(features, training=training, **labels)[:2]
         else:
-            loss, logits = self.model(features, labels=labels, training=training)[:2]
+            outputs = self.model(features, labels=labels, training=training)[:2]
+        loss, logits = outputs[:2]
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
         loss += sum(self.model.losses) * (1.0 / self.args.n_replicas)
 
         return loss, logits

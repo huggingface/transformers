@@ -75,7 +75,8 @@ class DataTrainingArguments:
         metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
     )
     labels: Optional[str] = field(
-        metadata={"help": "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."}
+        default=None,
+        metadata={"help": "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."},
     )
     max_seq_length: int = field(
         default=128,
