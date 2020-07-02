@@ -42,7 +42,7 @@ def encode_file(
     examples = []
     for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer(
-            [' '+ text],
+            [" " + text],
             max_length=max_length,
             padding="max_length" if pad_to_max_length else None,
             truncation=True,
