@@ -142,6 +142,7 @@ conversion utilities for the following models:
     preprocessing
     training
     model_sharing
+    tokenizer_summary
     multilingual
 
 .. toctree::
