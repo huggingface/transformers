@@ -1,7 +1,6 @@
 import logging
 import math
 import os
-import random
 import re
 import shutil
 import warnings
@@ -23,7 +22,14 @@ from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    EvalPrediction,
+    PredictionOutput,
+    TrainOutput,
+    is_wandb_available,
+    set_seed,
+)
 from .training_args import TrainingArguments
 
 
@@ -58,20 +64,6 @@ if is_wandb_available():
 
 
 logger = logging.getLogger(__name__)
-
-
-def set_seed(seed: int):
-    """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy`` and ``torch``.
-
-    Args:
-        seed (:obj:`int`): The seed to set.
-    """
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    # ^^ safe to call this function even if cuda is not available
 
 
 @contextmanager
@@ -493,6 +485,10 @@ class Trainer:
             else:
                 epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
 
+            # Reset the past mems state at the beginning of each epoch if necessary.
+            if self.args.past_index >= 0:
+                self._past = None
+
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -537,8 +533,8 @@ class Trainer:
 
                         self._log(logs)
 
-                        if self.args.evaluate_during_training:
-                            self.evaluate()
+                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                        self.evaluate()
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -569,12 +565,15 @@ class Trainer:
             if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                 train_iterator.close()
                 break
-            if self.args.tpu_metrics_debug:
+            if self.args.tpu_metrics_debug or self.args.debug:
                 # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                 xm.master_print(met.metrics_report())
 
         if self.tb_writer:
             self.tb_writer.close()
+        if self.args.past_index and hasattr(self, "_past"):
+            # Clean the state at the end of training
+            delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         return TrainOutput(self.global_step, tr_loss / self.global_step)
@@ -617,8 +616,14 @@ class Trainer:
             if isinstance(v, torch.Tensor):
                 inputs[k] = v.to(self.args.device)
 
+        if self.args.past_index >= 0 and self._past is not None:
+            inputs["mems"] = self._past
+
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
+
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -741,7 +746,7 @@ class Trainer:
 
         self._log(output.metrics)
 
-        if self.args.tpu_metrics_debug:
+        if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
@@ -802,12 +807,17 @@ class Trainer:
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
+        if self.args.past_index >= 0:
+            past = None
+
         for inputs in tqdm(dataloader, desc=description):
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
             for k, v in inputs.items():
                 if isinstance(v, torch.Tensor):
                     inputs[k] = v.to(self.args.device)
+            if self.args.past_index >= 0:
+                inputs["mems"] = past
 
             with torch.no_grad():
                 outputs = model(**inputs)
@@ -816,6 +826,8 @@ class Trainer:
                     eval_losses += [step_eval_loss.mean().item()]
                 else:
                     logits = outputs[0]
+                if self.args.past_index >= 0:
+                    past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
 
             if not prediction_loss_only:
                 if preds is None:
