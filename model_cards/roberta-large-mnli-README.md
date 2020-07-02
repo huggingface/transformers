@@ -1,7 +1,7 @@
 ---
 license: mit
 widget:
-- "I like you. [SEP] I love you"
+- text: "I like you. </s></s> I love you."
 ---
 
 
