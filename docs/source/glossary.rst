@@ -11,7 +11,7 @@ General terms
   tokens at a certain timestep.
 - MLM: masked language modeling, a pretraining task where the model sees a corrupted version of the texts, usually done
   by masking some tokens randomly, and has to predict the original text.
-- multimodal: a task taht combines texts with another kind of inputs (for instance images).
+- multimodal: a task that combines texts with another kind of inputs (for instance images).
 - NLG: natural language generation, all tasks related to generating text ( for instance talk with transformers,
   translation)
 - NLP: natural language processing, a generic way to say "deal with texts".
