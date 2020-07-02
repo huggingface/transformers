@@ -342,11 +342,16 @@ class TFXLNetModelTester:
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
-        (logits,) = model(inputs)
+        (logits, mems_1) = model(inputs)
         result = {
+            "mems_1": [mem.numpy() for mem in mems_1],
             "logits": logits.numpy(),
         }
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+        self.parent.assertListEqual(
+            list(list(mem.shape) for mem in result["mems_1"]),
+            [[self.seq_length, self.batch_size * self.num_choices, self.hidden_size]] * self.num_hidden_layers,
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

@@ -19,7 +19,6 @@
 import itertools
 import logging
 import math
-import warnings
 
 import numpy as np
 import tensorflow as tf
@@ -39,7 +38,6 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
-    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -123,6 +121,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         self.layer_id = next(TFMultiHeadAttention.NEW_ID)
         self.dim = dim
         self.n_heads = n_heads
+        self.output_attentions = config.output_attentions
         assert self.dim % self.n_heads == 0
 
         self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
@@ -135,11 +134,10 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
+    def call(self, input, mask, kv, cache, head_mask, output_attentions, training=False):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
-        input, mask, kv, cache, head_mask, output_attentions = inputs
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
         bs, qlen, dim = shape_list(input)
@@ -196,7 +194,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         context = unshape(context)  # (bs, qlen, dim)
 
         outputs = (self.out_lin(context),)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (weights,)
         return outputs
 
@@ -457,15 +455,15 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         hidden_states = ()
         attentions = ()
         for i in range(self.n_layers):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
             attn_outputs = self.attentions[i](
-                [tensor, attn_mask, None, cache, head_mask[i], output_attentions], training=training
+                tensor, attn_mask, None, cache, head_mask[i], output_attentions, training=training
             )
             attn = attn_outputs[0]
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 attentions = attentions + (attn_outputs[1],)
             attn = self.dropout(attn, training=training)
             tensor = tensor + attn
@@ -484,7 +482,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -495,9 +493,9 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (attentions,)
         return outputs  # outputs, (hidden_states), (attentions)
 
@@ -828,9 +826,6 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
 
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
-        self.logits_proj = tf.keras.layers.Dense(
-            1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
-        )
 
     @property
     def dummy_inputs(self):
@@ -839,10 +834,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {
-            "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-            "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-        }
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
@@ -899,7 +891,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
             output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
             labels = inputs[11] if len(inputs) > 11 else labels
-            assert len(inputs) <= 12, "Too many inputs."
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -928,41 +920,23 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-        flat_langs = tf.reshape(langs, (-1, seq_length)) if langs is not None else None
-        flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, inputs_embeds.shape[-2], inputs_embeds.shape[-1]))
-            if inputs_embeds is not None
-            else None
-        )
-
-        if lengths is not None:
-            warnings.warn(
-                "The `lengths` parameter cannot be used with the XLM multiple choice models. Please use the "
-                "attention mask instead.",
-                FutureWarning,
-            )
-            lengths = None
-
-        flat_inputs = [
+        transformer_outputs = self.transformer(
             flat_input_ids,
             flat_attention_mask,
-            flat_langs,
+            langs,
             flat_token_type_ids,
             flat_position_ids,
             lengths,
             cache,
             head_mask,
-            flat_inputs_embeds,
+            inputs_embeds,
             output_attentions,
             output_hidden_states,
-        ]
-
-        transformer_outputs = self.transformer(flat_inputs, training=training)
+            training=training,
+        )
         output = transformer_outputs[0]
         logits = self.sequence_summary(output)
-        logits = self.logits_proj(logits)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
         outputs = (reshaped_logits,) + transformer_outputs[1:]  # add hidden states and attention if they are here
 
         if labels is not None:
