@@ -73,6 +73,7 @@ from .modeling_bert import (
 from .modeling_camembert import (
     CamembertForMaskedLM,
     CamembertForMultipleChoice,
+    CamembertForQuestionAnswering,
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
@@ -300,6 +301,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
+        (CamembertConfig, CamembertForQuestionAnswering),
         (BartConfig, BartForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
         (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
@@ -328,7 +330,6 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
     ]
 )
-
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
