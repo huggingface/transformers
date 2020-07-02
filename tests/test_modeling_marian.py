@@ -19,8 +19,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
-
-from .utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -38,6 +37,7 @@ if is_torch_available():
         convert_opus_name_to_hf_name,
         ORG_NAME,
     )
+    from transformers.pipelines import TranslationPipeline
 
 
 class ModelManagementTests(unittest.TestCase):
@@ -129,11 +129,6 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         max_indices = logits.argmax(-1)
         self.tokenizer.batch_decode(max_indices)
 
-    def test_tokenizer_equivalence(self):
-        batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
-        expected = [38, 121, 14, 697, 38848, 0]
-        self.assertListEqual(expected, batch.input_ids[0].tolist())
-
     def test_unk_support(self):
         t = self.tokenizer
         ids = t.prepare_translation_batch(["||"]).to(torch_device).input_ids[0].tolist()
@@ -194,6 +189,7 @@ class TestMarian_RU_FR(MarianIntegrationTest):
     src_text = ["Он показал мне рукопись своей новой пьесы."]
     expected_text = ["Il m'a montré le manuscrit de sa nouvelle pièce."]
 
+    @slow
     def test_batch_generation_ru_fr(self):
         self._assert_generated_batch_equal_expected()
 
@@ -204,6 +200,7 @@ class TestMarian_MT_EN(MarianIntegrationTest):
     src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
     expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
 
+    @slow
     def test_batch_generation_mt_en(self):
         self._assert_generated_batch_equal_expected()
 
@@ -233,6 +230,12 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         self.assertIsInstance(normalized, str)
         with self.assertRaises(ValueError):
             self.tokenizer.prepare_translation_batch([""])
+
+    def test_pipeline(self):
+        device = 0 if torch_device == "cuda" else -1
+        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=device)
+        output = pipeline(self.src_text)
+        self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 
 
 @require_torch

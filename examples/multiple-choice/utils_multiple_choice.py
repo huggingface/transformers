@@ -26,6 +26,7 @@ from enum import Enum
 from typing import List, Optional
 
 import tqdm
+from filelock import FileLock
 
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
@@ -77,7 +78,6 @@ class Split(Enum):
 if is_torch_available():
     import torch
     from torch.utils.data.dataset import Dataset
-    from transformers import torch_distributed_zero_first
 
     class MultipleChoiceDataset(Dataset):
         """
@@ -95,7 +95,6 @@ if is_torch_available():
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,
             mode: Split = Split.train,
-            local_rank=-1,
         ):
             processor = processors[task]()
 
@@ -103,9 +102,11 @@ if is_torch_available():
                 data_dir,
                 "cached_{}_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length), task,),
             )
-            with torch_distributed_zero_first(local_rank):
-                # Make sure only the first process in distributed training processes the dataset,
-                # and the others will use the cache.
+
+            # Make sure only the first process in distributed training processes the dataset,
+            # and the others will use the cache.
+            lock_path = cached_features_file + ".lock"
+            with FileLock(lock_path):
 
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
@@ -120,19 +121,9 @@ if is_torch_available():
                     else:
                         examples = processor.get_train_examples(data_dir)
                     logger.info("Training examples: %s", len(examples))
-                    # TODO clean up all this to leverage built-in features of tokenizers
-                    self.features = convert_examples_to_features(
-                        examples,
-                        label_list,
-                        max_seq_length,
-                        tokenizer,
-                        pad_on_left=bool(tokenizer.padding_side == "left"),
-                        pad_token=tokenizer.pad_token_id,
-                        pad_token_segment_id=tokenizer.pad_token_type_id,
-                    )
-                    if local_rank in [-1, 0]:
-                        logger.info("Saving features into cached file %s", cached_features_file)
-                        torch.save(self.features, cached_features_file)
+                    self.features = convert_examples_to_features(examples, label_list, max_seq_length, tokenizer,)
+                    logger.info("Saving features into cached file %s", cached_features_file)
+                    torch.save(self.features, cached_features_file)
 
         def __len__(self):
             return len(self.features)
@@ -172,16 +163,8 @@ if is_tf_available():
             else:
                 examples = processor.get_train_examples(data_dir)
             logger.info("Training examples: %s", len(examples))
-            # TODO clean up all this to leverage built-in features of tokenizers
-            self.features = convert_examples_to_features(
-                examples,
-                label_list,
-                max_seq_length,
-                tokenizer,
-                pad_on_left=bool(tokenizer.padding_side == "left"),
-                pad_token=tokenizer.pad_token_id,
-                pad_token_segment_id=tokenizer.pad_token_type_id,
-            )
+
+            self.features = convert_examples_to_features(examples, label_list, max_seq_length, tokenizer,)
 
             def gen():
                 for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
@@ -506,14 +489,7 @@ class ArcProcessor(DataProcessor):
 
 
 def convert_examples_to_features(
-    examples: List[InputExample],
-    label_list: List[str],
-    max_length: int,
-    tokenizer: PreTrainedTokenizer,
-    pad_token_segment_id=0,
-    pad_on_left=False,
-    pad_token=0,
-    mask_padding_with_zero=True,
+    examples: List[InputExample], label_list: List[str], max_length: int, tokenizer: PreTrainedTokenizer,
 ) -> List[InputFeatures]:
     """
     Loads a data file into a list of `InputFeatures`
@@ -534,8 +510,14 @@ def convert_examples_to_features(
             else:
                 text_b = example.question + " " + ending
 
-            inputs = tokenizer.encode_plus(
-                text_a, text_b, add_special_tokens=True, max_length=max_length, pad_to_max_length=True,
+            inputs = tokenizer(
+                text_a,
+                text_b,
+                add_special_tokens=True,
+                max_length=max_length,
+                padding="max_length",
+                truncation=True,
+                return_overflowing_tokens=True,
             )
             if "num_truncated_tokens" in inputs and inputs["num_truncated_tokens"] > 0:
                 logger.info(

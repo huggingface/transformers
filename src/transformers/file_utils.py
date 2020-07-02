@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional, Union
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
@@ -59,6 +59,7 @@ try:
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
+
 try:
     from torch.hub import _get_torch_home
 
@@ -67,6 +68,44 @@ except ImportError:
     torch_cache_home = os.path.expanduser(
         os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
     )
+
+
+try:
+    import torch_xla.core.xla_model as xm  # noqa: F401
+
+    if _torch_available:
+        _torch_tpu_available = True  # pylint: disable=
+    else:
+        _torch_tpu_available = False
+except ImportError:
+    _torch_tpu_available = False
+
+
+try:
+    import psutil  # noqa: F401
+
+    _psutil_available = True
+
+except ImportError:
+    _psutil_available = False
+
+
+try:
+    import py3nvml  # noqa: F401
+
+    _py3nvml_available = True
+
+except ImportError:
+    _py3nvml_available = False
+
+
+try:
+    from apex import amp  # noqa: F401
+
+    _has_apex = True
+except ImportError:
+    _has_apex = False
+
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 
@@ -95,6 +134,22 @@ def is_torch_available():
 
 def is_tf_available():
     return _tf_available
+
+
+def is_torch_tpu_available():
+    return _torch_tpu_available
+
+
+def is_psutil_available():
+    return _psutil_available
+
+
+def is_py3nvml_available():
+    return _py3nvml_available
+
+
+def is_apex_available():
+    return _has_apex
 
 
 def add_start_docstrings(*docstr):
@@ -126,6 +181,263 @@ def add_start_docstrings_to_callable(*docstr):
 def add_end_docstrings(*docstr):
     def docstring_decorator(fn):
         fn.__doc__ = fn.__doc__ + "".join(docstr)
+        return fn
+
+    return docstring_decorator
+
+
+PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss, scores = outputs[:2]
+"""
+
+PT_QUESTION_ANSWERING_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
+
+        >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
+        >>> loss, start_scores, end_scores = outputs[:3]
+"""
+
+PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss, logits = outputs[:2]
+"""
+
+PT_MASKED_LM_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt")["input_ids"]
+
+        >>> outputs = model(input_ids, labels=input_ids)
+        >>> loss, prediction_scores = outputs[:2]
+"""
+
+PT_BASE_MODEL_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+"""
+
+PT_MULTIPLE_CHOICE_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> choice0 = "It is eaten with a fork and a knife."
+        >>> choice1 = "It is eaten while held in the hand."
+        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
+
+        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
+        >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, labels=labels)  # batch size is 1
+
+        >>> # the linear classifier still needs to be trained
+        >>> loss, logits = outputs[:2]
+"""
+
+PT_CAUSAL_LM_SAMPLE = r"""
+    Example::
+
+        >>> import torch
+        >>> from transformers import {tokenizer_class}, {model_class}
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs, labels=inputs["input_ids"])
+        >>> loss, logits = outputs[:2]
+"""
+
+TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import tensorflow as tf
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+        >>> input_ids = inputs["input_ids"]
+        >>> inputs["labels"] = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
+
+        >>> outputs = model(inputs)
+        >>> loss, scores = outputs[:2]
+"""
+
+TF_QUESTION_ANSWERING_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import tensorflow as tf
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> input_dict = tokenizer(question, text, return_tensors='tf')
+        >>> start_scores, end_scores = model(input_dict)
+
+        >>> all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
+        >>> answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
+"""
+
+TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import tensorflow as tf
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+        >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
+
+        >>> outputs = model(inputs)
+        >>> loss, logits = outputs[:2]
+"""
+
+TF_MASKED_LM_SAMPLE = r"""
+    Example::
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import tensorflow as tf
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+
+        >>> outputs = model(input_ids)
+        >>> prediction_scores = outputs[0]
+"""
+
+TF_BASE_MODEL_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import tensorflow as tf
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+        >>> outputs = model(inputs)
+
+        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+"""
+
+TF_MULTIPLE_CHOICE_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import tensorflow as tf
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> choice0 = "It is eaten with a fork and a knife."
+        >>> choice1 = "It is eaten while held in the hand."
+
+        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='tf', padding=True)
+        >>> inputs = {{k: tf.expand_dims(v, 0) for k, v in encoding.items()}}
+        >>> outputs = model(inputs)  # batch size is 1
+
+        >>> # the linear classifier still needs to be trained
+        >>> logits = outputs[0]
+"""
+
+TF_CAUSAL_LM_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import tensorflow as tf
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+        >>> outputs = model(inputs)
+        >>> logits = outputs[0]
+"""
+
+
+def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None):
+    def docstring_decorator(fn):
+        model_class = fn.__qualname__.split(".")[0]
+        is_tf_class = model_class[:2] == "TF"
+
+        if "SequenceClassification" in model_class:
+            code_sample = TF_SEQUENCE_CLASSIFICATION_SAMPLE if is_tf_class else PT_SEQUENCE_CLASSIFICATION_SAMPLE
+        elif "QuestionAnswering" in model_class:
+            code_sample = TF_QUESTION_ANSWERING_SAMPLE if is_tf_class else PT_QUESTION_ANSWERING_SAMPLE
+        elif "TokenClassification" in model_class:
+            code_sample = TF_TOKEN_CLASSIFICATION_SAMPLE if is_tf_class else PT_TOKEN_CLASSIFICATION_SAMPLE
+        elif "MultipleChoice" in model_class:
+            code_sample = TF_MULTIPLE_CHOICE_SAMPLE if is_tf_class else PT_MULTIPLE_CHOICE_SAMPLE
+        elif "MaskedLM" in model_class:
+            code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
+        elif "LMHead" in model_class:
+            code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
+        elif "Model" in model_class:
+            code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE
+        else:
+            raise ValueError(f"Docstring can't be built for model {model_class}")
+
+        built_doc = code_sample.format(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
+        fn.__doc__ = (fn.__doc__ or "") + "".join(docstr) + built_doc
         return fn
 
     return docstring_decorator
@@ -216,7 +528,7 @@ def cached_path(
     force_download=False,
     proxies=None,
     resume_download=False,
-    user_agent=None,
+    user_agent: Union[Dict, str, None] = None,
     extract_compressed_file=False,
     force_extract=False,
     local_files_only=False,
@@ -302,7 +614,7 @@ def cached_path(
     return output_path
 
 
-def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
+def http_get(url, temp_file, proxies=None, resume_size=0, user_agent: Union[Dict, str, None] = None):
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
     if is_torch_available():
         ua += "; torch/{}".format(torch.__version__)
@@ -342,7 +654,7 @@ def get_from_cache(
     proxies=None,
     etag_timeout=10,
     resume_download=False,
-    user_agent=None,
+    user_agent: Union[Dict, str, None] = None,
     local_files_only=False,
 ) -> Optional[str]:
     """

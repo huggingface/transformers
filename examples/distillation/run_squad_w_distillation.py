@@ -67,9 +67,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig)), ()
-)
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForQuestionAnswering, BertTokenizer),
@@ -505,7 +502,7 @@ def main():
         default=None,
         type=str,
         required=True,
-        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS),
+        help="Path to pretrained model or model identifier from huggingface.co/models",
     )
     parser.add_argument(
         "--output_dir",
@@ -812,10 +809,6 @@ def main():
 
     # Save the trained model and the tokenizer
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
-        # Create output directory if needed
-        if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
-            os.makedirs(args.output_dir)
-
         logger.info("Saving model checkpoint to %s", args.output_dir)
         # Save a trained model, configuration and tokenizer using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`

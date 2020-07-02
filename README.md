@@ -24,6 +24,7 @@
 
 🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, T5, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over thousands of pretrained models in 100+ languages and deep interoperability between PyTorch & TensorFlow 2.0.
 
+### Recent contributors
 [![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/0)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/0)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/1)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/1)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/2)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/2)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/3)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/3)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/4)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/4)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/5)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/5)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/6)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/6)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/7)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/7)
 
 ### Features
@@ -59,11 +60,11 @@ Choose the right framework for every part of a model's lifetime
 | [Quick tour: Share your models ](#Quick-tour-of-model-sharing) | Upload and share your fine-tuned models with the community |
 | [Migrating from pytorch-transformers to transformers](#Migrating-from-pytorch-transformers-to-transformers) | Migrating your code from pytorch-transformers to transformers |
 | [Migrating from pytorch-pretrained-bert to pytorch-transformers](#Migrating-from-pytorch-pretrained-bert-to-transformers) | Migrating your code from pytorch-pretrained-bert to transformers |
-| [Documentation][(v2.5.0)](https://huggingface.co/transformers/v2.5.0)[(v2.4.0/v2.4.1)](https://huggingface.co/transformers/v2.4.0)[(v2.3.0)](https://huggingface.co/transformers/v2.3.0)[(v2.2.0/v2.2.1/v2.2.2)](https://huggingface.co/transformers/v2.2.0) [(v2.1.1)](https://huggingface.co/transformers/v2.1.1) [(v2.0.0)](https://huggingface.co/transformers/v2.0.0) [(v1.2.0)](https://huggingface.co/transformers/v1.2.0) [(v1.1.0)](https://huggingface.co/transformers/v1.1.0) [(v1.0.0)](https://huggingface.co/transformers/v1.0.0) [(master)](https://huggingface.co/transformers) | Full API documentation and more |
+| [Documentation](https://huggingface.co/transformers/) | Full API documentation and more |
 
 ## Installation
 
-This repo is tested on Python 3.6+, PyTorch 1.0.0+ and TensorFlow 2.0.
+This repo is tested on Python 3.6+, PyTorch 1.0.0+ (PyTorch 1.3.1+ for examples) and TensorFlow 2.0.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
@@ -165,10 +166,11 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 18. **[DialoGPT](https://huggingface.co/transformers/model_doc/dialogpt.html)** (from Microsoft Research) released with the paper [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.org/abs/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu, Bill Dolan.
 19. **[Reformer](https://huggingface.co/transformers/model_doc/reformer.html)** (from Google Research) released with the paper [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
 20. **[MarianMT](https://huggingface.co/transformers/model_doc/marian.html)** Machine translation models trained using [OPUS](http://opus.nlpl.eu/) data by Jörg Tiedemann. The [Marian Framework](https://marian-nmt.github.io/) is being developed by the Microsoft Translator Team.
-21. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
-22. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
+21. **[Longformer](https://huggingface.co/transformers/model_doc/longformer.html)** (from AllenAI) released with the paper [Longformer: The Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy, Matthew E. Peters, Arman Cohan.
+22. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
+23. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
-These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
+These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Pearson R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
 ## Online demo
 
@@ -286,8 +288,8 @@ pytorch_model = BertForSequenceClassification.from_pretrained('./save/', from_tf
 sentence_0 = "This research was consistent with his findings."
 sentence_1 = "His findings were compatible with this research."
 sentence_2 = "His findings were not compatible with this research."
-inputs_1 = tokenizer.encode_plus(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
-inputs_2 = tokenizer.encode_plus(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
+inputs_1 = tokenizer(sentence_0, sentence_1, add_special_tokens=True, return_tensors='pt')
+inputs_2 = tokenizer(sentence_0, sentence_2, add_special_tokens=True, return_tensors='pt')
 
 pred_1 = pytorch_model(inputs_1['input_ids'], token_type_ids=inputs_1['token_type_ids'])[0].argmax().item()
 pred_2 = pytorch_model(inputs_2['input_ids'], token_type_ids=inputs_2['token_type_ids'])[0].argmax().item()
@@ -339,8 +341,8 @@ python ./examples/text-classification/run_glue.py \
     --do_eval \
     --data_dir $GLUE_DIR/$TASK_NAME \
     --max_seq_length 128 \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir /tmp/$TASK_NAME/
@@ -366,8 +368,8 @@ python ./examples/text-classification/run_glue.py \
     --data_dir=${GLUE_DIR}/STS-B  \
     --output_dir=./proc_data/sts-b-110   \
     --max_seq_length=128   \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --gradient_accumulation_steps=1 \
     --max_steps=1200  \
     --model_name=xlnet-large-cased   \
@@ -390,8 +392,8 @@ python -m torch.distributed.launch --nproc_per_node 8 ./examples/text-classifica
     --do_eval   \
     --data_dir $GLUE_DIR/MRPC/   \
     --max_seq_length 128   \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --learning_rate 2e-5   \
     --num_train_epochs 3.0  \
     --output_dir /tmp/mrpc_output/ \
@@ -427,8 +429,8 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
     --max_seq_length 384 \
     --doc_stride 128 \
     --output_dir ../models/wwm_uncased_finetuned_squad/ \
-    --per_gpu_eval_batch_size=3   \
-    --per_gpu_train_batch_size=3   \
+    --per_device_eval_batch_size=3   \
+    --per_device_train_batch_size=3   \
 ```
 
 Training with these hyper-parameters gave us the following results:
@@ -537,20 +539,21 @@ You can create `Pipeline` objects for the following down-stream tasks:
  - `translation_xx_to_yy`
 
 ```python
-from transformers import pipeline
+>>> from transformers import pipeline
 
 # Allocate a pipeline for sentiment-analysis
-nlp = pipeline('sentiment-analysis')
-nlp('We are very happy to include pipeline into the transformers repository.')
->>> {'label': 'POSITIVE', 'score': 0.99893874}
+>>> nlp = pipeline('sentiment-analysis')
+>>> nlp('We are very happy to include pipeline into the transformers repository.')
+[{'label': 'POSITIVE', 'score': 0.9978193640708923}]
 
 # Allocate a pipeline for question-answering
-nlp = pipeline('question-answering')
-nlp({
-    'question': 'What is the name of the repository ?',
-    'context': 'Pipeline have been included in the huggingface/transformers repository'
-})
->>> {'score': 0.28756016668193496, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+>>> nlp = pipeline('question-answering')
+>>> nlp({
+...     'question': 'What is the name of the repository ?',
+...     'context': 'Pipeline have been included in the huggingface/transformers repository'
+... })
+{'score': 0.5135612454720828, 'start': 35, 'end': 59, 'answer': 'huggingface/transformers'}
+
 ```
 
 ## Migrating from pytorch-transformers to transformers

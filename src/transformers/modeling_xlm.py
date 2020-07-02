@@ -28,24 +28,33 @@ from torch.nn import functional as F
 
 from .activations import gelu
 from .configuration_xlm import XLMConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_linear_layer
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_utils import (
+    PreTrainedModel,
+    SequenceSummary,
+    SQuADHead,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 
 
 logger = logging.getLogger(__name__)
 
-XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlm-mlm-en-2048": "https://cdn.huggingface.co/xlm-mlm-en-2048-pytorch_model.bin",
-    "xlm-mlm-ende-1024": "https://cdn.huggingface.co/xlm-mlm-ende-1024-pytorch_model.bin",
-    "xlm-mlm-enfr-1024": "https://cdn.huggingface.co/xlm-mlm-enfr-1024-pytorch_model.bin",
-    "xlm-mlm-enro-1024": "https://cdn.huggingface.co/xlm-mlm-enro-1024-pytorch_model.bin",
-    "xlm-mlm-tlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-tlm-xnli15-1024-pytorch_model.bin",
-    "xlm-mlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-xnli15-1024-pytorch_model.bin",
-    "xlm-clm-enfr-1024": "https://cdn.huggingface.co/xlm-clm-enfr-1024-pytorch_model.bin",
-    "xlm-clm-ende-1024": "https://cdn.huggingface.co/xlm-clm-ende-1024-pytorch_model.bin",
-    "xlm-mlm-17-1280": "https://cdn.huggingface.co/xlm-mlm-17-1280-pytorch_model.bin",
-    "xlm-mlm-100-1280": "https://cdn.huggingface.co/xlm-mlm-100-1280-pytorch_model.bin",
-}
+_TOKENIZER_FOR_DOC = "XLMTokenizer"
+
+XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlm-mlm-en-2048",
+    "xlm-mlm-ende-1024",
+    "xlm-mlm-enfr-1024",
+    "xlm-mlm-enro-1024",
+    "xlm-mlm-tlm-xnli15-1024",
+    "xlm-mlm-xnli15-1024",
+    "xlm-clm-enfr-1024",
+    "xlm-clm-ende-1024",
+    "xlm-mlm-17-1280",
+    "xlm-mlm-100-1280",
+    # See all XLM models at https://huggingface.co/models?filter=xlm
+]
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -88,7 +97,6 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, n_heads, dim, config):
         super().__init__()
         self.layer_id = next(MultiHeadAttention.NEW_ID)
-        self.output_attentions = config.output_attentions
         self.dim = dim
         self.n_heads = n_heads
         self.dropout = config.attention_dropout
@@ -104,13 +112,7 @@ class MultiHeadAttention(nn.Module):
         attention_head_size = self.dim // self.n_heads
         if len(heads) == 0:
             return
-        mask = torch.ones(self.n_heads, attention_head_size)
-        heads = set(heads) - self.pruned_heads
-        for head in heads:
-            head -= sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
+        heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, attention_head_size, self.pruned_heads)
         # Prune linear layers
         self.q_lin = prune_linear_layer(self.q_lin, index)
         self.k_lin = prune_linear_layer(self.k_lin, index)
@@ -121,7 +123,7 @@ class MultiHeadAttention(nn.Module):
         self.dim = attention_head_size * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, input, mask, kv=None, cache=None, head_mask=None):
+    def forward(self, input, mask, kv=None, cache=None, head_mask=None, output_attentions=False):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
@@ -180,7 +182,7 @@ class MultiHeadAttention(nn.Module):
         context = unshape(context)  # (bs, qlen, dim)
 
         outputs = (self.out_lin(context),)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (weights,)
         return outputs
 
@@ -207,7 +209,6 @@ class XLMPreTrainedModel(PreTrainedModel):
     """
 
     config_class = XLMConfig
-    pretrained_model_archive_map = XLM_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = None
     base_model_prefix = "transformer"
 
@@ -258,7 +259,7 @@ XLM_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -299,10 +300,12 @@ XLM_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -313,8 +316,6 @@ XLM_INPUTS_DOCSTRING = r"""
 class XLMModel(XLMPreTrainedModel):
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super().__init__(config)
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
         # encoder / decoder, output layer
         self.is_encoder = config.is_encoder
@@ -396,6 +397,7 @@ class XLMModel(XLMPreTrainedModel):
             self.attentions[layer].prune_heads(heads)
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -407,36 +409,31 @@ class XLMModel(XLMPreTrainedModel):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMModel
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         if input_ids is not None:
             bs, slen = input_ids.size()
         else:
@@ -508,13 +505,15 @@ class XLMModel(XLMPreTrainedModel):
         hidden_states = ()
         attentions = ()
         for i in range(self.n_layers):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
-            attn_outputs = self.attentions[i](tensor, attn_mask, cache=cache, head_mask=head_mask[i])
+            attn_outputs = self.attentions[i](
+                tensor, attn_mask, cache=cache, head_mask=head_mask[i], output_attentions=output_attentions,
+            )
             attn = attn_outputs[0]
-            if self.output_attentions:
+            if output_attentions:
                 attentions = attentions + (attn_outputs[1],)
             attn = F.dropout(attn, p=self.dropout, training=self.training)
             tensor = tensor + attn
@@ -533,7 +532,7 @@ class XLMModel(XLMPreTrainedModel):
             tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # Add last hidden state
-        if self.output_hidden_states:
+        if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -544,9 +543,9 @@ class XLMModel(XLMPreTrainedModel):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attentions,)
         return outputs  # outputs, (hidden_states), (attentions)
 
@@ -624,6 +623,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         return {"input_ids": input_ids, "langs": langs}
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -636,11 +636,13 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
+            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
@@ -651,29 +653,17 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             Language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMWithLMHeadModel
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -685,6 +675,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         output = transformer_outputs[0]
@@ -710,6 +702,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -722,6 +715,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -736,30 +731,17 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMForSequenceClassification
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -771,6 +753,8 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         output = transformer_outputs[0]
@@ -806,6 +790,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -819,6 +804,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -838,31 +825,17 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMForQuestionAnsweringSimple
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForQuestionAnsweringSimple.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss = outputs[0]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -874,6 +847,8 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = transformer_outputs[0]
@@ -940,6 +915,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         is_impossible=None,
         cls_index=None,
         p_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -972,31 +949,32 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             Indices for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
         cls_logits (``torch.FloatTensor`` of shape ``(batch_size,)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Log probabilities for the ``is_impossible`` label of the answers.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-    Examples::
+    Example::
 
-        from transformers import XLMTokenizer, XLMForQuestionAnswering
-        import torch
+        >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
+        >>> import torch
 
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss = outputs[0]
+        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+        >>> model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
 
+        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
+
+        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs[0]
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -1008,6 +986,8 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         output = transformer_outputs[0]
@@ -1043,6 +1023,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def forward(
         self,
         input_ids=None,
@@ -1050,8 +1031,12 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         langs=None,
         token_type_ids=None,
         position_ids=None,
+        lengths=None,
+        cache=None,
         head_mask=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1064,30 +1049,17 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             Classification loss.
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLMTokenizer, XLMForTokenClassification
-        import torch
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-100-1280')
-        model = XLMForTokenClassification.from_pretrained('xlm-mlm-100-1280')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
         outputs = self.transformer(
             input_ids,
@@ -1095,7 +1067,11 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             langs=langs,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
             head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]

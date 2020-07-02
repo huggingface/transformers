@@ -23,11 +23,13 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
-    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
-    "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
-    "bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
-    "mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
+    "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",
+    "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
+    "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
+    "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
+    "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
+    "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
+    "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
 }
 
 
@@ -36,11 +38,11 @@ class BartConfig(PretrainedConfig):
         Configuration class for Bart. Parameters are renamed from the fairseq implementation
     """
     model_type = "bart"
-    pretrained_config_archive_map = BART_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
         self,
         activation_dropout=0.0,
+        extra_pos_embeddings=2,
         activation_function="gelu",
         vocab_size=50265,
         d_model=1024,
@@ -72,9 +74,13 @@ class BartConfig(PretrainedConfig):
     ):
         r"""
             :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
-            Examples:
-                config = BartConfig.from_pretrained('bart-large')
-                model = BartModel(config)
+
+            Examples::
+
+                >>> from transformers import BartConfig, BartModel
+
+                >>> config = BartConfig.from_pretrained('facebook/bart-large')
+                >>> model = BartModel(config)
         """
         if "hidden_size" in common_kwargs:
             raise ValueError("hidden size is called d_model")
@@ -118,6 +124,9 @@ class BartConfig(PretrainedConfig):
         # Classifier stuff
         self.classif_dropout = classifier_dropout
 
+        # pos embedding offset
+        self.extra_pos_embeddings = self.pad_token_id + 1
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -133,3 +142,7 @@ class BartConfig(PretrainedConfig):
         if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
+
+
+class MBartConfig(BartConfig):
+    model_type = "mbart"

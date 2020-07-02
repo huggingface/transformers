@@ -10,3 +10,7 @@
 .highlight .kn, .highlight .nv, .highlight .s2, .highlight .ow {
     color: #6670FF;
 }
+
+.highlight .gp {
+    color: #FB8D68;
+}

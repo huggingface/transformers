@@ -97,7 +97,7 @@ class ReformerConfig(PretrainedConfig):
                 Number of following neighbouring chunks to attend to in LocalSelfAttention layer in addition to itself.
             local_attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
                 The dropout ratio for the attention probabilities in LocalSelfAttention.
-            lsh_chunk_length (:obj:`int`, optional, defaults to 64):
+            lsh_attn_chunk_length (:obj:`int`, optional, defaults to 64):
                 Length of chunk which attends to itself in LSHSelfAttention. Chunking reduces memory complexity from sequence length x sequence length (self attention) to chunk length x chunk length x sequence length / chunk length (chunked self attention).
             lsh_num_chunks_before (:obj:`int`, optional, defaults to 1):
                 Number of previous neighbouring chunks to attend to in LSHSelfAttention layer to itself.
@@ -110,10 +110,10 @@ class ReformerConfig(PretrainedConfig):
                 Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
             num_attention_heads (:obj:`int`, optional, defaults to 12):
                 Number of attention heads for each attention layer in the Transformer encoder.
-            num_buckets (:obj:`int` or :obj:`list(int)`, optional, defaults to `64`):
+            num_buckets (:obj:`int` or :obj:`list(int)`, optional, defaults to `None`):
                 Number of buckets, the key query vectors can be "hashed into" using the locality sensitive hashing scheme. Each query key vector is hashed into a hash in `1, ..., num_buckets`.
                 The number of buckets can also be factorized into a list for improved memory complexity. In this case, each query key vector is hashed into a hash in `1-1, 1-2, ..., num_buckets[0]-1, ..., num_buckets[0]-num_buckets[1]` if `num_buckets` is factorized into two factors.
-                The number of buckets (or the product the factors) should approximately equal sequence length / lsh_chunk_length.
+                The number of buckets (or the product the factors) should approximately equal sequence length / lsh_chunk_length. If `num_buckets` is set to `None`, a good value for `num_buckets` is calculated on the fly.
             num_hashes (:obj:`int`, optional, defaults to 1):
                 Number of hashing rounds (e.g. number of random rotations) in Local Sensitive Hashing scheme.
                 The higher `num_hashes`, the more accurate the `LSHSelfAttention` becomes, but also the more memory and time intensive the hashing becomes.
@@ -125,22 +125,17 @@ class ReformerConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import ReformerModel, ReformerConfig
+            >>> from transformers import ReformerModel, ReformerConfig
 
-            # Initializing a Reformer configuration
-            configuration = ReformerConfig()
+            >>> # Initializing a Reformer configuration
+            >>> configuration = ReformerConfig()
 
-            # Initializing a Reformer model
-            model = ReformerModel(configuration)
+            >>> # Initializing a Reformer model
+            >>> model = ReformerModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
-    pretrained_config_archive_map = REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "reformer"
 
     def __init__(
@@ -172,7 +167,7 @@ class ReformerConfig(PretrainedConfig):
         lsh_num_chunks_after=0,
         max_position_embeddings=4096,
         num_attention_heads=2,
-        num_buckets=32,
+        num_buckets=None,
         num_hashes=1,
         pad_token_id=0,
         vocab_size=320,

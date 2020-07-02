@@ -131,9 +131,9 @@ def main():
         level=logging.INFO,
     )
     logger.info(
-        "n_gpu: %s, distributed training: %s, 16-bits training: %s",
-        training_args.n_gpu,
-        bool(training_args.n_gpu > 1),
+        "n_replicas: %s, distributed training: %s, 16-bits training: %s",
+        training_args.n_replicas,
+        bool(training_args.n_replicas > 1),
         training_args.fp16,
     )
     logger.info("Training/evaluation parameters %s", training_args)

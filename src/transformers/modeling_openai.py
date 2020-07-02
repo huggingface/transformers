@@ -20,6 +20,7 @@ import json
 import logging
 import math
 import os
+import warnings
 
 import torch
 import torch.nn as nn
@@ -27,13 +28,24 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import gelu_new, swish
 from .configuration_openai import OpenAIGPTConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_utils import (
+    Conv1D,
+    PreTrainedModel,
+    SequenceSummary,
+    find_pruneable_heads_and_indices,
+    prune_conv1d_layer,
+)
 
 
 logger = logging.getLogger(__name__)
 
-OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://cdn.huggingface.co/openai-gpt-pytorch_model.bin"}
+_TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"
+
+OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "openai-gpt",
+    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
+]
 
 
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
@@ -127,8 +139,6 @@ class Attention(nn.Module):
         self.split_size = n_state
         self.scale = scale
 
-        self.output_attentions = config.output_attentions
-
         self.c_attn = Conv1D(n_state * 3, nx)
         self.c_proj = Conv1D(n_state, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
@@ -138,13 +148,9 @@ class Attention(nn.Module):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        mask = torch.ones(self.n_head, self.split_size // self.n_head)
-        heads = set(heads) - self.pruned_heads
-        for head in heads:
-            head -= sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_head, self.split_size // self.n_head, self.pruned_heads
+        )
         index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
         # Prune conv1d layers
         self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
@@ -154,7 +160,7 @@ class Attention(nn.Module):
         self.n_head = self.n_head - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, q, k, v, attention_mask=None, head_mask=None):
+    def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
@@ -175,7 +181,7 @@ class Attention(nn.Module):
             w = w * head_mask
 
         outputs = [torch.matmul(w, v)]
-        if self.output_attentions:
+        if output_attentions:
             outputs.append(w)
         return outputs
 
@@ -192,14 +198,14 @@ class Attention(nn.Module):
         else:
             return x.permute(0, 2, 1, 3)
 
-    def forward(self, x, attention_mask=None, head_mask=None):
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
+        attn_outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -234,8 +240,10 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
-    def forward(self, x, attention_mask=None, head_mask=None):
-        attn_outputs = self.attn(x, attention_mask=attention_mask, head_mask=head_mask)
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+        attn_outputs = self.attn(
+            x, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions,
+        )
         a = attn_outputs[0]
 
         n = self.ln_1(x + a)
@@ -252,7 +260,6 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     """
 
     config_class = OpenAIGPTConfig
-    pretrained_model_archive_map = OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
 
@@ -289,7 +296,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.OpenAIGPTTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -313,10 +320,12 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -327,8 +336,6 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
 class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
         self.tokens_embed = nn.Embedding(config.vocab_size, config.n_embd)
         self.positions_embed = nn.Embedding(config.n_positions, config.n_embd)
@@ -351,6 +358,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             self.h[layer].attn.prune_heads(heads)
 
     @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="openai-gpt")
     def forward(
         self,
         input_ids=None,
@@ -359,36 +367,31 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import OpenAIGPTTokenizer, OpenAIGPTModel
-        import torch
-
-        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -441,22 +444,22 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         all_attentions = ()
         all_hidden_states = ()
         for i, block in enumerate(self.h):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(hidden_states, attention_mask, head_mask[i])
+            outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions=output_attentions)
             hidden_states = outputs[0]
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions = all_attentions + (outputs[1],)
 
         # Add last layer
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
         outputs = (hidden_states.view(*output_shape),)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last hidden state, (all hidden states), (all attentions)
 
@@ -478,6 +481,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         return self.lm_head
 
     @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="openai-gpt")
     def forward(
         self,
         input_ids=None,
@@ -487,11 +491,13 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
+            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
@@ -506,29 +512,17 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import OpenAIGPTTokenizer, OpenAIGPTLMHeadModel
-        import torch
-
-        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
-
     """
         transformer_outputs = self.transformer(
             input_ids,
@@ -537,6 +531,8 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
@@ -586,16 +582,19 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         mc_token_ids=None,
-        lm_labels=None,
+        labels=None,
         mc_labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        **kwargs
     ):
         r"""
         mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
             Index of the classification token in each input sequence.
-            Selected in the range ``[0, input_ids.size(-1) - 1[``.
-        lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
+            Selected in the range ``[0, input_ids.size(-1) - 1]``.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
             Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
+            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-1, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
@@ -603,12 +602,14 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
-        lm_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``lm_labels`` is provided):
+        lm_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided):
             Language modeling loss.
-        mc_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`multiple_choice_labels` is provided):
+        mc_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`mc_labels` is provided):
             Multiple choice classification loss.
         lm_prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -618,12 +619,12 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -648,6 +649,14 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
     """
+        if "lm_labels" in kwargs:
+            warnings.warn(
+                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning,
+            )
+            labels = kwargs.pop("lm_labels")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
         transformer_outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
@@ -655,6 +664,8 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         hidden_states = transformer_outputs[0]
 
@@ -666,9 +677,9 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
             outputs = (loss,) + outputs
-        if lm_labels is not None:
+        if labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = lm_labels[..., 1:].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             outputs = (loss,) + outputs

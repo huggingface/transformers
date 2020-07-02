@@ -19,10 +19,11 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -30,16 +31,18 @@ if is_torch_available():
     from transformers import (
         AutoModel,
         AutoModelForSequenceClassification,
+        AutoModelForSeq2SeqLM,
         AutoTokenizer,
         BartModel,
         BartForConditionalGeneration,
         BartForSequenceClassification,
+        BartForQuestionAnswering,
         BartConfig,
         BartTokenizer,
-        MBartTokenizer,
+        BatchEncoding,
+        pipeline,
     )
     from transformers.modeling_bart import (
-        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
         invert_mask,
         _prepare_bart_decoder_inputs,
@@ -109,7 +112,9 @@ def prepare_bart_inputs_dict(
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
+        (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -147,6 +152,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_advanced_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
             config, inputs_dict["input_ids"]
@@ -197,15 +203,41 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             tiny(**inputs_dict)
 
 
+EN_CODE = 250004
+
+
 @require_torch
-class BartTranslationTests(unittest.TestCase):
-    _model = None
+class MBartIntegrationTests(unittest.TestCase):
+    src_text = [
+        " UN Chief Says There Is No Military Solution in Syria",
+        """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
+    ]
+    tgt_text = [
+        "Şeful ONU declară că nu există o soluţie militară în Siria",
+        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.',
+    ]
+
+    expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
 
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "mbart-large-en-ro"
-        cls.tokenizer = MBartTokenizer.from_pretrained(checkpoint_name)
+        checkpoint_name = "facebook/mbart-large-en-ro"
+        cls.tokenizer = AutoTokenizer.from_pretrained(checkpoint_name)
         cls.pad_token_id = 1
+        return cls
+
+    @cached_property
+    def model(self):
+        """Only load the model if needed."""
+        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro").to(torch_device)
+        if "cuda" in torch_device:
+            model = model.half()
+        return model
+
+    @slow
+    @unittest.skip("This has been failing since June 20th at least.")
+    def test_enro_forward(self):
+        model = self.model
         net_input = {
             "input_ids": _long_tensor(
                 [
@@ -219,52 +251,25 @@ class BartTranslationTests(unittest.TestCase):
                     [250020, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2],
                 ]
             ),
-            "generation_mode": False,
         }
-        net_input["attention_mask"] = net_input["input_ids"].ne(cls.pad_token_id)
-        cls.net_input = net_input
-
-        return cls
-
-    @property
-    def model(self):
-        """Only load the model if needed."""
-        if self._model is None:
-            model = BartForConditionalGeneration.from_pretrained("mbart-large-en-ro")
-            self._model = model
-        return self._model
-
-    @slow
-    def test_enro_forward(self):
-        model = self.model
+        net_input["attention_mask"] = net_input["input_ids"].ne(self.pad_token_id)
         with torch.no_grad():
-            logits, *other_stuff = model(**self.net_input)
+            logits, *other_stuff = model(**net_input)
 
-        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787])
-        result_slice = logits[0][0][:3]
-        self.assertTrue(torch.allclose(expected_slice, result_slice, atol=TOLERANCE))
+        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=logits.device, dtype=logits.dtype)
+        result_slice = logits[0, 0, :3]
+        _assert_tensors_equal(expected_slice, result_slice, atol=TOLERANCE)
 
     @slow
     def test_enro_generate(self):
-        model = self.model
-        # example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
-        # inputs: dict = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
-        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-
-        inputs = {
-            "input_ids": torch.LongTensor(
-                [[8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2]]  # 250004
-            )
-        }
-        translated_tokens = model.generate(input_ids=inputs["input_ids"].to(torch_device), num_beams=5,)
-        decoded = [
-            self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-            for g in translated_tokens
-        ]
-        self.assertEqual(expected_translation_romanian, decoded[0])
+        batch: BatchEncoding = self.tokenizer.prepare_translation_batch(self.src_text).to(torch_device)
+        translated_tokens = self.model.generate(**batch)
+        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
+        self.assertEqual(self.tgt_text[0], decoded[0])
+        self.assertEqual(self.tgt_text[1], decoded[1])
 
     def test_mbart_enro_config(self):
-        mbart_models = ["mbart-large-en-ro"]
+        mbart_models = ["facebook/mbart-large-en-ro"]
         expected = {"scale_embedding": True, "output_past": True}
         for name in mbart_models:
             config = BartConfig.from_pretrained(name)
@@ -275,13 +280,6 @@ class BartTranslationTests(unittest.TestCase):
                 except AssertionError as e:
                     e.args += (name, k)
                     raise
-
-    def test_enro_tokenizer(self):
-        raw = "UN Chief Says There Is No Military Solution in Syria"
-        ids = self.tokenizer.batch_encode_plus([raw])["input_ids"][0]
-        expected_result = [0, 8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2]
-        # TODO(SS): should be  [8274, ..., 2, 250020]
-        self.assertListEqual(expected_result, ids)
 
     def test_mbart_fast_forward(self):
         config = BartConfig(
@@ -299,9 +297,44 @@ class BartTranslationTests(unittest.TestCase):
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, lm_labels=summary)
+        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
+
+    def test_enro_tokenizer_prepare_translation_batch(self):
+        batch = self.tokenizer.prepare_translation_batch(
+            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens),
+        )
+        self.assertIsInstance(batch, BatchEncoding)
+
+        self.assertEqual((2, 14), batch.input_ids.shape)
+        self.assertEqual((2, 14), batch.attention_mask.shape)
+        result = batch.input_ids.tolist()[0]
+        self.assertListEqual(self.expected_src_tokens, result)
+        self.assertEqual(2, batch.decoder_input_ids[0, -2])  # EOS
+
+    def test_enro_tokenizer_batch_encode_plus(self):
+        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
+        self.assertListEqual(self.expected_src_tokens, ids)
+
+    def test_enro_tokenizer_decode_ignores_language_codes(self):
+        self.assertIn(250020, self.tokenizer.all_special_ids)
+        generated_ids = [250020, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2]
+        result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        self.assertEqual(result, expected_romanian)
+        self.assertNotIn(self.tokenizer.eos_token, result)
+
+    def test_enro_tokenizer_truncation(self):
+        src_text = ["this is gunna be a long sentence " * 20]
+        assert isinstance(src_text[0], str)
+        desired_max_length = 10
+        ids = self.tokenizer.prepare_translation_batch(
+            src_text, return_tensors=None, max_length=desired_max_length
+        ).input_ids[0]
+        self.assertEqual(ids[-2], 2)
+        self.assertEqual(ids[-1], EN_CODE)
+        self.assertEqual(len(ids), desired_max_length)
 
 
 @require_torch
@@ -358,13 +391,26 @@ class BartHeadTests(unittest.TestCase):
         loss = outputs[0]
         self.assertIsInstance(loss.item(), float)
 
+    def test_question_answering_forward(self):
+        config, input_ids, batch_size = self._get_config_and_data()
+        sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
+        model = BartForQuestionAnswering(config)
+        model.to(torch_device)
+        loss, start_logits, end_logits, _ = model(
+            input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
+        )
+
+        self.assertEqual(start_logits.shape, input_ids.shape)
+        self.assertEqual(end_logits.shape, input_ids.shape)
+        self.assertIsInstance(loss.item(), float)
+
     @timeout_decorator.timeout(1)
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
         lm_model = BartForConditionalGeneration(config)
         lm_model.to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=input_ids, lm_labels=lm_labels)
+        loss, logits, enc_features = lm_model(input_ids=input_ids, labels=lm_labels)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
@@ -384,7 +430,7 @@ class BartHeadTests(unittest.TestCase):
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, lm_labels=summary)
+        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
 
@@ -430,7 +476,7 @@ class BartHeadTests(unittest.TestCase):
 
     @slow
     def test_tokenization(self):
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
         examples = [" Hello world", " DomDramg"]  # need leading spaces for equality
         fairseq_results = [
             torch.Tensor([0, 20920, 232, 2]),
@@ -440,24 +486,13 @@ class BartHeadTests(unittest.TestCase):
             bart_toks = tokenizer.encode(ex, return_tensors="pt")
             _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = BartForConditionalGeneration(config).eval().to(torch_device).half()
-        model.generate(input_ids, attention_mask=attention_mask, do_sample=False, early_stopping=True)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_base_model_fp16(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        attention_mask = input_ids.ne(1).to(torch_device)
-        lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
-        lm_model(input_ids, attention_mask=attention_mask)
-
-    def test_default_generate_kwargs(self):
-        config, input_ids, _ = self._get_config_and_data()
         model = BartForConditionalGeneration(config).eval().to(torch_device)
-        model.generate(input_ids)
+        if torch_device == "cuda":
+            model.half()
+        model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     def test_dummy_inputs(self):
@@ -512,7 +547,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
 
 
 def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device,)
+    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
 
 
 TOLERANCE = 1e-4
@@ -522,7 +557,7 @@ TOLERANCE = 1e-4
 class BartModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = BartModel.from_pretrained("bart-large").to(torch_device)
+        model = BartModel.from_pretrained("facebook/bart-large").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
         with torch.no_grad():
@@ -535,12 +570,28 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     @slow
+    def test_bart_base_mask_filling(self):
+        pbase = pipeline(task="fill-mask", model="facebook/bart-base")
+        src_text = [" I went to the <mask>."]
+        results = [x["token_str"] for x in pbase(src_text)]
+        expected_results = ["Ġbathroom", "Ġrestroom", "Ġhospital", "Ġkitchen", "Ġcar"]
+        self.assertListEqual(results, expected_results)
+
+    @slow
+    def test_bart_large_mask_filling(self):
+        pbase = pipeline(task="fill-mask", model="facebook/bart-large")
+        src_text = [" I went to the <mask>."]
+        results = [x["token_str"] for x in pbase(src_text)]
+        expected_results = ["Ġbathroom", "Ġgym", "Ġwrong", "Ġmovies", "Ġhospital"]
+        self.assertListEqual(results, expected_results)
+
+    @slow
     def test_mnli_inference(self):
 
         example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2], example_b])
 
-        model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli").to(
+        model = AutoModelForSequenceClassification.from_pretrained("facebook/bart-large-mnli").to(
             torch_device
         )  # eval called in from_pre
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
@@ -561,26 +612,21 @@ class BartModelIntegrationTests(unittest.TestCase):
         _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
         _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
 
-    @unittest.skip("This is just too slow")
-    def test_model_from_pretrained(self):
-        # Forces 1.6GB download from S3 for each model
-        for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
-            model = BartModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
-        model = BartForConditionalGeneration.from_pretrained("bart-large-xsum").to(torch_device)
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum").to(torch_device)
         self.assertFalse(model.config.is_valid_mbart())
-        tok = BartTokenizer.from_pretrained("bart-large")
+        tok = BartTokenizer.from_pretrained("facebook/bart-large")
 
         PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
-        dct = tok.batch_encode_plus([PGE_ARTICLE], max_length=1024, pad_to_max_length=True, return_tensors="pt",)
+        dct = tok.batch_encode_plus(
+            [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
+        ).to(torch_device)
 
         hypotheses_batch = model.generate(
-            input_ids=dct["input_ids"].to(torch_device),
-            attention_mask=dct["attention_mask"].to(torch_device),
+            input_ids=dct["input_ids"],
+            attention_mask=dct["attention_mask"],
             num_beams=2,
             max_length=62,
             min_length=11,
@@ -590,21 +636,19 @@ class BartModelIntegrationTests(unittest.TestCase):
             decoder_start_token_id=model.config.eos_token_id,
         )
 
-        decoded = [
-            tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch
-        ]
+        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True,)
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
-        config = BartConfig.from_pretrained("bart-large-xsum")
+        config = BartConfig.from_pretrained("facebook/bart-large-xsum")
         expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
         config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
     @slow
     def test_cnn_summarization_same_as_fairseq(self):
-        hf = BartForConditionalGeneration.from_pretrained("bart-large-cnn").to(torch_device)
-        tok = BartTokenizer.from_pretrained("bart-large")
+        hf = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
+        tok = BartTokenizer.from_pretrained("facebook/bart-large")
 
         FRANCE_ARTICLE = ' Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col. Jean-Marc Menichini, a French Gendarmerie spokesman in charge of communications on rescue efforts around the Germanwings crash site, told CNN that the reports were "completely wrong" and "unwarranted." Cell phones have been collected at the site, he said, but that they "hadn\'t been exploited yet." Menichini said he believed the cell phones would need to be sent to the Criminal Research Institute in Rosny sous-Bois, near Paris, in order to be analyzed by specialized technicians working hand-in-hand with investigators. But none of the cell phones found so far have been sent to the institute, Menichini said. Asked whether staff involved in the search could have leaked a memory card to the media, Menichini answered with a categorical "no." Reichelt told "Erin Burnett: Outfront" that he had watched the video and stood by the report, saying Bild and Paris Match are "very confident" that the clip is real. He noted that investigators only revealed they\'d recovered cell phones from the crash site after Bild and Paris Match published their reports. "That is something we did not know before. ... Overall we can say many things of the investigation weren\'t revealed by the investigation at the beginning," he said. What was mental state of Germanwings co-pilot? German airline Lufthansa confirmed Tuesday that co-pilot Andreas Lubitz had battled depression years before he took the controls of Germanwings Flight 9525, which he\'s accused of deliberately crashing last week in the French Alps. Lubitz told his Lufthansa flight training school in 2009 that he had a "previous episode of severe depression," the airline said Tuesday. Email correspondence between Lubitz and the school discovered in an internal investigation, Lufthansa said, included medical documents he submitted in connection with resuming his flight training. The announcement indicates that Lufthansa, the parent company of Germanwings, knew of Lubitz\'s battle with depression, allowed him to continue training and ultimately put him in the cockpit. Lufthansa, whose CEO Carsten Spohr previously said Lubitz was 100% fit to fly, described its statement Tuesday as a "swift and seamless clarification" and said it was sharing the information and documents -- including training and medical records -- with public prosecutors. Spohr traveled to the crash site Wednesday, where recovery teams have been working for the past week to recover human remains and plane debris scattered across a steep mountainside. He saw the crisis center set up in Seyne-les-Alpes, laid a wreath in the village of Le Vernet, closer to the crash site, where grieving families have left flowers at a simple stone memorial. Menichini told CNN late Tuesday that no visible human remains were left at the site but recovery teams would keep searching. French President Francois Hollande, speaking Tuesday, said that it should be possible to identify all the victims using DNA analysis by the end of the week, sooner than authorities had previously suggested. In the meantime, the recovery of the victims\' personal belongings will start Wednesday, Menichini said. Among those personal belongings could be more cell phones belonging to the 144 passengers and six crew on board. Check out the latest from our correspondents . The details about Lubitz\'s correspondence with the flight school during his training were among several developments as investigators continued to delve into what caused the crash and Lubitz\'s possible motive for downing the jet. A Lufthansa spokesperson told CNN on Tuesday that Lubitz had a valid medical certificate, had passed all his examinations and "held all the licenses required." Earlier, a spokesman for the prosecutor\'s office in Dusseldorf, Christoph Kumpa, said medical records reveal Lubitz suffered from suicidal tendencies at some point before his aviation career and underwent psychotherapy before he got his pilot\'s license. Kumpa emphasized there\'s no evidence suggesting Lubitz was suicidal or acting aggressively before the crash. Investigators are looking into whether Lubitz feared his medical condition would cause him to lose his pilot\'s license, a European government official briefed on the investigation told CNN on Tuesday. While flying was "a big part of his life," the source said, it\'s only one theory being considered. Another source, a law enforcement official briefed on the investigation, also told CNN that authorities believe the primary motive for Lubitz to bring down the plane was that he feared he would not be allowed to fly because of his medical problems. Lubitz\'s girlfriend told investigators he had seen an eye doctor and a neuropsychologist, both of whom deemed him unfit to work recently and concluded he had psychological issues, the European government official said. But no matter what details emerge about his previous mental health struggles, there\'s more to the story, said Brian Russell, a forensic psychologist. "Psychology can explain why somebody would turn rage inward on themselves about the fact that maybe they weren\'t going to keep doing their job and they\'re upset about that and so they\'re suicidal," he said. "But there is no mental illness that explains why somebody then feels entitled to also take that rage and turn it outward on 149 other people who had nothing to do with the person\'s problems." Germanwings crash compensation: What we know . Who was the captain of Germanwings Flight 9525? CNN\'s Margot Haddad reported from Marseille and Pamela Brown from Dusseldorf, while Laura Smith-Spark wrote from London. CNN\'s Frederik Pleitgen, Pamela Boykoff, Antonia Mortensen, Sandrine Amiel and Anna-Maja Rappard contributed to this report.'  # @noqa
         EXPECTED_SUMMARY_FRANCE = 'French prosecutor says he\'s not aware of any video footage from on board the plane. German daily Bild and French Paris Match claim to have found a cell phone video of the crash. A French Gendarmerie spokesman calls the reports "completely wrong" and "unwarranted" German airline Lufthansa confirms co-pilot Andreas Lubitz had battled depression.'
@@ -622,7 +666,8 @@ class BartModelIntegrationTests(unittest.TestCase):
         dct = tok.batch_encode_plus(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
 

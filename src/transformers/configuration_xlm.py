@@ -142,23 +142,18 @@ class XLMConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import XLMConfig, XLMModel
+            >>> from transformers import XLMConfig, XLMModel
 
-            # Initializing a XLM configuration
-            configuration = XLMConfig()
+            >>> # Initializing a XLM configuration
+            >>> configuration = XLMConfig()
 
-            # Initializing a model from the configuration
-            model = XLMModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = XLMModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
-    pretrained_config_archive_map = XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "xlm"
 
     def __init__(

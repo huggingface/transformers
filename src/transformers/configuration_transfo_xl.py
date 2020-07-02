@@ -30,7 +30,7 @@ TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TransfoXLConfig(PretrainedConfig):
     """
-        This is the configuration class to store the configuration of an :class:`~transformers.TransfoXLModel`.
+        This is the configuration class to store the configuration of a :class:`~transformers.TransfoXLModel`.
         It is used to instantiate a Transformer XL model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
         the `Transformer XL <https://huggingface.co/transfo-xl-wt103>`__ architecture.
@@ -100,23 +100,18 @@ class TransfoXLConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import TransfoXLConfig, TransfoXLModel
+            >>> from transformers import TransfoXLConfig, TransfoXLModel
 
-            # Initializing a Transformer XL configuration
-            configuration = TransfoXLConfig()
+            >>> # Initializing a Transformer XL configuration
+            >>> configuration = TransfoXLConfig()
 
-            # Initializing a model from the configuration
-            model = TransfoXLModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = TransfoXLModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
-    pretrained_config_archive_map = TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "transfo-xl"
 
     def __init__(

@@ -32,9 +32,10 @@ class EncoderDecoderModel(PreTrainedModel):
         instantiated as a transformer architecture with one of the base model
         classes of the library as encoder and another one as
         decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
-        class method for the encoder and `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
+        class method for the encoder and `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
+    base_model_prefix = "encoder_decoder"
 
     def __init__(
         self,
@@ -60,9 +61,9 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            from transformers import AutoModelWithLMHead
+            from transformers import AutoModelForCausalLM
 
-            decoder = AutoModelWithLMHead.from_config(config.decoder)
+            decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -125,9 +126,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            from tranformers import EncoderDecoder
-
-            model = EncoderDecoder.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+            >>> from transformers import EncoderDecoderModel
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
         """
 
         kwargs_encoder = {
@@ -156,14 +156,28 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModelWithLMHead
+            from .modeling_auto import AutoModelForCausalLM
 
-            decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
-        decoder.config.is_decoder = True
+            if "config" not in kwargs_decoder:
+                from transformers import AutoConfig
 
-        model = cls(encoder=encoder, decoder=decoder)
+                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+                if decoder_config.is_decoder is False:
+                    logger.info(
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                    )
+                    decoder_config.is_decoder = True
 
-        return model
+                kwargs_decoder["config"] = decoder_config
+
+            if kwargs_decoder["config"].is_decoder is False:
+                logger.warning(
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attribute `is_decoder` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` is set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                )
+
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+        return cls(encoder=encoder, decoder=decoder)
 
     def forward(
         self,
@@ -176,8 +190,7 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_attention_mask=None,
         decoder_head_mask=None,
         decoder_inputs_embeds=None,
-        masked_lm_labels=None,
-        lm_labels=None,
+        labels=None,
         **kwargs,
     ):
 
@@ -219,13 +232,8 @@ class EncoderDecoderModel(PreTrainedModel):
                 Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
-            masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
                 Labels for computing the masked language modeling loss for the decoder.
-                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-                in ``[0, ..., config.vocab_size]``
-            lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-                Labels for computing the left-to-right language modeling loss (next word prediction) for the decoder.
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
                 in ``[0, ..., config.vocab_size]``
@@ -235,21 +243,21 @@ class EncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            from transformers import EncoderDecoderModel, BertTokenizer
-            import torch
+            >>> from transformers import EncoderDecoderModel, BertTokenizer
+            >>> import torch
 
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
 
-            # forward
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            >>> # forward
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
-            # training
-            loss, outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)[:2]
+            >>> # training
+            >>> loss, outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)[:2]
 
-            # generation
-            generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+            >>> # generation
+            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
 
         """
 
@@ -278,8 +286,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
-            lm_labels=lm_labels,
-            masked_lm_labels=masked_lm_labels,
+            labels=labels,
             **kwargs_decoder,
         )
 
@@ -290,7 +297,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # first step
         if type(past) is tuple:
-            encoder_outputs = past
+            encoder_outputs, _ = past
         else:
             encoder_outputs = (past,)
 
