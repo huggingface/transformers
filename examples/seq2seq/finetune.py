@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import get_linear_schedule_with_warmup
+from transformers import MBartTokenizer, get_linear_schedule_with_warmup
 
 
 try:
@@ -161,7 +161,12 @@ class SummarizationModule(BaseTransformer):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         t0 = time.time()
-        generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,decoder_start_token_id=self.decoder_start_token_id)
+        generated_ids = self.model.generate(
+            input_ids=source_ids,
+            attention_mask=source_mask,
+            use_cache=True,
+            decoder_start_token_id=self.decoder_start_token_id,
+        )
         gen_time = (time.time() - t0) / source_ids.shape[0]
         preds = self.ids_to_clean_text(generated_ids)
         target = self.ids_to_clean_text(y)
@@ -282,7 +287,9 @@ class SummarizationModule(BaseTransformer):
 
         return parser
 
-from transformers import MBartTokenizer
+
+
+
 class TranslationModule(SummarizationModule):
     mode = "translation"
     loss_names = ["loss"]
