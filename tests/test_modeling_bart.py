@@ -132,7 +132,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip('')
+    @unittest.skip("")
     def test_tie_model_weights(self):
         pass
 
