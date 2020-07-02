@@ -4,7 +4,7 @@ from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
 
 from transformers import is_tf_available, is_torch_available
-from transformers.modeling_outputs import ModelOutput
+from transformers.file_utils import ModelOutput
 from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
 

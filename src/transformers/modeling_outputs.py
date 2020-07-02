@@ -3,24 +3,7 @@ from typing import Optional, Tuple
 
 import torch
 
-
-class ModelOutput:
-    """
-    Base class for all model outputs as dataclass. Has a ``__getitem__`` (to make it behave like a ``namedtuple``) that
-    will ignore ``None`` in the attributes.
-    """
-
-    def to_tuple(self):
-        return tuple(getattr(self, f) for f in self.__dataclass_fields__.keys() if getattr(self, f, None) is not None)
-
-    def to_dict(self):
-        return {f: getattr(self, f) for f in self.__dataclass_fields__.keys() if getattr(self, f, None) is not None}
-
-    def __getitem__(self, i):
-        return self.to_tuple()[i]
-
-    def __len__(self):
-        return len(self.to_tuple())
+from .file_utils import ModelOutput
 
 
 @dataclass
