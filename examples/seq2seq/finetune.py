@@ -288,8 +288,6 @@ class SummarizationModule(BaseTransformer):
         return parser
 
 
-
-
 class TranslationModule(SummarizationModule):
     mode = "translation"
     loss_names = ["loss"]
