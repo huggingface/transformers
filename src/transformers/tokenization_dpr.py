@@ -130,6 +130,23 @@ class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
+
+class DPRReaderTokenizer(BertTokenizer):
+    r"""
+    Constructs a  DPRReaderTokenizer.
+
+    :class:`~transformers.DPRReaderTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    parameters.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
+
     def __call__(
         self,
         question,
@@ -212,23 +229,6 @@ class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
         )["input_ids"]
         sequence_lenghts = [len(encoded_sequence) for encoded_sequence in encoded_sequences]
         return {"input_ids": input_ids, "passage_offsets": passage_offsets, "sequence_lenghts": sequence_lenghts}
-
-
-class DPRReaderTokenizer(BertTokenizer):
-    r"""
-    Constructs a  DPRReaderTokenizer.
-
-    :class:`~transformers.DPRReaderTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting + wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
 
 
 class DPRReaderTokenizerFast(BertTokenizerFast):
