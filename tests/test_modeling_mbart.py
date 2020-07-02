@@ -1,17 +1,27 @@
 import unittest
 
+from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers import is_torch_available
 
 from .test_modeling_bart import TOLERANCE, _assert_tensors_equal, _long_tensor
+
+
 if is_torch_available():
     import torch
-    from transformers import AutoModelForSeq2SeqLM, BartConfig, BartForConditionalGeneration, BatchEncoding, MBartTokenizer, AutoTokenizer
+    from transformers import (
+        AutoModelForSeq2SeqLM,
+        BartConfig,
+        BartForConditionalGeneration,
+        BatchEncoding,
+        MBartTokenizer,
+        AutoTokenizer,
+    )
 
 
 EN_CODE = 250004
 RO_CODE = 250020
+
 
 @require_torch
 class AbstractMBartIntegrationTest(unittest.TestCase):
@@ -160,7 +170,7 @@ class MBartCC25IntegrationTest(AbstractMBartIntegrationTest):
     ]
     tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
 
-    @unittest.skip('This test is broken, still generates english')
+    @unittest.skip("This test is broken, still generates english")
     def test_cc25_generate(self):
         inputs = self.tokenizer.prepare_translation_batch([self.src_text[0]]).to(torch_device)
         translated_tokens = self.model.generate(
