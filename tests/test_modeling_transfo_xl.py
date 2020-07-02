@@ -22,7 +22,6 @@ from transformers.testing_utils import require_multigpu, require_torch, slow, to
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
-
 if is_torch_available():
     import torch
     from transformers import TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel
@@ -31,7 +30,7 @@ if is_torch_available():
 
 class TransfoXLModelTester:
     def __init__(
-        self, parent,
+            self, parent,
     ):
         self.parent = parent
         self.batch_size = 14
@@ -162,7 +161,6 @@ class TransfoXLModelTester:
 
 @require_torch
 class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TransfoXLModel, TransfoXLLMHeadModel) if is_torch_available() else ()
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
@@ -170,7 +168,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = True
 
     def check_cutoffs_and_n_token(
-        self, copied_cutoffs, layer, model_embed, model, model_class, resized_value, vocab_size
+            self, copied_cutoffs, layer, model_embed, model, model_class, resized_value, vocab_size
     ):
         # Check that the cutoffs were modified accordingly
         for i in range(len(copied_cutoffs)):
@@ -448,201 +446,46 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
         #  father initially slaps him for making such an accusation , Rasputin watches as the
         #  man is chased outside and beaten . Twenty years later , Rasputin sees a vision of
         #  the Virgin Mary , prompting him to become a priest . Rasputin quickly becomes famous ,
-
         #  with people , even a bishop , begging for his blessing . <eod> </s> <eos>
 
         expected_output_ids = [
-            33,
-            1297,
-            2,
-            1,
-            1009,
-            4,
-            1109,
-            11739,
-            4762,
-            358,
-            5,
-            25,
-            245,
-            22,
-            1706,
-            17,
-            20098,
-            5,
-            3215,
-            21,
-            37,
-            1110,
-            3,
-            13,
-            1041,
-            4,
-            24,
-            603,
-            490,
-            2,
-            71477,
-            20098,
-            104447,
-            2,
-            20961,
-            1,
-            2604,
-            4,
-            1,
-            329,
-            3,
-            6224,
-            831,
-            16002,
-            2,
-            8,
-            603,
-            78967,
-            29546,
-            23,
-            803,
-            20,
-            25,
-            416,
-            5,
-            8,
-            232,
-            4,
-            277,
-            6,
-            1855,
-            4601,
-            3,
-            29546,
-            54,
-            8,
-            3609,
-            5,
-            57211,
-            49,
-            4,
-            1,
-            277,
-            18,
-            8,
-            1755,
-            15691,
-            3,
-            341,
-            25,
-            416,
-            693,
-            42573,
-            71,
-            17,
-            401,
-            94,
-            31,
-            17919,
-            2,
-            29546,
-            7873,
-            18,
-            1,
-            435,
-            23,
-            11011,
-            755,
-            5,
-            5167,
-            3,
-            7983,
-            98,
-            84,
-            2,
-            29546,
-            3267,
-            8,
-            3609,
-            4,
-            1,
-            4865,
-            1075,
-            2,
-            6087,
-            71,
-            6,
-            346,
-            8,
-            5854,
-            3,
-            29546,
-            824,
-            1400,
-            1868,
-            2,
-            19,
-            160,
-            2,
-            311,
-            8,
-            5496,
-            2,
-            20920,
-            17,
-            25,
-            15097,
-            3,
-            24,
-            24,
-            0,
-            33,
-            1,
-            1857,
-            2,
-            1,
-            1009,
-            4,
-            1109,
-            11739,
-            4762,
-            358,
-            5,
-            25,
-            245,
-            28,
-            1110,
-            3,
-            13,
-            1041,
-            4,
-            24,
-            603,
-            490,
-            2,
-            71477,
-            20098,
-            104447,
-            2,
-            20961,
-            1,
-            2604,
-            4,
-            1,
-            329,
-            3,
-            0,
+            33, 1297, 2, 1, 1009, 4, 1109, 11739, 4762,
+            358, 5, 25, 245, 22, 1706, 17, 20098, 5,
+            3215, 21, 37, 1110, 3, 13, 1041, 4, 24,
+            603, 490, 2, 71477, 20098, 104447, 2, 20961, 1,
+            2604, 4, 1, 329, 3, 6224, 831, 16002, 2,
+            8, 603, 78967, 29546, 23, 803, 20, 25, 416,
+            5, 8, 232, 4, 277, 6, 1855, 4601, 3,
+            29546, 54, 8, 3609, 5, 57211, 49, 4, 1,
+            277, 18, 8, 1755, 15691, 3, 341, 25, 416,
+            693, 42573, 71, 17, 401, 94, 31, 17919, 2,
+            29546, 7873, 18, 1, 435, 23, 11011, 755, 5,
+            5167, 3, 7983, 98, 84, 2, 29546, 3267, 8,
+            3609, 4, 1, 4865, 1075, 2, 6087, 71, 6,
+            346, 8, 5854, 3, 29546, 824, 1400, 1868, 2,
+            19, 160, 2, 311, 8, 5496, 2, 20920, 17,
+            25, 15097, 3, 24, 24, 0, 33, 1, 142,
+            1298, 188, 2, 29546, 113, 8, 3654, 4, 1,
+            1109, 7136, 833, 3, 13, 1645, 4, 29546, 11,
+            104, 7, 1, 1109, 532, 7129, 2, 10, 83507,
+            2, 1162, 1123, 2, 6, 7245, 10, 2, 5,
+            11, 104, 7, 1, 1109, 532, 7129, 2, 10,
+            24, 24, 10, 22, 10, 13, 770, 5863, 4,
+            7245, 10,
         ]
-        #  In 1991, the remains of Russian Tsar Nicholas II and his family (
-        #  except for Alexei and Maria ) are discovered. The voice of young son,
-        #  Tsarevich Alexei Nikolaevich, narrates the remainder of the story.
-        #  1883 Western Siberia, a young Grigori Rasputin is asked by his father
-        #  and a group of men to perform magic. Rasputin has a vision and
-        #  denounces one of the men as a horse thief. Although his father initially
-        #  slaps him for making such an accusation, Rasputin watches as the man
-        #  is chased outside and beaten. Twenty years later, Rasputin sees a vision
-        #  of the Virgin Mary, prompting him to become a priest.
-        #  Rasputin quickly becomes famous, with people, even a bishop, begging for
-        #  his blessing. <unk> <unk> <eos> In the 1990s, the remains of Russian Tsar
-        # Nicholas II and his family were discovered. The voice of <unk> young son,
-        # Tsarevich Alexei Nikolaevich, narrates the remainder of the story.<eos>
+        #  In 1991, the remains of Russian Tsar Nicholas II and his family ( except for
+        #  Alexei and Maria ) are discovered. The voice of young son, Tsarevich Alexei
+        #  Nikolaevich, narrates the remainder of the story. 1883 Western Siberia, a young
+        #  Grigori Rasputin is asked by his father and a group of men to perform magic.
+        #  Rasputin has a vision and denounces one of the men as a horse thief. Although
+        #  his father initially slaps him for making such an accusation, Rasputin watches
+        #  as the man is chased outside and beaten. Twenty years later, Rasputin sees a
+        #  vision of the Virgin Mary, prompting him to become a priest. Rasputin quickly
+        #  becomes famous, with people, even a bishop, begging for his blessing. In the
+        #  early 20th century, Rasputin became a symbol of the Russian Orthodox Church.
+        #  The image of Rasputin was used in the Russian national anthem, " Nearer, My God,
+        #  to Heaven ", and was used in the Russian national anthem, " " ( " The Great Spirit
+        #  of Heaven "
 
         output_ids = model.generate(input_ids, max_length=200, do_sample=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
