@@ -278,7 +278,7 @@ class BertSelfAttention(nn.Module):
                                            new_context_layer_shape[1],
                                            new_context_layer_shape[2])
 
-        outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer, None)
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer, None)
         return outputs
 
 
@@ -370,7 +370,12 @@ class DummyModule(nn.Module):
     """
     def __init__(self):
         super().__init__()
-    def forward(self, a, b: Optional[torch.Tensor], c: Optional[torch.Tensor], d: Optional[torch.Tensor], e: Optional[torch.Tensor]):
+    def forward(self, a,
+                b: Optional[torch.Tensor],
+                c: Optional[torch.Tensor],
+                d: Optional[torch.Tensor],
+                e: Optional[torch.Tensor],
+                f: bool):
         return torch.zeros([0])
 
 class BertLayer(nn.Module):
@@ -429,19 +434,22 @@ class BertEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-    ):
-        all_hidden_states = ()
-        all_attentions = ()
-        for i, layer_module in enumerate(self.layer):
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+        all_hidden_states = []
+        all_attentions = []
+        i = 0
+        for layer_module in self.layer:
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
+                all_hidden_states = all_hidden_states.append(hidden_states)
+            layer_head_mask = None if head_mask is None else head_mask[i]
+            
+            """    
             if getattr(self.config, "gradient_checkpointing", False):
 
                 def create_custom_forward(module):
@@ -454,34 +462,35 @@ class BertEncoder(nn.Module):
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
-                    head_mask[i],
+                    layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    head_mask[i],
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    output_attentions,
-                )
+            """
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                output_attentions,
+            )
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                attn = layer_outputs[1]
+                assert attn is not None
+                all_attentions.append(attn)
+            i += 1
 
         # Add last layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states.append(hidden_states)
 
-        outputs = (hidden_states,)
-        if output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+        return (hidden_states,
+                all_hidden_states if output_hidden_states else None,
+                all_attentions if output_attentions else None)
 
 
 class BertPooler(nn.Module):
