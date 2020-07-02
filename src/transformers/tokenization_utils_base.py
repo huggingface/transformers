@@ -2008,19 +2008,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         """
 
         if return_lengths:
-            warnings.warn(
-                "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
-                "Please use `return_length` instead.",
-                FutureWarning,
-            )
+            if verbose:
+                warnings.warn(
+                    "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
+                    "Please use `return_length` instead.",
+                    FutureWarning,
+                )
             return_length = return_lengths
 
         if pad_to_max_length:
-            warnings.warn(
-                "The PreTrainedTokenizerBase.prepare_for_model `pad_to_max_length` parameter is deprecated."
-                "Please use `padding_strategy` instead.",
-                FutureWarning,
-            )
+            if verbose:
+                warnings.warn(
+                    "The PreTrainedTokenizerBase.prepare_for_model `pad_to_max_length` parameter is deprecated."
+                    "Please use `padding_strategy` instead.",
+                    FutureWarning,
+                )
             padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
                 pad_to_max_length=pad_to_max_length,
                 truncation_strategy=truncation_strategy,
