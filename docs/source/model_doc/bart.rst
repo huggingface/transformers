@@ -39,6 +39,13 @@ BartTokenizer
     :members:
 
 
+MBartTokenizer
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.MBartTokenizer
+    :members:
+
+
 BartModel
 ~~~~~~~~~~~~~
 
@@ -67,5 +74,3 @@ BartForConditionalGeneration
 
 .. autoclass:: transformers.BartForConditionalGeneration
     :members: generate, forward
-
-
