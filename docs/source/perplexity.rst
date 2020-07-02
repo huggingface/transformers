@@ -49,8 +49,8 @@ model's maximum input size. If a model's max input size is :math:`k`, we
 then approximate the likelihood of a token :math:`x_t` by conditioning only
 on the :math:`k-1` tokens that precede it rather than the entire context.
 When evaluating the model's perplexity of a sequence, a tempting but
-suboptimal approach is to break the sequence into disjoint chunks and average
-the PPL of each.
+suboptimal approach is to break the sequence into disjoint chunks and
+calculate the average decomposed log-likelihood of each independently.
 
 .. image:: imgs/ppl_chunked.gif
     :width: 600
@@ -71,12 +71,17 @@ prediction.
     :width: 600
     :alt: Sliding window PPL taking advantage of all available context
 
-This is can be slower to compute since each stride requires its own forward
-pass, but is a much closer approximation to the true decomposition of the
+This is a closer approximation to the true decomposition of the
 sequence probability and will typically yield a more favorable score.
+However, the downside is that it would require a separate forward
+pass for each token in the corpus. A good practical compromise is to employ a
+strided sliding window, moving the context by larger strides rather than
+sliding by 1 token a time. This allows computation to procede much faster
+while still giving the model a large context to make predictions at each
+step.
 
 Example: Calculating PPL with GPT-2 in 🤗 Transformers
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Let's demonstrate this process with GPT-2.
 
@@ -106,9 +111,8 @@ tokens we pass to the model at each iteration. We don't want the
 log-likelihood for the tokens we're just treating as context to be included
 in our loss, so we can set these targets to ``-100`` so that they are
 ignored. The following is an example of how we could do this with a stride of
-``512``. Since GPT-2 has a max input length of ``1024``, this means that
-we'll use the previous 512 tokens to predict the next 512 tokens at each
-step.
+``512``. This means that the model will have at least 512 tokens for context
+when calculating the conditional likelihood of any one token.
 
 .. code-block:: python
 
@@ -141,5 +145,5 @@ When we run the above with ``stride = 1024``, e.g. no overlap, the resulting
 PPL is ``19.64``, which is about the same as the ``19.93`` reported in the
 GPT-2 paper. By using ``stride = 512`` and thereby employing our striding
 window strategy, this jumps down to ``16.53``. This is not only a more
-favorable score, but is closer to the way sequence probabilities are
-decomposed.
+favorable score, but is calculated in a way that is closer to the true
+autoregressive decomposition of a sequence likelihood.
