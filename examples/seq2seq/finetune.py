@@ -95,6 +95,7 @@ class SummarizationModule(BaseTransformer):
             freeze_params(self.model.model.encoder)  # TODO: this will break for t5
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
+        self.decoder_start_token_id = None
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
@@ -160,7 +161,7 @@ class SummarizationModule(BaseTransformer):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         t0 = time.time()
-        generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,)
+        generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,decoder_start_token_id=self.decoder_start_token_id)
         gen_time = (time.time() - t0) / source_ids.shape[0]
         preds = self.ids_to_clean_text(generated_ids)
         target = self.ids_to_clean_text(y)
@@ -281,7 +282,7 @@ class SummarizationModule(BaseTransformer):
 
         return parser
 
-
+from transformers import MBartTokenizer
 class TranslationModule(SummarizationModule):
     mode = "translation"
     loss_names = ["loss"]
@@ -292,6 +293,8 @@ class TranslationModule(SummarizationModule):
         super().__init__(hparams, **kwargs)
         self.dataset_kwargs["src_lang"] = hparams.src_lang
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
+        if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
+            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
 
     def calc_generative_metrics(self, preds, target) -> dict:
         return calculate_bleu_score(preds, target)
