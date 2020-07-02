@@ -30,7 +30,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import gelu, gelu_new, swish
 from .configuration_bert import BertConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, ModelOutput
+from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import (
     CausalLMOutput,
     EncoderOutput,
