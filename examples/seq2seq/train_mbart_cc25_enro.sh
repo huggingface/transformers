@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+export PYTHONPATH="../":"${PYTHONPATH}"
+
+export BS=32
+export GAS=1
+
+python finetune.py \
+    --learning_rate=3e-5 \
+    --fp16 \
+    --gpus 1 \
+    --do_train \
+    --do_predict \
+    --val_check_interval 0.1 \
+    --n_val 500 \
+    --num_train_epochs 2 --src_lang en_XX --tgt_lang ro_RO \
+    --freeze_encoder --freeze_embeds --data_dir $ENRO_DIR \
+    --max_target_length 300 --val_max_target_length=300 --test_max_target_length 300 \
+    --train_batch_size=$BS --eval_batch_size=$BS --gradient_accumulation_steps=$GAS \
+    --model_name_or_path facebook/mbart-large-cc25 \
+    --task translation \
+    --warmup_steps 500 \
+    --output_dir dbart/logs/cc25_v0_frozen/ \
+    --logger wandb \
+    $@

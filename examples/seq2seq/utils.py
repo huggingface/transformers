@@ -42,11 +42,11 @@ def encode_file(
     examples = []
     for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer(
-            [text],
+            [' '+ text],
             max_length=max_length,
             padding="max_length" if pad_to_max_length else None,
             truncation=True,
-            add_prefix_space=True,
+            # add_prefix_space=True,
             return_tensors=return_tensors,
         )
         assert tokenized.input_ids.shape[1] == max_length
