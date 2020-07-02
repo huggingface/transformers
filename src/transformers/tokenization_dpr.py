@@ -41,24 +41,24 @@ READER_PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "dpr-ctx_encoder-single-nq-base": 512,
+    "facebook/dpr-ctx_encoder-single-nq-base": 512,
 }
 QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "dpr-question_encoder-single-nq-base": 512,
+    "facebook/dpr-question_encoder-single-nq-base": 512,
 }
 READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "dpr-reader-single-nq-base": 512,
+    "facebook/dpr-reader-single-nq-base": 512,
 }
 
 
 CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
 }
 QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "dpr-question_encoder-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-question_encoder-single-nq-base": {"do_lower_case": True},
 }
 READER_PRETRAINED_INIT_CONFIGURATION = {
-    "dpr-reader-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-reader-single-nq-base": {"do_lower_case": True},
 }
 
 
