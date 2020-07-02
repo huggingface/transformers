@@ -120,7 +120,6 @@ when calculating the conditional likelihood of any one token.
     stride = 512
 
     lls = []
-    past = None
     for i in tqdm(range(1, encodings.input_ids.size(1), stride)):
         begin_loc = max(i + stride - max_length, 0)
         end_loc = i + stride
