@@ -1293,6 +1293,16 @@ class TokenizerTesterMixin:
                 for key in output.keys():
                     self.assertEqual(output[key], output_sequence[key])
 
+    def test_prepare_for_model(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            string_sequence = "Testing the prepare_for_model method."
+            ids = tokenizer.encode(string_sequence, add_special_tokens=False)
+            input_dict = tokenizer.encode_plus(string_sequence)
+            prepared_input_dict = tokenizer.prepare_for_model(ids)
+
+            self.assertEqual(input_dict, prepared_input_dict)
+
     @require_torch
     @require_tf
     def test_batch_encode_plus_tensors(self):
