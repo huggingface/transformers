@@ -14,7 +14,6 @@ if is_torch_available():
         BartConfig,
         BartForConditionalGeneration,
         BatchEncoding,
-        MBartTokenizer,
         AutoTokenizer,
     )
 
@@ -163,7 +162,7 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
 
 
 class MBartCC25IntegrationTest(AbstractMBartIntegrationTest):
-    checkpoint_name = "sshleifer/mbart-large-cc25"
+    checkpoint_name = "facebook/mbart-large-cc25"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
         " I ate lunch twice yesterday",
