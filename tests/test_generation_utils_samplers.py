@@ -28,7 +28,7 @@ from transformers.generation_utils_samplers import (
     TopPSampler,
 )
 
-from .utils import require_tf, require_torch, torch_device
+from transformers.testing_utils import require_tf, require_torch, torch_device
 
 
 if is_torch_available():
