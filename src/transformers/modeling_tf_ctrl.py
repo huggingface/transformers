@@ -625,7 +625,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         hidden_states = transformer_outputs[0]
 
-        logits = self.lm_head(hidden_states, training=training)
+        logits = self.lm_head(hidden_states)
 
         outputs = (logits,) + transformer_outputs[1:]
         if labels is not None:
