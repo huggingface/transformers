@@ -87,6 +87,8 @@ class SummarizationDataset(Dataset):
         n_obs=None,
         overwrite_cache=False,
         prefix="",
+        src_lang=None,
+        tgt_lang=None,
     ):
         super().__init__()
         tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
@@ -100,7 +102,8 @@ class SummarizationDataset(Dataset):
         )
         tgt_path = os.path.join(data_dir, type_path + ".target")
         if hasattr(tokenizer, "set_lang"):
-            tokenizer.set_lang("ro_RO")  # HACK: only applies to mbart
+            assert tgt_lang is not None, f'--tgt_lang must be passed to build a translation'
+            tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
         self.target = encode_file(
             tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
         )

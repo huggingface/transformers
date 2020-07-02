@@ -134,6 +134,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
     def set_lang(self, lang: str) -> None:
         """Set the current language code in order to call tokenizer properly."""
         self.cur_lang_code = self.lang_code_to_id[lang]
+        self.prefix_tokens = [self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]
 
     def prepare_translation_batch(
         self,
@@ -170,9 +172,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         if tgt_texts is None:
             return model_inputs
-        self.cur_lang_code = self.lang_code_to_id[tgt_lang]
-        self.prefix_tokens = [self.cur_lang_code]
-        self.suffix_tokens = [self.eos_token_id]
+        self.set_lang(tgt_lang)
         decoder_inputs: BatchEncoding = self.batch_encode_plus(
             tgt_texts,
             add_special_tokens=True,

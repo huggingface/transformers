@@ -273,9 +273,10 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument(
-            "--task", type=str, default="summarization", required=False, help="# examples. -1 means use all."
-        )
+        parser.add_argument("--task", type=str, default="summarization", required=False, help="# examples. -1 means use all.")
+        parser.add_argument("--src_lang", type=str, default="", required=False)
+        parser.add_argument("--tgt_lang", type=str, default="", required=False)
+
         return parser
 
 
@@ -284,6 +285,11 @@ class TranslationModule(SummarizationModule):
     loss_names = ["loss"]
     metric_names = ["bleu"]
     val_metric = "bleu"
+
+    def __init__(self, hparams, **kwargs):
+        super().__init__(hparams, **kwargs)
+        self.dataset_kwargs['src_lang'] = hparams.src_lang
+        self.dataset_kwargs['tgt_lang'] = hparams.tgt_lang
 
     def calc_generative_metrics(self, preds, target) -> dict:
         return calculate_bleu_score(preds, target)
