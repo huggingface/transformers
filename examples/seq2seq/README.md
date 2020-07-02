@@ -87,8 +87,8 @@ Then you can finetune mbart_cc25 on english-romanian with the following command.
 **Recommendation:** Read and potentially modify the fairly opinionated defaults in `train_mbart_cc25_enro.sh` script before running it. 
 ```bash
 export ENRO_DIR=${PWD}/wmt_en_ro   # may need to be fixed depending on where you downloaded
-export BS=32
-export GAS=1
+export BS=4
+export GAS=8
 ./train_mbart_cc25_enro.sh --output_dir dbart/logs/cc25_v0_frozen/
 ```
 
