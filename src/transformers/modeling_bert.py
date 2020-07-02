@@ -799,9 +799,9 @@ class BertForPretrainingOutput(ModelOutput):
     Args:
         loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
-        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+        prediction_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
+        seq_relationship_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False
             continuation before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -818,8 +818,8 @@ class BertForPretrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor]
-    prediction_scores: torch.FloatTensor
-    seq_relationship_score: torch.FloatTensor
+    prediction_logits: torch.FloatTensor
+    seq_relationship_logits: torch.FloatTensor
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -944,8 +944,8 @@ class BertForPreTraining(BertPreTrainedModel):
 
         return BertForPretrainingOutput(
             loss=total_loss,
-            prediction_scores=prediction_scores,
-            seq_relationship_score=seq_relationship_score,
+            prediction_logits=prediction_scores,
+            seq_relationship_logits=seq_relationship_score,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
