@@ -137,7 +137,7 @@ class DataCollatorForLanguageModeling:
 
 
 @dataclass
-class DataCollatorForXLNetLanguageModeling:
+class DataCollatorForPermutationLanguageModeling:
     """
     Data collator used for language modeling with XLNet.
     - collates batches of tensors, honoring their tokenizer's pad_token
@@ -145,17 +145,13 @@ class DataCollatorForXLNetLanguageModeling:
     """
 
     tokenizer: PreTrainedTokenizer
-    mlm: bool = True
-    mlm_probability: float = 0.15
+    plm_probability: float = 0.15
     max_gram: int = 5  # maximum individual mask span length L
 
     def __call__(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
         batch = self._tensorize_batch(examples)
-        if self.mlm:
-            inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
-            return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
-        else:
-            return {"input_ids": batch, "labels": batch}
+        inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
+        return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
     def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
         length_of_first = examples[0].size(0)
