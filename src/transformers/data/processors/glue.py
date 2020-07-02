@@ -132,7 +132,7 @@ def _glue_convert_examples_to_features(
         [(example.text_a, example.text_b) for example in examples],
         max_length=max_length,
         padding="max_length",
-        truncation=True,
+        truncation="longest_first",
     )
 
     features = []
