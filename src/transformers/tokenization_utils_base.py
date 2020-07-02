@@ -1982,15 +1982,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         add_special_tokens: bool = True,
         stride: int = 0,
-        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
+        truncation_strategy: str = "longest_first",
+        pad_to_max_length: bool = False,
         return_tensors: Optional[str] = None,
-        prepend_batch_axis: bool = False,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
+        return_lengths: bool = False,
+
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        pad_to_multiple_of: Optional[int] = None,
+        prepend_batch_axis: bool = False,
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
@@ -2004,6 +2007,29 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             pair_ids: Optional second list of input ids. Can be obtained from a string by chaining the
                 `tokenize` and `convert_tokens_to_ids` methods.
         """
+
+        if return_lengths:
+            warnings.warn(
+                "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
+                "Please use `return_length` instead.",
+                FutureWarning
+            )
+            return_length = return_lengths
+
+        if pad_to_max_length:
+            warnings.warn(
+                "The PreTrainedTokenizerBase.prepare_for_model `pad_to_max_length` parameter is deprecated."
+                "Please use `padding_strategy` instead.",
+                FutureWarning
+            )
+            padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
+                pad_to_max_length=pad_to_max_length,
+                truncation_strategy=truncation_strategy,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose
+            )
+
         pair = bool(pair_ids is not None)
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
