@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 export PYTHONPATH="../":"${PYTHONPATH}"
 
-export BS=32
-export GAS=1
-
 python finetune.py \
     --learning_rate=3e-5 \
     --fp16 \
@@ -19,6 +16,5 @@ python finetune.py \
     --model_name_or_path facebook/mbart-large-cc25 \
     --task translation \
     --warmup_steps 500 \
-    --output_dir dbart/logs/cc25_v0_frozen/ \
-    --logger wandb \
+    --logger wandb --sortish_sampler \
     $@

@@ -41,6 +41,28 @@ If you are using your own data, it must be formatted as one directory with 6 fil
 The `.source` files are the input, the `.target` files are the desired output.
 
 
+### Tips and Tricks
+
+General Tips:
+- since you need to run from `examples/seq2seq`, and likely need to modify code, the easiest workflow is fork transformers, clone your fork, and run `pip install -e .` before you get started.   
+- try `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr per epoch with bs=8, see the "xsum_shared_task" command below)
+- `fp16_opt_level=O1` (the default works best).
+- In addition to the pytorch-lightning .ckpt checkpoint, a transformers checkpoint will be saved.
+Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_tfmr)`.
+- At the moment, `--do_predict` does not work in a multi-gpu setting. You need to use `evaluate_checkpoint` or the `run_eval.py` code.
+- This warning can be safely ignored: 
+    > "Some weights of BartForConditionalGeneration were not initialized from the model checkpoint at facebook/bart-large-xsum and are newly initialized: ['final_logits_bias']"
+- Both finetuning and eval are 30% faster with `--fp16`. For that you need to [install apex](https://github.com/NVIDIA/apex#quick-start).
+- Read scripts before you run them! 
+
+Summarization Tips:
+- (summ) 1 epoch at batch size 1 for bart-large takes 24 hours and requires 13GB GPU RAM with fp16 on an NVIDIA-V100.
+- If you want to run experiments on improving the summarization finetuning process, try the XSUM Shared Task (below). It's faster to train than CNNDM because the summaries are shorter.
+- For CNN/DailyMail, the default `val_max_target_length` and `test_max_target_length` will truncate the ground truth labels, resulting in slightly higher rouge scores. To get accurate rouge scores, you should rerun calculate_rouge on the `{output_dir}/test_generations.txt` file saved by `trainer.test()`
+- `--max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 ` is a reasonable setting for XSUM.
+- `wandb` can be used by specifying `--logger wandb`. It is useful for reproducibility. Specify the environment variable `WANDB_PROJECT='hf_xsum'` to do the XSUM shared task.
+- If you are finetuning on your own dataset, start from `distilbart-cnn-12-6` if you want long summaries and `distilbart-xsum-12-6` if you want short summaries.
+(It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods). 
 
 ### Summarization Finetuning
 Run/modify `finetune.sh`
@@ -58,25 +80,20 @@ The following command should work on a 16GB GPU:
 
 *Note*: The following tips mostly apply to summarization finetuning.
 
-Tips:
-- 1 epoch at batch size 1 for bart-large takes 24 hours and requires 13GB GPU RAM with fp16 on an NVIDIA-V100. 
-- since you need to run from `examples/seq2seq`, and likely need to modify code, it is easiest to fork, then clone transformers and run `pip install -e .` before you get started.   
-- try `bart-base`, `--freeze_encoder` or `--freeze_embeds` for faster training/larger batch size.  (3hr/epoch with bs=8, see the "xsum_shared_task" command below)
-- `fp16_opt_level=O1` (the default works best).
-- If you are finetuning on your own dataset, start from `distilbart-cnn-12-6` if you want long summaries and `distilbart-xsum-12-6` if you want short summaries.
-(It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
-- In addition to the pytorch-lightning .ckpt checkpoint, a transformers checkpoint will be saved.
-Load it with `BartForConditionalGeneration.from_pretrained(f'{output_dir}/best_tfmr)`.
-- At the moment, `--do_predict` does not work in a multi-gpu setting. You need to use `evaluate_checkpoint` or the `run_eval.py` code.
-- If you want to run experiments on improving the summarization finetuning process, try the XSUM Shared Task (below). It's faster to train than CNNDM because the summaries are shorter.
-- For CNN/DailyMail, the default `val_max_target_length` and `test_max_target_length` will truncate the ground truth labels, resulting in slightly higher rouge scores. To get accurate rouge scores, you should rerun calculate_rouge on the `{output_dir}/test_generations.txt` file saved by `trainer.test()`
-- `--max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 ` is a reasonable setting for XSUM.
-- `wandb` can be used by specifying `--logger wandb`. It is useful for reproducibility. Specify the environment variable `WANDB_PROJECT='hf_xsum'` to do the XSUM shared task. 
-- This warning can be safely ignored: 
-    > "Some weights of BartForConditionalGeneration were not initialized from the model checkpoint at facebook/bart-large-xsum and are newly initialized: ['final_logits_bias']"
-- Both finetuning and eval are 30% faster with `--fp16`. For that you need to [install apex](https://github.com/NVIDIA/apex#quick-start).
+### Translation Finetuning
 
-#### Finetuning Outputs 
+First, follow the wmt_en_ro download instructions.
+Then you can finetune mbart_cc25 on english-romanian with the following command.
+**Recommendation:** Read and potentially modify the fairly opinionated defaults in `train_mbart_cc25_enro.sh` script before running it. 
+```bash
+export ENRO_DIR=${PWD}/wmt_en_ro   # may need to be fixed depending on where you downloaded
+export BS=32
+export GAS=1
+./train_mbart_cc25_enro.sh --output_dir dbart/logs/cc25_v0_frozen/
+```
+
+
+### Finetuning Outputs 
 As you train, `output_dir` will be filled with files, that look kind of like this (comments are mine). 
 Some of them are metrics, some of them are checkpoints, some of them are metadata. Here is a quick tour:
 
