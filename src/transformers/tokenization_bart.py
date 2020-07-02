@@ -109,20 +109,27 @@ class MBartTokenizer(XLMRobertaTokenizer):
     }
     id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
+    prefix_tokens = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
+        self.reset_special_tokens()
+
+    def reset_special_tokens(self):
+
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
-        special_tokens = [self.eos_token_id, self.cur_lang_code]
+
         if token_ids_1 is None:
-            return token_ids_0 + special_tokens
+            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
-        return token_ids_0 + token_ids_1 + special_tokens
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
     def set_lang(self, lang: str) -> None:
         """Set the current language code in order to call tokenizer properly."""
@@ -164,6 +171,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if tgt_texts is None:
             return model_inputs
         self.cur_lang_code = self.lang_code_to_id[tgt_lang]
+        self.prefix_tokens = [self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]
         decoder_inputs: BatchEncoding = self.batch_encode_plus(
             tgt_texts,
             add_special_tokens=True,
@@ -175,4 +184,5 @@ class MBartTokenizer(XLMRobertaTokenizer):
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
         self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.reset_special_tokens()
         return model_inputs
