@@ -25,6 +25,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
+from .configuration_deberta import DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP, DeBERTaConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
 from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
@@ -149,6 +150,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenize
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
+from .tokenization_deberta import DeBERTaTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_dpr import (
     DPRContextEncoderTokenizer,
@@ -477,6 +479,13 @@ if is_torch_available():
         XLNetModel,
         XLNetPreTrainedModel,
         load_tf_weights_in_xlnet,
+    )
+
+    from .modeling_deberta import (
+        DeBERTa_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DeBERTaPreTrainedModel,
+        DeBERTaModel,
+        DeBERTaForSequenceClassification,
     )
 
     # Optimization

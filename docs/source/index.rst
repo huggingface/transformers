@@ -227,6 +227,7 @@ conversion utilities for the following models:
     model_doc/funnel
     model_doc/lxmert
     model_doc/bertgeneration
+    model_doc/deberta
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils

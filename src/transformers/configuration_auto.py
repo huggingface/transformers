@@ -23,6 +23,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
+from .configuration_deberta import DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP, DeBERTaConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_encoder_decoder import EncoderDecoderConfig
@@ -73,6 +74,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -108,6 +110,7 @@ CONFIG_MAPPING = OrderedDict(
         ("encoder-decoder", EncoderDecoderConfig),
         ("funnel", FunnelConfig),
         ("lxmert", LxmertConfig),
+        ("deberta", DeBERTaConfig),
     ]
 )
 
