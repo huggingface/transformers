@@ -301,7 +301,7 @@ class TFModelTesterMixin:
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"
                     ),
-                    "inputs": tf.keras.Input(batch_shape=(2, 2000), name="inputs", dtype="int32"),
+                    "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
                 }
             elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
                 input_ids = tf.keras.Input(batch_shape=(4, 2, 2000), name="input_ids", dtype="int32")
@@ -335,7 +335,7 @@ class TFModelTesterMixin:
             outputs_dict = model(self._prepare_for_class(inputs_dict, model_class))
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "inputs", None,)
+            input_ids = inputs_keywords.pop("input_ids", None)
             outputs_keywords = model(input_ids, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
             output_keywords = outputs_keywords[0].numpy()
@@ -489,9 +489,9 @@ class TFModelTesterMixin:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
-                encoder_input_ids = inputs["inputs"]
+                encoder_input_ids = inputs["input_ids"]
                 decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["inputs"]
+                del inputs["input_ids"]
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()

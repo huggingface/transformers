@@ -83,7 +83,7 @@ class TFT5ModelTester:
     def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
         model = TFT5Model(config=config)
         inputs = {
-            "inputs": input_ids,
+            "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
         }
@@ -114,7 +114,7 @@ class TFT5ModelTester:
     def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
         model = TFT5ForConditionalGeneration(config=config)
         inputs_dict = {
-            "inputs": input_ids,
+            "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
         }
@@ -208,7 +208,7 @@ class TFT5ModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids, input_mask, token_labels) = config_and_inputs
         inputs_dict = {
-            "inputs": input_ids,
+            "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
             "use_cache": tf.convert_to_tensor([False]),

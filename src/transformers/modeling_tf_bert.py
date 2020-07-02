@@ -884,7 +884,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             loss = self.compute_loss(labels, prediction_scores)
             outputs = (loss,) + outputs
 
-        return outputs  # prediction_scores, (hidden_states), (attentions)
+        return outputs  # (loss), prediction_scores, (hidden_states), (attentions)
 
 
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
