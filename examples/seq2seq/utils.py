@@ -102,7 +102,7 @@ class SummarizationDataset(Dataset):
         )
         tgt_path = os.path.join(data_dir, type_path + ".target")
         if hasattr(tokenizer, "set_lang"):
-            assert tgt_lang is not None, f"--tgt_lang must be passed to build a translation"
+            assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
             tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
         self.target = encode_file(
             tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name

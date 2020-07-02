@@ -122,44 +122,6 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
 
-    def test_enro_tokenizer_prepare_translation_batch(self):
-        batch = self.tokenizer.prepare_translation_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens),
-        )
-        self.assertIsInstance(batch, BatchEncoding)
-
-        self.assertEqual((2, 14), batch.input_ids.shape)
-        self.assertEqual((2, 14), batch.attention_mask.shape)
-        result = batch.input_ids.tolist()[0]
-        self.assertListEqual(self.expected_src_tokens, result)
-        self.assertEqual(2, batch.decoder_input_ids[0, -1])  # EOS
-        # Test that special tokens are reset
-        self.assertEqual(self.tokenizer.prefix_tokens, [])
-        self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, EN_CODE])
-
-    def test_enro_tokenizer_batch_encode_plus(self):
-        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
-        self.assertListEqual(self.expected_src_tokens, ids)
-
-    def test_enro_tokenizer_decode_ignores_language_codes(self):
-        self.assertIn(RO_CODE, self.tokenizer.all_special_ids)
-        generated_ids = [RO_CODE, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2]
-        result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
-        self.assertEqual(result, expected_romanian)
-        self.assertNotIn(self.tokenizer.eos_token, result)
-
-    def test_enro_tokenizer_truncation(self):
-        src_text = ["this is gunna be a long sentence " * 20]
-        assert isinstance(src_text[0], str)
-        desired_max_length = 10
-        ids = self.tokenizer.prepare_translation_batch(
-            src_text, return_tensors=None, max_length=desired_max_length
-        ).input_ids[0]
-        self.assertEqual(ids[-2], 2)
-        self.assertEqual(ids[-1], EN_CODE)
-        self.assertEqual(len(ids), desired_max_length)
-
 
 class MBartCC25IntegrationTest(AbstractMBartIntegrationTest):
     checkpoint_name = "facebook/mbart-large-cc25"
