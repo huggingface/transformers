@@ -9,7 +9,7 @@ python finetune.py \
     --do_predict \
     --val_check_interval 0.1 \
     --n_val 500 \
-    --adam-eps 1e-06 \
+    --adam_eps 1e-06 \
     --num_train_epochs 3 --src_lang en_XX --tgt_lang ro_RO \
     --freeze_encoder --freeze_embeds --data_dir $ENRO_DIR \
     --max_source_length=300 --max_target_length 300 --val_max_target_length=300 --test_max_target_length 300 \
