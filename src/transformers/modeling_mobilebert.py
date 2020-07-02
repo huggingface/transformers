@@ -575,7 +575,7 @@ class MobileBertPooler(nn.Module):
             return first_token_tensor
         else:
             pooled_output = self.dense(first_token_tensor)
-            pooled_output = F.tanh(pooled_output)
+            pooled_output = torch.tanh(pooled_output)
             return pooled_output
 
 

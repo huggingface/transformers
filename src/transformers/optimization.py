@@ -16,6 +16,7 @@
 
 import logging
 import math
+from typing import Callable, Iterable, Tuple
 
 import torch
 from torch.optim import Optimizer
@@ -25,18 +26,40 @@ from torch.optim.lr_scheduler import LambdaLR
 logger = logging.getLogger(__name__)
 
 
-def get_constant_schedule(optimizer, last_epoch=-1):
-    """ Create a schedule with a constant learning rate.
+def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
+    """
+    Create a schedule with a constant learning rate, using the learning rate set in optimizer.
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        last_epoch (:obj:`int`, `optional`, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
     return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
 
 
-def get_constant_schedule_with_warmup(optimizer, num_warmup_steps, last_epoch=-1):
-    """ Create a schedule with a constant learning rate preceded by a warmup
-    period during which the learning rate increases linearly between 0 and 1.
+def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: int, last_epoch: int = -1):
+    """
+    Create a schedule with a constant learning rate preceded by a warmup period during which the learning rate
+    increases linearly between 0 and the initial lr set in the optimizer.
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (:obj:`int`):
+            The number of steps for the warmup phase.
+        last_epoch (:obj:`int`, `optional`, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
-    def lr_lambda(current_step):
+    def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1.0, num_warmup_steps))
         return 1.0
@@ -45,11 +68,25 @@ def get_constant_schedule_with_warmup(optimizer, num_warmup_steps, last_epoch=-1
 
 
 def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
-    """ Create a schedule with a learning rate that decreases linearly after
-    linearly increasing during a warmup period.
+    """
+    Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0,
+    after a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (:obj:`int`):
+            The number of steps for the warmup phase.
+        num_training_steps (:obj:`int`):
+            The totale number of training steps.
+        last_epoch (:obj:`int`, `optional`, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
-    def lr_lambda(current_step):
+    def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
         return max(
@@ -59,10 +96,29 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1):
-    """ Create a schedule with a learning rate that decreases following the
-    values of the cosine function between 0 and `pi * cycles` after a warmup
-    period during which it increases linearly between 0 and 1.
+def get_cosine_schedule_with_warmup(
+    optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: float = 0.5, last_epoch: int = -1
+):
+    """
+    Create a schedule with a learning rate that decreases following the values of the cosine function between the
+    initial lr set in the optimizer to 0, after a warmup period during which it increases linearly between 0 and the
+    initial lr set in the optimizer.
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (:obj:`int`):
+            The number of steps for the warmup phase.
+        num_training_steps (:obj:`int`):
+            The total number of training steps.
+        num_cycles (:obj:`float`, `optional`, defaults to 0.5):
+            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
+            following a half-cosine).
+        last_epoch (:obj:`int`, `optional`, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
     def lr_lambda(current_step):
@@ -75,11 +131,27 @@ def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
 
 
 def get_cosine_with_hard_restarts_schedule_with_warmup(
-    optimizer, num_warmup_steps, num_training_steps, num_cycles=1.0, last_epoch=-1
+    optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: int = 1, last_epoch: int = -1
 ):
-    """ Create a schedule with a learning rate that decreases following the
-    values of the cosine function with several hard restarts, after a warmup
-    period during which it increases linearly between 0 and 1.
+    """
+    Create a schedule with a learning rate that decreases following the values of the cosine function between the
+    initial lr set in the optimizer to 0, with several hard restarts, after a warmup period during which it increases
+    linearly between 0 and the initial lr set in the optimizer.
+
+    Args:
+        optimizer (:class:`~torch.optim.Optimizer`):
+            The optimizer for which to schedule the learning rate.
+        num_warmup_steps (:obj:`int`):
+            The number of steps for the warmup phase.
+        num_training_steps (:obj:`int`):
+            The total number of training steps.
+        num_cycles (:obj:`int`, `optional`, defaults to 1):
+            The number of hard restarts to use.
+        last_epoch (:obj:`int`, `optional`, defaults to -1):
+            The index of the last epoch when resuming training.
+
+    Return:
+        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
     def lr_lambda(current_step):
@@ -94,17 +166,34 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(
 
 
 class AdamW(Optimizer):
-    """ Implements Adam algorithm with weight decay fix.
+    """
+    Implements Adam algorithm with weight decay fix as introduced in
+    `Decoupled Weight Decay Regularization <https://arxiv.org/abs/1711.05101>`__.
 
     Parameters:
-        lr (float): learning rate. Default 1e-3.
-        betas (tuple of 2 floats): Adams beta parameters (b1, b2). Default: (0.9, 0.999)
-        eps (float): Adams epsilon. Default: 1e-6
-        weight_decay (float): Weight decay. Default: 0.0
-        correct_bias (bool): can be set to False to avoid correcting bias in Adam (e.g. like in Bert TF repository). Default True.
+        params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
+            Iterable of parameters to optimize or dictionaries defining parameter groups.
+        lr (:obj:`float`, `optional`, defaults to 1e-3):
+            The learning rate to use.
+        betas (:obj:`Tuple[float,float]`, `optional`, defaults to (0.9, 0.999)):
+            Adam's betas parameters (b1, b2).
+        eps (:obj:`float`, `optional`, defaults to 1e-6):
+            Adam's epsilon for numerical stability.
+        weight_decay (:obj:`float`, `optional`, defaults to 0):
+            Decoupled weight decay to apply.
+        correct_bias (:obj:`bool`, `optional`, defaults to `True`):
+            Whether ot not to correct bias in Adam (for instance, in Bert TF repository they use :obj:`False`).
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0.0, correct_bias=True):
+    def __init__(
+        self,
+        params: Iterable[torch.nn.parameter.Parameter],
+        lr: float = 1e-3,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        eps: float = 1e-6,
+        weight_decay: float = 0.0,
+        correct_bias: bool = True,
+    ):
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
         if not 0.0 <= betas[0] < 1.0:
@@ -116,12 +205,12 @@ class AdamW(Optimizer):
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=correct_bias)
         super().__init__(params, defaults)
 
-    def step(self, closure=None):
-        """Performs a single optimization step.
+    def step(self, closure: Callable = None):
+        """
+        Performs a single optimization step.
 
         Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
+            closure (:obj:`Callable`, `optional`): A closure that reevaluates the model and returns the loss.
         """
         loss = None
         if closure is not None:

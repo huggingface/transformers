@@ -17,6 +17,7 @@
 import os
 import unittest
 
+from transformers.testing_utils import custom_tokenizers
 from transformers.tokenization_bert import WordpieceTokenizer
 from transformers.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
@@ -26,7 +27,6 @@ from transformers.tokenization_bert_japanese import (
 )
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import custom_tokenizers
 
 
 @custom_tokenizers
