@@ -46,12 +46,14 @@ rule-based tokenizers. On the text above, they'd output something like:
 
 Space/punctuation-tokenization and rule-based tokenization are both examples of word tokenization, which is splitting a
 sentence into words. While it's the most intuitive way to separate texts in smaller chunks, it can have a problem when
-you have a huge corpus: it usually yields a very big vocabulary. :doc:`Transformer XL <model_doc/transformerxl>` for
-instance uses space/punctuation-tokenization, and has a vocabulary size of 267,735!
+you have a huge corpus: it usually yields a very big vocabulary (the set of all unique tokens used).
+:doc:`Transformer XL <model_doc/transformerxl>` for instance uses space/punctuation-tokenization, and has a vocabulary
+size of 267,735!
 
-A huge vocabulary size means a huge embedding matrix, which will cause memory problems. TransformerXL deals with it by
-using a special kind of embeddings called adaptive embeddings, but in general, transformers model rarely have a
-vocabulary size greater than 50,000, especially if they are trained on a single language.
+A huge vocabulary size means a huge embedding matrix at the start of the model, which will cause memory problems.
+TransformerXL deals with it by using a special kind of embeddings called adaptive embeddings, but in general,
+transformers model rarely have a vocabulary size greater than 50,000, especially if they are trained on a single
+language.
 
 So if tokenizing on words is unsatisfactory, we could go on the opposite direction and simply tokenize on characters.
 While it's very simple and would save a lot of memory, this doesn't allow the model to learn representations of texts
