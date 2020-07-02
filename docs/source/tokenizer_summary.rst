@@ -33,7 +33,7 @@ into account. This would give:
 
 which is better already. One thing that is annoying though is how it dealt with "Don't". "Don't" stands for do not, so
 it should probably be better tokenized as ``["Do", "n't"]``. This is where things start getting more complicated, and
-part of the reason each kind of model as its own tokenizer class. Depending on the rules we apply to split our texts
+part of the reason each kind of model has its own tokenizer class. Depending on the rules we apply to split our texts
 into tokens, we'll get different tokenized versions of the same text. And of course, a given pretrained model won't
 perform properly if you don't use the exact same rules as the persons who pretrained it.
 
@@ -49,7 +49,7 @@ sentence into words. While it's the most intuitive way to separate texts in smal
 you have a huge corpus: it usually yields a very big vocabulary. :doc:`Transformer XL <model_doc/transformerxl>` for
 instance uses space/punctuation-tokenization, and has a vocabulary size of 267,735!
 
-A huge vocabulary size means a huge embedding matrix, which will cause memory problem. TransformerXL deals with it by
+A huge vocabulary size means a huge embedding matrix, which will cause memory problems. TransformerXL deals with it by
 using a special kind of embeddings called adaptive embeddings, but in general, transformers model rarely have a
 vocabulary size greater than 50,000, especially if they are trained on a single language.
 
@@ -67,7 +67,7 @@ decomposed as "annoying" and "ly". This is especially useful in agglutinative la
 form (almost) arbitrarily long complex words by stringing together some subwords.
 
 This allows the model to keep a reasonable vocabulary while still learning useful representations for common words or
-subwords. This also give the ability to the model to process words it has never seen before, by decomposing them into
+subwords. This also gives the ability to the model to process words it has never seen before, by decomposing them into
 subwords it knows. For instance, the base :class:`~transformers.BertTokenizer` will tokenize "I have a new GPU!" like
 this:
 
@@ -106,10 +106,11 @@ Byte-Pair Encoding
 Byte-Pair Encoding was introduced in `this paper <https://arxiv.org/abs/1508.07909>`__. It relies on a pretokenizer
 splitting the training data into words, which can be a simple space tokenization
 (:doc:`GPT-2 <model_doc/gpt2>` and :doc:`Roberta <model_doc/roberta>` uses this for instance) or a rule-based tokenizer
-(:doc:`XLM <model_doc/xlm>` use Moses for most languages, as do :doc:`FlauBERT <model_doc/flaubert>`),
+(:doc:`XLM <model_doc/xlm>` use Moses for most languages, as does :doc:`FlauBERT <model_doc/flaubert>`),
+
 :doc:`GPT <model_doc/gpt>` uses Spacy and ftfy) and, counts the frequency of each word in the training corpus.
 
-It then begins from the list of all characters, and will learn merge rules to form a new token from to symbols in the
+It then begins from the list of all characters, and will learn merge rules to form a new token from two symbols in the
 vocabulary until it has learned a vocabulary of the desired size (this is a hyperparameter to pick).
 
 Let's say that after the pre-tokenization we have the following words (the number indicating the frequency of each
@@ -145,10 +146,10 @@ represented as
 
     ('hug', 10), ('p' 'ug', 5), ('p' 'un', 12), ('b' 'un', 4), ('hug' 's', 5)
 
-If we stop there, the tokenizer can apply the rules it learned to new words (as long as they don't have characters that
-are in the base vocabulary). For instance 'bug' would be tokenized as ``['b', 'ug']`` but mug would be tokenized as
+If we stop there, the tokenizer can apply the rules it learned to new words (as long as they don't contain characters that
+were not in the base vocabulary). For instance 'bug' would be tokenized as ``['b', 'ug']`` but mug would be tokenized as
 ``['<unk>', 'ug']`` since the 'm' is not in the base vocabulary. This doesn't happen to letters in general (since the
-base corpus uses all of them), but to special characters like emoticons.
+base corpus uses all of them), but to special characters like emojis.
 
 As we said before, the vocabulary size (which is the base vocabulary size + the number of merges) is a hyperparameter
 to choose. For instance :doc:`GPT <model_doc/gpt>` has a vocabulary size of 40,478 since they have 478 base characters
