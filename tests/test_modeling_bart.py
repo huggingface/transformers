@@ -120,7 +120,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False
-    test_torchscript = False
+    test_torchscript = True
     test_head_masking = False
     test_resize_embeddings = True  # This requires inputs_dict['input_ids']
     test_missing_keys = False  # because BartForConditionalGeneration and BartModel now have identical state_dict
@@ -131,6 +131,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip('')
+    def test_tie_model_weights(self):
+        pass
 
     def test_initialization_more(self):
         # (config, input_ids, token_type_ids, input_mask, *unused) = \
