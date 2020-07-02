@@ -39,7 +39,9 @@ if is_tf_available():
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -95,7 +97,11 @@ class TFModelTesterMixin:
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size)
             elif model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
-            elif model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.values():
+            elif model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
+            elif model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.values():
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
+            elif model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
         return inputs_dict
 
@@ -600,9 +606,15 @@ class TFModelTesterMixin:
                 added_label = prepared_for_class[list(prepared_for_class.keys() - inputs_dict.keys())[0]]
                 loss_size = tf.size(added_label)
 
+                if model.__class__ in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
+                    # if loss is causal lm loss, labels are shift, so that one label per batch
+                    # is cut
+                    loss_size = loss_size - self.model_tester.batch_size
+
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 input_ids = prepared_for_class.pop("input_ids")
+
                 loss = model(input_ids, **prepared_for_class)[0]
                 self.assertEqual(loss.shape, [loss_size])
 
