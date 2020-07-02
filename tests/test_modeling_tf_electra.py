@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import ElectraConfig, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -29,6 +29,7 @@ if is_tf_available():
         TFElectraForMaskedLM,
         TFElectraForPreTraining,
         TFElectraForTokenClassification,
+        TFElectraForQuestionAnswering,
     )
 
 
@@ -137,6 +138,19 @@ class TFElectraModelTester:
         }
         self.parent.assertListEqual(list(result["prediction_scores"].shape), [self.batch_size, self.seq_length])
 
+    def create_and_check_electra_for_question_answering(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = TFElectraForQuestionAnswering(config=config)
+        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        start_logits, end_logits = model(inputs)
+        result = {
+            "start_logits": start_logits.numpy(),
+            "end_logits": end_logits.numpy(),
+        }
+        self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
+        self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+
     def create_and_check_electra_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -191,6 +205,10 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_electra_for_pretraining(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_electra_for_question_answering(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

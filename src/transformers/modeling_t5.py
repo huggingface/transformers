@@ -33,6 +33,8 @@ from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, p
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
+
 ####################################################
 # This dict contrains shortcut names and associated url
 # for the pretrained weights provided with the models
@@ -659,11 +661,12 @@ class T5Stack(T5PreTrainedModel):
         inputs_embeds=None,
         head_mask=None,
         past_key_value_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
     ):
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -854,6 +857,7 @@ class T5Model(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
@@ -893,7 +897,7 @@ class T5Model(T5PreTrainedModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_past_key_value_states=None,
-        use_cache=True,
+        use_cache=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
@@ -922,17 +926,19 @@ class T5Model(T5PreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-    Examples::
+        Example::
 
-        from transformers import T5Tokenizer, T5Model
+            >>> from transformers import T5Tokenizer, T5Model
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5Model.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5Model.from_pretrained('t5-small')
 
+            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+
+            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -985,6 +991,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
@@ -1021,7 +1028,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_past_key_value_states=None,
-        use_cache=True,
+        use_cache=None,
         labels=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -1064,18 +1071,18 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, T5ForConditionalGeneration
+        >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
-        loss, prediction_scores = outputs[:2]
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+        >>> loss, prediction_scores = outputs[:2]
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model.generate(input_ids)
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        >>> outputs = model.generate(input_ids)
         """
 
         if "lm_labels" in kwargs:
@@ -1085,6 +1092,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             )
             labels = kwargs.pop("lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:

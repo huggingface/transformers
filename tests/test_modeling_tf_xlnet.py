@@ -18,10 +18,10 @@ import random
 import unittest
 
 from transformers import XLNetConfig, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -33,6 +33,7 @@ if is_tf_available():
         TFXLNetForSequenceClassification,
         TFXLNetForTokenClassification,
         TFXLNetForQuestionAnsweringSimple,
+        TFXLNetForMultipleChoice,
         TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -66,6 +67,7 @@ class TFXLNetModelTester:
         self.bos_token_id = 1
         self.eos_token_id = 2
         self.pad_token_id = 5
+        self.num_choices = 4
 
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -316,6 +318,36 @@ class TFXLNetModelTester:
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
+    def create_and_check_xlnet_for_multiple_choice(
+        self,
+        config,
+        input_ids_1,
+        input_ids_2,
+        input_ids_q,
+        perm_mask,
+        input_mask,
+        target_mapping,
+        segment_ids,
+        lm_labels,
+        sequence_labels,
+        is_impossible_labels,
+    ):
+        config.num_choices = self.num_choices
+        model = TFXLNetForMultipleChoice(config=config)
+        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids_1, 1), (1, self.num_choices, 1))
+        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(segment_ids, 1), (1, self.num_choices, 1))
+        inputs = {
+            "input_ids": multiple_choice_inputs_ids,
+            "attention_mask": multiple_choice_input_mask,
+            "token_type_ids": multiple_choice_token_type_ids,
+        }
+        (logits,) = model(inputs)
+        result = {
+            "logits": logits.numpy(),
+        }
+        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -345,6 +377,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             TFXLNetForSequenceClassification,
             TFXLNetForTokenClassification,
             TFXLNetForQuestionAnsweringSimple,
+            TFXLNetForMultipleChoice,
         )
         if is_tf_available()
         else ()
@@ -384,6 +417,10 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_qa(*config_and_inputs)
+
+    def test_xlnet_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlnet_for_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

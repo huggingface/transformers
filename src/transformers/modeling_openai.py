@@ -28,7 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import gelu_new, swish
 from .configuration_openai import OpenAIGPTConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import (
     Conv1D,
     PreTrainedModel,
@@ -39,6 +39,8 @@ from .modeling_utils import (
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"
 
 OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai-gpt",
@@ -294,7 +296,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.OpenAIGPTTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -356,6 +358,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             self.h[layer].attn.prune_heads(heads)
 
     @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="openai-gpt")
     def forward(
         self,
         input_ids=None,
@@ -383,18 +386,6 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import OpenAIGPTTokenizer, OpenAIGPTModel
-        import torch
-
-        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -490,6 +481,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         return self.lm_head
 
     @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="openai-gpt")
     def forward(
         self,
         input_ids=None,
@@ -531,18 +523,6 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import OpenAIGPTTokenizer, OpenAIGPTLMHeadModel
-        import torch
-
-        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTLMHeadModel.from_pretrained('openai-gpt')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
-
     """
         transformer_outputs = self.transformer(
             input_ids,

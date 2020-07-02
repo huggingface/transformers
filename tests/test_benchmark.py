@@ -4,8 +4,7 @@ import unittest
 from pathlib import Path
 
 from transformers import AutoConfig, is_torch_available
-
-from .utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, torch_device
 
 
 if is_torch_available():
@@ -32,6 +31,22 @@ class BenchmarkTest(unittest.TestCase):
             sequence_lengths=[8],
             batch_sizes=[1],
             no_multi_process=True,
+        )
+        benchmark = PyTorchBenchmark(benchmark_args)
+        results = benchmark.run()
+        self.check_results_dict_not_empty(results.time_inference_result)
+        self.check_results_dict_not_empty(results.memory_inference_result)
+
+    def test_inference_no_configs_only_pretrain(self):
+        MODEL_ID = "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"
+        benchmark_args = PyTorchBenchmarkArguments(
+            models=[MODEL_ID],
+            training=False,
+            no_inference=False,
+            sequence_lengths=[8],
+            batch_sizes=[1],
+            no_multi_process=True,
+            only_pretrain_model=True,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
         results = benchmark.run()

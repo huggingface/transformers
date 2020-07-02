@@ -18,10 +18,10 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_roberta import VOCAB_FILES_NAMES, RobertaTokenizer, RobertaTokenizerFast
+from transformers.testing_utils import slow
+from transformers.tokenization_roberta import VOCAB_FILES_NAMES, AddedToken, RobertaTokenizer, RobertaTokenizerFast
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import slow
 
 
 class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -139,7 +139,9 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Testing spaces after special tokenss
         mask = "<mask>"
-        tokenizer.add_special_tokens({"mask_token": mask})
+        tokenizer.add_special_tokens(
+            {"mask_token": AddedToken(mask, lstrip=True, rstrip=False)}
+        )  # mask token has a left space
         mask_ind = tokenizer.convert_tokens_to_ids(mask)
 
         sequence = "Encode <mask> sequence"

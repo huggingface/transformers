@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import T5Config, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -135,7 +135,15 @@ class TFT5ModelTester:
         self.batch_size = 1
 
         # first forward pass
-        _, past_key_value_states = model(input_ids, use_cache=True)
+        outputs = model(input_ids, use_cache=True)
+
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past_key_value_states = outputs
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -268,10 +276,11 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         summarization_config = task_specific_config.get("summarization", {})
         model.config.update(summarization_config)
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [model.config.prefix + x for x in [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY]],
             max_length=512,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="tf",
         )
         self.assertEqual(512, dct["input_ids"].shape[1])

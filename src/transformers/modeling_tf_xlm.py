@@ -24,7 +24,12 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
@@ -42,6 +47,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "XLMTokenizer"
 
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-mlm-en-2048",
@@ -548,7 +555,7 @@ XLM_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -608,6 +615,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -625,18 +633,6 @@ class TFXLMModel(TFXLMPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLMTokenizer, TFXLMModel
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = TFXLMModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
@@ -704,6 +700,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         return {"inputs": inputs, "langs": langs}
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -721,18 +718,6 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLMTokenizer, TFXLMWithLMHeadModel
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = TFXLMWithLMHeadModel.from_pretrained('xlm-mlm-en-2048')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         transformer_outputs = self.transformer(inputs, **kwargs)
 
@@ -757,9 +742,10 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def call(
         self,
-        input_ids,
+        inputs=None,
         attention_mask=None,
         langs=None,
         token_type_ids=None,
@@ -768,9 +754,9 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         cache=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -795,22 +781,16 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLMTokenizer, TFXLMForSequenceClassification
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = TFXLMForSequenceClassification.from_pretrained('xlm-mlm-en-2048')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[11] if len(inputs) > 11 else labels
+            if len(inputs) > 11:
+                inputs = inputs[:11]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         transformer_outputs = self.transformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             langs=langs,
             token_type_ids=token_type_ids,
@@ -858,6 +838,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def call(
         self,
         inputs,
@@ -869,9 +850,9 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -897,22 +878,6 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLMTokenizer, TFXLMForMultipleChoice
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = TFXLMForMultipleChoice.from_pretrained('xlm-mlm-en-2048')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -925,7 +890,9 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
-            assert len(inputs) <= 10, "Too many inputs."
+            output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
+            labels = inputs[11] if len(inputs) > 11 else labels
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -937,7 +904,9 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 10, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 12, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -994,13 +963,14 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         langs=None,
         token_type_ids=None,
@@ -1009,9 +979,9 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         cache=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1034,25 +1004,22 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLMTokenizer, TFXLMForTokenClassification
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = TFXLMForTokenClassification.from_pretrained('xlm-mlm-en-2048')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[11] if len(inputs) > 11 else labels
+            if len(inputs) > 11:
+                inputs = inputs[:11]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         transformer_outputs = self.transformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
+            langs=langs,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1065,7 +1032,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
 
-        outputs = (logits,) + transformer_outputs[2:]  # add hidden states and attention if they are here
+        outputs = (logits,) + transformer_outputs[1:]  # add hidden states and attention if they are here
 
         if labels is not None:
             loss = self.compute_loss(labels, logits)
@@ -1088,9 +1055,10 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         )
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         langs=None,
         token_type_ids=None,
@@ -1099,13 +1067,10 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         cache=None,
         head_mask=None,
         inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        cls_index=None,
-        p_mask=None,
-        is_impossible=None,
         output_attentions=None,
         output_hidden_states=None,
+        start_positions=None,
+        end_positions=None,
         training=False,
     ):
         r"""
@@ -1135,25 +1100,18 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import XLMTokenizer, TFXLMForQuestionAnsweringSimple
-
-        tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        model = TFXLMForQuestionAnsweringSimple.from_pretrained('xlm-mlm-en-2048')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
         """
+        if isinstance(inputs, (tuple, list)):
+            start_positions = inputs[11] if len(inputs) > 11 else start_positions
+            end_positions = inputs[12] if len(inputs) > 12 else end_positions
+            if len(inputs) > 11:
+                inputs = inputs[:11]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
 
         transformer_outputs = self.transformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             langs=langs,
             token_type_ids=token_type_ids,

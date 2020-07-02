@@ -37,6 +37,8 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
+
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "t5-small",
     "t5-base",
@@ -518,6 +520,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
+        self.use_cache = config.use_cache
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
@@ -556,7 +559,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         head_mask=None,
         past_key_value_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         training=False,
@@ -586,6 +589,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.use_cache
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
@@ -874,6 +878,7 @@ class TFT5Model(TFT5PreTrainedModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
@@ -928,13 +933,13 @@ class TFT5Model(TFT5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, TFT5Model
+        >>> from transformers import T5Tokenizer, TFT5Model
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5Model.from_pretrained('t5-small')
-        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(inputs, decoder_input_ids=inputs)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5Model.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> outputs = model(inputs, decoder_input_ids=inputs)
+        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
 
@@ -952,10 +957,12 @@ class TFT5Model(TFT5PreTrainedModel):
         decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
-        use_cache = kwargs.get("use_cache", True)
+        use_cache = kwargs.get("use_cache", None)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
         output_hidden_states = kwargs.get("output_hidden_states", None)
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1014,6 +1021,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
@@ -1068,18 +1076,18 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+        >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(inputs, decoder_input_ids=inputs)
-        prediction_scores = outputs[0]
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> outputs = model(inputs, decoder_input_ids=inputs)
+        >>> prediction_scores = outputs[0]
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        model.generate(inputs)
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> result = model.generate(inputs)
 
         """
 
@@ -1095,12 +1103,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         encoder_outputs = kwargs.get("encoder_outputs", None)
         decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
-        use_cache = kwargs.get("use_cache", True)
+        use_cache = kwargs.get("use_cache", None)
         inputs_embeds = kwargs.get("inputs_embeds", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
         output_hidden_states = kwargs.get("output_hidden_states", None)
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:

@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import copy
-import logging
 import os.path
 import random
 import tempfile
@@ -22,8 +21,7 @@ import unittest
 from typing import List
 
 from transformers import is_torch_available
-
-from .utils import require_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -813,7 +811,7 @@ class ModelTesterMixin:
             # Wrap model in nn.DataParallel
             model = torch.nn.DataParallel(model)
             with torch.no_grad():
-                _ = model(**inputs_dict)
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 global_rng = random.Random()
@@ -855,7 +853,6 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 class ModelUtilsTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
-        logging.basicConfig(level=logging.INFO)
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = BertConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)

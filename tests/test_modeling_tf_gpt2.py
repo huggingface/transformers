@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import GPT2Config, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -143,7 +143,14 @@ class TFGPT2ModelTester:
         model = TFGPT2Model(config=config)
 
         # first forward pass
-        output, past = model(input_ids, token_type_ids=token_type_ids)
+        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids, token_type_ids=token_type_ids)
+        outputs_no_past = model(input_ids, token_type_ids=token_type_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past = outputs
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)

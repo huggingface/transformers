@@ -3,7 +3,6 @@ import unittest
 from collections import namedtuple
 from itertools import takewhile
 
-from tests.utils import require_torch
 from transformers import (
     BertTokenizer,
     BertTokenizerFast,
@@ -16,13 +15,12 @@ from transformers import (
     TransfoXLTokenizer,
     is_torch_available,
 )
+from transformers.testing_utils import require_torch
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
 from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
 
-
-logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +54,10 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 if tok_case.filter is None or (
                     tok_case.filter is not None and tok_case.filter(tok_case, pretrained_name)
                 ):
+                    kwargs = dict(t for t in tok_case.kwargs) if tok_case.kwargs else {}
                     with self.subTest("{} ({})".format(tok_case.name, pretrained_name)):
-                        tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name)
-                        tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name)
+                        tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
+                        tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name, **kwargs)
 
                         self.fast_align_python(tokenizer_r, tokenizer_p, tok_case, pretrained_name)
                         self.fast_only(tokenizer_r)
@@ -769,7 +768,16 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
 
 class RobertaFastTokenizerTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors, None)]
+        [
+            Tokenizer(
+                "Roberta",
+                RobertaTokenizerFast,
+                RobertaTokenizer,
+                "vocab_file",
+                filter_roberta_detectors,
+                (("cls_token", "<s>"),),
+            )
+        ]
     )
 
     def assert_embeded_special_tokens(self, tokenizer_r, tokenizer_p):

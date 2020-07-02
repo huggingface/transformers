@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -168,7 +168,14 @@ class GPT2ModelTester:
         model.eval()
 
         # first forward pass
-        output, past = model(input_ids, token_type_ids=token_type_ids)
+        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids, token_type_ids=token_type_ids)
+        outputs_no_past = model(input_ids, token_type_ids=token_type_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past = outputs
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
