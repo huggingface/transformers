@@ -223,8 +223,8 @@ def test_finetune(model):
         output_dir=output_dir,
         do_predict=True,
         task=task,
-        src_lang='en_XX',
-        tgt_lang='ro_RO',
+        src_lang="en_XX",
+        tgt_lang="ro_RO",
     )
     assert "n_train" in args_d
     args = argparse.Namespace(**args_d)
@@ -241,7 +241,12 @@ def test_dataset(tok):
     max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
     trunc_target = 4
     train_dataset = SummarizationDataset(
-        tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target, tgt_lang='ro_RO',
+        tokenizer,
+        data_dir=tmp_dir,
+        type_path="train",
+        max_source_length=20,
+        max_target_length=trunc_target,
+        tgt_lang="ro_RO",
     )
     dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
     for batch in dataloader:
