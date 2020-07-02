@@ -114,9 +114,15 @@ ReformerModelWithLMHead
     :members:
 
 
+ReformerForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ReformerForMaskedLM
+    :members:
+
+
 ReformerForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ReformerForQuestionAnswering
     :members:
-
