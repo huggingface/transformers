@@ -618,9 +618,8 @@ class ModelTesterMixin:
             config_tied.torchscript = False
             model_tied = model_class(config_tied)
             params_tied = list(model_tied.parameters())
-
-            # Check that the embedding layer and decoding layer are the same in size and in value
             self.assertGreater(len(params_not_tied), len(params_tied))
+            # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(check_same_values(embeddings, decoding))
 
             # # Check that after modification, they remain the same.
