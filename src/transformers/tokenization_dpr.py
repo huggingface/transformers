@@ -21,7 +21,7 @@ from typing import List, Optional, Union
 
 from .modeling_dpr import DPRReaderOutput
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
-from .tokenization_utils_base import BatchEncoding, EncodedInput, TensorType
+from .tokenization_utils_base import BatchEncoding, TensorType
 
 
 logger = logging.getLogger(__name__)
@@ -162,8 +162,8 @@ class CustomDPRReaderTokenizerMixin:
         Args:
             `questions` (:obj:`str`, :obj:`List[str]`):
                 The questions to be encoded.
-                There must be 
-                You can specify one question for many passages. In this case, the question will be duplicated like `[questions] * n_passages`
+                You can specify one question for many passages. In this case, the question will be duplicated like `[questions] * n_passages`.
+                Otherwise you have to specify as many questions as in `titles` or `texts`.
             `titles` (:obj:`str`, :obj:`List[str]`):
                 The passages titles to be encoded. This can be a string, a list of strings if there are several passages.
             `texts` (:obj:`str`, :obj:`List[str]`):
@@ -341,7 +341,7 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
 
     :class:`~transformers.DPRReaderTokenizer is alsmost identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
-    
+
     What is different is that is has three inputs strings: question, titles and texts that are combined to feed into the DPRReader model.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
