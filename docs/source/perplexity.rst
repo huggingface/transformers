@@ -2,10 +2,10 @@ Perplexity of fixed-length models
 =================================
 
 Perplexity (PPL) is one of the most common metrics for evaluating language
-models. Note that the metric applies specifically to classical language
-models (sometimes called autoregressive or causal language models) and is not
-well defined for masked language models like BERT (see :doc:`summary of the
-models <model_summary>`).
+models. Before diving in, we should note that the metric applies specifically
+to classical language models (sometimes called autoregressive or causal
+language models) and is not well defined for masked language models like BERT
+(see :doc:`summary of the models <model_summary>`).
 
 Perplexity is defined as the exponentiated average log-likelihood of a
 sequence. If we have a tokenized sequence :math:`X = (x_0, x_1, \dots, x_t)`,
@@ -18,7 +18,11 @@ then the perplexity of :math:`X` is,
 
 where :math:`\log p_\theta (x_i|x_{<i})` is the log-likelihood of the ith
 token conditioned on the preceding tokens :math:`x_{<i}` according to our
-model.
+model. Intuitively, it can be thought of as an evaluation of the model's
+ability to predict uniformly among the set of specified tokens in a corpus.
+Importantly, this means that the tokenization procedure has a direct impact
+on a model's perplexity which should always be taken into consideration when
+comparing different models.
 
 This is also equivalent to the exponentiation of the cross-entropy between
 the data and model predictions. For more intuition about perplexity and its
@@ -50,7 +54,7 @@ then approximate the likelihood of a token :math:`x_t` by conditioning only
 on the :math:`k-1` tokens that precede it rather than the entire context.
 When evaluating the model's perplexity of a sequence, a tempting but
 suboptimal approach is to break the sequence into disjoint chunks and
-calculate the average decomposed log-likelihood of each independently.
+add up the decomposed log-likelihoods of each segment independently.
 
 .. image:: imgs/ppl_chunked.gif
     :width: 600
@@ -59,8 +63,7 @@ calculate the average decomposed log-likelihood of each independently.
 This is quick to compute since the perplexity of each segment can be computed
 in one forward pass, but serves as a poor approximation of the
 fully-factorized perplexity and will typically yield a higher (worse) PPL
-because the model will not be able to take advantage of all the available
-context at most of the prediction steps.
+because the model will have less context at most of the prediction steps.
 
 Instead, the PPL of fixed-length models should be evaluated with a
 sliding-window strategy. This involves repeatedly sliding the
@@ -73,15 +76,14 @@ prediction.
 
 This is a closer approximation to the true decomposition of the
 sequence probability and will typically yield a more favorable score.
-However, the downside is that it would require a separate forward
-pass for each token in the corpus. A good practical compromise is to employ a
-strided sliding window, moving the context by larger strides rather than
-sliding by 1 token a time. This allows computation to procede much faster
-while still giving the model a large context to make predictions at each
-step.
+The downside is that it requires a separate forward pass for each token in
+the corpus. A good practical compromise is to employ a strided sliding
+window, moving the context by larger strides rather than sliding by 1 token a
+time. This allows computation to procede much faster while still giving the
+model a large context to make predictions at each step.
 
-Example: Calculating PPL with GPT-2 in 🤗 Transformers
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Example: Calculating perplexity with GPT-2 in 🤗 Transformers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Let's demonstrate this process with GPT-2.
 
@@ -112,7 +114,8 @@ log-likelihood for the tokens we're just treating as context to be included
 in our loss, so we can set these targets to ``-100`` so that they are
 ignored. The following is an example of how we could do this with a stride of
 ``512``. This means that the model will have at least 512 tokens for context
-when calculating the conditional likelihood of any one token.
+when calculating the conditional likelihood of any one token (provided there
+are 512 preceding tokens available to condition on).
 
 .. code-block:: python
 
@@ -138,9 +141,9 @@ when calculating the conditional likelihood of any one token.
 Running this with the stride length equal to the max input length is
 equivalent to the suboptimal, non-sliding-window strategy we discussed above.
 The smaller the stride, the more context the model will have in making each
-prediction, and the better the PPL will typically be.
+prediction, and the better the reported perplexity will typically be.
 
-When we run the above with ``stride = 1024``, e.g. no overlap, the resulting
+When we run the above with ``stride = 1024``, i.e. no overlap, the resulting
 PPL is ``19.64``, which is about the same as the ``19.93`` reported in the
 GPT-2 paper. By using ``stride = 512`` and thereby employing our striding
 window strategy, this jumps down to ``16.53``. This is not only a more
