@@ -15,7 +15,6 @@
 """ PyTorch DPR model for Open Domain Question Answering."""
 
 
-import collections
 import logging
 from typing import Optional, Tuple
 
