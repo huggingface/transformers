@@ -19,7 +19,7 @@ def get_setup_file():
     return args.f
 
 
-class DeebertTests(unittest.TestCase):
+class DeeBertTests(unittest.TestCase):
     def test_glue_deebert(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -36,7 +36,7 @@ class DeebertTests(unittest.TestCase):
             --max_seq_length 128
             --per_gpu_eval_batch_size=1
             --per_gpu_train_batch_size=8
-            --learning_rate 2e-5
+            --learning_rate 2e-4
             --num_train_epochs 3
             --overwrite_output_dir
             --seed 42
