@@ -1470,7 +1470,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         elif padding is not False:
             if padding is True:
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
-            else:
+            elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
         else:
             padding_strategy = PaddingStrategy.DO_NOT_PAD
@@ -1495,7 +1495,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation_strategy = (
                     TruncationStrategy.LONGEST_FIRST
                 )  # Default to truncate the longest sequences in pairs of inputs
-            else:
+            elif not isinstance(truncation, TruncationStrategy):
                 truncation_strategy = TruncationStrategy(truncation)
         else:
             truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
@@ -2140,8 +2140,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
+                    if not overflowing_tokens:
+                        window_len = min(len(ids), stride + 1)
+                    else:
+                        window_len = 1
+                    overflowing_tokens.extend(ids[-window_len:])
                     ids = ids[:-1]
                 else:
+                    if not overflowing_tokens:
+                        window_len = min(len(pair_ids), stride + 1)
+                    else:
+                        window_len = 1
+                    overflowing_tokens.extend(pair_ids[-window_len:])
                     pair_ids = pair_ids[:-1]
         elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
             if len(ids) > num_tokens_to_remove:
