@@ -945,9 +945,9 @@ ENCODE_KWARGS_DOCSTRING = r"""
             `truncation` (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
                 Activate and control truncation. Accepts the following values:
 
-                * `True` or `'only_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will only truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided,
+                * `True` or `'longest_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will truncate token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a batch of pairs) is provided,
+                * `'only_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will only truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided,
                 * `'only_second'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will only truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided,
-                * `'longest_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will truncate token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a batch of pairs) is provided,
                 * `False` or `'do_not_truncate'` (default): No truncation (i.e. can output batch with sequences length greater than the model max admissible input size)
             `max_length` (:obj:`Union[int, None]`, `optional`, defaults to :obj:`None`):
                 Control the length for padding/truncation. Accepts the following values
@@ -1446,10 +1446,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 logger.warning(
                     "Truncation was not explicitely activated but `max_length` is provided a specific value, "
                     "please use `truncation=True` to explicitely truncate examples to max length. "
-                    "Defaulting to 'only_first' truncation strategy. "
-                    "If you encode pairs of sequences (GLUE-style) with the tokenizer you may want to check this is the right behavior."
+                    "Defaulting to 'longest_first' truncation strategy. "
+                    "If you encode pairs of sequences (GLUE-style) with the tokenizer you can select this strategy "
+                    "more precisely by providing a specific strategy to `truncation`."
                 )
-            truncation = "only_first"
+            truncation = "longest_first"
 
         # Get padding strategy
         if padding is False and old_pad_to_max_length:
@@ -1492,8 +1493,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         elif truncation is not False:
             if truncation is True:
                 truncation_strategy = (
-                    TruncationStrategy.ONLY_FIRST
-                )  # Default to truncate the first sequences in pairs of inputs
+                    TruncationStrategy.LONGEST_FIRST
+                )  # Default to truncate the longest sequences in pairs of inputs
             else:
                 truncation_strategy = TruncationStrategy(truncation)
         else:
@@ -1979,22 +1980,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         self,
         ids: List[int],
         pair_ids: Optional[List[int]] = None,
-        max_length: Optional[int] = None,
         add_special_tokens: bool = True,
+        padding: Union[bool, str] = False,
+        truncation: Union[bool, str] = False,
+        max_length: Optional[int] = None,
         stride: int = 0,
-        truncation_strategy: str = "longest_first",
-        pad_to_max_length: bool = False,
-        return_tensors: Optional[str] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
-        return_lengths: bool = False,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        prepend_batch_axis: bool = False,
+        return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
+        prepend_batch_axis: bool = False,
+        **kwargs
     ) -> BatchEncoding:
         """ Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
         It adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
@@ -2007,29 +2008,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 `tokenize` and `convert_tokens_to_ids` methods.
         """
 
-        if return_lengths:
+        if "return_lengths" in kwargs:
             if verbose:
                 warnings.warn(
                     "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
                     "Please use `return_length` instead.",
                     FutureWarning,
                 )
-            return_length = return_lengths
+            return_length = kwargs["return_lengths"]
 
-        if pad_to_max_length:
-            if verbose:
-                warnings.warn(
-                    "The PreTrainedTokenizerBase.prepare_for_model `pad_to_max_length` parameter is deprecated."
-                    "Please use `padding_strategy` instead.",
-                    FutureWarning,
-                )
-            padding_strategy, truncation_strategy, max_length, _ = self._get_padding_truncation_strategies(
-                pad_to_max_length=pad_to_max_length,
-                truncation_strategy=truncation_strategy,
-                max_length=max_length,
-                pad_to_multiple_of=pad_to_multiple_of,
-                verbose=verbose,
-            )
+        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
+        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            verbose=verbose,
+            **kwargs,
+        )
 
         pair = bool(pair_ids is not None)
         len_ids = len(ids)
@@ -2121,14 +2117,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 `tokenize` and `convert_tokens_to_ids` methods.
             num_tokens_to_remove (:obj:`int`, `optional`, defaults to ``0``):
                 number of tokens to remove using the truncation strategy
-            truncation_strategy (:obj:`string`, `optional`, defaults to "only_first"):
+            truncation_strategy (:obj:`string`, `optional`, defaults to "longest_first"):
                 String selected in the following options:
 
-                - 'only_first' (default): Only truncate the first sequence. raise an error if the first sequence is shorter or equal to than num_tokens_to_remove.
-                - 'only_second': Only truncate the second sequence
-                - 'longest_first': Iteratively reduce the inputs sequence until the input is under max_length
+                - 'longest_first' (default): Iteratively reduce the inputs sequence until the input is under max_length
                   starting from the longest one at each token (when there is a pair of input sequences).
                   Overflowing tokens only contains overflow from the first sequence.
+                - 'only_first': Only truncate the first sequence. raise an error if the first sequence is shorter or equal to than num_tokens_to_remove.
+                - 'only_second': Only truncate the second sequence
                 - 'do_not_truncate'
             stride (:obj:`int`, `optional`, defaults to ``0``):
                 If set to a number along with max_length, the overflowing tokens returned will contain some tokens
