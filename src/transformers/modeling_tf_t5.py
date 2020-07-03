@@ -1005,7 +1005,7 @@ class TFT5Model(TFT5PreTrainedModel):
             assert len(inputs) <= 12, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             if "inputs" in inputs:
-                warnings.warn(f"Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
+                warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
                 input_ids = inputs.get("inputs")
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -1198,7 +1198,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             assert len(inputs) <= 13, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             if "inputs" in inputs:
-                warnings.warn(f"Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
+                warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
                 input_ids = inputs.get("inputs")
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
