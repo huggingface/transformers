@@ -1285,9 +1285,10 @@ class QuestionAnsweringPipeline(Pipeline):
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
                 # Ensure padding cannot be attended
-                start_, end_ = start_ * feature.attention_mask, end_ * feature.attention_mask
+                start_ = start_ * feature.attention_mask
+                end_ = end_ * feature.attention_mask
 
-                # Mask padding and question
+                # Mask question
                 start_, end_ = (
                     start_ * np.abs(np.array(feature.p_mask) - 1),
                     end_ * np.abs(np.array(feature.p_mask) - 1),
@@ -1296,7 +1297,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 # Mask CLS
                 start_[0] = end_[0] = 0
 
-                # Make masking the lowest value around there
+                # Make sure non-context indexes in the tensor cannot contribute to the softmax
                 start_ = np.where(start_ == 0.0, -10000.0, start_)
                 end_ = np.where(end_ == 0.0, -10000.0, end_)
 
