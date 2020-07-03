@@ -16,8 +16,7 @@
 import unittest
 
 from transformers import is_tf_available
-
-from .utils import require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 
 if is_tf_available():

@@ -1,8 +1,7 @@
 import unittest
 
 from transformers import is_torch_available
-
-from .utils import require_torch
+from transformers.testing_utils import require_torch
 
 
 if is_torch_available():

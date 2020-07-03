@@ -146,8 +146,9 @@ Using the tokenizer
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
-that process, which is why we need to instantiate the tokenizer using the name of the model, to make sure we use the
-same rules as when the model was pretrained.
+that process (you can learn more about them in the :doc:`tokenizer_summary <tokenizer_summary>`, which is why we need
+to instantiate the tokenizer using the name of the model, to make sure we use the same rules as when the model was
+pretrained.
 
 The second step is to convert those `tokens` into numbers, to be able to build a tensor out of them and feed them to
 the model. To do this, the tokenizer has a `vocab`, which is the part we download when we instantiate it with the

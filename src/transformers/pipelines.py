@@ -87,6 +87,18 @@ def get_framework(model=None):
     return framework
 
 
+class PipelineException(Exception):
+    """
+    Raised by pipelines when handling __call__
+    """
+
+    def __init__(self, task: str, model: str, reason: str):
+        super().__init__(reason)
+
+        self.task = task
+        self.model = model
+
+
 class ArgumentHandler(ABC):
     """
     Base interface for handling varargs for each Pipeline
@@ -603,6 +615,28 @@ class TextGenerationPipeline(Pipeline):
         "TFCTRLLMHeadModel",
     ]
 
+    # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
+
+    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+        """
+        Parse arguments and tokenize
+        """
+        # Parse arguments
+        if self.model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
+            tokenizer_kwargs = {"add_space_before_punct_symbol": True}
+        else:
+            tokenizer_kwargs = {}
+        inputs = self._args_parser(*args, **kwargs)
+        inputs = self.tokenizer(
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
+            **tokenizer_kwargs,
+        )
+
+        return inputs
+
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
@@ -808,6 +842,21 @@ class FillMaskPipeline(Pipeline):
 
         self.topk = topk
 
+    def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
+        numel = np.prod(masked_index.shape)
+        if numel > 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
+            )
+        elif numel < 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                f"No mask_token ({self.tokenizer.mask_token}) found on the input",
+            )
+
     def __call__(self, *args, **kwargs):
         inputs = self._parse_and_tokenize(*args, **kwargs)
         outputs = self._forward(inputs, return_tensors=True)
@@ -820,15 +869,22 @@ class FillMaskPipeline(Pipeline):
             result = []
 
             if self.framework == "tf":
-                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy().item()
-                logits = outputs[i, masked_index, :]
+                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
+
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                self.ensure_exactly_one_mask_token(masked_index)
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = tf.nn.softmax(logits)
                 topk = tf.math.top_k(probs, k=self.topk)
                 values, predictions = topk.values.numpy(), topk.indices.numpy()
             else:
-                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
+                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
 
-                logits = outputs[i, masked_index, :]
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                self.ensure_exactly_one_mask_token(masked_index.numpy())
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
                 values, predictions = probs.topk(self.topk)
 
@@ -987,6 +1043,10 @@ class TokenClassificationPipeline(Pipeline):
                         entity_group_disagg = [entity]
 
                 entities += [entity]
+
+            # Ensure if an entity is the latest one in the sequence it gets appended to the output
+            if len(entity_group_disagg) > 0:
+                entity_groups.append(self.group_entities(entity_group_disagg))
 
             # Append
             if self.grouped_entities:
@@ -1212,32 +1272,33 @@ class QuestionAnsweringPipeline(Pipeline):
             with self.device_placement():
                 if self.framework == "tf":
                     fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
-                    start, end = self.model(fw_args)
+                    start, end = self.model(fw_args)[:2]
                     start, end = start.numpy(), end.numpy()
                 else:
                     with torch.no_grad():
                         # Retrieve the score for the context tokens only (removing question tokens)
                         fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
-                        start, end = self.model(**fw_args)
+                        start, end = self.model(**fw_args)[:2]
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
             min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
-                # Normalize logits and spans to retrieve the answer
-                start_ = np.exp(start_) / np.sum(np.exp(start_))
-                end_ = np.exp(end_) / np.sum(np.exp(end_))
-
                 # Mask padding and question
                 start_, end_ = (
                     start_ * np.abs(np.array(feature.p_mask) - 1),
                     end_ * np.abs(np.array(feature.p_mask) - 1),
                 )
 
+                # Mask CLS
+                start_[0] = end_[0] = 0
+
+                # Normalize logits and spans to retrieve the answer
+                start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
+                end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+
                 if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
-
-                start_[0] = end_[0] = 0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)

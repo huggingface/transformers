@@ -108,7 +108,10 @@ def main():
         level=logging.INFO,
     )
     logger.warning(
-        "device: %s, n_gpu: %s, 16-bits training: %s", training_args.device, training_args.n_gpu, training_args.fp16,
+        "device: %s, n_replicas: %s, 16-bits training: %s",
+        training_args.device,
+        training_args.n_replicas,
+        training_args.fp16,
     )
     logger.info("Training/evaluation parameters %s", training_args)
 
