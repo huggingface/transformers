@@ -1272,32 +1272,33 @@ class QuestionAnsweringPipeline(Pipeline):
             with self.device_placement():
                 if self.framework == "tf":
                     fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
-                    start, end = self.model(fw_args)
+                    start, end = self.model(fw_args)[:2]
                     start, end = start.numpy(), end.numpy()
                 else:
                     with torch.no_grad():
                         # Retrieve the score for the context tokens only (removing question tokens)
                         fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
-                        start, end = self.model(**fw_args)
+                        start, end = self.model(**fw_args)[:2]
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
             min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
-                # Normalize logits and spans to retrieve the answer
-                start_ = np.exp(start_) / np.sum(np.exp(start_))
-                end_ = np.exp(end_) / np.sum(np.exp(end_))
-
                 # Mask padding and question
                 start_, end_ = (
                     start_ * np.abs(np.array(feature.p_mask) - 1),
                     end_ * np.abs(np.array(feature.p_mask) - 1),
                 )
 
+                # Mask CLS
+                start_[0] = end_[0] = 0
+
+                # Normalize logits and spans to retrieve the answer
+                start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
+                end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+
                 if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
-
-                start_[0] = end_[0] = 0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)
