@@ -107,18 +107,6 @@ class DPRSpanPredictor(PreTrainedModel):
 ##################
 
 
-CheckpointState = collections.namedtuple(
-    "CheckpointState", ["model_dict", "optimizer_dict", "scheduler_dict", "offset", "epoch", "encoder_params"]
-)
-
-
-def load_states_from_checkpoint(model_file: str) -> CheckpointState:
-    logger.info("Reading saved model from %s", model_file)
-    state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, "cpu"))
-    logger.info("model_state_dict keys %s", state_dict.keys())
-    return CheckpointState(**state_dict)
-
-
 class DPRPretrainedContextEncoder(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pretrained models.
