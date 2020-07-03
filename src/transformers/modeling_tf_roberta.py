@@ -29,6 +29,7 @@ from .file_utils import (
 )
 from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu
 from .modeling_tf_utils import (
+    TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -264,7 +265,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
-class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
+class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
