@@ -113,6 +113,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.layer_id = next(TFT5Attention.NEW_ID)
         self.is_decoder = config.is_decoder
+        self.use_cache = config.use_cache
         self.has_relative_attention_bias = has_relative_attention_bias
 
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
@@ -260,9 +261,7 @@ class TFT5Attention(tf.keras.layers.Layer):
                 k, v = past_key_value_state
 
         # to cope with keras serialization
-        use_cache = cast_bool_to_primitive(use_cache, True)
-
-        if self.is_decoder and use_cache is True:
+        if self.is_decoder and cast_bool_to_primitive(use_cache, self.use_cache) is True:
             present_key_value_state = ((k, v),)
         else:
             present_key_value_state = (None,)
@@ -297,7 +296,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         outputs = (context,) + present_key_value_state
 
-        if cast_bool_to_primitive(output_attentions) is True:
+        if cast_bool_to_primitive(output_attentions, True) is True:
             outputs = outputs + (weights,)
         if self.has_relative_attention_bias:
             outputs = outputs + (position_bias,)
@@ -748,7 +747,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         outputs = (hidden_states,)
         # need to check if is decoder here as well for special cases when using keras compile
-        if cast_bool_to_primitive(use_cache, True) is True and self.is_decoder:
+        if cast_bool_to_primitive(use_cache, self.use_cache) is True and self.is_decoder:
             outputs = outputs + (present_key_value_states,)
         if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
@@ -1070,7 +1069,7 @@ class TFT5Model(TFT5PreTrainedModel):
             training=training,
         )
 
-        if cast_bool_to_primitive(use_cache) is True:
+        if cast_bool_to_primitive(use_cache, self.config.use_cache) is True:
             past = ((encoder_outputs, decoder_outputs[1]),)
             decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
 
@@ -1271,7 +1270,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         # insert decoder past at right place
         # to speed up decoding
-        if cast_bool_to_primitive(use_cache) is True:
+        if cast_bool_to_primitive(use_cache, self.config.use_cache) is True:
             past = ((encoder_outputs, decoder_outputs[1]),)
             decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
 
