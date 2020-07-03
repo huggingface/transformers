@@ -202,15 +202,19 @@ DPR_READER_INPUTS_DOCSTRING = r"""
         **input_ids**: ``torch.LongTensor`` of shape ``(n_passages, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
             It has to be a sequence triplet with 1) the question and 2) the passages titles and 3) the passages texts
-            To match pre-training, DPR `input_ids` sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            To match pre-training, DPR `input_ids` sequence should be formatted with [CLS] and [SEP] with the format:
 
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] jack ##son ##ville page [SEP] this is jack ##son ##ville .``
+                [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on
             the right rather than the left.
 
             Indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` for more details
+            See :class:`transformers.DPRReaderTokenizer` for more details
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 """
 
 

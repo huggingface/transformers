@@ -148,7 +148,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
 
         [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
-    Args:
+    Inputs:
         questions (:obj:`str`, :obj:`List[str]`):
             The questions to be encoded.
             You can specify one question for many passages. In this case, the question will be duplicated like :obj:`[questions] * n_passages`.
