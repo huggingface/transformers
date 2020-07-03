@@ -247,9 +247,9 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
     Examples::
 
         from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
-        tokenizer = DPRContextEncoderTokenizer.from_pretrained('dpr-base-uncased')
-        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-base')
-        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')
+        tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
         embeddings = model(input_ids)  # the embeddings of the given context.
 
     """
@@ -286,9 +286,9 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
     Examples::
 
         from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
-        tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('dpr-base-uncased')
+        tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
         model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')
+        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
         embeddings = model(input_ids)  # the embeddings of the given question.
 
     """
@@ -336,13 +336,13 @@ class DPRReader(DPRPretrainedReader):
     Examples::
 
         from transformers import DPRReader, DPRReaderTokenizer
-        tokenizer = DPRReaderTokenizer.from_pretrained('dpr-reader-base')
+        tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
         model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
         question_and_titles_ids = [
-            torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
+            tokenizer("Hello, is my dog cute ?", "Dog cuteness", return_tensors='pt')["input_ids"]
             ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
         texts_ids = [
-            torch.tensor(tokenizer("Hello, my dog is definitely cute", add_special_tokens=False))
+            tokenizer("Hello, my dog is definitely cute.", return_tensors='pt', add_special_tokens=False)["input_ids"]
             ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
         outputs = model(question_and_titles_ids, texts_ids)
         start_logits = outputs[1]  # The logits of the start of the span
@@ -403,13 +403,13 @@ class DPRReader(DPRPretrainedReader):
         Examples::
 
             from transformers import DPRReaderTokenizer, DPRReader
-            tokenizer = DPRReaderTokenizer.from_pretrained('dpr-reader-base')
+            tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
             model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
             question_and_titles_ids = [
-                torch.tensor(tokenizer("Hello, is my dog cute ?", "Dog cuteness"))
+                tokenizer("Hello, is my dog cute ?", "Dog cuteness", return_tensors='pt')["input_ids"]
                 ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
             texts_ids = [
-                torch.tensor(tokenizer("Hello, my dog is definitely cute", add_special_tokens=False))
+                tokenizer("Hello, my dog is definitely cute.", add_special_tokens=False, return_tensors='pt')["input_ids"]
                 ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
             predicted_spans = model.generate(question_and_titles_ids, texts_ids)
             # get best answer
