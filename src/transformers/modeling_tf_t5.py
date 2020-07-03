@@ -596,7 +596,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         use_cache = use_cache if use_cache is not None else self.use_cache
-        print("2:", use_cache)
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
@@ -1071,7 +1070,6 @@ class TFT5Model(TFT5PreTrainedModel):
             training=training,
         )
 
-        print(use_cache)
         if cast_bool_to_primitive(use_cache) is True:
             past = ((encoder_outputs, decoder_outputs[1]),)
             decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
