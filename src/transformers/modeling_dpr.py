@@ -15,9 +15,9 @@
 """ PyTorch DPR model for Open Domain Question Answering."""
 
 
+import collections
 import logging
 from typing import Optional, Tuple
-import collections
 
 import torch
 from torch import Tensor, nn
@@ -315,9 +315,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         return pooled_output
 
 
-DPRReaderOutput = collections.namedtuple(
-    "DPRReaderOutput", ["start_logits", "end_logits", "relevance_logits"]
-)
+DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "end_logits", "relevance_logits"])
 
 
 @add_start_docstrings(

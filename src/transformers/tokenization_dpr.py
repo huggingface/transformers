@@ -214,9 +214,7 @@ class CustomDPRReaderTokenizerMixin:
         assert len(titles) == len(
             texts
         ), "There should be as many titles than texts but got {} titles and {} texts.".format(len(titles), len(texts))
-        encoded_question_and_titles = super().__call__(
-            questions, titles, padding=False, truncation=False
-        )["input_ids"]
+        encoded_question_and_titles = super().__call__(questions, titles, padding=False, truncation=False)["input_ids"]
         encoded_texts = super().__call__(texts, add_special_tokens=False, padding=False, truncation=False)["input_ids"]
         encoded_inputs = {
             "input_ids": [
@@ -297,7 +295,7 @@ class CustomDPRReaderTokenizerMixin:
                         doc_id=doc_id,
                         start_index=start_index,
                         end_index=end_index,
-                        text=self.decode(sequence_ids[start_index:end_index + 1])
+                        text=self.decode(sequence_ids[start_index : end_index + 1]),
                     )
                 )
             if len(nbest_spans_predictions) >= num_spans:
@@ -305,11 +303,7 @@ class CustomDPRReaderTokenizerMixin:
         return nbest_spans_predictions[:num_spans]
 
     def _get_best_spans(
-        self,
-        start_logits: List[int],
-        end_logits: List[int],
-        max_answer_length: int,
-        top_spans: int,
+        self, start_logits: List[int], end_logits: List[int], max_answer_length: int, top_spans: int,
     ) -> List[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage.
