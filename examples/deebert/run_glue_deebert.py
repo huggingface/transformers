@@ -616,7 +616,7 @@ def main():
     if args.model_type == "bert":
         model.bert.encoder.set_early_exit_entropy(args.early_exit_entropy)
         model.bert.init_highway_pooler()
-    elif args.model_type == 'roberta':
+    elif args.model_type == "roberta":
         model.roberta.encoder.set_early_exit_entropy(args.early_exit_entropy)
         model.roberta.init_highway_pooler()
     else:
@@ -682,7 +682,7 @@ def main():
             model = model_class.from_pretrained(checkpoint)
             if args.model_type == "bert":
                 model.bert.encoder.set_early_exit_entropy(args.early_exit_entropy)
-            elif args.model_type == 'roberta':
+            elif args.model_type == "roberta":
                 model.roberta.encoder.set_early_exit_entropy(args.early_exit_entropy)
             else:
                 raise NotImplementedError()
