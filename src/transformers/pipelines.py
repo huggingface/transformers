@@ -1297,8 +1297,8 @@ class QuestionAnsweringPipeline(Pipeline):
                 start_[0] = end_[0] = 0
 
                 # Make masking the lowest value around there
-                start_ = np.where(start_ == 0., -10000., start_)
-                end_ = np.where(end_ == 0., -10000., end_)
+                start_ = np.where(start_ == 0.0, -10000.0, start_)
+                end_ = np.where(end_ == 0.0, -10000.0, end_)
 
                 # Normalize logits and spans to retrieve the answer
                 start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
