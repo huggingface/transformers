@@ -1284,6 +1284,9 @@ class QuestionAnsweringPipeline(Pipeline):
             min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
+                # Ensure padding cannot be attended
+                start_, end_ = start_ * feature.attention_mask, end_ * feature.attention_mask
+
                 # Mask padding and question
                 start_, end_ = (
                     start_ * np.abs(np.array(feature.p_mask) - 1),
@@ -1292,6 +1295,10 @@ class QuestionAnsweringPipeline(Pipeline):
 
                 # Mask CLS
                 start_[0] = end_[0] = 0
+
+                # Make masking the lowest value around there
+                start_ = np.where(start_ == 0., -10000., start_)
+                end_ = np.where(end_ == 0., -10000., end_)
 
                 # Normalize logits and spans to retrieve the answer
                 start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
