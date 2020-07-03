@@ -130,4 +130,4 @@ Here is an example of the conversion process for a pre-trained XLM model:
      --tf_checkpoint $XLM_CHECKPOINT_PATH \
      --pytorch_dump_output $PYTORCH_DUMP_OUTPUT
     [--config XML_CONFIG] \
-    [--finetuning_task_name XML_FINETUNED_TASK]
+    [--finetuning_task_name XLM_CONFIG]
