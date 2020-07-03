@@ -260,7 +260,7 @@ class TFT5Attention(tf.keras.layers.Layer):
                 k, v = past_key_value_state
 
         # to cope with keras serialization
-        use_cache = cast_bool_to_primitive(use_cache, True)
+        use_cache = cast_bool_to_primitive(use_cache)
 
         if self.is_decoder and use_cache is True:
             present_key_value_state = ((k, v),)
@@ -748,8 +748,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        # need to check if is decoder here as well for special cases when using keras compile
-        if cast_bool_to_primitive(use_cache, True) is True and self.is_decoder:
+        if cast_bool_to_primitive(use_cache) is True:
+            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
             outputs = outputs + (present_key_value_states,)
         if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
@@ -1273,7 +1273,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         # insert decoder past at right place
         # to speed up decoding
-        if cast_bool_to_primitive(use_cache) is True:
+        if cast_bool_to_primitive(use_cache) is True and len(decoder_outputs) > 1:
             past = ((encoder_outputs, decoder_outputs[1]),)
             decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
 
