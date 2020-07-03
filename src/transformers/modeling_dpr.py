@@ -15,9 +15,9 @@
 """ PyTorch DPR model for Open Domain Question Answering."""
 
 
-import collections
 import logging
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
+import collections
 
 import torch
 from torch import Tensor, nn
@@ -48,12 +48,12 @@ class DPREncoder(PreTrainedModel):
         self.init_weights()
 
     def forward(
-        self, input_ids: Tensor, token_type_ids: Optional[Tensor], attention_mask: Optional[Tensor]
+        self, input_ids: Tensor, attention_mask: Optional[Tensor] = None, token_type_ids: Optional[Tensor] = None
     ) -> Tuple[Tensor, ...]:
         outputs = self.bert_model(
             input_ids=input_ids,
-            token_type_ids=token_type_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             output_hidden_states=True,
         )
         sequence_output, pooled_output, hidden_states = outputs
@@ -92,7 +92,11 @@ class DPRSpanPredictor(PreTrainedModel):
         end_logits = end_logits.squeeze(-1)
         relevance_logits = self.qa_classifier(sequence_output[:, 0, :])
         # resize and return
-        return start_logits.view(n_passages, sequence_length), end_logits.view(n_passages, sequence_length), relevance_logits.view(n_passages)
+        return (
+            start_logits.view(n_passages, sequence_length),
+            end_logits.view(n_passages, sequence_length),
+            relevance_logits.view(n_passages),
+        )
 
     def init_weights(self):
         self.encoder.init_weights()
@@ -257,12 +261,15 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         self.init_weights()
 
     def forward(
-        self, input_ids: Tensor, token_type_ids: Optional[Tensor] = None, attention_mask: Optional[Tensor] = None
+        self, input_ids: Tensor, attention_mask: Optional[Tensor] = None, token_type_ids: Optional[Tensor] = None,
     ) -> Tensor:
         if attention_mask is None:
             attention_mask = input_ids != self.config.pad_token_id
-            attention_mask = attention_mask.to(device=input_ids.device)
-        sequence_output, pooled_output, hidden_states = self.ctx_encoder(input_ids, token_type_ids, attention_mask)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device)
+        sequence_output, pooled_output, hidden_states = self.ctx_encoder(
+            input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
+        )
         return pooled_output
 
 
@@ -296,19 +303,20 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         self.init_weights()
 
     def forward(
-        self, input_ids: Tensor, token_type_ids: Optional[Tensor] = None, attention_mask: Optional[Tensor] = None
+        self, input_ids: Tensor, attention_mask: Optional[Tensor] = None, token_type_ids: Optional[Tensor] = None,
     ) -> Tensor:
         if attention_mask is None:
             attention_mask = input_ids != self.config.pad_token_id
-            attention_mask = attention_mask.to(device=input_ids.device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device)
         sequence_output, pooled_output, hidden_states = self.question_encoder(
-            input_ids, token_type_ids, attention_mask
+            input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         return pooled_output
 
 
 DPRReaderOutput = collections.namedtuple(
-    "SpanPrediction", ["span_score", "relevance_score", "doc_id", "start_index", "end_index"]
+    "DPRReaderOutput", ["start_logits", "end_logits", "relevance_logits"]
 )
 
 
@@ -334,15 +342,16 @@ class DPRReader(DPRPretrainedReader):
         from transformers import DPRReader, DPRReaderTokenizer
         tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
         model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
-        question_and_titles_ids = [
-            tokenizer("Hello, is my dog cute ?", "Dog cuteness", return_tensors='pt')["input_ids"]
-            ]  # One tensor per passage. It corresponds to the concatenation of the question and the context title.
-        texts_ids = [
-            tokenizer("Hello, my dog is definitely cute.", return_tensors='pt', add_special_tokens=False)["input_ids"]
-            ]  # One tensor per passage. It corresponds to the context text in which we're looking for the answer.
-        outputs = model(question_and_titles_ids, texts_ids)
-        start_logits = outputs[1]  # The logits of the start of the span
-        end_logits = outputs[2]  # The logits of the end of the span
+        encoded_inputs = tokenizer(
+                questions=["What is love ?"],
+                titles=["Haddaway"],
+                texts=["'What Is Love' is a song recorded by the artist Haddaway"],
+                return_tensors='pt'
+            )
+        outputs = model(**encoded_inputs)
+        start_logits = outputs[0]  # The logits of the start of the spans
+        end_logits = outputs[1]  # The logits of the end of the spans
+        relevance_logits = outputs[2]  # The relrevance score of the passages
 
     """
 
@@ -352,129 +361,9 @@ class DPRReader(DPRPretrainedReader):
         self.span_predictor = DPRSpanPredictor(config)
         self.init_weights()
 
-    def forward(self, input_ids: Tensor) -> Tuple[Tensor, ...]:
+    def forward(self, input_ids: Tensor, attention_mask: Optional[Tensor] = None) -> Tuple[Tensor, ...]:
         """Compute logits from batched inputs of size (n_questions, n_passages, sequence_length)"""
-        attention_mask = input_ids != self.config.pad_token_id
-        attention_mask = attention_mask.to(device=input_ids.device)
+        if attention_mask is None:
+            attention_mask = input_ids != self.config.pad_token_id
         start_logits, end_logits, relevance_logits = self.span_predictor(input_ids, attention_mask)
-        return start_logits, end_logits, relevance_logits
-
-    def generate(
-        self,
-        input_ids: Tensor,
-        passage_offsets: List[int],
-        sequence_lenghts: List[int],
-        num_spans: int = 16,
-        max_answer_length: int = 64,
-        num_spans_per_passage: int = 4,
-    ) -> List[DPRReaderOutput]:
-        """
-        Get the span predictions for the extractive Q&A model.
-        Outputs: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`.
-            Each `DPRReaderOutput` is a `Tuple` with:
-            **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to other spans
-                in the same passage. It corresponds to the sum of the start and end logits of the span.
-            **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
-                compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
-            **doc_id**: ``int``` the id of the passage.
-            **start_index**: ``int`` the start index of the span (inclusive).
-            **end_index**: ``int`` the end index of the span (inclusive).
-
-        Examples::
-
-            from transformers import DPRReaderTokenizer, DPRReader
-            tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-            model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
-            tokenized_input = tokenizer(question, titles, texts, return_tensors="pt")
-            predicted_spans = reader.generate(**tokenized_input)
-            # get best answer
-            best_span = predicted_spans[0]
-            best_span_ids = tokenized_input["input_ids"][best_span.doc_id]
-            best_span_ids = best_span_ids[best_span.start_index:best_span.end_index + 1]
-            print(tokenizer.decode(best_span_ids.numpy()))
-
-        """
-        assert (
-            input_ids.ndim == 2
-        ), "`.generate` expects a matrix of size (n_passages, sequence_length) for one question only."
-
-        start_logits, end_logits, relevance_logits = self.forward(input_ids.unsqueeze(0))
-
-        n_passages = len(relevance_logits)
-        _, idxs = torch.sort(relevance_logits, descending=True)
-        nbest_spans_predictions: List[DPRReaderOutput] = []
-        for p in range(n_passages):
-            doc_id = idxs[p].item()
-            sequence_ids = input_ids[doc_id]
-            sequence_len = len(sequence_ids)
-            # assuming question & title information is at the beginning of the sequence
-            passage_offset = passage_offsets[p]
-
-            p_start_logits = start_logits[doc_id].tolist()[passage_offset:sequence_len]
-            p_end_logits = end_logits[doc_id].tolist()[passage_offset:sequence_len]
-            ctx_ids = sequence_ids.tolist()[passage_offset:]
-            best_spans = self._get_best_spans(
-                start_logits=p_start_logits,
-                end_logits=p_end_logits,
-                ctx_ids=ctx_ids,
-                passage_offset=passage_offset,
-                sequence_len=sequence_len,
-                max_answer_length=max_answer_length,
-                doc_id=doc_id,
-                relevance_score=relevance_logits[doc_id].item(),
-                top_spans=num_spans_per_passage,
-            )
-            nbest_spans_predictions.extend(best_spans)
-            if len(nbest_spans_predictions) > num_spans:
-                break
-        return nbest_spans_predictions[:num_spans]
-
-    def _get_best_spans(
-        self,
-        start_logits: List[int],
-        end_logits: List[int],
-        ctx_ids: List[int],
-        passage_offset: List[int],
-        sequence_len: List[int],
-        max_answer_length: int,
-        doc_id: int,
-        relevance_score: float,
-        top_spans: int,
-    ) -> List[DPRReaderOutput]:
-        """
-        Finds the best answer span for the extractive Q&A model for one passage.
-        It returns the best span by descending `span_score` order and keeping max `top_spans` spans.
-        Spans longer that `max_answer_length` are ignored.
-        """
-        scores = []
-        start_logits = start_logits[passage_offset:sequence_len]
-        end_logits = end_logits[passage_offset:sequence_len]
-        ctx_ids = ctx_ids[passage_offset:sequence_len]
-        for (start_index, start_score) in enumerate(start_logits):
-            for (answer_length, end_score) in enumerate(end_logits[start_index : start_index + max_answer_length]):
-                scores.append(((start_index, start_index + answer_length), start_score + end_score))
-        scores = sorted(scores, key=lambda x: x[1], reverse=True)
-        chosen_span_intervals = []
-        best_spans = []
-        for (start_index, end_index), score in scores:
-            assert start_index <= end_index, "Wrong span indices: [{}:{}]".format(start_index, end_index)
-            length = end_index - start_index + 1
-            assert length <= max_answer_length, "Span is too long: {} > {}".format(length, max_answer_length)
-            if any(
-                [
-                    start_index <= prev_start_index <= prev_end_index <= end_index
-                    or prev_start_index <= start_index <= end_index <= prev_end_index
-                    for (prev_start_index, prev_end_index) in chosen_span_intervals
-                ]
-            ):
-                continue
-            best_spans.append(
-                DPRReaderOutput(
-                    score, relevance_score, doc_id, passage_offset + start_index, passage_offset + end_index
-                )
-            )
-            chosen_span_intervals.append((start_index, end_index))
-
-            if len(chosen_span_intervals) == top_spans:
-                break
-        return best_spans
+        return DPRReaderOutput(start_logits, end_logits, relevance_logits)
