@@ -142,6 +142,7 @@ conversion utilities for the following models:
     preprocessing
     training
     model_sharing
+    tokenizer_summary
     multilingual
 
 .. toctree::
@@ -173,6 +174,7 @@ conversion utilities for the following models:
     main_classes/pipelines
     main_classes/optimizer_schedules
     main_classes/processors
+    main_classes/trainer
     model_doc/auto
     model_doc/encoderdecoder
     model_doc/bert
