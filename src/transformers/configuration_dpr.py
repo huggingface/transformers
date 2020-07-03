@@ -47,12 +47,6 @@ class DPRConfig(PretrainedConfig):
                 If it is set to zero (default), then no projection is done.
             sequence_length (:obj:`int`, optional, defaults to 512):
                 Maximum length of the sequence.
-            bi_encoder_model_file (:obj:`str`, optional, defaults to None):
-                If not None, load weights from files provided in the official DPR repository for the context
-                and question encoders
-            reader_model_file (:obj:`str`, optional, defaults to None):
-                If not None, load weights from files provided in the official DPR repository for the context
-                and question encoders
             pad_token_id (:obj:`int`, optional, defaults to 0):
                 The id of the pad token. This is used in the reader to combine the different `input_ids`
     """

@@ -903,7 +903,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Set to True to indicate the input is already tokenized
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
-                PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
+                PyTorch :obj:`torch.Tensor` or Numpy :obj: `np.ndarray` instead of a list of python integers.
 """
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -1752,7 +1752,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
-                PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
+                PyTorch :obj:`torch.Tensor` or Numpy :obj: `np.ndarray` instead of a list of python integers.
             verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Set to ``False`` to avoid printing infos and warnings.
         """

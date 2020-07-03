@@ -26,6 +26,7 @@ from .configuration_dpr import DPRConfig
 from .file_utils import add_start_docstrings
 from .modeling_bert import BertConfig, BertModel
 from .modeling_utils import PreTrainedModel
+from .tokenization_dpr import DPRReaderOutput
 
 
 logger = logging.getLogger(__name__)
@@ -213,22 +214,6 @@ DPR_READER_INPUTS_DOCSTRING = r"""
             See :func:`transformers.PreTrainedTokenizer.__call__` for more details
 """
 
-DPR_READER_GENERATE_INPUTS_DOCSTRING = (
-    DPR_READER_INPUTS_DOCSTRING
-    + r"""
-        **passage_offsets**: ``List[int]``:
-            The indices of the beginning of each passage text in the `input_ids`
-
-            These indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` for more details
-        **sequence_lenghts**: ``List[int]``:
-            The indices of the beginning of each passage text in the `input_ids`
-
-            These indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.__call__` for more details
-"""
-)
-
 
 @add_start_docstrings(
     "The bare DPRContextEncoder transformer outputting pooler outputs as context representations.",
@@ -312,9 +297,6 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
             input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         return pooled_output
-
-
-DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "end_logits", "relevance_logits"])
 
 
 @add_start_docstrings(
