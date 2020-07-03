@@ -7,19 +7,19 @@ from transformers.configuration_roberta import RobertaConfig
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from transformers.modeling_roberta import ROBERTA_INPUTS_DOCSTRING, ROBERTA_START_DOCSTRING, RobertaEmbeddings
 
-from .modeling_highway_bert import BertPreTrainedModel, DeebertModel, HighwayException, entropy
+from .modeling_highway_bert import BertPreTrainedModel, DeeBertModel, HighwayException, entropy
 
 
 @add_start_docstrings(
     "The RoBERTa Model transformer with early exiting (DeeRoBERTa). ", ROBERTA_START_DOCSTRING,
 )
-class DeerobertaModel(DeebertModel):
+class DeeRobertaModel(DeeBertModel):
 
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(DeerobertaModel, self).__init__(config)
+        super(DeeRobertaModel, self).__init__(config)
 
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
@@ -36,17 +36,17 @@ class DeerobertaModel(DeebertModel):
     also takes care of multi-layer training. """,
     ROBERTA_START_DOCSTRING,
 )
-class DeerobertaForSequenceClassification(BertPreTrainedModel):
+class DeeRobertaForSequenceClassification(BertPreTrainedModel):
 
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(DeerobertaForSequenceClassification, self).__init__(config)
+        super(DeeRobertaForSequenceClassification, self).__init__(config)
         self.num_labels = config.num_labels
         self.num_layers = config.num_hidden_layers
 
-        self.roberta = DeerobertaModel(config)
+        self.roberta = DeeRobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
 

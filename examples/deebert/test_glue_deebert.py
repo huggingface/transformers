@@ -37,7 +37,7 @@ class DeebertTests(unittest.TestCase):
             --per_gpu_eval_batch_size=1
             --per_gpu_train_batch_size=8
             --learning_rate 2e-5
-            --num_train_epochs 10
+            --num_train_epochs 3
             --overwrite_output_dir
             --seed 42
             --output_dir ./examples/deebert/saved_models/roberta-base/MRPC/two_stage

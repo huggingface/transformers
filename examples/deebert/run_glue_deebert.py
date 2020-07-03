@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from deebert.modeling_highway_bert import DeebertForSequenceClassification
-from deebert.modeling_highway_roberta import DeerobertaForSequenceClassification
+from src.modeling_highway_bert import DeeBertForSequenceClassification
+from src.modeling_highway_roberta import DeeRobertaForSequenceClassification
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 
 
 MODEL_CLASSES = {
-    "bert": (BertConfig, DeebertForSequenceClassification, BertTokenizer),
-    "roberta": (RobertaConfig, DeerobertaForSequenceClassification, RobertaTokenizer),
+    "bert": (BertConfig, DeeBertForSequenceClassification, BertTokenizer),
+    "roberta": (RobertaConfig, DeeRobertaForSequenceClassification, RobertaTokenizer),
 }
 
 
@@ -616,9 +616,11 @@ def main():
     if args.model_type == "bert":
         model.bert.encoder.set_early_exit_entropy(args.early_exit_entropy)
         model.bert.init_highway_pooler()
-    else:
+    elif args.model_type == 'roberta':
         model.roberta.encoder.set_early_exit_entropy(args.early_exit_entropy)
         model.roberta.init_highway_pooler()
+    else:
+        raise NotImplementedError()
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -680,8 +682,11 @@ def main():
             model = model_class.from_pretrained(checkpoint)
             if args.model_type == "bert":
                 model.bert.encoder.set_early_exit_entropy(args.early_exit_entropy)
-            else:
+            elif args.model_type == 'roberta':
                 model.roberta.encoder.set_early_exit_entropy(args.early_exit_entropy)
+            else:
+                raise NotImplementedError()
+
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix, eval_highway=args.eval_highway)
             print_result = get_wanted_result(result)
