@@ -21,7 +21,6 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
-from torch.serialization import default_restore_location
 
 from .configuration_dpr import DPRConfig
 from .file_utils import add_start_docstrings
@@ -83,10 +82,7 @@ class DPRSpanPredictor(PreTrainedModel):
 
     def forward(self, input_ids: Tensor, attention_mask: Tensor):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
-        N, M, L = input_ids.size()
-        # resize as matrices
-        input_ids = input_ids.view(N * M, L)
-        attention_mask = attention_mask.view(N * M, L)
+        n_passages, sequence_length = input_ids.size()
         # feed encoder
         sequence_output, *_ = self.encoder(input_ids, None, attention_mask)
         # compute logits
@@ -96,7 +92,7 @@ class DPRSpanPredictor(PreTrainedModel):
         end_logits = end_logits.squeeze(-1)
         relevance_logits = self.qa_classifier(sequence_output[:, 0, :])
         # resize and return
-        return start_logits.view(N, M, L), end_logits.view(N, M, L), relevance_logits.view(N, M)
+        return start_logits.view(n_passages, sequence_length), end_logits.view(n_passages, sequence_length), relevance_logits.view(n_passages)
 
     def init_weights(self):
         self.encoder.init_weights()
@@ -374,7 +370,7 @@ class DPRReader(DPRPretrainedReader):
             _, len_txt = text_ids.size()
             input_ids[i, 0:len_question_and_title] = question_and_title_ids
             input_ids[i, len_question_and_title : len_question_and_title + len_txt] = text_ids
-        input_ids = input_ids.unsqueeze(0)
+        input_ids = input_ids
         attention_mask = input_ids != self.config.pad_token_id
         attention_mask = attention_mask.to(device=device)
         start_logits, end_logits, relevance_logits = self.span_predictor(input_ids, attention_mask)
@@ -422,21 +418,18 @@ class DPRReader(DPRPretrainedReader):
 
         input_ids, start_logits, end_logits, relevance_logits = self.forward(question_and_titles_ids, texts_ids)
 
-        questions_num, docs_per_question = relevance_logits.size()
-        assert (
-            questions_num == 1
-        ), "`.generate` expects a batch size of 1, i.e. with only the input_ids for one question."
-        _, idxs = torch.sort(relevance_logits, dim=1, descending=True,)
+        n_passages = len(relevance_logits)
+        _, idxs = torch.sort(relevance_logits, descending=True)
         nbest_spans_predictions: List[DPRReaderOutput] = []
-        for p in range(docs_per_question):
-            doc_id = idxs[0, p].item()
-            sequence_ids = input_ids[0, doc_id]
-            sequence_len = sequence_ids.size(0)
+        for p in range(n_passages):
+            doc_id = idxs[p].item()
+            sequence_ids = input_ids[doc_id]
+            sequence_len = len(sequence_ids)
             # assuming question & title information is at the beginning of the sequence
             passage_offset = question_and_titles_ids[p].size(1)
 
-            p_start_logits = start_logits[0, doc_id].tolist()[passage_offset:sequence_len]
-            p_end_logits = end_logits[0, doc_id].tolist()[passage_offset:sequence_len]
+            p_start_logits = start_logits[doc_id].tolist()[passage_offset:sequence_len]
+            p_end_logits = end_logits[doc_id].tolist()[passage_offset:sequence_len]
             ctx_ids = sequence_ids.tolist()[passage_offset:]
             best_spans = self._get_best_spans(
                 start_logits=p_start_logits,
@@ -444,7 +437,7 @@ class DPRReader(DPRPretrainedReader):
                 ctx_ids=ctx_ids,
                 max_answer_length=max_answer_length,
                 doc_id=doc_id,
-                relevance_score=relevance_logits[0, doc_id].item(),
+                relevance_score=relevance_logits[doc_id].item(),
                 top_spans=num_spans_per_passage,
             )
             nbest_spans_predictions.extend(best_spans)
