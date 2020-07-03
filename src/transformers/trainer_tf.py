@@ -3,7 +3,6 @@
 import logging
 import math
 import os
-import random
 from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
@@ -11,7 +10,7 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available, set_seed
 from .training_args_tf import TFTrainingArguments
 
 
@@ -22,13 +21,35 @@ if is_wandb_available():
 logger = logging.getLogger(__name__)
 
 
-def set_seed(seed: int):
-    random.seed(seed)
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
-
-
 class TFTrainer:
+    """
+    TFTrainer is a simple but feature-complete training and eval loop for TensorFlow,
+    optimized for 🤗 Transformers.
+
+    Args:
+        model (:class:`~transformers.TFPreTrainedModel`):
+            The model to train, evaluate or use for predictions.
+        args (:class:`~transformers.TFTrainingArguments`):
+            The arguments to tweak training.
+        train_dataset (:class:`~tf.data.Dataset`, `optional`):
+            The dataset to use for training.
+        eval_dataset (:class:`~tf.data.Dataset`, `optional`):
+            The dataset to use for evaluation.
+        compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
+            The function that will be used to compute metrics at evaluation. Must take a
+            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
+        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
+            When performing evaluation and predictions, only returns the loss.
+        tb_writer (:obj:`tf.summary.SummaryWriter`, `optional`):
+            Object to write to TensorBoard.
+        optimizers (:obj:`Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]`, `optional`):
+            A tuple containing the optimizer and the scheduler to use. The optimizer default to an instance of
+            :class:`tf.keras.optimizers.Adam` if :obj:`args.weight_decay_rate` is 0 else an instance of
+            :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
+            :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else
+            an instance of :class:`~transformers.WarmUp`.
+    """
+
     model: TFPreTrainedModel
     args: TFTrainingArguments
     train_dataset: Optional[tf.data.Dataset]
@@ -78,6 +99,9 @@ class TFTrainer:
         set_seed(self.args.seed)
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
+        """
+        Returns the training :class:`~tf.data.Dataset`.
+        """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
@@ -101,6 +125,13 @@ class TFTrainer:
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_eval_tfdataset(self, eval_dataset: Optional[tf.data.Dataset] = None) -> tf.data.Dataset:
+        """
+        Returns the evaluation :class:`~tf.data.Dataset`.
+
+        Args:
+            eval_dataset (:class:`~tf.data.Dataset`, `optional`):
+                If provided, will override `self.eval_dataset`.
+        """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
@@ -114,6 +145,12 @@ class TFTrainer:
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
+        """
+        Returns a test :class:`~tf.data.Dataset`.
+
+        Args:
+            test_dataset (:class:`~tf.data.Dataset`): The dataset to use.
+        """
         ds = test_dataset.batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
 
         return self.args.strategy.experimental_distribute_dataset(ds)
@@ -124,9 +161,8 @@ class TFTrainer:
         """
         Setup the optimizer and the learning rate scheduler.
 
-        We provide a reasonable default that works well.
-        If you want to use something else, you can pass a tuple in the Trainer's init,
-        or override this method in a subclass.
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        TFTrainer's init through :obj:`optimizers`, or override this method in a subclass.
         """
         if self.optimizers is not None:
             return self.optimizers
@@ -197,6 +233,10 @@ class TFTrainer:
 
         step: int = 1
 
+        # Reset the past mems state at the beginning of the evaluation if necessary.
+        if self.args.past_index >= 0:
+            self._past = None
+
         for features, labels in dataset:
             step = tf.convert_to_tensor(step, dtype=tf.int64)
             loss, logits = self._evaluate_steps(features, labels)
@@ -209,7 +249,7 @@ class TFTrainer:
                 if isinstance(labels, tuple):
                     labels = labels[0]
 
-                if self.args.n_gpu > 1:
+                if self.args.n_replicas > 1:
                     for val in logits.values:
                         if preds is None:
                             preds = val.numpy()
@@ -245,6 +285,10 @@ class TFTrainer:
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
+        if self.args.past_index and hasattr(self, "_past"):
+            # Clean the state at the end of training
+            delattr(self, "_past")
+
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def _log(self, logs: Dict[str, float]) -> None:
@@ -263,11 +307,18 @@ class TFTrainer:
 
         logger.info(output)
 
-    def evaluate(
-        self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None
-    ) -> Dict[str, float]:
+    def evaluate(self, eval_dataset: Optional[tf.data.Dataset] = None) -> Dict[str, float]:
         """
-        Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
+        Run evaluation and returns metrics.
+
+        The calling script will be responsible for providing a method to compute metrics, as they are
+        task-dependent (pass it to the init :obj:`compute_metrics` argument).
+
+        Args:
+            eval_dataset (:class:`~tf.data.Dataset`, `optional`):
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+        Returns:
+            A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
         eval_ds = self.get_eval_tfdataset(eval_dataset)
 
@@ -355,6 +406,9 @@ class TFTrainer:
         logger.info("  Total optimization steps = %d", t_total)
 
         for epoch_iter in range(epochs_trained, int(epochs + 1)):
+            # Reset the past mems state at the beginning of each epoch if necessary.
+            if self.args.past_index >= 0:
+                self._past = None
             for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
                 self.global_step = iterations.numpy()
                 self.epoch_logging = epoch_iter - 1 + (step + 1) / steps_per_epoch
@@ -393,6 +447,10 @@ class TFTrainer:
 
                 if self.args.max_steps > 0 and self.global_step % self.args.max_steps == 0:
                     break
+
+        if self.args.past_index and hasattr(self, "_past"):
+            # Clean the state at the end of training
+            delattr(self, "_past")
 
     def _training_steps(self, ds, optimizer):
         """
@@ -468,22 +526,37 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
+        if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
+            features["mems"] = self._past
         if isinstance(labels, (dict)):
-            loss, logits = self.model(features, training=training, **labels)[:2]
+            outputs = self.model(features, training=training, **labels)[:2]
         else:
-            loss, logits = self.model(features, labels=labels, training=training)[:2]
-        loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
+            outputs = self.model(features, labels=labels, training=training)[:2]
+        loss, logits = outputs[:2]
+        if self.args.past_index >= 0:
+            self._past = outputs[self.args.past_index]
+        loss += sum(self.model.losses) * (1.0 / self.args.n_replicas)
 
         return loss, logits
 
     def predict(self, test_dataset: tf.data.Dataset) -> PredictionOutput:
         """
-        Run prediction and return predictions and potential metrics.
+        Run prediction and returns predictions and potential metrics.
+
         Depending on the dataset and your use case, your test dataset may contain labels.
-        In that case, this method will also return metrics, like in evaluate().
+        In that case, this method will also return metrics, like in :obj:`evaluate()`.
+
         Args:
-          test_dataset: something similar to a PT Dataset. This is just
-            temporary before to have a framework-agnostic approach for datasets.
+            test_dataset (:class:`~tf.data.Dataset`):
+                Dataset to run the predictions on.
+        Returns:
+            `NamedTuple`:
+            predictions (:obj:`np.ndarray`):
+                The predictions on :obj:`test_dataset`.
+            label_ids (:obj:`np.ndarray`, `optional`):
+                The labels (if the dataset contained some).
+            metrics (:obj:`Dict[str, float]`, `optional`):
+                The potential dictionary of metrics (if the dataset contained labels).
         """
         test_ds = self.get_test_tfdataset(test_dataset)
 
@@ -491,7 +564,7 @@ class TFTrainer:
 
     def save_model(self, output_dir: Optional[str] = None):
         """
-        Save the pretrained model.
+        Will save the model, so you can reload it using :obj:`from_pretrained()`.
         """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
 
