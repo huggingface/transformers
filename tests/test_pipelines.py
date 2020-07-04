@@ -166,34 +166,6 @@ class MonoColumnInputTestCase(unittest.TestCase):
         self.assertRaises(Exception, nlp, invalid_inputs)
 
     @require_torch
-    def test_torch_ner(self):
-        mandatory_keys = {"entity", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_torch
-    def test_ner_grouped(self):
-        mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_tf
-    def test_tf_ner(self):
-        mandatory_keys = {"entity", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_tf
-    def test_tf_ner_grouped(self):
-        mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_torch
     def test_torch_sentiment_analysis(self):
         mandatory_keys = {"label", "score"}
         for model_name in TEXT_CLASSIF_FINETUNED_MODELS:
@@ -400,6 +372,60 @@ class QAPipelineTests(unittest.TestCase):
         for model_name in QA_FINETUNED_MODELS:
             nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name, framework="tf")
             self._test_qa_pipeline(nlp)
+
+
+class NerPipelineTests(unittest.TestCase):
+    def _test_ner_pipeline(
+        self, nlp: Pipeline,
+    ):
+        output_keys = {"entity", "word", "score"}
+
+        self.assertIsNotNone(nlp)
+
+        mono_result = nlp(VALID_INPUTS[0], **kwargs)
+        self.assertIsInstance(mono_result, list)
+        self.assertIsInstance(mono_result[0], (dict, list))
+
+        if isinstance(mono_result[0], list):
+            mono_result = mono_result[0]
+
+        for key in output_keys:
+            self.assertIn(key, mono_result[0])
+
+        multi_result = [nlp(input) for input in VALID_INPUTS]
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], (dict, list))
+
+        if isinstance(multi_result[0], list):
+            multi_result = multi_result[0]
+
+        for result in multi_result:
+            for key in output_keys:
+                self.assertIn(key, result)
+
+    @require_torch
+    def test_torch_ner(self):
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
+            self._test_ner_pipeline(nlp)
+
+    @require_torch
+    def test_ner_grouped(self):
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
+            self._test_ner_pipeline(nlp)
+
+    @require_tf
+    def test_tf_ner(self):
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_ner_pipeline(nlp)
+
+    @require_tf
+    def test_tf_ner_grouped(self):
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
+            self._test_ner_pipeline(nlp)
 
 
 class PipelineCommonTests(unittest.TestCase):
