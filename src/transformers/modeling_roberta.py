@@ -343,8 +343,9 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
+        sequence_output = outputs[0] # (bs, seq_len, dim)
+        pooled_output = sequence_output[:, 0] # (bs, dim); <s> token (equiv. to [CLS])
+        logits = self.classifier(pooled_output) # (bs, dim)
 
         outputs = (logits,) + outputs[2:]
         if labels is not None:
@@ -557,8 +558,7 @@ class RobertaClassificationHead(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+    def forward(self, x, **kwargs):
         x = self.dropout(x)
         x = self.dense(x)
         x = torch.tanh(x)

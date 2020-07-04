@@ -320,8 +320,7 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
 
-    def call(self, features, training=False):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+    def call(self, x, training=False):
         x = self.dropout(x, training=training)
         x = self.dense(x)
         x = self.dropout(x, training=training)
@@ -393,8 +392,9 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             training=training,
         )
 
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output, training=training)
+        sequence_output = outputs[0] # (bs, seq_len, dim)
+        pooled_output = sequence_output[:, 0] # (bs, dim); <s> token (equiv. to [CLS])
+        logits = self.classifier(pooled_output, training=training)
 
         outputs = (logits,) + outputs[2:]
 
