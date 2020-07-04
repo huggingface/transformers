@@ -24,18 +24,8 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .configuration_roberta import RobertaConfig
-from .file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_callable,
-)
-from .modeling_bert import (
-    BertEmbeddings,
-    BertLayerNorm,
-    BertModel,
-    BertPreTrainedModel,
-    gelu,
-)
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
 
 
 logger = logging.getLogger(__name__)
