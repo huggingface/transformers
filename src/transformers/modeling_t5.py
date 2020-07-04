@@ -957,7 +957,7 @@ class T5Model(T5PreTrainedModel):
 
         # If the model is only provided with either input_ids or inputs_embeds,
         # use them as the inputs of the decoder. self.encoder checks for input_ids XOR inputs_embeds
-        if (decoder_input_ids is None) and (decoder_input_ids is None):
+        if (decoder_input_ids is None) and (decoder_inputs_embeds is None):
             decoder_input_ids = input_ids
             decoder_inputs_embeds = inputs_embeds
 
