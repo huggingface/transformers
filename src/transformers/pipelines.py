@@ -59,7 +59,6 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
         AutoModelForSeq2SeqLM,
-        AutoModelForCausalLM,
     )
 
 if TYPE_CHECKING:
