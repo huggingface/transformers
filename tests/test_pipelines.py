@@ -377,9 +377,8 @@ class QAPipelineTests(unittest.TestCase):
 class NerPipelineTests(unittest.TestCase):
     def _test_ner_pipeline(
         self, nlp: Pipeline,
+        output_keys: Iterable[str],
     ):
-        output_keys = {"entity", "word", "score"}
-
         self.assertIsNotNone(nlp)
 
         mono_result = nlp(VALID_INPUTS[0])
@@ -405,27 +404,31 @@ class NerPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_torch_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
-            self._test_ner_pipeline(nlp)
+            self._test_ner_pipeline(nlp, mandatory_keys)
 
     @require_torch
     def test_ner_grouped(self):
+        mandatory_keys = {"entity_group", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
-            self._test_ner_pipeline(nlp)
+            self._test_ner_pipeline(nlp, mandatory_keys)
 
     @require_tf
     def test_tf_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
-            self._test_ner_pipeline(nlp)
+            self._test_ner_pipeline(nlp, mandatory_keys)
 
     @require_tf
     def test_tf_ner_grouped(self):
+        mandatory_keys = {"entity_group", "word", "score"}
         for model_name in NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
-            self._test_ner_pipeline(nlp)
+            self._test_ner_pipeline(nlp, mandatory_keys)
 
 
 class PipelineCommonTests(unittest.TestCase):
