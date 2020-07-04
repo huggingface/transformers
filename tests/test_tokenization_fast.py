@@ -3,7 +3,6 @@ import unittest
 from collections import namedtuple
 from itertools import takewhile
 
-from tests.utils import require_torch
 from transformers import (
     BertTokenizer,
     BertTokenizerFast,
@@ -16,6 +15,7 @@ from transformers import (
     TransfoXLTokenizer,
     is_torch_available,
 )
+from transformers.testing_utils import require_torch
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
@@ -90,6 +90,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
         self.assert_padding(tokenizer_r, tokenizer_p)
         self.assert_create_token_type_ids(tokenizer_r, tokenizer_p)
+        self.assert_prepare_for_model(tokenizer_r, tokenizer_p)
         # TODO: enable for v3.0.0
         # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
 
@@ -708,6 +709,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
             for key in no_special_tokens.keys():
                 for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                     self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
+
+    def assert_prepare_for_model(self, tokenizer_r, tokenizer_p):
+        string_sequence = "Asserting that both tokenizers are equal"
+        python_output = tokenizer_p.prepare_for_model(tokenizer_p.encode(string_sequence))
+        rust_output = tokenizer_r.prepare_for_model(tokenizer_r.encode(string_sequence))
+        self.assertEqual(python_output, rust_output)
 
 
 class WordPieceFastTokenizerTest(CommonFastTokenizerTest):

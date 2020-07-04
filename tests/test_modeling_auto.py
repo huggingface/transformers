@@ -17,8 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-
-from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_torch, slow
+from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_torch, slow
 
 
 if is_torch_available():

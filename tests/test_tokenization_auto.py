@@ -27,9 +27,8 @@ from transformers import (
     RobertaTokenizer,
     RobertaTokenizerFast,
 )
+from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER  # noqa: F401
 from transformers.tokenization_auto import TOKENIZER_MAPPING
-
-from .utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, slow  # noqa: F401
 
 
 class AutoTokenizerTest(unittest.TestCase):

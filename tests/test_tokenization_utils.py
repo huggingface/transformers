@@ -17,9 +17,8 @@ import unittest
 from typing import Callable, Optional
 
 from transformers import BatchEncoding, BertTokenizer, BertTokenizerFast, PreTrainedTokenizer, TensorType
+from transformers.testing_utils import require_tf, require_torch, slow
 from transformers.tokenization_gpt2 import GPT2Tokenizer
-
-from .utils import require_tf, require_torch, slow
 
 
 class TokenizerUtilsTest(unittest.TestCase):

@@ -57,7 +57,10 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[mecab,testing]
-            - run: python -m pytest -sv ./tests/test_tokenization_bert_japanese.py
+            - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
+            - store_artifacts:
+                path: ~/transformers/output.txt
+                destination: test_output.txt
     run_examples_torch:
         working_directory: ~/transformers
         docker:

@@ -2,9 +2,9 @@ import unittest
 from typing import Iterable, List, Optional
 
 from transformers import pipeline
-from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline, Conversation
+from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline
+from transformers.testing_utils import require_tf, require_torch, slow, torch_device
 
-from .utils import require_tf, require_torch, slow, torch_device
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 VALID_INPUTS = ["A simple string", ["list of strings"]]
@@ -32,12 +32,12 @@ DIALOGUE_FINETUNED_MODELS = ["microsoft/DialoGPT-medium"]
 
 expected_fill_mask_result = [
     [
-        {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
-        {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
+        {"sequence": "<s>My name is John</s>", "score": 0.00782308354973793, "token": 610, "token_str": "ĠJohn"},
+        {"sequence": "<s>My name is Chris</s>", "score": 0.007475061342120171, "token": 1573, "token_str": "ĠChris"},
     ],
     [
-        {"sequence": "<s> The largest city in France is Paris</s>", "score": 0.3185044229030609, "token": 2201},
-        {"sequence": "<s> The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
+        {"sequence": "<s>The largest city in France is Paris</s>", "score": 0.3185044229030609, "token": 2201},
+        {"sequence": "<s>The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
     ],
 ]
 SUMMARIZATION_KWARGS = dict(num_beams=2, min_length=2, max_length=5)
@@ -117,14 +117,14 @@ class DefaultArgumentHandlerTestCase(unittest.TestCase):
 
 class MonoColumnInputTestCase(unittest.TestCase):
     def _test_mono_column_pipeline(
-            self,
-            nlp: Pipeline,
-            valid_inputs: List,
-            output_keys: Iterable[str],
-            invalid_inputs: List = [None],
-            expected_multi_result: Optional[List] = None,
-            expected_check_keys: Optional[List[str]] = None,
-            **kwargs,
+        self,
+        nlp: Pipeline,
+        valid_inputs: List,
+        output_keys: Iterable[str],
+        invalid_inputs: List = [None],
+        expected_multi_result: Optional[List] = None,
+        expected_check_keys: Optional[List[str]] = None,
+        **kwargs,
     ):
         self.assertIsNotNone(nlp)
 
@@ -219,9 +219,15 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
+        invalid_inputs = [
+            "This is <mask> <mask>"  # More than 1 mask_token in the input is not supported
+            "This is"  # No mask_token is not supported
+        ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2, )
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
+            )
 
     @require_tf
     def test_tf_fill_mask(self):
@@ -230,9 +236,15 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
+        invalid_inputs = [
+            "This is <mask> <mask>"  # More than 1 mask_token in the input is not supported
+            "This is"  # No mask_token is not supported
+        ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2, )
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2,)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
+            )
 
     @require_torch
     @slow
@@ -243,7 +255,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "The largest city in France is <mask>",
         ]
         for model_name in LARGE_FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2, )
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
@@ -295,7 +307,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
         for model_name in TF_SUMMARIZATION_FINETUNED_MODELS:
-            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf", )
+            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf",)
             self._test_mono_column_pipeline(
                 nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs, **SUMMARIZATION_KWARGS
             )
@@ -418,6 +430,7 @@ class QAPipelineTests(unittest.TestCase):
 
 
 class PipelineCommonTests(unittest.TestCase):
+
     pipelines = SUPPORTED_TASKS.keys()
 
     @slow
