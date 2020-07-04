@@ -13,15 +13,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Benchmarking the library on inference and training in Tensorflow"""
+""" Benchmarking the library on inference and training in TensorFlow"""
 
-from transformers import HfArgumentParser, TensorflowBenchmark, TensorflowBenchmarkArguments
+from transformers import HfArgumentParser, TensorFlowBenchmark, TensorFlowBenchmarkArguments
 
 
 def main():
-    parser = HfArgumentParser(TensorflowBenchmarkArguments)
+    parser = HfArgumentParser(TensorFlowBenchmarkArguments)
     benchmark_args = parser.parse_args_into_dataclasses()[0]
-    benchmark = TensorflowBenchmark(args=benchmark_args)
+    benchmark = TensorFlowBenchmark(args=benchmark_args)
     benchmark.run()
 
 

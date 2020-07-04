@@ -122,7 +122,12 @@ from .modeling_mobilebert import (
     MobileBertModel,
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
-from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
+from .modeling_reformer import (
+    ReformerForMaskedLM,
+    ReformerForQuestionAnswering,
+    ReformerModel,
+    ReformerModelWithLMHead,
+)
 from .modeling_retribert import RetriBertModel
 from .modeling_roberta import (
     RobertaForMaskedLM,
@@ -266,6 +271,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
+        (ReformerConfig, ReformerForMaskedLM),
     ]
 )
 
@@ -310,6 +316,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (MobileBertConfig, MobileBertForQuestionAnswering),
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
+        (ReformerConfig, ReformerForQuestionAnswering),
     ]
 )
 
@@ -392,8 +399,8 @@ class AutoModel:
 
         Examples::
 
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            >>> config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            >>> model = AutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_MAPPING.items():
             if isinstance(config, config_class):
@@ -480,8 +487,7 @@ class AutoModel:
         Examples::
 
             model = AutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
-            model = AutoModel.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            assert model.config.output_attention == True
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
             model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
@@ -547,8 +553,8 @@ class AutoModelForPreTraining:
 
         Examples::
 
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelForPreTraining.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            >>> config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            >>> model = AutoModelForPreTraining.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_FOR_PRETRAINING_MAPPING.items():
             if isinstance(config, config_class):

@@ -17,6 +17,7 @@
 
 import logging
 import os
+from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
 
@@ -81,26 +82,16 @@ if is_tf_available():
 
         def gen():
             for ex in features:
-                yield (
-                    {
-                        "input_ids": ex.input_ids,
-                        "attention_mask": ex.attention_mask,
-                        "token_type_ids": ex.token_type_ids,
-                    },
-                    ex.label,
-                )
+                d = {k: v for k, v in asdict(ex).items() if v is not None}
+                label = d.pop("label")
+                yield (d, label)
+
+        input_names = ["input_ids"] + tokenizer.model_input_names
 
         return tf.data.Dataset.from_generator(
             gen,
-            ({"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32}, tf.int64),
-            (
-                {
-                    "input_ids": tf.TensorShape([None]),
-                    "attention_mask": tf.TensorShape([None]),
-                    "token_type_ids": tf.TensorShape([None]),
-                },
-                tf.TensorShape([]),
-            ),
+            ({k: tf.int32 for k in input_names}, tf.int64),
+            ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
         )
 
 
@@ -137,8 +128,11 @@ def _glue_convert_examples_to_features(
 
     labels = [label_from_example(example) for example in examples]
 
-    batch_encoding = tokenizer.batch_encode_plus(
-        [(example.text_a, example.text_b) for example in examples], max_length=max_length, pad_to_max_length=True,
+    batch_encoding = tokenizer(
+        [(example.text_a, example.text_b) for example in examples],
+        max_length=max_length,
+        padding="max_length",
+        truncation=True,
     )
 
     features = []

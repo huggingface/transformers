@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -31,6 +31,7 @@ if is_tf_available():
         TFXLMWithLMHeadModel,
         TFXLMForSequenceClassification,
         TFXLMForQuestionAnsweringSimple,
+        TFXLMForTokenClassification,
         TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -219,6 +220,26 @@ class TFXLMModelTester:
 
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
 
+    def create_and_check_xlm_for_token_classification(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_lengths,
+        sequence_labels,
+        token_labels,
+        is_impossible_labels,
+        input_mask,
+    ):
+        config.num_labels = self.num_labels
+        model = TFXLMForTokenClassification(config=config)
+        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        (logits,) = model(inputs)
+        result = {
+            "logits": logits.numpy(),
+        }
+        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -244,7 +265,14 @@ class TFXLMModelTester:
 class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple)
+        # TODO The multiple choice model is missing and should be added.
+        (
+            TFXLMModel,
+            TFXLMWithLMHeadModel,
+            TFXLMForSequenceClassification,
+            TFXLMForQuestionAnsweringSimple,
+            TFXLMForTokenClassification,
+        )
         if is_tf_available()
         else ()
     )
@@ -274,6 +302,10 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_xlm_sequence_classif(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_sequence_classif(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlm_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

@@ -1,4 +1,4 @@
---
+---
 language: english
 ---
 
@@ -13,7 +13,7 @@ The **T5** model was presented in [Exploring the Limits of Transfer Learning wit
 
 Transfer learning, where a model is first pre-trained on a data-rich task before being fine-tuned on a downstream task, has emerged as a powerful technique in natural language processing (NLP). The effectiveness of transfer learning has given rise to a diversity of approaches, methodology, and practice. In this paper, we explore the landscape of transfer learning techniques for NLP by introducing a unified framework that converts every language problem into a text-to-text format. Our systematic study compares pre-training objectives, architectures, unlabeled datasets, transfer approaches, and other factors on dozens of language understanding tasks. By combining the insights from our exploration with scale and our new “Colossal Clean Crawled Corpus”, we achieve state-of-the-art results on many benchmarks covering summarization, question answering, text classification, and more. To facilitate future work on transfer learning for NLP, we release our dataset, pre-trained models, and code.
 
-![model image](https://camo.githubusercontent.com/623b4dea0b653f2ad3f36c71ebfe749a677ac0a1/68747470733a2f2f6d69726f2e6d656469756d2e636f6d2f6d61782f343030362f312a44304a31674e51663876727255704b657944387750412e706e67)
+![model image](https://i.imgur.com/jVFMMWR.png)
 
 ## Details of the downstream task (Sentiment Recognition) - Dataset 📚
 
@@ -32,18 +32,18 @@ The training script is a slightly modified version of [this Colab Notebook](http
 
 ## Test set metrics 🧾
 
-               |precision | recall  | f1-score |support|
-    |----------|----------|---------|----------|-------|
-    |anger     |      0.93|     0.92|      0.93|    275|
-    |fear      |      0.91|     0.87|      0.89|    224|
-    |joy       |      0.97|     0.94|      0.95|    695|
-    |love      |      0.80|     0.91|      0.85|    159|
-    |sadness   |      0.97|     0.97|      0.97|    521|
-    |surpirse  |      0.73|     0.89|      0.80|     66|
-    |----------|----------|---------|----------|-------|
-    |accuracy|            |         |      0.93|   2000|
-    |macro avg|       0.89|     0.92|      0.90|   2000|
-    |weighted avg|    0.94|     0.93|      0.93|   2000|
+|          |precision | recall  | f1-score |support|
+|----------|----------|---------|----------|-------|
+|anger     |      0.93|     0.92|      0.93|    275|
+|fear      |      0.91|     0.87|      0.89|    224|
+|joy       |      0.97|     0.94|      0.95|    695|
+|love      |      0.80|     0.91|      0.85|    159|
+|sadness   |      0.97|     0.97|      0.97|    521|
+|surpirse  |      0.73|     0.89|      0.80|     66|
+|                                                  |
+|accuracy|            |         |      0.93|   2000|
+|macro avg|       0.89|     0.92|      0.90|   2000|
+|weighted avg|    0.94|     0.93|      0.93|   2000|
     
     
                  
@@ -73,7 +73,6 @@ def get_emotion(text):
  get_emotion("i feel as if i havent blogged in ages are at least truly blogged i am doing an update cute") # Output: 'joy'
  
  get_emotion("i have a feeling i kinda lost my best friend") # Output: 'sadness'
-
 ```
 
 > Created by [Manuel Romero/@mrm8488](https://twitter.com/mrm8488) | [LinkedIn](https://www.linkedin.com/in/manuel-romero-cs/)

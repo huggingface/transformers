@@ -56,6 +56,7 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
+        AutoModelForSeq2SeqLM,
     )
 
 if TYPE_CHECKING:
@@ -84,6 +85,18 @@ def get_framework(model=None):
         # framework = 'tf' if is_tf_available() else 'pt'
         framework = "pt" if is_torch_available() else "tf"
     return framework
+
+
+class PipelineException(Exception):
+    """
+    Raised by pipelines when handling __call__
+    """
+
+    def __init__(self, task: str, model: str, reason: str):
+        super().__init__(reason)
+
+        self.task = task
+        self.model = model
 
 
 class ArgumentHandler(ABC):
@@ -404,9 +417,10 @@ class Pipeline(_ScikitCompat):
         """
         Save the pipeline's model and tokenizer to the specified save_directory
         """
-        if not os.path.isdir(save_directory):
-            logger.error("Provided path ({}) should be a directory".format(save_directory))
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
+        os.makedirs(save_directory, exist_ok=True)
 
         self.model.save_pretrained(save_directory)
         self.tokenizer.save_pretrained(save_directory)
@@ -455,17 +469,14 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def _parse_and_tokenize(self, *args, pad_to_max_length=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
-        inputs = self.tokenizer.batch_encode_plus(
-            inputs,
-            add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
-            pad_to_max_length=pad_to_max_length,
+        inputs = self.tokenizer(
+            inputs, add_special_tokens=add_special_tokens, return_tensors=self.framework, padding=padding,
         )
 
         return inputs
@@ -588,7 +599,7 @@ class TextGenerationPipeline(Pipeline):
     father initially slaps him for making such an accusation, Rasputin watches as the
     man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
-    with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
+    with people, even a bishop, begging for his blessing. """
 
     ALLOWED_MODELS = [
         "XLNetLMHeadModel",
@@ -603,6 +614,28 @@ class TextGenerationPipeline(Pipeline):
         "TFOpenAIGPTLMHeadModel",
         "TFCTRLLMHeadModel",
     ]
+
+    # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
+
+    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+        """
+        Parse arguments and tokenize
+        """
+        # Parse arguments
+        if self.model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
+            tokenizer_kwargs = {"add_space_before_punct_symbol": True}
+        else:
+            tokenizer_kwargs = {}
+        inputs = self._args_parser(*args, **kwargs)
+        inputs = self.tokenizer(
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
+            **tokenizer_kwargs,
+        )
+
+        return inputs
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -621,11 +654,21 @@ class TextGenerationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                    # For XLNet and TransformerXL we had an article to the prompt to give more state to the model.
+                    padding_text = self.PADDING_TEXT + self.tokenizer.eos_token
+                    padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
+                    # This impacts max_length and min_length argument that need adjusting.
+                    padding_length = padding["input_ids"].shape[-1]
+                    if "max_length" in generate_kwargs and generate_kwargs["max_length"] is not None:
+                        generate_kwargs["max_length"] += padding_length
+                    if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
+                        generate_kwargs["min_length"] += padding_length
+
                     inputs = self._parse_and_tokenize(
-                        self.PADDING_TEXT + prompt_text, pad_to_max_length=False, add_special_tokens=False
+                        padding_text + prompt_text, padding=False, add_special_tokens=False
                     )
                 else:
-                    inputs = self._parse_and_tokenize(prompt_text, pad_to_max_length=False, add_special_tokens=False)
+                    inputs = self._parse_and_tokenize(prompt_text, padding=False, add_special_tokens=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
@@ -799,6 +842,21 @@ class FillMaskPipeline(Pipeline):
 
         self.topk = topk
 
+    def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
+        numel = np.prod(masked_index.shape)
+        if numel > 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
+            )
+        elif numel < 1:
+            raise PipelineException(
+                "fill-mask",
+                self.model.base_model_prefix,
+                f"No mask_token ({self.tokenizer.mask_token}) found on the input",
+            )
+
     def __call__(self, *args, **kwargs):
         inputs = self._parse_and_tokenize(*args, **kwargs)
         outputs = self._forward(inputs, return_tensors=True)
@@ -811,14 +869,22 @@ class FillMaskPipeline(Pipeline):
             result = []
 
             if self.framework == "tf":
-                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy().item()
-                logits = outputs[i, masked_index, :]
+                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
+
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                self.ensure_exactly_one_mask_token(masked_index)
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = tf.nn.softmax(logits)
                 topk = tf.math.top_k(probs, k=self.topk)
                 values, predictions = topk.values.numpy(), topk.indices.numpy()
             else:
-                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero().item()
-                logits = outputs[i, masked_index, :]
+                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
+
+                # Fill mask pipeline supports only one ${mask_token} per sample
+                self.ensure_exactly_one_mask_token(masked_index.numpy())
+
+                logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
                 values, predictions = probs.topk(self.topk)
 
@@ -919,11 +985,8 @@ class TokenClassificationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
 
-                tokens = self.tokenizer.encode_plus(
-                    sentence,
-                    return_attention_mask=False,
-                    return_tensors=self.framework,
-                    max_length=self.tokenizer.max_len,
+                tokens = self.tokenizer(
+                    sentence, return_attention_mask=False, return_tensors=self.framework, truncation=True,
                 )
 
                 # Forward
@@ -980,6 +1043,10 @@ class TokenClassificationPipeline(Pipeline):
                         entity_group_disagg = [entity]
 
                 entities += [entity]
+
+            # Ensure if an entity is the latest one in the sequence it gets appended to the output
+            if len(entity_group_disagg) > 0:
+                entity_groups.append(self.group_entities(entity_group_disagg))
 
             # Append
             if self.grouped_entities:
@@ -1186,12 +1253,12 @@ class QuestionAnsweringPipeline(Pipeline):
         examples = self._args_parser(*args, **kwargs)
         features_list = [
             squad_convert_examples_to_features(
-                [example],
-                self.tokenizer,
-                kwargs["max_seq_len"],
-                kwargs["doc_stride"],
-                kwargs["max_question_len"],
-                False,
+                examples=[example],
+                tokenizer=self.tokenizer,
+                max_seq_length=kwargs["max_seq_len"],
+                doc_stride=kwargs["doc_stride"],
+                max_query_length=kwargs["max_question_len"],
+                is_training=False,
                 tqdm_enabled=False,
             )
             for example in examples
@@ -1205,32 +1272,33 @@ class QuestionAnsweringPipeline(Pipeline):
             with self.device_placement():
                 if self.framework == "tf":
                     fw_args = {k: tf.constant(v) for (k, v) in fw_args.items()}
-                    start, end = self.model(fw_args)
+                    start, end = self.model(fw_args)[:2]
                     start, end = start.numpy(), end.numpy()
                 else:
                     with torch.no_grad():
                         # Retrieve the score for the context tokens only (removing question tokens)
                         fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
-                        start, end = self.model(**fw_args)
+                        start, end = self.model(**fw_args)[:2]
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
             min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
-                # Normalize logits and spans to retrieve the answer
-                start_ = np.exp(start_) / np.sum(np.exp(start_))
-                end_ = np.exp(end_) / np.sum(np.exp(end_))
-
                 # Mask padding and question
                 start_, end_ = (
                     start_ * np.abs(np.array(feature.p_mask) - 1),
                     end_ * np.abs(np.array(feature.p_mask) - 1),
                 )
 
+                # Mask CLS
+                start_[0] = end_[0] = 0
+
+                # Normalize logits and spans to retrieve the answer
+                start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
+                end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
+
                 if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
-
-                start_[0] = end_[0] = 0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)
@@ -1430,11 +1498,11 @@ class SummarizationPipeline(Pipeline):
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
             documents = ([prefix + document for document in documents[0]],)
-            pad_to_max_length = True
+            padding = True
 
         elif isinstance(documents[0], str):
             documents = (prefix + documents[0],)
-            pad_to_max_length = False
+            padding = False
         else:
             raise ValueError(
                 " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
@@ -1443,7 +1511,7 @@ class SummarizationPipeline(Pipeline):
             )
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*documents, pad_to_max_length=pad_to_max_length)
+            inputs = self._parse_and_tokenize(*documents, padding=padding)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
@@ -1548,11 +1616,11 @@ class TranslationPipeline(Pipeline):
                 self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
             args = ([prefix + text for text in args[0]],)
-            pad_to_max_length = True
+            padding = True
 
         elif isinstance(args[0], str):
             args = (prefix + args[0],)
-            pad_to_max_length = False
+            padding = False
         else:
             raise ValueError(
                 " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
@@ -1561,7 +1629,7 @@ class TranslationPipeline(Pipeline):
             )
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*args, pad_to_max_length=pad_to_max_length)
+            inputs = self._parse_and_tokenize(*args, padding=padding)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
@@ -1643,8 +1711,8 @@ SUPPORTED_TASKS = {
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "facebook/bart-large-cnn", "tf": "t5-small"}},
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
+        "default": {"model": {"pt": "sshleifer/distilbart-cnn-12-6", "tf": "t5-small"}},
     },
     "translation_en_to_fr": {
         "impl": TranslationPipeline,

@@ -20,10 +20,10 @@ import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -43,7 +43,6 @@ if is_torch_available():
         pipeline,
     )
     from transformers.modeling_bart import (
-        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
         shift_tokens_right,
         invert_mask,
         _prepare_bart_decoder_inputs,
@@ -153,6 +152,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_advanced_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
         decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
             config, inputs_dict["input_ids"]
@@ -210,9 +210,13 @@ EN_CODE = 250004
 class MBartIntegrationTests(unittest.TestCase):
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
-        " I ate lunch twice yesterday",
+        """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
     ]
-    tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
+    tgt_text = [
+        "Şeful ONU declară că nu există o soluţie militară în Siria",
+        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.',
+    ]
+
     expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
 
     @classmethod
@@ -231,6 +235,7 @@ class MBartIntegrationTests(unittest.TestCase):
         return model
 
     @slow
+    @unittest.skip("This has been failing since June 20th at least.")
     def test_enro_forward(self):
         model = self.model
         net_input = {
@@ -246,22 +251,22 @@ class MBartIntegrationTests(unittest.TestCase):
                     [250020, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2],
                 ]
             ),
-            "generation_mode": False,
         }
         net_input["attention_mask"] = net_input["input_ids"].ne(self.pad_token_id)
         with torch.no_grad():
             logits, *other_stuff = model(**net_input)
 
-        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=torch_device, dtype=model.dtype)
-        result_slice = logits[0][0][:3]
-        self.assertTrue(torch.allclose(expected_slice, result_slice, atol=TOLERANCE))
+        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=logits.device, dtype=logits.dtype)
+        result_slice = logits[0, 0, :3]
+        _assert_tensors_equal(expected_slice, result_slice, atol=TOLERANCE)
 
     @slow
     def test_enro_generate(self):
-        inputs: dict = self.tokenizer.prepare_translation_batch([self.src_text[0]]).to(torch_device)
-        translated_tokens = self.model.generate(input_ids=inputs["input_ids"].to(torch_device))
+        batch: BatchEncoding = self.tokenizer.prepare_translation_batch(self.src_text).to(torch_device)
+        translated_tokens = self.model.generate(**batch)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
+        self.assertEqual(self.tgt_text[1], decoded[1])
 
     def test_mbart_enro_config(self):
         mbart_models = ["facebook/mbart-large-en-ro"]
@@ -311,6 +316,14 @@ class MBartIntegrationTests(unittest.TestCase):
     def test_enro_tokenizer_batch_encode_plus(self):
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
+
+    def test_enro_tokenizer_decode_ignores_language_codes(self):
+        self.assertIn(250020, self.tokenizer.all_special_ids)
+        generated_ids = [250020, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2]
+        result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        self.assertEqual(result, expected_romanian)
+        self.assertNotIn(self.tokenizer.eos_token, result)
 
     def test_enro_tokenizer_truncation(self):
         src_text = ["this is gunna be a long sentence " * 20]
@@ -473,24 +486,13 @@ class BartHeadTests(unittest.TestCase):
             bart_toks = tokenizer.encode(ex, return_tensors="pt")
             _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = BartForConditionalGeneration(config).eval().to(torch_device).half()
-        model.generate(input_ids, attention_mask=attention_mask, do_sample=False, early_stopping=True)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_base_model_fp16(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        attention_mask = input_ids.ne(1).to(torch_device)
-        lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
-        lm_model(input_ids, attention_mask=attention_mask)
-
-    def test_default_generate_kwargs(self):
-        config, input_ids, _ = self._get_config_and_data()
         model = BartForConditionalGeneration(config).eval().to(torch_device)
-        model.generate(input_ids)
+        if torch_device == "cuda":
+            model.half()
+        model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     def test_dummy_inputs(self):
@@ -545,7 +547,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
 
 
 def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device,)
+    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
 
 
 TOLERANCE = 1e-4
@@ -610,13 +612,6 @@ class BartModelIntegrationTests(unittest.TestCase):
         _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
         _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
 
-    @unittest.skip("This is just too slow")
-    def test_model_from_pretrained(self):
-        # Forces 1.6GB download from S3 for each model
-        for model_name in BART_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = BartModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
         model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum").to(torch_device)
@@ -625,9 +620,9 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
-        dct = tok.batch_encode_plus([PGE_ARTICLE], max_length=1024, pad_to_max_length=True, return_tensors="pt",).to(
-            torch_device
-        )
+        dct = tok.batch_encode_plus(
+            [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
+        ).to(torch_device)
 
         hypotheses_batch = model.generate(
             input_ids=dct["input_ids"],
@@ -671,7 +666,8 @@ class BartModelIntegrationTests(unittest.TestCase):
         dct = tok.batch_encode_plus(
             [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
 

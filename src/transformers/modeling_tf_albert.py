@@ -21,7 +21,12 @@ import logging
 import tensorflow as tf
 
 from .configuration_albert import AlbertConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
@@ -38,6 +43,8 @@ from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "AlbertTokenizer"
 
 TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "albert-base-v1",
@@ -667,7 +674,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.AlbertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional, defaults to :obj:`None`):
@@ -713,6 +720,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         self.albert = TFAlbertMainLayer(config, name="albert")
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -737,18 +745,6 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertModel
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertModel.from_pretrained('albert-base-v2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         outputs = self.albert(inputs, **kwargs)
         return outputs
@@ -837,6 +833,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         return self.albert.embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -854,18 +851,6 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertForMaskedLM
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForMaskedLM.from_pretrained('albert-base-v2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
         """
         outputs = self.albert(inputs, **kwargs)
 
@@ -895,17 +880,18 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         )
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -930,23 +916,16 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertForSequenceClassification
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForSequenceClassification.from_pretrained('albert-base-v2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[8] if len(inputs) > 8 else labels
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         outputs = self.albert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -988,17 +967,18 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         )
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1021,22 +1001,16 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertForTokenClassification
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForTokenClassification.from_pretrained('albert-base-v2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[8] if len(inputs) > 8 else labels
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         outputs = self.albert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1076,21 +1050,19 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
         )
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        cls_index=None,
-        p_mask=None,
-        is_impossible=None,
         output_attentions=None,
         output_hidden_states=None,
+        start_positions=None,
+        end_positions=None,
         training=False,
     ):
         r"""
@@ -1120,27 +1092,18 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        # The checkpoint albert-base-v2 is not fine-tuned for question answering. Please see the
-        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
-
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertForQuestionAnswering
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForQuestionAnswering.from_pretrained('albert-base-v2')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
         """
+        if isinstance(inputs, (tuple, list)):
+            start_positions = inputs[8] if len(inputs) > 8 else start_positions
+            end_positions = inputs[9] if len(inputs) > 9 else end_positions
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
+
         outputs = self.albert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1194,6 +1157,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="albert-base-v2")
     def call(
         self,
         inputs,
@@ -1202,9 +1166,9 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1230,22 +1194,6 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertForMultipleChoice
-
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForMultipleChoice.from_pretrained('albert-base-v2')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tokenizer(choices, add_special_tokens=True, return_tensors='tf', truncation=True, padding=True)[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1255,8 +1203,10 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
-            assert len(inputs) <= 7, "Too many inputs."
-        elif isinstance(inputs, dict):
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            labels = inputs[8] if len(inputs) > 8 else labels
+            assert len(inputs) <= 9, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             token_type_ids = inputs.get("token_type_ids", token_type_ids)
@@ -1264,7 +1214,9 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 7, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_attentions)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 

@@ -29,11 +29,19 @@ from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import gelu, gelu_fast, gelu_new, swish
 from .configuration_reformer import ReformerConfig
-from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "ReformerTokenizer"
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/reformer-crime-and-punishment",
@@ -154,9 +162,14 @@ class AxialPositionEmbeddings(nn.Module):
                 self.axial_pos_shape, sequence_length, self.least_common_mult_chunk_length,
             )
 
-            # reshape axial encodings and use only until sequence_length
-            position_encodings = torch.cat(broadcasted_weights, dim=-1)
-            position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[
+            # compute how many columns are needed
+            required_pos_encodings_columns = -(-sequence_length // self.axial_pos_shape[1])
+
+            # cut to columns that are needed
+            position_encodings = torch.cat(
+                [weight[:, :required_pos_encodings_columns] for weight in broadcasted_weights], dim=-1
+            )
+            position_encodings = torch.reshape(position_encodings, (batch_size, -1, position_encodings.shape[-1]))[
                 :, :sequence_length
             ]
 
@@ -371,11 +384,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             )
 
             # make sure bucket idx is not longer then sequence length
-            sorted_bucket_idx = sorted_bucket_idx % sequence_length
+            sorted_bucket_idx_per_hash = sorted_bucket_idx % sequence_length
 
             # cluster query key value vectors according to hashed buckets
-            query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx, num_hashes)
-            value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx, num_hashes)
+            query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx_per_hash, num_hashes)
+            value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx_per_hash, num_hashes)
 
             query_key_vectors = self._split_seq_length_dim_to(
                 query_key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
@@ -390,7 +403,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
         else:
             # get sequence length indices
-            sorted_bucket_idx = torch.arange(sequence_length, device=query_key_vectors.device).repeat(
+            sorted_bucket_idx_per_hash = torch.arange(sequence_length, device=query_key_vectors.device).repeat(
                 batch_size, self.num_attention_heads, 1
             )
 
@@ -402,7 +415,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             query_vectors=query_key_vectors,
             key_vectors=key_vectors,
             value_vectors=value_vectors,
-            sorted_bucket_idx=sorted_bucket_idx,
+            sorted_bucket_idx_per_hash=sorted_bucket_idx_per_hash,
             attention_mask=attention_mask,
             head_mask=head_mask,
             sequence_length=sequence_length,
@@ -414,9 +427,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # re-order out_vectors and logits
         if self.chunk_length < sequence_length:
             # sort clusters back to correct ordering
-            out_vectors, logits = ReverseSort.apply(
-                out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, self.num_hashes
-            )
+            out_vectors, logits = ReverseSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
             # sum up all hash rounds
             if num_hashes > 1:
@@ -565,7 +576,14 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.num_buckets = num_buckets
 
     def _attend(
-        self, query_vectors, key_vectors, value_vectors, sorted_bucket_idx, attention_mask, head_mask, sequence_length
+        self,
+        query_vectors,
+        key_vectors,
+        value_vectors,
+        sorted_bucket_idx_per_hash,
+        attention_mask,
+        head_mask,
+        sequence_length,
     ):
 
         # look at previous and following chunks if chunked attention
@@ -582,11 +600,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # if chunked attention split bucket idxs to query and key
         if self.chunk_length < sequence_length:
             query_bucket_idx = self._split_seq_length_dim_to(
-                sorted_bucket_idx, -1, self.chunk_length, self.num_attention_heads
+                sorted_bucket_idx_per_hash, -1, self.chunk_length, self.num_attention_heads
             )
             key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
         else:
-            query_bucket_idx = key_value_bucket_idx = sorted_bucket_idx
+            query_bucket_idx = key_value_bucket_idx = sorted_bucket_idx_per_hash
 
         # get correct mask values depending on precision
         if query_key_dots.dtype == torch.float16:
@@ -728,11 +746,10 @@ class ReverseSort(Function):
     """
 
     @staticmethod
-    def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_hashes):
+    def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx):
         # save sorted_bucket_idx for backprop
         with torch.no_grad():
             ctx.sorted_bucket_idx = sorted_bucket_idx
-            ctx.num_hashes = num_hashes
 
             # undo sort to have correct order for next layer
             expanded_undo_sort_indices = undo_sorted_bucket_idx.unsqueeze(-1).expand(out_vectors.shape)
@@ -744,35 +761,14 @@ class ReverseSort(Function):
     def backward(ctx, grad_out_vectors, grad_logits):
         # get parameters saved in ctx
         sorted_bucket_idx = ctx.sorted_bucket_idx
-        num_hashes = ctx.num_hashes
 
-        # get real gradient shape
-        # shape is BatchSize x NumAttnHeads x ChunkLen * NumHashes
-        grad_logits_shape = grad_logits.shape
-        # shape is BatchSize x NumAttnHeads x ChunkLen * NumHashes x ChunkLen
-        grad_out_vectors_shape = grad_out_vectors.shape
-
-        # split gradient vectors and sorted bucket idxs by concatenated chunk dimension to gather correct indices
-        # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen
-        grad_logits = grad_logits.view((grad_logits_shape[:2] + (num_hashes, -1)))
-        # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen x ChunkLen
-        grad_out_vectors = grad_out_vectors.view(
-            (grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:])
-        )
-
-        # reshape and expand
-        sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_hashes, -1)))
         expanded_sort_indices = sorted_bucket_idx.unsqueeze(-1).expand(grad_out_vectors.shape)
         # reverse sort of forward
-        grad_out_vectors = torch.gather(grad_out_vectors, 3, expanded_sort_indices)
-        grad_logits = torch.gather(grad_logits, 3, sorted_bucket_idx)
+        grad_out_vectors = torch.gather(grad_out_vectors, 2, expanded_sort_indices)
+        grad_logits = torch.gather(grad_logits, 2, sorted_bucket_idx)
 
-        # reshape into correct shape
-        grad_logits = torch.reshape(grad_logits, grad_logits_shape)
-        grad_out_vectors = torch.reshape(grad_out_vectors, grad_out_vectors_shape)
-
-        # return grad and `None` fillers for last 3 forward args
-        return grad_out_vectors, grad_logits, None, None, None
+        # return grad and `None` fillers for last 2 forward args
+        return grad_out_vectors, grad_logits, None, None
 
 
 class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
@@ -1474,7 +1470,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.ReformerTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1538,6 +1534,7 @@ class ReformerModel(ReformerPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
     def forward(
         self,
         input_ids=None,
@@ -1565,19 +1562,6 @@ class ReformerModel(ReformerPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ReformerModel, ReformerTokenizer
-        import torch
-
-        tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
-        model =  ReformerModel.from_pretrained('google/reformer-crime-and-punishment')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1720,6 +1704,7 @@ class ReformerModel(ReformerPreTrainedModel):
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        assert config.is_decoder, "If you want to use `ReformerLMHeadModel` make sure that `is_decoder=True`."
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 
@@ -1733,6 +1718,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         pass
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
     def forward(
         self,
         input_ids=None,
@@ -1769,19 +1755,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import ReformerModelWithLMHead, ReformerTokenizer
-        import torch
-
-        tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
-        model =  ReformerModelWithLMHead.from_pretrained('google/reformer-crime-and-punishment')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-
-        loss, prediction_scores = outputs[:2]
         """
 
         reformer_outputs = self.reformer(
@@ -1909,3 +1882,109 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             outputs = (loss,) + outputs
         return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """Reformer Model with a span classification head on top for
+    extractive question-answering tasks like SQuAD / TriviaQA ( a linear layer on
+    top of hidden-states output to compute `span start logits` and `span end logits`. """,
+    REFORMER_START_DOCSTRING,
+)
+class ReformerForQuestionAnswering(ReformerPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.reformer = ReformerModel(config)
+        # 2 * config.hidden_size because we use reversible residual layers
+        self.qa_outputs = nn.Linear(2 * config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def tie_weights(self):
+        # word embeddings are not tied in Reformer
+        pass
+
+    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
+    def forward(
+        self,
+        input_ids=None,
+        position_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        num_hashes=None,
+        start_positions=None,
+        end_positions=None,
+        output_hidden_states=None,
+        output_attentions=None,
+    ):
+        r"""
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.ReformerConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
+        start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-start scores (before SoftMax).
+        end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-end scores (before SoftMax).
+        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        """
+
+        reformer_outputs = self.reformer(
+            input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            num_hashes=num_hashes,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+        )
+
+        sequence_output = reformer_outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        outputs = (start_logits, end_logits,) + reformer_outputs[1:]
+
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+            total_loss = (start_loss + end_loss) / 2
+            outputs = (total_loss,) + outputs
+
+        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)

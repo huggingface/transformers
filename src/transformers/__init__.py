@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.11.0"
+__version__ = "3.0.1"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -155,7 +155,7 @@ from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
 # Trainer
-from .trainer_utils import EvalPrediction
+from .trainer_utils import EvalPrediction, set_seed
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
 
@@ -169,7 +169,8 @@ if is_sklearn_available():
 
 # Modeling
 if is_torch_available():
-    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering, apply_chunking_to_forward
+    from .generation_utils import top_k_top_p_filtering
+    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, apply_chunking_to_forward
     from .modeling_auto import (
         AutoModel,
         AutoModelForPreTraining,
@@ -365,8 +366,10 @@ if is_torch_available():
         ReformerAttention,
         ReformerLayer,
         ReformerModel,
+        ReformerForMaskedLM,
         ReformerModelWithLMHead,
         ReformerForSequenceClassification,
+        ReformerForQuestionAnswering,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -397,7 +400,7 @@ if is_torch_available():
     )
 
     # Trainer
-    from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
+    from .trainer import Trainer, torch_distributed_zero_first
     from .data.data_collator import default_data_collator, DataCollator, DataCollatorForLanguageModeling
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
@@ -407,9 +410,9 @@ if is_torch_available():
 
 # TensorFlow
 if is_tf_available():
+    from .generation_tf_utils import tf_top_k_top_p_filtering
     from .modeling_tf_utils import (
         shape_list,
-        tf_top_k_top_p_filtering,
         TFPreTrainedModel,
         TFSequenceSummary,
         TFSharedEmbeddings,
@@ -614,8 +617,8 @@ if is_tf_available():
     from .trainer_tf import TFTrainer
 
     # Benchmarks
-    from .benchmark.benchmark_tf import TensorflowBenchmark
-    from .benchmark.benchmark_args_tf import TensorflowBenchmarkArguments
+    from .benchmark.benchmark_tf import TensorFlowBenchmark
+    from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
 
 if not is_tf_available() and not is_torch_available():

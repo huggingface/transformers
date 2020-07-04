@@ -31,6 +31,8 @@ from .modeling_roberta import (
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "CamembertTokenizer"
+
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "camembert-base",
     "Musixmatch/umberto-commoncrawl-cased-v1",

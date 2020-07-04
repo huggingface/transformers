@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -36,7 +36,6 @@ if is_torch_available():
         MobileBertForTokenClassification,
         MobileBertForMultipleChoice,
     )
-    from transformers.modeling_mobilebert import MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class MobileBertModelTester:
@@ -453,12 +452,6 @@ class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MobileBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
 
 def _long_tensor(tok_lst):

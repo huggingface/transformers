@@ -21,7 +21,12 @@ import logging
 import tensorflow as tf
 
 from . import MobileBertConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_bert import TFBertIntermediate, gelu, gelu_new, swish
 from .modeling_tf_utils import (
     TFMultipleChoiceLoss,
@@ -39,6 +44,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "mobilebert-uncased",
@@ -621,19 +627,6 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
         return prediction_scores
 
 
-class TFMobileBertPreTrainingHeads(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
-        self.predictions = TFMobileBertLMPredictionHead(config, name="predictions")
-        self.seq_relationship = tf.keras.layers.Dense(2, name="seq_relationship")
-
-    def call(self, inputs):
-        sequence_output, pooled_output = inputs
-        prediction_scores = self.predictions(sequence_output)
-        seq_relationship_score = self.seq_relationship(pooled_output)
-        return prediction_scores, seq_relationship_score
-
-
 @keras_serializable
 class TFMobileBertMainLayer(tf.keras.layers.Layer):
     config_class = MobileBertConfig
@@ -801,7 +794,7 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.MobileBertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
@@ -845,6 +838,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -869,18 +863,6 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertModel
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertModel.from_pretrained('mobilebert-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
         outputs = self.mobilebert(inputs, **kwargs)
         return outputs
@@ -895,7 +877,8 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
-        self.cls = TFMobileBertPreTrainingHeads(config, name="cls")
+        self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
+        self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
     def get_output_embeddings(self):
         return self.mobilebert.embeddings
@@ -923,20 +906,21 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
     Examples::
 
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
+        >>> import tensorflow as tf
+        >>> from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
 
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertForPreTraining.from_pretrained('mobilebert-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores, seq_relationship_scores = outputs[:2]
+        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
+        >>> model = TFMobileBertForPreTraining.from_pretrained('google/mobilebert-uncased')
+        >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        >>> outputs = model(input_ids)
+        >>> prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
         outputs = self.mobilebert(inputs, **kwargs)
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores, seq_relationship_score = self.cls([sequence_output, pooled_output])
+        prediction_scores = self.predictions(sequence_output)
+        seq_relationship_score = self.seq_relationship(pooled_output)
         outputs = (prediction_scores, seq_relationship_score,) + outputs[
             2:
         ]  # add hidden states and attention if they are here
@@ -956,6 +940,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel):
         return self.mobilebert.embeddings
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -973,18 +958,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForMaskedLM
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertForMaskedLM.from_pretrained('mobilebert-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
         """
         outputs = self.mobilebert(inputs, **kwargs)
 
@@ -1015,7 +988,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
-        self.cls = TFMobileBertOnlyNSPHead(config, name="cls")
+        self.cls = TFMobileBertOnlyNSPHead(config, name="seq_relationship___cls")
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
@@ -1038,18 +1011,17 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
 
     Examples::
 
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
+        >>> import tensorflow as tf
+        >>> from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
 
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertForNextSentencePrediction.from_pretrained('mobilebert-uncased')
+        >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
+        >>> model = TFMobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
 
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        encoding = tokenizer.encode_plus(prompt, next_sentence, return_tensors='tf')
+        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
 
-        logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-        assert logits[0][0] < logits[0][1] # the next sentence was random
+        >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
         """
         outputs = self.mobilebert(inputs, **kwargs)
 
@@ -1078,17 +1050,18 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         )
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1113,23 +1086,16 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFBMobileBertForSequenceClassification
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertForSequenceClassification.from_pretrained('mobilebert-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[8] if len(inputs) > 8 else labels
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         outputs = self.mobilebert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1170,21 +1136,19 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         )
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        cls_index=None,
-        p_mask=None,
-        is_impossible=None,
         output_attentions=None,
         output_hidden_states=None,
+        start_positions=None,
+        end_positions=None,
         training=False,
     ):
         r"""
@@ -1214,25 +1178,18 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForQuestionAnswering
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertForQuestionAnswering.from_pretrained('mobilebert-uncased')  # Not a fine-tuned model! Load a fine-tuned model to obtain coherent results.
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-        assert answer == "a nice puppet"
-
         """
+        if isinstance(inputs, (tuple, list)):
+            start_positions = inputs[8] if len(inputs) > 8 else start_positions
+            end_positions = inputs[9] if len(inputs) > 9 else end_positions
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
+
         outputs = self.mobilebert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1286,6 +1243,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def call(
         self,
         inputs,
@@ -1294,9 +1252,9 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1322,22 +1280,6 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForMultipleChoice
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertForMultipleChoice.from_pretrained('mobilebert-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1348,7 +1290,8 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
             output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            assert len(inputs) <= 8, "Too many inputs."
+            labels = inputs[8] if len(inputs) > 8 else labels
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -1358,7 +1301,8 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 8, "Too many inputs."
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -1424,17 +1368,18 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         )
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/mobilebert-uncased")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
@@ -1457,22 +1402,16 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import MobileBertTokenizer, TFMobileBertForTokenClassification
-
-        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
-        model = TFMobileBertForTokenClassification.from_pretrained('mobilebert-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[8] if len(inputs) > 8 else labels
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         outputs = self.mobilebert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,

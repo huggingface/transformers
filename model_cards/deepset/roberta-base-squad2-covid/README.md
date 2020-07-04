@@ -4,7 +4,7 @@
 **Language model:** deepset/roberta-base-squad2  
 **Language:** English  
 **Downstream-task:** Extractive QA  
-**Training data:** [SQuAD-style CORD-19 annotations](https://github.com/deepset-ai/COVID-QA/tree/master/data/question-answering)  
+**Training data:** [SQuAD-style CORD-19 annotations from 23rd April](https://github.com/deepset-ai/COVID-QA/blob/master/data/question-answering/200423_covidQA.json)  
 **Code:**  See [example](https://github.com/deepset-ai/FARM/blob/master/examples/question_answering_crossvalidation.py) in [FARM](https://github.com/deepset-ai/FARM)  
 **Infrastructure**: Tesla v100
 

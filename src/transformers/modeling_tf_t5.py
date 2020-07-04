@@ -37,6 +37,8 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "T5Tokenizer"
+
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "t5-small",
     "t5-base",
@@ -476,7 +478,7 @@ class TFT5Block(tf.keras.layers.Layer):
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-class _NoLayerEmbedTokens(object):
+class _NoLayerEmbedTokens:
     """
      this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
      class to avoid problem with weight restoring. Also it makes sure that the layer is
@@ -518,6 +520,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
+        self.use_cache = config.use_cache
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
@@ -556,7 +559,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         head_mask=None,
         past_key_value_states=None,
-        use_cache=False,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         training=False,
@@ -586,6 +589,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        use_cache = use_cache if use_cache is not None else self.use_cache
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
@@ -651,7 +655,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
 
-        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposistion
+        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
         # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
         # extended_attention_mask = tf.math.equal(extended_attention_mask,
         #                                         tf.transpose(extended_attention_mask, perm=(-1, -2)))
@@ -678,16 +682,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if head_mask is not None:
-            raise NotImplementedError
-        else:
-            head_mask = [None] * self.num_hidden_layers
-            # head_mask = tf.constant([0] * self.num_hidden_layers)
+        assert head_mask is None, "Head mask not supported"
+        head_mask = [None] * self.num_hidden_layers
 
         present_key_value_states = ()
         all_hidden_states = ()
@@ -874,6 +870,7 @@ class TFT5Model(TFT5PreTrainedModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
@@ -928,13 +925,13 @@ class TFT5Model(TFT5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, TFT5Model
+        >>> from transformers import T5Tokenizer, TFT5Model
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5Model.from_pretrained('t5-small')
-        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(inputs, decoder_input_ids=inputs)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5Model.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> outputs = model(inputs, decoder_input_ids=inputs)
+        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
 
@@ -952,10 +949,12 @@ class TFT5Model(TFT5PreTrainedModel):
         decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
-        use_cache = kwargs.get("use_cache", True)
+        use_cache = kwargs.get("use_cache", None)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
         output_hidden_states = kwargs.get("output_hidden_states", None)
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1014,6 +1013,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
@@ -1046,8 +1046,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
-        loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
-            Classification loss (cross entropy).
         prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         decoder_past_key_value_states (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``use_cache=True``):
@@ -1068,18 +1066,18 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
     Examples::
 
-        from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+        >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(inputs, decoder_input_ids=inputs)
-        prediction_scores = outputs[0]
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> outputs = model(inputs, decoder_input_ids=inputs)
+        >>> prediction_scores = outputs[0]
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        model.generate(inputs)
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        >>> result = model.generate(inputs)
 
         """
 
@@ -1095,12 +1093,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         encoder_outputs = kwargs.get("encoder_outputs", None)
         decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
-        use_cache = kwargs.get("use_cache", True)
+        use_cache = kwargs.get("use_cache", None)
         inputs_embeds = kwargs.get("inputs_embeds", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         head_mask = kwargs.get("head_mask", None)
         output_attentions = kwargs.get("output_attentions", None)
         output_hidden_states = kwargs.get("output_hidden_states", None)
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:

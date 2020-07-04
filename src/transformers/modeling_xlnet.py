@@ -26,11 +26,13 @@ from torch.nn import functional as F
 
 from .activations import gelu_new, swish
 from .configuration_xlnet import XLNetConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "XLNetTokenizer"
 
 XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlnet-base-cased",
@@ -571,7 +573,7 @@ XLNET_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
@@ -749,6 +751,7 @@ class XLNetModel(XLNetPreTrainedModel):
         return pos_emb
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def forward(
         self,
         input_ids=None,
@@ -785,20 +788,6 @@ class XLNetModel(XLNetPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLNetTokenizer, XLNetModel
-        import torch
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = XLNetModel.from_pretrained('xlnet-large-cased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=False)).unsqueeze(0)  # Batch size 1
-
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1164,6 +1153,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def forward(
         self,
         input_ids=None,
@@ -1208,20 +1198,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLNetTokenizer, XLNetForSequenceClassification
-        import torch
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = XLNetForSequenceClassification.from_pretrained('xlnet-large-cased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -1273,6 +1249,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def forward(
         self,
         input_ids=None,
@@ -1316,21 +1293,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLNetTokenizer, XLNetForTokenClassification
-        import torch
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = XLNetForTokenClassification.from_pretrained('xlnet-large-cased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-
-        scores = outputs[0]
-
         """
 
         outputs = self.transformer(
@@ -1386,6 +1348,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def forward(
         self,
         input_ids=None,
@@ -1431,22 +1394,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLNetTokenizer, XLNetForMultipleChoice
-        import torch
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
-        model = XLNetForMultipleChoice.from_pretrained('xlnet-base-cased')
-
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
-
-        outputs = model(input_ids, labels=labels)
-        loss, classification_scores = outputs[:2]
-
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1508,6 +1455,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlnet-base-cased")
     def forward(
         self,
         input_ids=None,
@@ -1558,22 +1506,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import XLNetTokenizer, XLNetForQuestionAnsweringSimple
-        import torch
-
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
-        model = XLNetForQuestionAnsweringSimple.from_pretrained('xlnet-base-cased')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss = outputs[0]
-
         """
 
         outputs = self.transformer(
@@ -1705,20 +1637,20 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
-    Examples::
+        Example::
 
-        from transformers import XLNetTokenizer, XLNetForQuestionAnswering
-        import torch
+            >>> from transformers import XLNetTokenizer, XLNetForQuestionAnswering
+            >>> import torch
 
-        tokenizer =  XLNetTokenizer.from_pretrained('xlnet-base-cased')
-        model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased')
+            >>> tokenizer =  XLNetTokenizer.from_pretrained('xlnet-base-cased')
+            >>> model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        start_positions = torch.tensor([1])
-        end_positions = torch.tensor([3])
-        outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        loss = outputs[0]
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> start_positions = torch.tensor([1])
+            >>> end_positions = torch.tensor([3])
+            >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
 
+            >>> loss = outputs[0]
         """
         transformer_outputs = self.transformer(
             input_ids,
