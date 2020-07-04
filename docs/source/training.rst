@@ -86,7 +86,7 @@ prepares everything we might need to pass to the model.
     from transformers import BertTokenizer
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     text_batch = ["I love Pixar.", "I don't care for Pixar."]
-    encoding = tokenizer(text_batch, return_tensors='pt', padding=True, truncation=True)
+    encoding = tokenizer.encode(text_batch, return_tensors='pt', padding=True, truncation=True)
     input_ids = encoding['input_ids']
     attention_mask = encoding['attention_mask']
 
