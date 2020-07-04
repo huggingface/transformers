@@ -818,7 +818,8 @@ T5_INPUTS_DOCSTRING = r"""
             Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
             If `decoder_past_key_value_states` is used, optionally only the last `decoder_input_ids` have to be input (see `decoder_past_key_value_states`).
             To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
-            `T5 Training <./t5.html#training>`__.
+            `T5 Training <./t5.html#training>`__. If decoder_input_ids and decoder_inputs_embeds are both None, 
+            decoder_input_ids takes the value of input_ids.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
         decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
@@ -837,7 +838,8 @@ T5_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
             If `decoder_past_key_value_states` is used, optionally only the last `decoder_inputs_embeds` have to be input (see `decoder_past_key_value_states`).
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            than the model's internal embedding lookup matrix. If decoder_input_ids and decoder_inputs_embeds are both None, 
+            decoder_inputs_embeds takes the value of inputs_embeds.
         head_mask: (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
@@ -934,7 +936,7 @@ class T5Model(T5PreTrainedModel):
             >>> model = T5Model.from_pretrained('t5-small')
 
             >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            >>> outputs = model(input_ids=input_ids)
 
             >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
@@ -952,6 +954,12 @@ class T5Model(T5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
+
+        # If the model is only provided with either input_ids or inputs_embeds,
+        # use them as the inputs of the decoder. self.encoder checks for input_ids XOR inputs_embeds
+        if (decoder_input_ids is None) and (decoder_input_ids is None):
+            decoder_input_ids = input_ids
+            decoder_inputs_embeds = inputs_embeds
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
@@ -1076,7 +1084,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
         >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
         >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+        >>> outputs = model(input_ids=input_ids, labels=input_ids)
         >>> loss, prediction_scores = outputs[:2]
 
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
