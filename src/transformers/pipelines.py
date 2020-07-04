@@ -39,6 +39,7 @@ from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 
+
 if is_tf_available():
     import tensorflow as tf
     from .modeling_tf_auto import (
@@ -57,7 +58,8 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
-        AutoModelForSeq2SeqLM, AutoModelForCausalLM,
+        AutoModelForSeq2SeqLM,
+        AutoModelForCausalLM,
     )
 
 if TYPE_CHECKING:
@@ -175,7 +177,7 @@ class PipelineDataFormat:
     SUPPORTED_FORMATS = ["json", "csv", "pipe"]
 
     def __init__(
-            self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         self.output_path = output_path
         self.input_path = input_path
@@ -222,7 +224,7 @@ class PipelineDataFormat:
 
     @staticmethod
     def from_str(
-            format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         if format == "json":
             return JsonPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
@@ -236,7 +238,7 @@ class PipelineDataFormat:
 
 class CsvPipelineDataFormat(PipelineDataFormat):
     def __init__(
-            self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -259,7 +261,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
 class JsonPipelineDataFormat(PipelineDataFormat):
     def __init__(
-            self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -382,15 +384,15 @@ class Pipeline(_ScikitCompat):
     default_input_names = None
 
     def __init__(
-            self,
-            model: Union["PreTrainedModel", "TFPreTrainedModel"],
-            tokenizer: PreTrainedTokenizer,
-            modelcard: Optional[ModelCard] = None,
-            framework: Optional[str] = None,
-            task: str = "",
-            args_parser: ArgumentHandler = None,
-            device: int = -1,
-            binary_output: bool = False,
+        self,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        tokenizer: PreTrainedTokenizer,
+        modelcard: Optional[ModelCard] = None,
+        framework: Optional[str] = None,
+        task: str = "",
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        binary_output: bool = False,
     ):
 
         if framework is None:
@@ -547,14 +549,14 @@ class FeatureExtractionPipeline(Pipeline):
     """
 
     def __init__(
-            self,
-            model: Union["PreTrainedModel", "TFPreTrainedModel"],
-            tokenizer: PreTrainedTokenizer,
-            modelcard: Optional[ModelCard] = None,
-            framework: Optional[str] = None,
-            args_parser: ArgumentHandler = None,
-            device: int = -1,
-            task: str = "",
+        self,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        tokenizer: PreTrainedTokenizer,
+        modelcard: Optional[ModelCard] = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        task: str = "",
     ):
         super().__init__(
             model=model,
@@ -638,7 +640,7 @@ class TextGenerationPipeline(Pipeline):
         return inputs
 
     def __call__(
-            self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         if self.model.__class__.__name__ not in self.ALLOWED_MODELS:
             raise NotImplementedError(
@@ -682,7 +684,7 @@ class TextGenerationPipeline(Pipeline):
 
                 # Ensure that batch size = 1 (batch generation not allowed for now)
                 assert (
-                        input_ids is None or input_ids.shape[0] == 1
+                    input_ids is None or input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
 
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
@@ -819,15 +821,15 @@ class FillMaskPipeline(Pipeline):
     """
 
     def __init__(
-            self,
-            model: Union["PreTrainedModel", "TFPreTrainedModel"],
-            tokenizer: PreTrainedTokenizer,
-            modelcard: Optional[ModelCard] = None,
-            framework: Optional[str] = None,
-            args_parser: ArgumentHandler = None,
-            device: int = -1,
-            topk=5,
-            task: str = "",
+        self,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        tokenizer: PreTrainedTokenizer,
+        modelcard: Optional[ModelCard] = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        topk=5,
+        task: str = "",
     ):
         super().__init__(
             model=model,
@@ -950,17 +952,17 @@ class TokenClassificationPipeline(Pipeline):
     default_input_names = "sequences"
 
     def __init__(
-            self,
-            model: Union["PreTrainedModel", "TFPreTrainedModel"],
-            tokenizer: PreTrainedTokenizer,
-            modelcard: Optional[ModelCard] = None,
-            framework: Optional[str] = None,
-            args_parser: ArgumentHandler = None,
-            device: int = -1,
-            binary_output: bool = False,
-            ignore_labels=["O"],
-            task: str = "",
-            grouped_entities: bool = False,
+        self,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        tokenizer: PreTrainedTokenizer,
+        modelcard: Optional[ModelCard] = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        binary_output: bool = False,
+        ignore_labels=["O"],
+        task: str = "",
+        grouped_entities: bool = False,
     ):
         super().__init__(
             model=model,
@@ -1030,8 +1032,8 @@ class TokenClassificationPipeline(Pipeline):
 
                     # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
                     if (
-                            entity["entity"] == entity_group_disagg[-1]["entity"]
-                            and entity["index"] == entity_group_disagg[-1]["index"] + 1
+                        entity["entity"] == entity_group_disagg[-1]["entity"]
+                        and entity["index"] == entity_group_disagg[-1]["index"] + 1
                     ):
                         entity_group_disagg += [entity]
                         # Group the entities at the last entity
@@ -1180,14 +1182,14 @@ class QuestionAnsweringPipeline(Pipeline):
     default_input_names = "question,context"
 
     def __init__(
-            self,
-            model: Union["PreTrainedModel", "TFPreTrainedModel"],
-            tokenizer: PreTrainedTokenizer,
-            modelcard: Optional[ModelCard] = None,
-            framework: Optional[str] = None,
-            device: int = -1,
-            task: str = "",
-            **kwargs
+        self,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        tokenizer: PreTrainedTokenizer,
+        modelcard: Optional[ModelCard] = None,
+        framework: Optional[str] = None,
+        device: int = -1,
+        task: str = "",
+        **kwargs
     ):
         super().__init__(
             model=model,
@@ -1202,7 +1204,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     @staticmethod
     def create_sample(
-            question: Union[str, List[str]], context: Union[str, List[str]]
+        question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
         QuestionAnsweringPipeline leverages the SquadExample/SquadFeatures internally.
@@ -1310,7 +1312,7 @@ class QuestionAnsweringPipeline(Pipeline):
                         "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
                         "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
                         "answer": " ".join(
-                            example.doc_tokens[feature.token_to_orig_map[s]: feature.token_to_orig_map[e] + 1]
+                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
                         ),
                     }
                     for s, e, score in zip(starts, ends, scores)
@@ -1464,8 +1466,7 @@ class SummarizationPipeline(Pipeline):
         super().__init__(**kwargs)
 
     def __call__(
-            self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False,
-            **generate_kwargs
+        self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Args:
@@ -1495,7 +1496,7 @@ class SummarizationPipeline(Pipeline):
 
         if isinstance(documents[0], list):
             assert (
-                    self.tokenizer.pad_token_id is not None
+                self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
             documents = ([prefix + document for document in documents[0]],)
@@ -1593,7 +1594,7 @@ class TranslationPipeline(Pipeline):
     """
 
     def __call__(
-            self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Args:
@@ -1614,7 +1615,7 @@ class TranslationPipeline(Pipeline):
 
         if isinstance(args[0], list):
             assert (
-                    self.tokenizer.pad_token_id is not None
+                self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
             args = ([prefix + text for text in args[0]],)
             padding = True
@@ -1679,14 +1680,16 @@ class Conversation:
         if self.new_user_input:
             if overwrite:
                 logger.warning(
-                    "User input added while unprocessed input was existing: \"{}\" was overwritten with: \"{}\".".format(
-                        self.new_user_input, text))
+                    'User input added while unprocessed input was existing: "{}" was overwritten with: "{}".'.format(
+                        self.new_user_input, text
+                    )
+                )
                 self.new_user_input = text
             else:
                 logger.warning(
-                    "User input added while unprocessed input was existing: \"{}\" new input ignored: \"{}\". "
-                    "Set `overwrite` to True to overwrite unprocessed user input".format(
-                        self.new_user_input, text))
+                    'User input added while unprocessed input was existing: "{}" new input ignored: "{}". '
+                    "Set `overwrite` to True to overwrite unprocessed user input".format(self.new_user_input, text)
+                )
         else:
             self.new_user_input = text
 
@@ -1759,7 +1762,7 @@ class DialoguePipeline(Pipeline):
             self.pad_token_id = self.tokenizer.pad_token_id
         else:
             self.pad_token_id = self.tokenizer.eos_token_id
-        self.min_response_allowed_length = kwargs.get('min_response_allowed_length', 32)
+        self.min_response_allowed_length = kwargs.get("min_response_allowed_length", 32)
 
     def __call__(self, *args, clean_up_tokenization_spaces=True, **generate_kwargs):
         r"""
@@ -1776,19 +1779,21 @@ class DialoguePipeline(Pipeline):
         if isinstance(args[0], list):
             active_index = 0
             for conversation_index, conversation in enumerate(args[0]):
-                assert isinstance(conversation, Conversation), \
-                    "DialoguePipeline expects a Conversation or list of Conversations as an input"
+                assert isinstance(
+                    conversation, Conversation
+                ), "DialoguePipeline expects a Conversation or list of Conversations as an input"
                 if conversation.new_user_input is None:
                     logger.warning(
                         "Conversation with id {} does not contain new user input and will not be updated".format(
-                            conversation.uuid)
+                            conversation.uuid
+                        )
                     )
                 else:
                     active_conversations_indices[conversation_index] = active_index
                     active_conversations.append(conversation)
                     active_index += 1
             assert (
-                    self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
+                self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
         elif isinstance(args[0], Conversation):
             active_conversations_indices.append(0)
@@ -1799,9 +1804,10 @@ class DialoguePipeline(Pipeline):
             with self.device_placement():
 
                 inputs = self._parse_and_tokenize(
-                    [conversation.new_user_input for conversation in active_conversations])
+                    [conversation.new_user_input for conversation in active_conversations]
+                )
                 histories = [conversation.history for conversation in active_conversations]
-                max_length = generate_kwargs.get('max_length', 1000)
+                max_length = generate_kwargs.get("max_length", 1000)
                 inputs = self._concat_inputs_history(inputs, histories, max_length)
 
                 if self.framework == "pt":
@@ -1818,7 +1824,7 @@ class DialoguePipeline(Pipeline):
                             input_length, max_length
                         )
                     )
-                generate_kwargs['max_length'] = max_length
+                generate_kwargs["max_length"] = max_length
                 generated_responses = self.model.generate(
                     inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
                 )
@@ -1827,9 +1833,12 @@ class DialoguePipeline(Pipeline):
                 if isinstance(args[0], Conversation):
                     args[0].mark_processed()
                     args[0].generated_responses.append(
-                        self.tokenizer.decode(cleaned_history[0][input_length:],
-                                              skip_special_tokens=True,
-                                              clean_up_tokenization_spaces=clean_up_tokenization_spaces))
+                        self.tokenizer.decode(
+                            cleaned_history[0][input_length:],
+                            skip_special_tokens=True,
+                            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                        )
+                    )
                     args[0].history = cleaned_history[0]
                     output = args[0]
                 else:
@@ -1839,16 +1848,20 @@ class DialoguePipeline(Pipeline):
                             conversation.mark_processed()
                             active_index = active_conversations_indices[conversation_index]
                             conversation.generated_responses.append(
-                                self.tokenizer.decode(cleaned_history[active_index][input_length:],
-                                                      skip_special_tokens=True,
-                                                      clean_up_tokenization_spaces=clean_up_tokenization_spaces))
+                                self.tokenizer.decode(
+                                    cleaned_history[active_index][input_length:],
+                                    skip_special_tokens=True,
+                                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                                )
+                            )
                             conversation.history = cleaned_history[active_index]
                         output.append(conversation)
                 return output
         else:
             logger.warning(
                 "No active conversation provided for generating response. "
-                "Add user input to the conversations by calling `conversation.add_user_input(...)`")
+                "Add user input to the conversations by calling `conversation.add_user_input(...)`"
+            )
             return args[0]
 
     def _parse_and_tokenize(self, *args, **kwargs):
@@ -1857,7 +1870,7 @@ class DialoguePipeline(Pipeline):
         """
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
-        inputs = self.tokenizer.batch_encode_plus(inputs, add_special_tokens=False, padding=False).get('input_ids', [])
+        inputs = self.tokenizer.batch_encode_plus(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
         for input in inputs:
             input.append(self.tokenizer.eos_token_id)
         return inputs
@@ -1897,21 +1910,19 @@ class DialoguePipeline(Pipeline):
             if history is not None:
                 concatenated_input = history + input
                 if len(concatenated_input) > max_length - self.min_response_allowed_length:
-                    concatenated_input = concatenated_input[len(concatenated_input) -
-                                                            max_length +
-                                                            self.min_response_allowed_length:]
+                    concatenated_input = concatenated_input[
+                        len(concatenated_input) - max_length + self.min_response_allowed_length :
+                    ]
                 outputs.append(concatenated_input)
             else:
                 if len(input) > max_length - self.min_response_allowed_length:
-                    input = input[len(input) - max_length + self.min_response_allowed_length:]
+                    input = input[len(input) - max_length + self.min_response_allowed_length :]
                 outputs.append(input)
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
-        outputs = self.tokenizer.batch_encode_plus(outputs,
-                                                   add_special_tokens=False,
-                                                   is_pretokenized=True,
-                                                   return_tensors=self.framework,
-                                                   padding=False)
+        outputs = self.tokenizer.batch_encode_plus(
+            outputs, add_special_tokens=False, is_pretokenized=True, return_tensors=self.framework, padding=False
+        )
         return outputs
 
 
@@ -1999,12 +2010,12 @@ SUPPORTED_TASKS = {
 
 
 def pipeline(
-        task: str,
-        model: Optional = None,
-        config: Optional[Union[str, PretrainedConfig]] = None,
-        tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
-        framework: Optional[str] = None,
-        **kwargs
+    task: str,
+    model: Optional = None,
+    config: Optional[Union[str, PretrainedConfig]] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+    framework: Optional[str] = None,
+    **kwargs
 ) -> Pipeline:
     """
     Utility factory method to build a pipeline.
