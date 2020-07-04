@@ -350,19 +350,18 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = T5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
-    @slow
+
     def test_export_to_onnx(self):
         import tempfile
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = T5Model.from_pretrained(model_name)
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                torch.onnx.export(model,
-                                  config_and_inputs[1],
-                                  f"{tmpdirname}/t5_test.onnx",
-                                  export_params=True,
-                                  opset_version=9,
-                                  )
+        model = T5Model(config_and_inputs[0])
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            torch.onnx.export(model,
+                              config_and_inputs[1],
+                              f"{tmpdirname}/t5_test.onnx",
+                              export_params=True,
+                              opset_version=9,
+                              )
 
 
 @require_torch
