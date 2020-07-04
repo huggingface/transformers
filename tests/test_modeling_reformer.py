@@ -75,6 +75,7 @@ class ReformerModelTester:
         eos_token_id=None,
         scope=None,
         hash_seed=None,
+        num_labels=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -121,6 +122,7 @@ class ReformerModelTester:
         self.encoder_seq_length = seq_length // attn_chunk_length + (self.seq_length % attn_chunk_length != 0)
         self.key_length = (num_chunks_before + num_chunks_after + 1) * attn_chunk_length
         self.chunk_length = attn_chunk_length
+        self.num_labels = num_labels
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -406,8 +408,8 @@ class ReformerModelTester:
         return config, inputs_dict
 
     def create_and_check_reformer_for_sequence_classification(self, config, input_ids, input_mask, sequence_labels):
-        config.num_labels = self.num_labels
         model = ReformerForSequenceClassification(config)
+        config.num_labels = self.num_labels
         model.to(torch_device)
         model.eval()
         loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
@@ -483,7 +485,10 @@ class ReformerTesterMixin:
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs)
+        batch_size = 13
+        type_sequence_label_size = 2
+        sequence_labels = ids_tensor([batch_size], type_sequence_label_size)
+        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, sequence_labels)
 
 
 @require_torch
@@ -528,6 +533,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
             "eos_token_id": 2,
             "scope": None,
             "hash_seed": 0,
+            "num_labels": 2,
         }
 
     def setUp(self):
@@ -586,6 +592,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "eos_token_id": 2,
             "scope": None,
             "hash_seed": 0,
+            "num_labels": 2,
         }
 
     def setUp(self):
