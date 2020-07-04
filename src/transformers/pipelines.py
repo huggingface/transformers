@@ -1009,8 +1009,6 @@ class TokenClassificationPipeline(Pipeline):
                 for idx, label_idx in enumerate(labels_idx)
                 if self.model.config.id2label[label_idx] not in self.ignore_labels
             ]
-            if filtered_labels_idx:
-                last_idx, _ = filtered_labels_idx[-1]
 
             for idx, label_idx in filtered_labels_idx:
 
