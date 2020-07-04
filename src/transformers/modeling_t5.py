@@ -821,7 +821,7 @@ T5_INPUTS_DOCSTRING = r"""
             Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
             If `decoder_past_key_value_states` is used, optionally only the last `decoder_input_ids` have to be input (see `decoder_past_key_value_states`).
             To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
-            `T5 Training <./t5.html#training>`__. If decoder_input_ids and decoder_inputs_embeds are both None, 
+            `T5 Training <./t5.html#training>`__. If decoder_input_ids and decoder_inputs_embeds are both None,
             decoder_input_ids takes the value of input_ids.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
@@ -841,7 +841,7 @@ T5_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
             If `decoder_past_key_value_states` is used, optionally only the last `decoder_inputs_embeds` have to be input (see `decoder_past_key_value_states`).
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix. If decoder_input_ids and decoder_inputs_embeds are both None, 
+            than the model's internal embedding lookup matrix. If decoder_input_ids and decoder_inputs_embeds are both None,
             decoder_inputs_embeds takes the value of inputs_embeds.
         head_mask: (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
