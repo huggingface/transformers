@@ -2,10 +2,9 @@ import unittest
 from typing import Iterable, List, Optional
 
 from transformers import pipeline
-from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline
+from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline, Conversation
 
 from .utils import require_tf, require_torch, slow, torch_device
-
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 VALID_INPUTS = ["A simple string", ["list of strings"]]
@@ -28,6 +27,8 @@ TRANSLATION_FINETUNED_MODELS = [
     ("patrickvonplaten/t5-tiny-random", "translation_en_to_ro"),
 ]
 TF_TRANSLATION_FINETUNED_MODELS = [("patrickvonplaten/t5-tiny-random", "translation_en_to_fr")]
+
+DIALOGUE_FINETUNED_MODELS = ["microsoft/DialoGPT-medium"]
 
 expected_fill_mask_result = [
     [
@@ -116,14 +117,14 @@ class DefaultArgumentHandlerTestCase(unittest.TestCase):
 
 class MonoColumnInputTestCase(unittest.TestCase):
     def _test_mono_column_pipeline(
-        self,
-        nlp: Pipeline,
-        valid_inputs: List,
-        output_keys: Iterable[str],
-        invalid_inputs: List = [None],
-        expected_multi_result: Optional[List] = None,
-        expected_check_keys: Optional[List[str]] = None,
-        **kwargs,
+            self,
+            nlp: Pipeline,
+            valid_inputs: List,
+            output_keys: Iterable[str],
+            invalid_inputs: List = [None],
+            expected_multi_result: Optional[List] = None,
+            expected_check_keys: Optional[List[str]] = None,
+            **kwargs,
     ):
         self.assertIsNotNone(nlp)
 
@@ -219,7 +220,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "The largest city in France is <mask>",
         ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2, )
             self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
 
     @require_tf
@@ -230,7 +231,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "The largest city in France is <mask>",
         ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2,)
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2, )
             self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
 
     @require_torch
@@ -242,7 +243,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "The largest city in France is <mask>",
         ]
         for model_name in LARGE_FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2, )
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
@@ -294,7 +295,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
         for model_name in TF_SUMMARIZATION_FINETUNED_MODELS:
-            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf",)
+            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf", )
             self._test_mono_column_pipeline(
                 nlp, VALID_INPUTS, mandatory_keys, invalid_inputs=invalid_inputs, **SUMMARIZATION_KWARGS
             )
@@ -329,6 +330,40 @@ class MonoColumnInputTestCase(unittest.TestCase):
         for model_name in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
+
+    @slow
+    @require_torch
+    def test_integration_torch_dialogue(self):
+        # When
+        nlp = pipeline(task="dialogue", device=DEFAULT_DEVICE_NUM)
+        conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
+        conversation_2 = Conversation("What's the last book you have read?")
+        # Then
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_2.past_user_inputs), 0)
+        # When
+        result = nlp([conversation_1, conversation_2], do_sample=False)
+        # Then
+        self.assertEqual(result, [conversation_1, conversation_2])
+        self.assertEqual(len(result[0].past_user_inputs), 1)
+        self.assertEqual(len(result[1].past_user_inputs), 1)
+        self.assertEqual(len(result[0].generated_responses), 1)
+        self.assertEqual(len(result[1].generated_responses), 1)
+        self.assertEqual(result[0].past_user_inputs[0], "Going to the movies tonight - any suggestions?")
+        self.assertEqual(result[0].generated_responses[0], "The Big Lebowski")
+        self.assertEqual(result[1].past_user_inputs[0], "What's the last book you have read?")
+        self.assertEqual(result[1].generated_responses[0], "The Last Question")
+        # When
+        conversation_2.add_user_input("Why do you recommend it?")
+        result = nlp([conversation_1, conversation_2], do_sample=False)
+        # Then
+        self.assertEqual(result, [conversation_1, conversation_2])
+        self.assertEqual(len(result[0].past_user_inputs), 1)
+        self.assertEqual(len(result[1].past_user_inputs), 2)
+        self.assertEqual(len(result[0].generated_responses), 1)
+        self.assertEqual(len(result[1].generated_responses), 2)
+        self.assertEqual(result[1].past_user_inputs[1], "Why do you recommend it?")
+        self.assertEqual(result[1].generated_responses[1], "It's a good book.")
 
 
 QA_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]
@@ -383,7 +418,6 @@ class QAPipelineTests(unittest.TestCase):
 
 
 class PipelineCommonTests(unittest.TestCase):
-
     pipelines = SUPPORTED_TASKS.keys()
 
     @slow

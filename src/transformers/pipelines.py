@@ -1698,7 +1698,7 @@ class DialoguePipeline(Pipeline):
             self.pad_token_id = self.tokenizer.eos_token_id
         self.min_response_allowed_length = kwargs.get('min_response_allowed_length', 32)
 
-    def __call__(self, *args, clean_up_tokenization_spaces=False, **generate_kwargs):
+    def __call__(self, *args, clean_up_tokenization_spaces=True, **generate_kwargs):
         r"""
         Args:
             *args: (list of `:class:Conversation`) Conversations to generate responses for
