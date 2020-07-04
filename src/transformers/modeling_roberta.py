@@ -24,8 +24,18 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .configuration_roberta import RobertaConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
+from .file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
+from .modeling_bert import (
+    BertEmbeddings,
+    BertLayerNorm,
+    BertModel,
+    BertPreTrainedModel,
+    gelu,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +63,7 @@ class RobertaEmbeddings(BertEmbeddings):
         self.padding_idx = config.pad_token_id
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx,
         )
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
@@ -65,7 +75,7 @@ class RobertaEmbeddings(BertEmbeddings):
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         return super().forward(
-            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds
+            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds,
         )
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
@@ -79,7 +89,10 @@ class RobertaEmbeddings(BertEmbeddings):
         sequence_length = input_shape[1]
 
         position_ids = torch.arange(
-            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+            self.padding_idx + 1,
+            sequence_length + self.padding_idx + 1,
+            dtype=torch.long,
+            device=inputs_embeds.device,
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
@@ -162,7 +175,9 @@ class RobertaModel(BertModel):
         self.embeddings.word_embeddings = value
 
 
-@add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
+@add_start_docstrings(
+    """RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING,
+)
 class RobertaForMaskedLM(BertPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
@@ -191,7 +206,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        **kwargs
+        **kwargs,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -343,9 +358,9 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        sequence_output = outputs[0] # (bs, seq_len, dim)
-        pooled_output = sequence_output[:, 0] # (bs, dim); <s> token (equiv. to [CLS])
-        logits = self.classifier(pooled_output) # (bs, dim)
+        sequence_output = outputs[0]  # (bs, seq_len, dim)
+        pooled_output = sequence_output[:, 0]  # (bs, dim); <s> token (equiv. to [CLS])
+        logits = self.classifier(pooled_output)  # (bs, dim)
 
         outputs = (logits,) + outputs[2:]
         if labels is not None:
@@ -539,7 +554,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
                 active_loss = attention_mask.view(-1) == 1
                 active_logits = logits.view(-1, self.num_labels)
                 active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels),
                 )
                 loss = loss_fct(active_logits, active_labels)
             else:
