@@ -358,7 +358,8 @@ class T5Attention(nn.Module):
         else:
             present_key_value_state = (None,)
 
-        scores = torch.einsum("bnqd,bnkd->bnqk", q, k)  # (bs, n_heads, qlen, klen)
+        # (bs, n_heads, qlen, klen)
+        scores = q @ k.transpose(3, 2) # equivalent of torch.einsum("bnqd,bnkd->bnqk", q, k), compatible with onnx op>9
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
