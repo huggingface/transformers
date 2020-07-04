@@ -41,7 +41,6 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from transformers.trainer import is_apex_available
 
 
 logger = logging.getLogger(__name__)
