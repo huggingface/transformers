@@ -1684,7 +1684,8 @@ class Conversation:
                 self.new_user_input = text
             else:
                 logger.warning(
-                    "User input added while unprocessed input was existing: \"{}\" new input ignored: \"{}\". Set `overwrite` to True to overwrite unprocessed user input".format(
+                    "User input added while unprocessed input was existing: \"{}\" new input ignored: \"{}\". "
+                    "Set `overwrite` to True to overwrite unprocessed user input".format(
                         self.new_user_input, text))
         else:
             self.new_user_input = text
@@ -1812,7 +1813,8 @@ class DialoguePipeline(Pipeline):
 
                 if input_length > 0.9 * max_length:
                     logger.warning(
-                        "Longest conversation length: {} is bigger than 0.9 * max_length: {}. You might consider trimming the early phase of the conversation".format(
+                        "Longest conversation length: {} is bigger than 0.9 * max_length: {}. "
+                        "You might consider trimming the early phase of the conversation".format(
                             input_length, max_length
                         )
                     )
@@ -1845,7 +1847,8 @@ class DialoguePipeline(Pipeline):
                 return output
         else:
             logger.warning(
-                "No active conversation provided for generating response. Add user input to the converasations by calling `conversation.add_user_input(...)`")
+                "No active conversation provided for generating response. "
+                "Add user input to the conversations by calling `conversation.add_user_input(...)`")
             return args[0]
 
     def _parse_and_tokenize(self, *args, **kwargs):
@@ -1863,9 +1866,11 @@ class DialoguePipeline(Pipeline):
         """
         Cleans the padding history. Padding may be generated in two places when multiple conversations are provided as
         an input:
-            - at the end of the concatenated history and new user input, so that all input to the model have the same length
+            - at the end of the concatenated history and new user input, so that all input to the model have the same
+                length
             - at the end of the generated response, as some responses will be longer than others
-        This method cleans up these padding token so that the history for each conversation is not impacted by the batching process.
+        This method cleans up these padding token so that the history for each conversation is not impacted by the
+        batching process.
         """
         outputs = []
         for sequence in generated_tensor:
