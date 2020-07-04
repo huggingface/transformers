@@ -2,7 +2,7 @@ import unittest
 from typing import Iterable, List, Optional
 
 from transformers import pipeline
-from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline
+from transformers.pipelines import SUPPORTED_TASKS, Conversation, DefaultArgumentHandler, Pipeline
 from transformers.testing_utils import require_tf, require_torch, slow, torch_device
 
 
