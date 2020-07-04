@@ -10,7 +10,6 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 VALID_INPUTS = ["A simple string", ["list of strings"]]
 
 NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
-GROUPED_NER_FINETUNED_MODELS = ["mrm8488/bert-spanish-cased-finetuned-ner"]
 
 # xlnet-base-cased disabled for now, since it crashes TF2
 FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased"]
@@ -176,19 +175,9 @@ class MonoColumnInputTestCase(unittest.TestCase):
     @require_torch
     def test_ner_grouped(self):
         mandatory_keys = {"entity_group", "word", "score"}
-        valid_inputs = [
-            "Consuelo Araújo Noguera, ministra de cultura del presidente Andrés Pastrana (1998.2002) fue asesinada por las Farc luego de haber permanecido secuestrada por algunos meses."
-        ]
-        expected_check_keys = ["entity_group", "word"]
-        for model_name in GROUPED_NER_FINETUNED_MODELS:
+        for model_name in NER_FINETUNED_MODELS:
             nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
-            self._test_mono_column_pipeline(
-                nlp,
-                valid_inputs,
-                mandatory_keys,
-                expected_multi_result=expected_grouped_ner_result,
-                expected_check_keys=expected_check_keys,
-            )
+            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
 
     @require_tf
     def test_tf_ner(self):
