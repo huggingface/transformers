@@ -1613,7 +1613,7 @@ class Conversation:
         self.history: List[int] = []
         self.new_user_input: Optional[str] = text
 
-    def add_user_input(self, text: str, overwrite: False):
+    def add_user_input(self, text: str, overwrite: bool = False):
         if self.new_user_input:
             if overwrite:
                 logger.warning(
@@ -1632,6 +1632,15 @@ class Conversation:
             self.past_user_inputs.append(self.new_user_input)
         self.new_user_input = None
 
+    def __repr__(self):
+        output = "Conversation id: {} \n".format(self.uuid)
+        for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
+            output += "user >> {} \n".format(user_input)
+            output += "bot >> {} \n".format(generated_response)
+        if self.new_user_input is not None:
+            output += "user >> {} \n".format(self.new_user_input)
+        return output
+
 
 class DialoguePipeline(Pipeline):
     """Multi-turn dialogue.
@@ -1644,7 +1653,7 @@ class DialoguePipeline(Pipeline):
             self.pad_token_id = self.tokenizer.pad_token_id
         else:
             self.pad_token_id = self.tokenizer.eos_token_id
-        self.max_length = self.model.config.max_length
+        self.min_response_allowed_length = kwargs.get('min_response_allowed_length', 32)
 
     def __call__(self, *args, clean_up_tokenization_spaces=False, **generate_kwargs):
         r"""
@@ -1652,21 +1661,23 @@ class DialoguePipeline(Pipeline):
             *args: (list of Conversations) conversations to generate responses for
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
         """
-        active_conversations_indices = []
+        active_conversations_indices = dict()
         active_conversations = []
         # Input validation
         if isinstance(args[0], list):
+            active_index = 0
             for conversation_index, conversation in enumerate(args[0]):
                 assert isinstance(conversation, Conversation), \
-                    "ConversationPipeline expects a Conversation or list of Conversations as an input"
+                    "DialoguePipeline expects a Conversation or list of Conversations as an input"
                 if conversation.new_user_input is None:
                     logger.warning(
                         "Conversation with id {} does not contain new user input and will not be updated".format(
                             conversation.uuid)
                     )
                 else:
-                    active_conversations_indices.append(conversation_index)
+                    active_conversations_indices[conversation_index] = active_index
                     active_conversations.append(conversation)
+                    active_index += 1
             assert (
                     self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
@@ -1674,45 +1685,57 @@ class DialoguePipeline(Pipeline):
             active_conversations_indices.append(0)
             active_conversations.append(args[0])
         else:
-            raise ValueError("ConversationPipeline expects a Conversation or list of Conversations as an input")
+            raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
+        if len(active_conversations) > 0:
+            with self.device_placement():
 
-        with self.device_placement():
+                inputs = self._parse_and_tokenize(
+                    [conversation.new_user_input for conversation in active_conversations])
+                histories = [conversation.history for conversation in active_conversations]
+                max_length = generate_kwargs.get('max_length', 1000)
+                inputs = self._concat_inputs_history(inputs, histories, max_length)
 
-            inputs = self._parse_and_tokenize([conversation.new_user_input for conversation in active_conversations])
-            histories = [conversation.history for conversation in active_conversations]
-            inputs = self._concat_inputs_history(inputs, histories)
+                if self.framework == "pt":
+                    inputs = self.ensure_tensor_on_device(**inputs)
+                    input_length = inputs["input_ids"].shape[-1]
 
-            if self.framework == "pt":
-                inputs = self.ensure_tensor_on_device(**inputs)
-                input_length = inputs["input_ids"].shape[-1]
+                elif self.framework == "tf":
+                    input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
-            elif self.framework == "tf":
-                input_length = tf.shape(inputs["input_ids"])[-1].numpy()
-
-            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-            if input_length > 0.9 * max_length:
-                logger.warning(
-                    "Your input_length: {} is bigger than 0.9 * max_length: {}. You might consider increasing your max_length manually, e.g. translator('...', max_length=400)".format(
-                        input_length, max_length
+                if input_length > 0.9 * max_length:
+                    logger.warning(
+                        "Longest conversation length: {} is bigger than 0.9 * max_length: {}. You might consider trimming the early phase of the conversation".format(
+                            input_length, max_length
+                        )
                     )
+                generate_kwargs['max_length'] = max_length
+                generated_responses = self.model.generate(
+                    inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
                 )
 
-            translations = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
-            )
-            results = []
-            for translation in translations:
-                record = {}
-                if return_tensors:
-                    record["translation_token_ids"] = translation
-                if return_text:
-                    record["translation_text"] = self.tokenizer.decode(
-                        translation,
-                        skip_special_tokens=True,
-                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                    )
-                results.append(record)
-            return results
+                cleaned_history = self._clean_padding_history(generated_responses)
+                if isinstance(args[0], Conversation):
+                    args[0].mark_processed()
+                    args[0].generated_responses.append(
+                        self.tokenizer.decode(cleaned_history[0][input_length:], skip_special_tokens=True))
+                    args[0].history = cleaned_history[0]
+                    output = args[0]
+                else:
+                    output = []
+                    for conversation_index, conversation in enumerate(args[0]):
+                        if conversation_index in active_conversations_indices:
+                            conversation.mark_processed()
+                            active_index = active_conversations_indices[conversation_index]
+                            conversation.generated_responses.append(
+                                self.tokenizer.decode(cleaned_history[active_index][input_length:],
+                                                      skip_special_tokens=True))
+                            conversation.history = cleaned_history[active_index]
+                        output.append(conversation)
+                return output
+        else:
+            logger.warning(
+                "No active conversation provided for generating response. Add user input to the converasations by calling `conversation.add_user_input(...)`")
+            return args[0]
 
     def _parse_and_tokenize(self, *args, **kwargs):
         """
@@ -1725,17 +1748,36 @@ class DialoguePipeline(Pipeline):
             input.append(self.tokenizer.eos_token_id)
         return inputs
 
-    def _concat_inputs_history(self, inputs: List[List[int]], histories: List[Optional[List[int]]]):
+    def _clean_padding_history(self, generated_tensor) -> List[List[int]]:
+        outputs = []
+        for sequence in generated_tensor:
+            sequence_tokens = []
+            is_previous_pad = False
+            for token in sequence:
+                if token == self.pad_token_id:
+                    if is_previous_pad:
+                        continue
+                    else:
+                        is_previous_pad = True
+                else:
+                    is_previous_pad = False
+                sequence_tokens.append(token.item())
+            outputs.append(sequence_tokens)
+        return outputs
+
+    def _concat_inputs_history(self, inputs: List[List[int]], histories: List[Optional[List[int]]], max_length: int):
         outputs = []
         for input, history in zip(inputs, histories):
             if history is not None:
-                concatenated_input = input + history
-                if len(concatenated_input) > self.max_length:
-                    concatenated_input = concatenated_input[len(concatenated_input) - self.max_length:]
+                concatenated_input = history + input
+                if len(concatenated_input) > max_length - self.min_response_allowed_length:
+                    concatenated_input = concatenated_input[len(concatenated_input) -
+                                                            max_length +
+                                                            self.min_response_allowed_length:]
                 outputs.append(concatenated_input)
             else:
-                if len(input) > self.max_length:
-                    input = input[len(input) - self.max_length:]
+                if len(input) > max_length - self.min_response_allowed_length:
+                    input = input[len(input) - max_length + self.min_response_allowed_length:]
                 outputs.append(input)
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
@@ -1825,7 +1867,7 @@ SUPPORTED_TASKS = {
         "impl": DialoguePipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "microsoft/DialoGPT-small", "tf": "microsoft/DialoGPT-small"}},
+        "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
 }
 
