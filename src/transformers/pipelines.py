@@ -1081,10 +1081,9 @@ class TokenClassificationPipeline(Pipeline):
             else:
                 entity_groups += [self.group_sub_entities(entity_group_disagg)]
                 entity_group_disagg = [entity]
-
-        # Ensure if an entity is the latest one in the sequence it gets appended to the output
-        if len(entity_group_disagg) > 0:
-            entity_groups.append(self.group_sub_entities(entity_group_disagg))
+                # If it's the last entity, add it to the entity groups
+                if is_last_idx:
+                    entity_groups += [self.group_entities(entity_group_disagg)]
 
         return entity_groups
 
