@@ -1044,9 +1044,6 @@ class TokenClassificationPipeline(Pipeline):
                     else:
                         entity_groups += [self.group_entities(entity_group_disagg)]
                         entity_group_disagg = [entity]
-                        # If it's the last entity,
-                        if is_last_idx:
-                            entity_groups += [self.group_entities(entity_group_disagg)]
 
                 entities += [entity]
 
