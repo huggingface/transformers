@@ -381,6 +381,36 @@ class MonoColumnInputTestCase(unittest.TestCase):
 QA_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]
 
 
+class DialoguePipelineTests(unittest.TestCase):
+    def _test_dialogue_pipeline(self, nlp):
+        valid_inputs = [Conversation("Hi there!"), [Conversation("Hi there!"), Conversation("How are you?")]]
+        invalid_inputs = ["Hi there!", Conversation()]
+        self.assertIsNotNone(nlp)
+
+        mono_result = nlp(valid_inputs[0])
+        self.assertIsInstance(mono_result, Conversation)
+
+        multi_result = nlp(valid_inputs[1])
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], Conversation)
+
+        for bad_input in invalid_inputs:
+            self.assertRaises(Exception, nlp, bad_input)
+        self.assertRaises(Exception, nlp, invalid_inputs)
+
+    @require_torch
+    def test_torch_dialogue(self):
+        for model_name in DIALOGUE_FINETUNED_MODELS:
+            nlp = pipeline(task="dialogue", model=model_name, tokenizer=model_name)
+            self._test_dialogue_pipeline(nlp)
+
+    @require_tf
+    def test_tf_dialogue(self):
+        for model_name in DIALOGUE_FINETUNED_MODELS:
+            nlp = pipeline(task="dialogue", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_dialogue_pipeline(nlp)
+
+
 class QAPipelineTests(unittest.TestCase):
     def _test_qa_pipeline(self, nlp):
         output_keys = {"score", "answer", "start", "end"}
@@ -430,7 +460,6 @@ class QAPipelineTests(unittest.TestCase):
 
 
 class PipelineCommonTests(unittest.TestCase):
-
     pipelines = SUPPORTED_TASKS.keys()
 
     @slow

@@ -1772,10 +1772,11 @@ class DialoguePipeline(Pipeline):
         Returns:
             list of conversations with updated generated responses for those containing a new user input
         """
-        active_conversations_indices = dict()
+
         active_conversations = []
         # Input validation
         if isinstance(args[0], list):
+            active_conversations_indices = dict()
             active_index = 0
             for conversation_index, conversation in enumerate(args[0]):
                 assert isinstance(
@@ -1795,7 +1796,6 @@ class DialoguePipeline(Pipeline):
                 self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
         elif isinstance(args[0], Conversation):
-            active_conversations_indices.append(0)
             active_conversations.append(args[0])
         else:
             raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
