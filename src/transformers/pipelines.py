@@ -1083,7 +1083,7 @@ class TokenClassificationPipeline(Pipeline):
                 entity_group_disagg = [entity]
                 # If it's the last entity, add it to the entity groups
                 if is_last_idx:
-                    entity_groups += [self.group_entities(entity_group_disagg)]
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
 
         return entity_groups
 
