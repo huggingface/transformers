@@ -382,7 +382,7 @@ class NerPipelineTests(unittest.TestCase):
 
         self.assertIsNotNone(nlp)
 
-        mono_result = nlp(VALID_INPUTS[0], **kwargs)
+        mono_result = nlp(VALID_INPUTS[0])
         self.assertIsInstance(mono_result, list)
         self.assertIsInstance(mono_result[0], (dict, list))
 
