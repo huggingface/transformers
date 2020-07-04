@@ -1643,8 +1643,51 @@ class Conversation:
 
 
 class DialoguePipeline(Pipeline):
-    """Multi-turn dialogue.
-    ToDo: complete the docstring"""
+    """
+    Multi-turn dialogue pipeline.
+
+    Usage::
+        dialogue_pipeline = pipeline("dialogue")
+
+        conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
+        conversation_2 = Conversation("What's the last book you have read?")
+
+        conversation_pipeline([conversation_1, conversation_2])
+
+        conversation_1.add_user_input("Is it an action movie?")
+
+        conversation_pipeline([conversation_1, conversation_2])
+
+    The models that this pipeline can use are models that have been fine-tuned on a multi-turn dialogue task,
+    currently: "microsoft/DialoGPT-small", "microsoft/DialoGPT-medium", "microsoft/DialoGPT-large"
+    See the up-to-date list of available models on
+    `huggingface.co/models <https://huggingface.co/models?filter=conversational>`__.
+
+    Arguments:
+        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
+            The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
+            checkpoint identifier or an actual pre-trained model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+            If :obj:`None`, the default of the pipeline will be loaded.
+        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`, defaults to :obj:`None`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This can be :obj:`None`,
+            a string checkpoint identifier or an actual pre-trained tokenizer inheriting from
+            :class:`~transformers.PreTrainedTokenizer`.
+            If :obj:`None`, the default of the pipeline will be loaded.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1658,8 +1701,11 @@ class DialoguePipeline(Pipeline):
     def __call__(self, *args, clean_up_tokenization_spaces=False, **generate_kwargs):
         r"""
         Args:
-            *args: (list of Conversations) conversations to generate responses for
+            *args: (list of `:class:Conversation`) Conversations to generate responses for
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
+
+        Returns:
+            list of conversations with updated generated responses for those containing a new user input
         """
         active_conversations_indices = dict()
         active_conversations = []
@@ -1717,7 +1763,9 @@ class DialoguePipeline(Pipeline):
                 if isinstance(args[0], Conversation):
                     args[0].mark_processed()
                     args[0].generated_responses.append(
-                        self.tokenizer.decode(cleaned_history[0][input_length:], skip_special_tokens=True))
+                        self.tokenizer.decode(cleaned_history[0][input_length:],
+                                              skip_special_tokens=True,
+                                              clean_up_tokenization_spaces=clean_up_tokenization_spaces))
                     args[0].history = cleaned_history[0]
                     output = args[0]
                 else:
@@ -1728,7 +1776,8 @@ class DialoguePipeline(Pipeline):
                             active_index = active_conversations_indices[conversation_index]
                             conversation.generated_responses.append(
                                 self.tokenizer.decode(cleaned_history[active_index][input_length:],
-                                                      skip_special_tokens=True))
+                                                      skip_special_tokens=True,
+                                                      clean_up_tokenization_spaces=clean_up_tokenization_spaces))
                             conversation.history = cleaned_history[active_index]
                         output.append(conversation)
                 return output
@@ -1739,7 +1788,7 @@ class DialoguePipeline(Pipeline):
 
     def _parse_and_tokenize(self, *args, **kwargs):
         """
-        Parse arguments and tokenize
+        Parse arguments and tokenize, adding an EOS token at the end of the user input
         """
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
@@ -1749,6 +1798,13 @@ class DialoguePipeline(Pipeline):
         return inputs
 
     def _clean_padding_history(self, generated_tensor) -> List[List[int]]:
+        """
+        Cleans the padding history. Padding may be generated in two places when multiple conversations are provided as
+        an input:
+            - at the end of the concatenated history and new user input, so that all input to the model have the same length
+            - at the end of the generated response, as some responses will be longer than others
+        This method cleans up these padding token so that the history for each conversation is not impacted by the batching process.
+        """
         outputs = []
         for sequence in generated_tensor:
             sequence_tokens = []
@@ -1766,6 +1822,9 @@ class DialoguePipeline(Pipeline):
         return outputs
 
     def _concat_inputs_history(self, inputs: List[List[int]], histories: List[Optional[List[int]]], max_length: int):
+        """
+        Builds an input prepended by the history for this conversation, allowing multi-turn conversation with context
+        """
         outputs = []
         for input, history in zip(inputs, histories):
             if history is not None:
