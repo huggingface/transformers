@@ -1896,7 +1896,11 @@ class DialoguePipeline(Pipeline):
                         is_previous_pad = True
                 else:
                     is_previous_pad = False
-                sequence_tokens.append(token.item())
+                if isinstance(token, torch.Tensor):
+                    sequence_tokens.append(token.item())
+                else:
+                    sequence_tokens.append(int(token.numpy()))
+
             outputs.append(sequence_tokens)
         return outputs
 
