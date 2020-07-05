@@ -445,7 +445,9 @@ class ReformerModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-    def create_and_check_reformer_for_sequence_classification(self, config, input_ids, input_mask, sequence_labels):
+    def create_and_check_reformer_for_sequence_classification(
+        self, config, input_ids, input_mask, choice_labels, sequence_labels
+    ):
         model = ReformerForSequenceClassification(config)
         config.num_labels = self.num_labels
         model.to(torch_device)
