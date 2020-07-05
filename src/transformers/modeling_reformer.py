@@ -1884,6 +1884,84 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
 
 
+@add_start_docstrings("""Reformer Model with a `language modeling` head on top. """, REFORMER_START_DOCSTRING)
+class ReformerForMaskedLM(ReformerPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        assert (
+            not config.is_decoder
+        ), "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+        self.reformer = ReformerModel(config)
+        self.lm_head = ReformerOnlyLMHead(config)
+
+        self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
+
+    def tie_weights(self):
+        # word embeddings are not tied in Reformer
+        pass
+
+    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
+    def forward(
+        self,
+        input_ids=None,
+        position_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        num_hashes=None,
+        labels=None,
+        output_hidden_states=None,
+        output_attentions=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the masked language modeling loss.
+                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Classification loss (cross entropy).
+        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        """
+
+        reformer_outputs = self.reformer(
+            input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            num_hashes=num_hashes,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+        )
+
+        sequence_output = reformer_outputs[0]
+        logits = self.lm_head(sequence_output)
+        outputs = (logits,) + reformer_outputs[1:]
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            outputs = (masked_lm_loss,) + outputs
+
+        return outputs  # (mlm_loss), lm_logits, (hidden_states), (attentions)
+
+
 @add_start_docstrings(
     """Reformer Model with a span classification head on top for
     extractive question-answering tasks like SQuAD / TriviaQA ( a linear layer on
