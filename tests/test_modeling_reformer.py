@@ -973,8 +973,8 @@ class ReformerIntegrationTestsDynamic(unittest.TestCase):
         config.is_decoder = False
         config.num_buckets = 32
         config.lsh_attn_chunk_length = 128
-        config.num_attention_heads = 1
-        shape = (1, 128, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        config.num_attention_heads = 2
+        shape = (3, 256, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         mask = np.ones(shape[:-1], dtype=np.int32)

@@ -700,6 +700,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]
             if sequence_length > self.chunk_length:
                 # expand attn_mask to fit with key_value_bucket_idx shape
+                attention_mask = attention_mask[:, None, :]
                 attention_mask = attention_mask.expand(query_indices.shape[:-1] + (-1,))
                 attention_mask = torch.gather(attention_mask, -1, key_indices)
 
