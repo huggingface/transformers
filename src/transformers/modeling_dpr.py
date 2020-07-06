@@ -392,7 +392,11 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
+            attention_mask = (
+                torch.ones(input_shape, device=device)
+                if input_ids is None
+                else (input_ids != self.config.pad_token_id)
+            )
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
