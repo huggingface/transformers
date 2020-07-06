@@ -480,6 +480,10 @@ def replace_return_docstrings(output_type=None, config_class=None):
         if i < len(lines):
             lines[i] = _prepare_output_docstrings(output_type, config_class)
             docstrings = "\n".join(lines)
+        else:
+            raise ValueError(
+                f"The function {fn} should have an empty 'Return:' or 'Returns:' in its docstring as placeholder, current docstring is:\n{docstrings}"
+            )
         fn.__doc__ = docstrings
         return fn
 
@@ -868,7 +872,3 @@ class ModelOutput:
 
     def __len__(self):
         return len(self.to_tuple())
-
-    @property
-    def shape(self):
-        return self[0].shape
