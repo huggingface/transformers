@@ -30,7 +30,12 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import gelu
 from .configuration_distilbert import DistilBertConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
 from .modeling_outputs import (
     EncoderOutput,
     MaskedLMOutput,
@@ -273,7 +278,9 @@ class Transformer(nn.Module):
         layer = TransformerBlock(config)
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
 
-    def forward(self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=None):
+    def forward(
+        self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=None
+    ):
         """
         Parameters
         ----------
@@ -635,7 +642,10 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=distilbert_output.hidden_states, attentions=distilbert_output.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=distilbert_output.hidden_states,
+            attentions=distilbert_output.attentions,
         )
 
 
@@ -911,4 +921,3 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         return MultipleChoiceModelOutput(
             loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
-

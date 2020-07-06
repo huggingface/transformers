@@ -552,7 +552,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         if return_tuple:
             output = (lm_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if lm_loss is not None else output
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,
