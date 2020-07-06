@@ -1033,33 +1033,31 @@ class ReformerIntegrationTestsDynamic(unittest.TestCase):
         config = ReformerConfig(
             axial_pos_embds=True,
             hash_seed=0,
-            is_decoder=True,
+            is_decoder=False,
             axial_pos_shape=[32, 16],
             axial_pos_embds_dim=[64, 192],
             attn_layers=["local", "local", "local", "local"],
+#            attn_layers=["lsh", "lsh", "lsh", "lsh"],
             local_attention_probs_dropout_prob=0.0,
             lsh_attention_probs_dropout_prob=0.0,
             hidden_dropout_prob=0.0,
             num_buckets=8,
+            num_attention_heads=1,
         )
 
         shape = (1, 512)  # Batch x SeqLen x ModelDimPerHead
 
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         mask = np.ones_like(np_input, dtype=np.float32)
-        #        mask[:, -10:] = 0
+        mask[:, -10:] = 0
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
         attention_mask = torch.tensor(mask)
 
         # choose one of the following two. "train" tests gradients. "test" tests forward only.
         mode = "train"
-        mode = "eval"
+        #        mode = "eval"
 
         trax_model = self.load_reformer_lm_model(config, mode=mode)
-
-        #        assert (
-        #            config.is_decoder is True
-        #        ), "trax can only test casaul mask for ReformerLM. Use tests for layers to test non-casaul mask"
 
         if mode == "train":
             np_input_2 = np.asarray(np_input, np.float32)
@@ -1076,11 +1074,9 @@ class ReformerIntegrationTestsDynamic(unittest.TestCase):
             trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
             torch_trax_weights = trax_weights
 
+        hf_input = torch.cat([torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1)
         if mode == "train":
-            hf_input = torch.cat([torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1)
             hf_labels = (-100 * (1 - attention_mask) + torch.tensor(np_input) * attention_mask).to(dtype=torch.long)
-        else:
-            hf_input = torch.tensor(np_input)
 
         hf_model = ReformerForMaskedLM(config)
         self._set_model_weights_in_torch(torch_trax_weights, hf_model, config.hidden_size)
@@ -1297,6 +1293,7 @@ class ReformerIntegrationTestsDynamic(unittest.TestCase):
             trax.models.ReformerLM.ff_chunk_size = {}
             trax.models.ReformerLM.ff_activation = @trax.layers.{}
             trax.models.ReformerLM.attention_type = @trax.layers.{}
+            trax.models.ReformerLM.is_decoder = {}
             trax.models.ReformerLM.dropout = 0.0
             trax.models.ReformerLM.ff_use_sru = 0
             """.format(
@@ -1326,6 +1323,7 @@ class ReformerIntegrationTestsDynamic(unittest.TestCase):
             config.chunk_size_feed_forward,
             hidden_act,
             attn_type,
+            config.is_decoder,
         )
         gin.parse_config(gin_config)
         model = trax.models.ReformerLM(mode=mode)
