@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.tokenization_utils import AddedToken
 
 
 if TYPE_CHECKING:
@@ -232,6 +233,12 @@ class TokenizerTesterMixin:
                 subwords_loaded = tokenizer_new.tokenize(text)
 
                 self.assertListEqual(subwords, subwords_loaded)
+
+    def test_pickle_added_tokens(self):
+        tok1 = AddedToken("<s>", rstrip=True, lstrip=True, normalized=False, single_word=True)
+        tok2 = pickle.loads(pickle.dumps(tok1))
+
+        self.assertEqual(tok1.__getstate__(), tok2.__getstate__())
 
     def test_added_tokens_do_lower_case(self):
         # TODO(thom) activate fast tokenizer tests once Rust tokenizers accepts white spaces in added tokens
