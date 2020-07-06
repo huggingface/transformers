@@ -14,20 +14,16 @@
 # limitations under the License.
 
 
-import os
-import tempfile
 import unittest
 
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import _config_zero_init, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
-    import torch
-    import numpy as np
     from transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
     from transformers.modeling_dpr import (
         DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -130,9 +126,9 @@ class DPRModelTester:
         model = DPRContextEncoder(config=config)
         model.to(torch_device)
         model.eval()
-        embeddings = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        embeddings = model(input_ids, token_type_ids=token_type_ids)
-        embeddings = model(input_ids)
+        embeddings = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)[0]
+        embeddings = model(input_ids, token_type_ids=token_type_ids)[0]
+        embeddings = model(input_ids)[0]
 
         result = {
             "embeddings": embeddings,
@@ -147,9 +143,9 @@ class DPRModelTester:
         model = DPRQuestionEncoder(config=config)
         model.to(torch_device)
         model.eval()
-        embeddings = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        embeddings = model(input_ids, token_type_ids=token_type_ids)
-        embeddings = model(input_ids)
+        embeddings = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)[0]
+        embeddings = model(input_ids, token_type_ids=token_type_ids)[0]
+        embeddings = model(input_ids)[0]
 
         result = {
             "embeddings": embeddings,
@@ -164,7 +160,7 @@ class DPRModelTester:
         model = DPRReader(config=config)
         model.to(torch_device)
         model.eval()
-        start_logits, end_logits, relevance_logits = model(input_ids, attention_mask=input_mask,)
+        start_logits, end_logits, relevance_logits, *_ = model(input_ids, attention_mask=input_mask,)
         result = {
             "relevance_logits": relevance_logits,
             "start_logits": start_logits,
@@ -190,9 +186,14 @@ class DPRModelTester:
 
 
 @require_torch
-class DPRModelTest(unittest.TestCase):
+class DPRModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (DPRContextEncoder, DPRQuestionEncoder, DPRReader,) if is_torch_available() else ()
+
+    test_resize_embeddings = False
+    test_missing_keys = False  # why?
+    test_pruning = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DPRModelTester(self)
@@ -230,116 +231,3 @@ class DPRModelTest(unittest.TestCase):
         for model_name in DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = DPRReader.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def _prepare_for_class(self, inputs_dict, model_class):
-        return inputs_dict
-
-    def test_save_load(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            out_2 = outputs[0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
-                    )
-
-    def test_determinism(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-            out_1 = first.cpu().numpy()
-            out_2 = second.cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-    def test_torchscript(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        self._create_and_check_torchscript(config, inputs_dict)
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)["input_ids"]  # Let's keep only input_ids
-
-            try:
-                traced_gpt2 = torch.jit.trace(model, inputs)
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_gpt2, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
