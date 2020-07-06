@@ -17,7 +17,8 @@ import logging
 import math
 import random
 import warnings
-from dataclasses import dataclass
+
+# from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -36,19 +37,20 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_outputs import (
-    EncoderOutput,
-    EncoderOutputWithPooling,
-    QuestionAnsweringModelOutput,
-    Seq2SeqLMOutput,
-    SequenceClassifierOutput,
-)
+
+# from .modeling_outputs import (
+#    EncoderOutput,
+#    EncoderOutputWithPooling,
+#    QuestionAnsweringModelOutput,
+#    Seq2SeqLMOutput,
+#    SequenceClassifierOutput,
+# )
 from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_FOR_DOC = "BartConfig"
+# _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
