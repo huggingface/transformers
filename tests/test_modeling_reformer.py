@@ -940,7 +940,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[1, -1, :5]
         expected_output_slice = torch.tensor(
-            [0.0324, -0.0121, 0.0615, 0.0031, -0.0297], dtype=torch.float, device=torch_device,
+            [0.0256, -0.0121, 0.0636, 0.0024, -0.0393], dtype=torch.float, device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -1022,5 +1022,5 @@ class ReformerIntegrationTests(unittest.TestCase):
         output_text = tokenizer.decode(output_ids[0])
         self.assertEqual(
             output_text,
-            "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
+            "A few months later state expression in the old water by which the water by which the other persons in the st",
         )

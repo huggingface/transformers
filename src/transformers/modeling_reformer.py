@@ -623,7 +623,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
 
-        mask = self._compute_attn_mask(query_bucket_idx, key_value_bucket_idx, attention_mask, query_key_dots.shape, sequence_length)
+        mask = self._compute_attn_mask(
+            query_bucket_idx, key_value_bucket_idx, attention_mask, query_key_dots.shape, sequence_length
+        )
 
         if mask is not None:
             query_key_dots = torch.where(mask, query_key_dots, mask_value)
