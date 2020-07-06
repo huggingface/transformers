@@ -1022,5 +1022,5 @@ class ReformerIntegrationTests(unittest.TestCase):
         output_text = tokenizer.decode(output_ids[0])
         self.assertEqual(
             output_text,
-            "A few months later state expression in the old water by which the water by which the other persons in the st",
+            "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
         )

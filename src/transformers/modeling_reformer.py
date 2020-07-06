@@ -681,14 +681,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         return out_vectors, logits, attention_probs
 
     def _compute_attn_mask(self, query_indices, key_indices, attention_mask, query_key_dot_shape, sequence_length):
-        causal_mask = None
 
-        # Causal mask
-        if self.is_decoder:
-            causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
-
-        # Attention mask: chunk, look up correct mask value from key_value_bucket_idx
-        # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
+        # attention mask for LSH
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]
@@ -701,9 +695,15 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
             attention_mask = attention_mask.unsqueeze(-2).expand(query_key_dot_shape)
 
-            # multiply by casaul mask if necessary
-            if causal_mask is not None:
+        # Causal mask
+        if self.is_decoder is True:
+            causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
+
+            # add attention mask if not None
+            if attention_mask is not None:
                 attention_mask = causal_mask * attention_mask
+            else:
+                attention_mask = causal_mask
 
         return attention_mask
 
@@ -921,7 +921,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         return LocalSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs)
 
     def _compute_attn_mask(self, query_indices, key_indices, attention_mask, query_key_dots_shape, sequence_length):
-        causal_mask = None
 
         # chunk attention mask and look before and after
         if attention_mask is not None:
@@ -930,18 +929,18 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
             if self.chunk_length < sequence_length:
                 attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
                 attention_mask = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
+            # create attn_mask
+            attention_mask = attention_mask.unsqueeze(-2).expand(query_key_dots_shape)
 
         # Causal mask
         if self.is_decoder is True:
             causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
 
-        # Attention mask
-        if attention_mask is not None:
-            # create attn_mask
-            attention_mask = attention_mask.unsqueeze(-2).expand(query_key_dots_shape)
-            # multiply by casaul mask if necessary
-            if causal_mask is not None:
+            # add attention mask if not None
+            if attention_mask is not None:
                 attention_mask = causal_mask * attention_mask
+            else:
+                attention_mask = causal_mask
 
         return attention_mask
 
