@@ -14,12 +14,36 @@ from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 
+def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=True):
+    if target.dim() == lprobs.dim() - 1:
+        target = target.unsqueeze(-1)
+    nll_loss = -lprobs.gather(dim=-1, index=target)
+    smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
+    if ignore_index is not None:
+        pad_mask = target.eq(ignore_index)
+        nll_loss.masked_fill_(pad_mask, 0.)
+        smooth_loss.masked_fill_(pad_mask, 0.)
+    else:
+        nll_loss = nll_loss.squeeze(-1)
+        smooth_loss = smooth_loss.squeeze(-1)
+    if reduce:
+        nll_loss = nll_loss.sum()
+        smooth_loss = smooth_loss.sum()
+    eps_i = epsilon / lprobs.size(-1)
+    loss = (1. - epsilon) * nll_loss + eps_i * smooth_loss
+    return loss, nll_loss
+
+def ce_loss(lm_logits, labels):
+    loss_fct = nn.CrossEntropyLoss()
+    # TODO(SS): do we need to ignore pad tokens in labels?
+    masked_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
+    return masked_lm_loss
+
 
 def encode_file(
     tokenizer,
     data_path,
     max_length,
-    pad_to_max_length=True,
     return_tensors="pt",
     overwrite_cache=False,
     prefix="",
@@ -44,7 +68,7 @@ def encode_file(
         tokenized = tokenizer(
             [text],
             max_length=max_length,
-            padding="max_length" if pad_to_max_length else None,
+            padding=True,
             truncation=True,
             add_prefix_space=True,
             return_tensors=return_tensors,
