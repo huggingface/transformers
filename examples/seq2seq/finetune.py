@@ -92,7 +92,10 @@ class SummarizationModule(BaseTransformer):
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
         if self.hparams.freeze_encoder:
-            freeze_params(self.model.model.encoder)  # TODO: this will break for t5
+            try:
+                freeze_params(self.model.model.encoder)
+            except AttributeError:
+                freeze_params(self.model.encoder)
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.decoder_start_token_id = None
