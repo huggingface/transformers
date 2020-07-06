@@ -81,7 +81,9 @@ def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
 
 
 @torch.no_grad()
-def convert_fairseq_rag_checkpoint_to_hf_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkpoint_name=None):
+def convert_fairseq_rag_checkpoint_to_hf_bart_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, hf_checkpoint_name=None
+):
     """
     Copy/paste/tweak model's weights to our BERT structure.
     """
@@ -90,7 +92,7 @@ def convert_fairseq_rag_checkpoint_to_hf_bart_checkpoint(checkpoint_path, pytorc
     config = BartConfig.from_pretrained(hf_checkpoint_name)
 
     state_dict = torch.load(checkpoint_path)
-    state_dict = {s:v for s,v in state_dict['model'].items() if (s.startswith('encoder') or s.startswith('decoder'))}
+    state_dict = {s: v for s, v in state_dict["model"].items() if (s.startswith("encoder") or s.startswith("decoder"))}
     remove_ignore_keys_(state_dict)
     state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
 
@@ -121,5 +123,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # TODO: very hacky right now, also we dont handle the retriever params, !
 
-    args.hf_config = 'facebook/bart-large-cnn'
-    convert_fairseq_rag_checkpoint_to_hf_bart_checkpoint(args.fairseq_path, args.pytorch_dump_folder_path, hf_checkpoint_name=args.hf_config)
+    args.hf_config = "facebook/bart-large-cnn"
+    convert_fairseq_rag_checkpoint_to_hf_bart_checkpoint(
+        args.fairseq_path, args.pytorch_dump_folder_path, hf_checkpoint_name=args.hf_config
+    )

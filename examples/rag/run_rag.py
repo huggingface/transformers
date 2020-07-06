@@ -1,14 +1,17 @@
 import torch
 
-from transformers import DprConfig, \
-    DprQuestionEncoder, \
-    DprContextEncoder, \
-    DprTokenizer, \
-    BartForConditionalGeneration, \
-    BartTokenizer, \
-    PreTrainedModel, \
-    PretrainedConfig
+from transformers import (
+    BartForConditionalGeneration,
+    BartTokenizer,
+    DprConfig,
+    DprContextEncoder,
+    DprQuestionEncoder,
+    DprTokenizer,
+    PretrainedConfig,
+    PreTrainedModel,
+)
 from transformers.modelling_rag import RagModel, Retriever
+
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -29,7 +32,7 @@ def get_rag_config(generator_config, retriever_config, rag_model_type):
         rag_model_type=rag_model_type,
         k=5,
         generator_config=generator_config,
-        retriever_config=retriever_config
+        retriever_config=retriever_config,
     )
 
 
@@ -42,7 +45,8 @@ def build_rag_model(dpr_model_file, rag_model_path, rag_model_type):
 
     # load generator
     generator_tokenizer = BartTokenizer.from_pretrained(
-        "facebook/bart-large", )  # additional_special_tokens=[TITLE_SEP, DOC_SEP]) # Patrick: removing for now
+        "facebook/bart-large",
+    )  # additional_special_tokens=[TITLE_SEP, DOC_SEP]) # Patrick: removing for now
     bart = BartForConditionalGeneration.from_pretrained(rag_model_path).to(device=device)
     rag_config = get_rag_config(bart.config, dpr_config, rag_model_type)
 
@@ -59,7 +63,7 @@ def build_rag_sequence():
     return build_rag_model(
         dpr_model_file="/private/home/plewis/rag/rag_hf/data/dpr_retriever/hf_bert_base.cp",
         rag_model_path="/private/home/plewis/rag/rag_hf/data/rag-sequence-nq",
-        rag_model_type='rag_sequence'
+        rag_model_type="rag_sequence",
     )
 
 
@@ -67,11 +71,11 @@ def build_rag_token():
     return build_rag_model(
         dpr_model_file="/private/home/plewis/rag/rag_hf/data/dpr_retriever/hf_bert_base.cp",
         rag_model_path="/private/home/plewis/rag/rag_hf/data/rag-token-nq",
-        rag_model_type='rag_token'
+        rag_model_type="rag_token",
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     questions = [
         "what is fabio lanzoni famous for",
         "who does eric roberts play in in The Dark Knight",
@@ -79,27 +83,28 @@ if __name__ == '__main__':
     ]
     num_beams = 4
     for build_rag in [build_rag_sequence, build_rag_token]:
-        print('*' * 50)
-        print(f'Loading {build_rag.__name__}')
-        print('*' * 50)
+        print("*" * 50)
+        print(f"Loading {build_rag.__name__}")
+        print("*" * 50)
         rag_model = build_rag().eval().to(device)
 
-        inputs = \
-        rag_model.generator_tokenizer.batch_encode_plus(questions, return_tensors="pt", pad_to_max_length=True)[
-            "input_ids"].to(device)
-        outputs = rag_model.generate(inputs,
-                                     num_beams=num_beams,
-                                     min_length=1,  # make sure short answers are allowed
-                                     max_length=10,  # no need for crazy long answers in NQ
-                                     early_stopping=False,
-                                     num_return_sequences=num_beams,
-                                     bad_words_ids=[[0, 0]]
-                                     # BART likes to repeat BOS tokens, dont allow it to generate more than one
-                                     )
+        inputs = rag_model.generator_tokenizer.batch_encode_plus(
+            questions, return_tensors="pt", pad_to_max_length=True
+        )["input_ids"].to(device)
+        outputs = rag_model.generate(
+            inputs,
+            num_beams=num_beams,
+            min_length=1,  # make sure short answers are allowed
+            max_length=10,  # no need for crazy long answers in NQ
+            early_stopping=False,
+            num_return_sequences=num_beams,
+            bad_words_ids=[[0, 0]]
+            # BART likes to repeat BOS tokens, dont allow it to generate more than one
+        )
         answers = rag_model.generator_tokenizer.batch_decode(outputs, skip_special_tokens=True)
         for i in range(0, len(questions)):
             print("Question: " + questions[i])
-            print(f"Top {num_beams} Answers: ", answers[i * num_beams: (i + 1) * num_beams])
+            print(f"Top {num_beams} Answers: ", answers[i * num_beams : (i + 1) * num_beams])
 
     # Retrieved contexts
     """
@@ -120,20 +125,3 @@ if __name__ == '__main__':
      was killed or taken to Arkham Asylum. In some cases, he was the man who made Havey Dent turn into Two-Face. 
      He was played by Eric Roberts in The Dark Knight. Category:Batman characters Category:DC Comics characters
     """
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
