@@ -23,7 +23,7 @@ from torch import Tensor, nn
 
 from .configuration_dpr import DPRConfig
 from .file_utils import add_start_docstrings
-from .modeling_bert import BertConfig, BertModel
+from .modeling_bert import BertModel
 from .modeling_utils import PreTrainedModel
 from .tokenization_dpr import DPRReaderOutput
 

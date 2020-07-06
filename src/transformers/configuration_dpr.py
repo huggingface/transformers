@@ -16,7 +16,6 @@
 
 
 import logging
-from typing import Optional
 
 from .configuration_bert import BertConfig
 
