@@ -1290,15 +1290,15 @@ class QuestionAnsweringPipeline(Pipeline):
                     end_ * np.abs(np.array(feature.p_mask) - 1),
                 )
 
-                # Mask CLS
-                start_[0] = end_[0] = 0
-
                 # Normalize logits and spans to retrieve the answer
                 start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
                 end_ = np.exp(end_ - np.log(np.sum(np.exp(end_), axis=-1, keepdims=True)))
 
                 if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+
+                # Mask the CLS tokens after softmax & handling of impossible answer
+                start_[0] = end_[0]
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)
