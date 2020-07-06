@@ -1,55 +1,62 @@
-import numpy as np
 import os
-import torch
 
+import numpy as np
+import torch
 from nlp import load_dataset
-from transformers import DprConfig, DprQuestionEncoder, \
-    DprContextEncoder, DprTokenizer, BartModel\
-    , BartForConditionalGeneration, BartTokenizer, PreTrainedModel, PretrainedConfig
+
+from transformers import (
+    BartForConditionalGeneration,
+    BartModel,
+    BartTokenizer,
+    DprConfig,
+    DprContextEncoder,
+    DprQuestionEncoder,
+    DprTokenizer,
+    PretrainedConfig,
+    PreTrainedModel,
+)
+
 
 torch.set_grad_enabled(False)
-os.environ['KMP_DUPLICATE_LIB_OK']='True'  # fix libiomp5.dylib initialization
+os.environ["KMP_DUPLICATE_LIB_OK"] = "True"  # fix libiomp5.dylib initialization
 
 
 def shift_tokens_left(input_ids, pad_token_id):
     """Shift input ids one token to the left, and add a pad to right"""
-    return torch.cat([
-        input_ids[:, 1:], input_ids.new(input_ids.shape[0], 1).fill_(pad_token_id)], 1
-    )
+    return torch.cat([input_ids[:, 1:], input_ids.new(input_ids.shape[0], 1).fill_(pad_token_id)], 1)
 
 
 def _cat_and_pad(tensors, pad_token_id):
     output = tensors[0].new(sum([t.shape[0] for t in tensors]), max([t.shape[1] for t in tensors])).fill_(pad_token_id)
     ind = 0
     for t in tensors:
-        output[ind: ind + t.shape[0], :t.shape[1]] = t
+        output[ind : ind + t.shape[0], : t.shape[1]] = t
         ind += t.shape[0]
     return output
 
 
 class Retriever(torch.nn.Module):
-
     def __init__(self, config: DprConfig, tokenizer: DprTokenizer):
         super().__init__()
         self.config = config
-        self.ctx_encoder = DprContextEncoder(config)#.eval()n
+        self.ctx_encoder = DprContextEncoder(config)  # .eval()n
         self.device = torch.device("cpu")
         self.tokenizer = tokenizer
         self.index = None
 
     def to(self, *args, **kwargs):
         r = super().to(*args, **kwargs)
-        self.device = kwargs['device']
+        self.device = kwargs["device"]
         return r
 
     # TODO: embedding is slow, can we load embeddings / index from file while loading dataset?
     def load_index(self):
         print("Loading dataset")
         wiki = load_dataset("wikipedia", "20200501.simple", split="train[:100]")
-        wiki_passages = wiki.map(lambda ex: {"text": self._crop(ex["text"]), 'title': ex['title'].strip()})
+        wiki_passages = wiki.map(lambda ex: {"text": self._crop(ex["text"]), "title": ex["title"].strip()})
         print("Adding embeddings")
         with torch.no_grad():
-          wiki_passages = wiki_passages.add_embeddings(self._embed_ctx, batched=True, batch_size=64)
+            wiki_passages = wiki_passages.add_embeddings(self._embed_ctx, batched=True, batch_size=64)
         print("Indexing")
         wiki_passages.init_index(device=0)  # faiss index with device=0 for gpu
         self.index = wiki_passages
@@ -58,14 +65,14 @@ class Retriever(torch.nn.Module):
         """Dummy function to create a snippet out of a full article"""
         if text.count(" ") > max_spaces:
             text = " ".join(text.split(" ", max_spaces + 1)[:-1])
-        return text.replace('\n', ' ')
+        return text.replace("\n", " ")
 
     def _embed_ctx(self, examples):
         tokenized_examples = torch.cat(
             [
                 self.tokenizer.encode(
                     title.strip(),
-                    text_pair=text.replace('\n', ' '),
+                    text_pair=text.replace("\n", " "),
                     return_tensors="pt",
                     pad_to_max_length=True,
                     model_max_length=512,
@@ -95,29 +102,20 @@ class RAGEnc(torch.nn.Module):
         super().__init__()
         self.rag_model = RagModel
 
-    def forward(self,
-                input_ids=None,
-                attention_mask=None,
-                ):
+    def forward(
+        self, input_ids=None, attention_mask=None,
+    ):
         ctxt_input_ids, ctxt_attention_mask, doc_scores = self.rag_model.contextualize(input_ids)
         enc = self.rag_model.generator.get_encoder()
-        encoder_out = enc(
-            input_ids=ctxt_input_ids,
-            attention_mask=ctxt_attention_mask,
-        )
+        encoder_out = enc(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask,)
         stacked_enc_out = _unstack_enc(encoder_out[0], self.rag_model.k)
         return (stacked_enc_out,) + encoder_out[1:] + (doc_scores,)
 
 
 class RagModel(PreTrainedModel):
-
-    def __init__(self,
-                 config,
-                 retriever,
-                 retriever_tokenizer,
-                 generator,
-                 generator_tokenizer,
-                 ):
+    def __init__(
+        self, config, retriever, retriever_tokenizer, generator, generator_tokenizer,
+    ):
         super().__init__(config)
         self.config = config
         self.retriever = retriever
@@ -128,7 +126,7 @@ class RagModel(PreTrainedModel):
         self.generator_tokenizer = generator_tokenizer
 
         self.k = self.config.k
-        assert self.k > 1 # dont support k > 1
+        assert self.k > 1  # dont support k > 1
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         """Mostly copied from BART"""
@@ -151,7 +149,6 @@ class RagModel(PreTrainedModel):
             "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
-
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -189,9 +186,11 @@ class RagModel(PreTrainedModel):
         if len(encoder_outputs[0].shape) == 4:
             encoder_outputs = (_stack_enc(encoder_outputs[0], self.k),) + encoder_outputs[1:]
 
-        kwargs['attention_mask'] = kwargs['attention_mask'].repeat_interleave(self.k, dim=0)
+        kwargs["attention_mask"] = kwargs["attention_mask"].repeat_interleave(self.k, dim=0)
         decoder_input_ids = decoder_input_ids.repeat_interleave(self.k, dim=0)
-        outputs = self.generator(input_ids, decoder_input_ids=decoder_input_ids, encoder_outputs=encoder_outputs, **kwargs)
+        outputs = self.generator(
+            input_ids, decoder_input_ids=decoder_input_ids, encoder_outputs=encoder_outputs, **kwargs
+        )
 
         seq_logits = outputs[0]
         (enc_out, enc_mask), decoder_cached_states = outputs[1]
@@ -206,21 +205,21 @@ class RagModel(PreTrainedModel):
         seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
             seq_logits.shape[0] // self.k, self.k, -1, seq_logits.size(-1)
         )
-        if self.config.rag_model_type == 'rag_token':
+        if self.config.rag_model_type == "rag_token":
             log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
             rag_logprobs = torch.logsumexp(log_prob_sum, dim=1)
-        elif self.config.rag_model_type == 'rag_sequence':
+        elif self.config.rag_model_type == "rag_sequence":
             first_token_scores = seq_logprobs[:, :, :1, :]
             remainder = seq_logprobs[:, :, 1:, :]
             rag_logprobs = torch.cat([first_token_scores + doc_logprobs.unsqueeze(-1).unsqueeze(-1), remainder], dim=2)
         else:
-            raise Exception('Unrecognized RAG model')
+            raise Exception("Unrecognized RAG model")
         return rag_logprobs, seq_logprobs, doc_logprobs
 
     def forward(self, input_ids, decoder_input_ids=None, **kwargs):
         """forward function, if input_ids is none, its called in rag_token generation"""
         if input_ids is None:
-            assert self.config.rag_model_type == 'rag_token'
+            assert self.config.rag_model_type == "rag_token"
             return self._forward_rag_token_generate(input_ids, decoder_input_ids, **kwargs)
 
         # Add context documents to encoder input
@@ -231,16 +230,14 @@ class RagModel(PreTrainedModel):
             decoder_input_ids = decoder_input_ids.repeat_interleave(self.k, dim=0)
 
         seq_logits = self.generator(
-            input_ids=ctxt_input_ids,
-            attention_mask=ctxt_attention_mask,
-            decoder_input_ids=decoder_input_ids
+            input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask, decoder_input_ids=decoder_input_ids
         )[0]
         return self._get_rag_logprobs(doc_scores, seq_logits)
 
     def _cat_input_and_doc(self, doc, input_string):
         # out = input_string + self.config.title_sep + doc["title"] + self.config.doc_sep + doc["text"] TODO Patrick: if we train more RAG models, I want to put the input first to take advantage of effortless truncation
         out = doc["title"] + self.config.title_sep + doc["text"] + self.config.doc_sep + input_string
-        return out.replace('  ', ' ')
+        return out.replace("  ", " ")
 
     def contextualize(self, input_ids, max_combined_length=300):
         """
@@ -251,21 +248,26 @@ class RagModel(PreTrainedModel):
         device = input_ids.device
         input_strings = self.generator_tokenizer.batch_decode(input_ids, skip_special_tokens=True)
 
-        dpr_inputs = self.retriever_tokenizer.batch_encode_plus(input_strings, return_tensors="pt", pad_to_max_length=True)
+        dpr_inputs = self.retriever_tokenizer.batch_encode_plus(
+            input_strings, return_tensors="pt", pad_to_max_length=True
+        )
         dpr_input_embs = self.question_encoder(dpr_inputs["input_ids"].to(device=device))
 
         doc_scores, docs = self.retriever.retrieve(np.asarray(dpr_input_embs.cpu(), order="C"), self.k)
 
         rag_input_strings = [
-            self._cat_input_and_doc(docs[i][j], input_strings[i]) for i in range(len(docs)) for j in range(len(docs[i]))
+            self._cat_input_and_doc(docs[i][j], input_strings[i])
+            for i in range(len(docs))
+            for j in range(len(docs[i]))
         ]
 
         contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
-            rag_input_strings, max_length=max_combined_length, return_tensors='pt', pad_to_max_length=True).to(device)
+            rag_input_strings, max_length=max_combined_length, return_tensors="pt", pad_to_max_length=True
+        ).to(device)
 
         return (
-            contextualized_inputs['input_ids'],
-            contextualized_inputs['attention_mask'],
+            contextualized_inputs["input_ids"],
+            contextualized_inputs["attention_mask"],
             torch.FloatTensor(doc_scores).to(device),
         )
 
@@ -285,35 +287,34 @@ class RagModel(PreTrainedModel):
             return torch.stack(list({str(k.tolist()): k for k in _input_ids}.values()))
 
         ctxt_input_ids, _, doc_scores = self.contextualize(input_ids)
-        nrs = kwargs.get('num_return_sequences', 1)
-        kwargs['num_return_sequences'] = kwargs.get('num_beams', 1)
+        nrs = kwargs.get("num_return_sequences", 1)
+        kwargs["num_return_sequences"] = kwargs.get("num_beams", 1)
         ctxt_input_ids, ctxt_attention_mask, doc_scores = self.contextualize(input_ids)
 
         outputs = []
         for index in range(len(input_ids)):
             # first, generate beams from documents:
-            generator_input_ids = ctxt_input_ids[index * self.k: (index  + 1) * self.k]  # (k, max_len)
+            generator_input_ids = ctxt_input_ids[index * self.k : (index + 1) * self.k]  # (k, max_len)
             output_sequences = self.generator.generate(generator_input_ids, **kwargs)
             output_sequences = _get_unique_rows(output_sequences)
 
             # then, run model forwards to get nll scores:
             rag_logprobs, seq_scores, doc_scores = self.forward(
-                input_ids[index: index + 1].repeat(len(output_sequences), 1),
-                decoder_input_ids=output_sequences
+                input_ids[index : index + 1].repeat(len(output_sequences), 1), decoder_input_ids=output_sequences
             )
             output_candidate_scores = self.get_nll(rag_logprobs, output_sequences)
-            top_cand_inds = (- output_candidate_scores).topk(nrs)[1]
+            top_cand_inds = (-output_candidate_scores).topk(nrs)[1]
             outputs.append(output_sequences[top_cand_inds])
 
         return _cat_and_pad(outputs, pad_token_id=self.generator_tokenizer.pad_token_id)
 
     def generate(self, *args, **kwargs):
-        if self.config.rag_model_type == 'rag_token':
+        if self.config.rag_model_type == "rag_token":
             return self._generate_rag_token(*args, **kwargs)
-        elif self.config.rag_model_type == 'rag_sequence':
+        elif self.config.rag_model_type == "rag_sequence":
             return self._generate_rag_sequence(*args, **kwargs)
         else:
-            raise Exception('Unrecognized RAG model')
+            raise Exception("Unrecognized RAG model")
 
     def get_nll(self, rag_log_probs, target):
         """get negative log likelihood from rag log probs"""
@@ -323,27 +324,27 @@ class RagModel(PreTrainedModel):
         def _mask_pads(ll):
             pad_mask = target.eq(ignore_index)
             if pad_mask.any():
-                ll.masked_fill_(pad_mask, 0.)
+                ll.masked_fill_(pad_mask, 0.0)
             return ll.squeeze(-1)
 
-        if self.config.rag_model_type == 'rag_token':
+        if self.config.rag_model_type == "rag_token":
             target = target.unsqueeze(1)
             if target.dim() == rag_log_probs.dim() - 1:
                 target = target.unsqueeze(-1)
 
             ll = rag_log_probs.gather(dim=-1, index=target)
             ll = _mask_pads(ll)
-            ll = ll.sum(1) # sum over tokens
+            ll = ll.sum(1)  # sum over tokens
 
-        elif self.config.rag_model_type == 'rag_sequence':
+        elif self.config.rag_model_type == "rag_sequence":
             target = target.unsqueeze(1).repeat(1, self.k, 1)
             if target.dim() == rag_log_probs.dim() - 1:
                 target = target.unsqueeze(-1)
 
             ll = rag_log_probs.gather(dim=-1, index=target)
             ll = _mask_pads(ll)
-            ll = ll.sum(2) # sum over tokens
-            ll = ll.logsumexp(1) # logsumexp v
+            ll = ll.sum(2)  # sum over tokens
+            ll = ll.logsumexp(1)  # logsumexp v
         else:
-            raise Exception('Unrecognized RAG model')
-        return - ll
+            raise Exception("Unrecognized RAG model")
+        return -ll
