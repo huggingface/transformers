@@ -16,7 +16,7 @@
 """
 Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, CTRL, BERT, RoBERTa, XLNet).
 GPT, GPT-2 and CTRL are fine-tuned using a causal language modeling (CLM) loss. BERT and RoBERTa are fine-tuned
-using a masked language modeling (MLM) loss. XLNet is fine-tuned using a permutation language modeling loss.
+using a masked language modeling (MLM) loss. XLNet is fine-tuned using a permutation language modeling (PLM) loss.
 """
 
 
@@ -103,11 +103,13 @@ class DataTrainingArguments:
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
     )
     plm_probability: float = field(
-        default=0.15,
-        metadata={"help": "Ratio of mask span to local context tokens for permutation language modeling."},
+        default=1 / 6,
+        metadata={
+            "help": "Ratio of length of a span of masked tokens to surrounding context length for permutation language modeling."
+        },
     )
-    max_gram: int = field(
-        default=5, metadata={"help": "Maximum individual mask span for permutation language modeling."}
+    max_span_length: int = field(
+        default=5, metadata={"help": "Maximum length of a span of masked tokens for permutation language modeling."}
     )
 
     block_size: int = field(
@@ -231,7 +233,7 @@ def main():
     eval_dataset = get_dataset(data_args, tokenizer=tokenizer, evaluate=True) if training_args.do_eval else None
     if config.model_type == "xlnet":
         data_collator = DataCollatorForPermutationLanguageModeling(
-            tokenizer=tokenizer, plm_probability=data_args.plm_probability, max_gram=data_args.max_gram,
+            tokenizer=tokenizer, plm_probability=data_args.plm_probability, max_span_length=data_args.max_span_length,
         )
     else:
         data_collator = DataCollatorForLanguageModeling(
