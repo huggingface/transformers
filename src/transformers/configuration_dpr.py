@@ -19,7 +19,6 @@ import logging
 from typing import Optional
 
 from .configuration_bert import BertConfig
-from .configuration_utils import PretrainedConfig
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +30,7 @@ DPR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class DPRConfig(PretrainedConfig):
+class DPRConfig(BertConfig):
     r"""
         :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a
         `DPRModel`.
@@ -40,29 +39,12 @@ class DPRConfig(PretrainedConfig):
         It is used to instantiate the components of the DPR model.
 
         Args:
-            encoder_model_config (:obj:`dict`, optional, defaults to `BertConfig.from_pretrained("bert-base-uncased").to_dict()`):
-                Configuration of the encoder inside each DPR component.
             projection_dim (:obj:`int`, optional, defaults to 0):
                 Dimension of the projection for the context and question encoders.
                 If it is set to zero (default), then no projection is done.
-            sequence_length (:obj:`int`, optional, defaults to 512):
-                Maximum length of the sequence.
-            pad_token_id (:obj:`int`, optional, defaults to 0):
-                The id of the pad token. This is used in the reader to combine the different `input_ids`
     """
     model_type = "dpr"
 
-    def __init__(
-        self,
-        encoder_model_config: Optional[dict] = None,  # base config
-        projection_dim: int = 0,  # projection of the encoders, 0 for no projection
-        sequence_length: int = 512,
-        pad_token_id: int = 0,
-        **kwargs
-    ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
-        self.encoder_model_config: dict = encoder_model_config or BertConfig.from_pretrained(
-            "bert-base-uncased"
-        ).to_dict()
+    def __init__(self, projection_dim: int = 0, **kwargs):  # projection of the encoders, 0 for no projection
+        super().__init__(**kwargs)
         self.projection_dim = projection_dim
-        self.sequence_length = sequence_length

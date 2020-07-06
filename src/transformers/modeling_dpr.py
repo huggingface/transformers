@@ -30,9 +30,13 @@ from .tokenization_dpr import DPRReaderOutput
 
 logger = logging.getLogger(__name__)
 
-DPR_PRETRAINED_MODEL_ARCHIVE_LIST = [
+DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-ctx_encoder-single-nq-base",
+]
+DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-question_encoder-single-nq-base",
+]
+DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-reader-single-nq-base",
 ]
 
@@ -40,7 +44,7 @@ DPR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class DPREncoder(PreTrainedModel):
     def __init__(self, config: DPRConfig):
         super().__init__(config)
-        self.bert_model = BertModel(BertConfig(**config.encoder_model_config))
+        self.bert_model = BertModel(config)
         assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
@@ -70,6 +74,8 @@ class DPREncoder(PreTrainedModel):
 
     def init_weights(self):
         self.bert_model.init_weights()
+        if self.projection_dim > 0:
+            self.encode_proj.apply(self.bert_model._init_weights)
 
 
 class DPRSpanPredictor(PreTrainedModel):
@@ -84,7 +90,7 @@ class DPRSpanPredictor(PreTrainedModel):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = input_ids.size()
         # feed encoder
-        sequence_output, *_ = self.encoder(input_ids, None, attention_mask)
+        sequence_output, *_ = self.encoder(input_ids, attention_mask=attention_mask)
         # compute logits
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -144,6 +150,8 @@ class DPRPretrainedReader(PreTrainedModel):
 
     def init_weights(self):
         self.span_predictor.encoder.init_weights()
+        self.span_predictor.qa_classifier.apply(self.span_predictor.encoder.bert_model._init_weights)
+        self.span_predictor.qa_outputs.apply(self.span_predictor.encoder.bert_model._init_weights)
 
 
 ###############

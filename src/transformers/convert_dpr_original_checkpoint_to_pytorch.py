@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 from torch.serialization import default_restore_location
 
-from transformers import DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
+from transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
 
 
 CheckpointState = collections.namedtuple(
@@ -16,7 +16,6 @@ CheckpointState = collections.namedtuple(
 def load_states_from_checkpoint(model_file: str) -> CheckpointState:
     print("Reading saved model from %s", model_file)
     state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, "cpu"))
-    print("model_state_dict keys %s", state_dict.keys())
     return CheckpointState(**state_dict)
 
 
@@ -41,7 +40,7 @@ class DPRState:
 
 class DPRContextEncoderState(DPRState):
     def load_dpr_model(self):
-        model = DPRContextEncoder(DPRConfig())
+        model = DPRContextEncoder(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
         print("Loading DPR biencoder from {}".format(self.src_file))
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.ctx_encoder, "ctx_model."
@@ -58,7 +57,7 @@ class DPRContextEncoderState(DPRState):
 
 class DPRQuestionEncoderState(DPRState):
     def load_dpr_model(self):
-        model = DPRQuestionEncoder(DPRConfig())
+        model = DPRQuestionEncoder(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
         print("Loading DPR biencoder from {}".format(self.src_file))
         saved_state = load_states_from_checkpoint(self.src_file)
         encoder, prefix = model.question_encoder, "question_model."
@@ -75,7 +74,7 @@ class DPRQuestionEncoderState(DPRState):
 
 class DPRReaderState(DPRState):
     def load_dpr_model(self):
-        model = DPRReader(DPRConfig())
+        model = DPRReader(DPRConfig(**BertConfig.get_config_dict("bert-base-uncased")[0]))
         print("Loading DPR reader from {}".format(self.src_file))
         saved_state = load_states_from_checkpoint(self.src_file)
         state_dict = {}
@@ -115,4 +114,7 @@ if __name__ == "__main__":
     dest_dir = f"converted-{src_file.name}" if args.dest is None else args.dest
     dest_dir = Path(dest_dir)
     assert src_file.exists()
+    assert (
+        args.type is not None
+    ), "Please specify the component type of the DPR model to convert: 'ctx_encoder', 'question_encoder' or 'reader'."
     convert(args.type, src_file, dest_dir)
