@@ -74,8 +74,8 @@ from transformers import (
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
-
 from transformers.file_utils import hf_bucket_url
+
 
 if is_torch_available():
     import torch
