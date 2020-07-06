@@ -15,8 +15,16 @@
 
 import unittest
 
+import gin
+import jax
+import numpy as np
+
+# trax imports - to be deleted later
+import trax
 from transformers import is_torch_available
-from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
+from trax import shapes
+from trax.shapes import ShapeDtype as trax_ShapeDtype
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -25,12 +33,12 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     from transformers import (
         ReformerConfig,
-        ReformerForMaskedLM,
         ReformerModel,
         ReformerModelWithLMHead,
+        ReformerForMaskedLM,
         ReformerTokenizer,
         ReformerLayer,
-        ReformerForQuestionAnswering,
+        ReformerAttention,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     import torch
@@ -45,7 +53,6 @@ class ReformerModelTester:
         is_training=None,
         is_decoder=None,
         use_input_mask=None,
-        use_labels=None,
         vocab_size=None,
         attention_head_size=None,
         hidden_size=None,
@@ -84,7 +91,6 @@ class ReformerModelTester:
         self.is_training = is_training
         self.is_decoder = is_decoder
         self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.attention_head_size = attention_head_size
         self.hidden_size = hidden_size
@@ -132,10 +138,6 @@ class ReformerModelTester:
         if self.use_input_mask:
             input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
-        choice_labels = None
-        if self.use_labels:
-            choice_labels = ids_tensor([self.batch_size], 2)
-
         config = ReformerConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -168,13 +170,14 @@ class ReformerModelTester:
             config,
             input_ids,
             input_mask,
-            choice_labels,
         )
 
     def check_loss_output(self, result):
         self.parent.assertListEqual(list(result["loss"].size()), [])
 
-    def create_and_check_reformer_model(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_model(
+        self, config, input_ids, input_mask,
+    ):
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -189,14 +192,18 @@ class ReformerModelTester:
             list(result["sequence_output"].size()), [self.batch_size, self.seq_length, 2 * self.hidden_size],
         )
 
-    def create_and_check_reformer_model_with_lm_backward(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_model_with_lm_backward(
+        self, config, input_ids, input_mask,
+    ):
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()
         loss = model(input_ids, attention_mask=input_mask, labels=input_ids)[0]
         loss.backward()
 
-    def create_and_check_reformer_with_lm(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_with_lm(
+        self, config, input_ids, input_mask,
+    ):
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()
@@ -210,24 +217,7 @@ class ReformerModelTester:
         )
         self.check_loss_output(result)
 
-    def create_and_check_reformer_with_mlm(self, config, input_ids, input_mask, choice_labels):
-        config.is_decoder = False
-        model = ReformerForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=input_ids)
-        result = {
-            "loss": loss,
-            "prediction_scores": prediction_scores,
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.check_loss_output(result)
-
-    def create_and_check_reformer_model_with_attn_mask(
-        self, config, input_ids, input_mask, choice_labels, is_decoder=False
-    ):
+    def create_and_check_reformer_model_with_attn_mask(self, config, input_ids, input_mask, is_decoder):
         # no special position embeddings
         config.axial_pos_embds = False
         config.is_decoder = is_decoder
@@ -268,9 +258,7 @@ class ReformerModelTester:
 
         self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
 
-    def create_and_check_reformer_layer_dropout_seed(
-        self, config, input_ids, input_mask, choice_labels, is_decoder=False
-    ):
+    def create_and_check_reformer_layer_dropout_seed(self, config, input_ids, input_mask, is_decoder):
         config.is_decoder = is_decoder
         layer = ReformerLayer(config).to(torch_device)
         layer.train()
@@ -303,7 +291,7 @@ class ReformerModelTester:
             torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3,)
         )
 
-    def create_and_check_reformer_feed_forward_chunking(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_feed_forward_chunking(self, config, input_ids, input_mask):
         torch.manual_seed(0)
         model = ReformerModel(config=config)
         model.to(torch_device)
@@ -321,7 +309,7 @@ class ReformerModelTester:
         hidden_states_with_chunk = model(input_ids, attention_mask=input_mask)[0]
         self.parent.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
-    def create_and_check_reformer_feed_backward_chunking(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_feed_backward_chunking(self, config, input_ids, input_mask):
         if not self.is_training:
             return
 
@@ -363,7 +351,7 @@ class ReformerModelTester:
             torch.allclose(grad_slice_position_factor_2_chunk, grad_slice_position_factor_2_no_chunk, atol=1e-3)
         )
 
-    def create_and_check_reformer_random_seed(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_random_seed(self, config, input_ids, input_mask):
         layer = ReformerLayer(config).to(torch_device)
         layer.train()
 
@@ -394,7 +382,7 @@ class ReformerModelTester:
             seeds.append(layer.feed_forward_seed)
         self.parent.assertGreater(len(set(seeds)), 70)
 
-    def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask):
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.half()
@@ -402,7 +390,7 @@ class ReformerModelTester:
         output = model(input_ids, attention_mask=input_mask)[0]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
-    def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask):
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.half()
@@ -410,35 +398,9 @@ class ReformerModelTester:
         output = model.generate(input_ids, attention_mask=input_mask, do_sample=False)
         self.parent.assertFalse(torch.isnan(output).any().item())
 
-    def create_and_check_reformer_no_chunking(self, config, input_ids, input_mask, choice_labels):
-        # force chunk length to be bigger than input_ids
-        config.lsh_attn_chunk_length = 2 * input_ids.shape[-1]
-        config.local_attn_chunk_length = 2 * input_ids.shape[-1]
-        model = ReformerModelWithLMHead(config=config)
-        model.to(torch_device)
-        model.eval()
-        output_logits = model(input_ids, attention_mask=input_mask)[0]
-        self.parent.assertTrue(output_logits.shape[1] == input_ids.shape[-1])
-
-    def create_and_check_longformer_for_question_answering(self, config, input_ids, input_mask, choice_labels):
-        model = ReformerForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        loss, start_logits, end_logits = model(
-            input_ids, attention_mask=input_mask, start_positions=choice_labels, end_positions=choice_labels,
-        )
-        result = {
-            "loss": loss,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.check_loss_output(result)
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids, input_mask, choice_labels) = config_and_inputs
+        (config, input_ids, input_mask,) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
@@ -461,21 +423,17 @@ class ReformerTesterMixin:
 
     def test_reformer_model_attn_masking(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, is_decoder=True)
-        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, is_decoder=False)
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, True)
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, False)
 
     def test_reformer_with_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_with_lm(*config_and_inputs)
 
-    def test_reformer_with_mlm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_with_mlm(*config_and_inputs)
-
     def test_reformer_layer_training_dropout(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=True)
-        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=False)
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, True)
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, False)
 
     def test_reformer_chunking_forward_equality(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -484,10 +442,6 @@ class ReformerTesterMixin:
     def test_reformer_chunking_backward_equality(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_feed_backward_chunking(*config_and_inputs)
-
-    def test_reformer_no_chunking(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_no_chunking(*config_and_inputs)
 
     @slow
     def test_dropout_random_seed_is_changing(self):
@@ -504,17 +458,10 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
-    @require_multigpu
-    def test_multigpu_data_parallel_forward(self):
-        # Opt-out of this test.
-        pass
-
 
 @require_torch
-class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (ReformerModel, ReformerModelWithLMHead, ReformerForQuestionAnswering) if is_torch_available() else ()
-    )
+class ReformerLocalAttnModelTest(ModelTesterMixin, ReformerTesterMixin, unittest.TestCase):
+    all_model_classes = (ReformerModel, ReformerModelWithLMHead) if is_torch_available() else ()
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
@@ -525,9 +472,8 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
             "batch_size": 13,
             "seq_length": 32,
             "is_training": True,
-            "is_decoder": True,
+            "is_decoder": False,
             "use_input_mask": True,
-            "use_labels": True,
             "vocab_size": 32,
             "attention_head_size": 16,
             "hidden_size": 32,
@@ -562,16 +508,14 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in list(REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST)[:1]:
             model = ReformerModelWithLMHead.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (ReformerModel, ReformerModelWithLMHead, ReformerForQuestionAnswering) if is_torch_available() else ()
-    )
+class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase, ReformerTesterMixin):
+    all_model_classes = (ReformerModel, ReformerModelWithLMHead) if is_torch_available() else ()
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
@@ -582,9 +526,8 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "batch_size": 13,
             "seq_length": 13,
             "use_input_mask": True,
-            "use_labels": True,
             "is_training": False,
-            "is_decoder": True,
+            "is_decoder": False,
             "vocab_size": 32,
             "attention_head_size": 16,
             "hidden_size": 64,
@@ -834,7 +777,6 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_lsh_layer_forward(self):
         config = self._get_basic_config_and_input()
-        config["lsh_num_chunks_before"] = 0
         config["attn_layers"] = ["lsh"]
         config["is_decoder"] = False
         hidden_states = self._get_hidden_states()
@@ -850,7 +792,6 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_lsh_layer_forward_complex(self):
         config = self._get_basic_config_and_input()
-        config["lsh_num_chunks_before"] = 0
         config["attn_layers"] = ["lsh"]
         config["num_buckets"] = [2, 4]
         attn_mask = self._get_attn_mask()
@@ -869,7 +810,6 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_local_layer_forward(self):
         config = self._get_basic_config_and_input()
-        config["local_num_chunks_before"] = 0
         config["attn_layers"] = ["local"]
         config["is_decoder"] = False
         hidden_states = self._get_hidden_states()
@@ -885,7 +825,6 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_local_layer_forward_complex(self):
         config = self._get_basic_config_and_input()
-        config["local_num_chunks_before"] = 0
         config["attn_layers"] = ["local"]
         attn_mask = self._get_attn_mask()
         hidden_states = self._get_hidden_states()
@@ -895,7 +834,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         reformer_output = layer(prev_attn_output=hidden_states, hidden_states=hidden_states, attention_mask=attn_mask,)
         output_slice = reformer_output.hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
-            [1.4750, -2.0235, -0.9743, 1.4463, -0.1269], dtype=torch.float, device=torch_device,
+            [1.5476, -1.9020, -0.9902, 1.5013, -0.1950], dtype=torch.float, device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
@@ -934,7 +873,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["num_buckets"] = [2, 4]
         config["is_decoder"] = False
         torch.manual_seed(0)
-        model = ReformerForMaskedLM(ReformerConfig(**config)).to(torch_device)
+        model = ReformerModelWithLMHead(ReformerConfig(**config)).to(torch_device)
         model.eval()
         input_ids, attn_mask = self._get_input_ids_and_mask()
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
@@ -1024,3 +963,772 @@ class ReformerIntegrationTests(unittest.TestCase):
             output_text,
             "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
         )
+
+
+@require_torch
+class ReformerIntegrationTestsDynamic(unittest.TestCase):
+    # This code has to be used with patrickvonplaten's fork of trax to work
+    def test_lsh_layer(self):
+        config = ReformerConfig(hash_seed=0)
+        config.is_decoder = False
+        config.num_buckets = 32
+        config.lsh_attn_chunk_length = 128
+        config.num_attention_heads = 1
+        shape = (1, 128, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        np_input = np.random.rand(*shape)
+
+        mask = np.ones(shape[:-1], dtype=np.int32)
+        mask[:, -10:] = 0
+        hf_mask = torch.tensor(mask)
+
+        trax_layer = self.load_lsh_layer(config, "eval")
+        input_signature = shapes.signature([np_input, mask])
+        trax_weights, trax_state = trax_layer.init(input_signature)
+
+        trax_output = trax_layer([np_input, mask], weights=trax_weights, state=trax_state)
+
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
+
+        hf_input = torch.tensor(np_input, dtype=torch.float)
+        config.attn_layers = ["lsh"]
+        hf_layer = ReformerAttention(config)
+        self._set_layer_weights_in_torch_lsh(trax_weights, hf_layer, config.hidden_size)
+        hf_layer.eval()
+
+        hf_attention_all_heads = hf_layer.self_attention(hf_input, attention_mask=hf_mask)[0]
+        hf_output = hf_layer.output(hf_attention_all_heads)
+
+        self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
+
+    def test_local_layer(self):
+        config = ReformerConfig(hash_seed=0)
+        config.is_decoder = False
+        shape = (1, 128, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        np_input = np.random.rand(*shape)
+
+        trax_layer = self.load_local_layer(config)
+        mask = np.ones(shape[:-1], dtype=np.int32)
+        mask[:, -10:] = 0
+
+        hf_mask = torch.tensor(mask)
+
+        input_signature = shapes.signature([np_input, mask])
+        trax_weights, trax_state = trax_layer.init(input_signature)
+
+        trax_output = trax_layer([np_input, mask], weights=trax_weights, state=trax_state)
+
+        hf_input = torch.tensor(np_input, dtype=torch.float)
+        config.attn_layers = ["local"]
+        hf_layer = ReformerAttention(config)
+        self._set_layer_weights_in_torch_local(trax_weights, hf_layer, config.hidden_size)
+        hf_layer.eval()
+
+        hf_attention_all_heads = hf_layer.self_attention(hf_input, attention_mask=hf_mask)[0]
+        hf_output = hf_layer.output(hf_attention_all_heads)
+
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
+        self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
+
+    def test_reformer_lm_model(self):
+        config = ReformerConfig(
+            axial_pos_embds=True,
+            hash_seed=0,
+            is_decoder=True,
+            axial_pos_shape=[32, 16],
+            axial_pos_embds_dim=[64, 192],
+            attn_layers=["local", "local", "local", "local"],
+            local_attention_probs_dropout_prob=0.0,
+            lsh_attention_probs_dropout_prob=0.0,
+            hidden_dropout_prob=0.0,
+            num_buckets=8,
+        )
+
+        shape = (1, 512)  # Batch x SeqLen x ModelDimPerHead
+
+        np_input = np.random.randint(0, config.vocab_size, size=shape)
+        mask = np.ones_like(np_input, dtype=np.float32)
+        #        mask[:, -10:] = 0
+        np_zeros = np.zeros((shape[0], 1), dtype=np.int)
+        attention_mask = torch.tensor(mask)
+
+        # choose one of the following two. "train" tests gradients. "test" tests forward only.
+        mode = "train"
+        mode = "eval"
+
+        trax_model = self.load_reformer_lm_model(config, mode=mode)
+
+        #        assert (
+        #            config.is_decoder is True
+        #        ), "trax can only test casaul mask for ReformerLM. Use tests for layers to test non-casaul mask"
+
+        if mode == "train":
+            np_input_2 = np.asarray(np_input, np.float32)
+            trax_model = trax.layers.Serial(trax_model, trax.layers.CrossEntropyLoss())
+            input_signature = shapes.signature([np_input, np_input_2, mask])
+            trax_weights, trax_state = trax_model.init(input_signature)
+            trax_input = [np_input, np_input_2, mask]
+            torch_trax_weights = trax_weights[0]
+        else:
+            input_signature = shapes.signature([np_input, mask])
+            trax_weights, trax_state = trax_model.init(input_signature)
+            trax_input = np_input
+            trax_output = trax_model([np_input, mask], weights=trax_weights, state=trax_state)
+            trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
+            torch_trax_weights = trax_weights
+
+        if mode == "train":
+            hf_input = torch.cat([torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1)
+            hf_labels = (-100 * (1 - attention_mask) + torch.tensor(np_input) * attention_mask).to(dtype=torch.long)
+        else:
+            hf_input = torch.tensor(np_input)
+
+        hf_model = ReformerForMaskedLM(config)
+        self._set_model_weights_in_torch(torch_trax_weights, hf_model, config.hidden_size)
+
+        if mode == "train":
+            # uncomment line to fix hf_input_shifting in ReformerWithLMHead
+            hf_model.train()
+            # Trax does not really use attention masks in their layers in this setup. The just
+            # mask the final loss
+            loss = hf_model(hf_input, labels=hf_labels)[0]
+        else:
+            hf_output = hf_model(hf_input, attention_mask=attention_mask)
+            hf_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+            self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-4))
+
+        if mode == "train":
+            hf_model.zero_grad()
+            loss.backward()
+
+            def model_and_loss_call(weights, batch, state):
+                res = trax_model(batch, weights=weights, state=state)
+                return res, trax_model.state
+
+            grad_fn = jax.grad(model_and_loss_call, has_aux=True)
+            grads, state = grad_fn(trax_weights, trax_input, trax_state)
+
+            all_test_correct = self._set_model_weights_in_torch(
+                grads[0], hf_model, config.hidden_size, set_params=False
+            )
+            self.assertTrue(all_test_correct)
+
+    def test_backprop_lm_model(self):
+        config = ReformerConfig()
+
+        shape = (1, 192)  # Batch x SeqLen x ModelDimPerHead
+        input_ids = torch.tensor(
+            np.random.randint(0, config.vocab_size, size=shape), dtype=torch.long, device=torch_device,
+        )
+
+        model = ReformerModelWithLMHead(config)
+        loss = model(input_ids, labels=input_ids)[0]
+        loss.backward()
+
+    # NEED OLD TRAX VERSION FOR THIS TEST => DEPRECATED
+    def test_pretrained_crime_and_punishment_lm_model(self):
+        hf_config = ReformerConfig.from_pretrained("google/reformer-crime-and-punishment")
+        hf_config.hash_seed = 0
+        hf_model = ReformerModelWithLMHead.from_pretrained("google/reformer-crime-and-punishment", config=hf_config)
+        config = hf_model.config
+
+        trax_model_path = "/home/patrick/hugging_face/models/trained_reformer_colab/model.pkl"
+
+        shape = (1, 512)
+        np_input = np.random.randint(0, config.vocab_size, size=shape)
+
+        hf_input = torch.tensor(np_input)
+
+        input_signature = trax_ShapeDtype(shape, np.int32)
+        trax_model = self.load_crime_and_punishment_model(trax_model_path, input_signature)
+
+        hf_output = hf_model(hf_input)
+        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+
+        trax_output = trax_model(np_input)
+        trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
+
+        self.assertTrue(torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3))
+
+    def test_pretrained_enwiki8_lm_model(self):
+        hf_config = ReformerConfig.from_pretrained("google/reformer-enwik8")
+        hf_config.hash_seed = 0
+        hf_model = ReformerModelWithLMHead.from_pretrained("google/reformer-enwik8", config=hf_config)
+        config = hf_model.config
+
+        trax_model_path = "/home/patrick/hugging_face/reformer/enwik8_model/reformer_enwik8_model.pkl"
+
+        shape = (1, 512)
+        np_input = np.random.randint(0, config.vocab_size, size=shape)
+
+        hf_input = torch.tensor(np_input)
+
+        input_signature = trax_ShapeDtype(shape, np.int32)
+        trax_model = self.load_enwik8_model(trax_model_path, input_signature)
+
+        hf_output = hf_model(hf_input)
+        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+
+        trax_output = trax_model(np_input)
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
+
+        self.assertTrue(torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3))
+
+    def load_lsh_layer(self, config, mode="eval"):
+        gin_config = """
+            import trax.layers
+            # Parameters for LSHSelfAttention:
+            # ==============================================================================
+            trax.layers.LSHSelfAttention.n_heads = {}
+            trax.layers.LSHSelfAttention.d_qk = {}
+            trax.layers.LSHSelfAttention.d_v = {}
+            trax.layers.LSHSelfAttention.chunk_len = {}
+            trax.layers.LSHSelfAttention.n_chunks_before = {}
+            trax.layers.LSHSelfAttention.n_chunks_after = {}
+            trax.layers.LSHSelfAttention.n_hashes = {}
+            trax.layers.LSHSelfAttention.n_buckets = {}
+            trax.layers.LSHSelfAttention.attention_dropout = {}
+            trax.layers.LSHSelfAttention.output_dropout = {}
+            trax.layers.LSHSelfAttention.lsh_seed = {}
+            trax.layers.LSHSelfAttention.causal= {}
+            trax.layers.LSHSelfAttention.use_reference_code = True
+            trax.layers.LSHSelfAttention.masked = True
+            """.format(
+            config.num_attention_heads,
+            config.attention_head_size,
+            config.attention_head_size,
+            config.lsh_attn_chunk_length,
+            config.lsh_num_chunks_before,
+            config.lsh_num_chunks_after,
+            config.num_hashes,
+            config.num_buckets,
+            config.lsh_attention_probs_dropout_prob,
+            config.hidden_dropout_prob,
+            config.hash_seed,
+            config.is_decoder,
+        )
+        gin.parse_config(gin_config)
+        layer = trax.layers.LSHSelfAttention(mode=mode)
+        return layer
+
+    def load_local_layer(self, config, mode="eval"):
+        gin_config = """
+            import trax.layers
+            # Parameters for SelfAttention:
+            # ==============================================================================
+            trax.layers.SelfAttention.n_heads = {}
+            trax.layers.SelfAttention.d_qk = {}
+            trax.layers.SelfAttention.d_v = {}
+            trax.layers.SelfAttention.chunk_len = {}
+            trax.layers.SelfAttention.n_chunks_before = {}
+            trax.layers.SelfAttention.n_chunks_after = {}
+            trax.layers.SelfAttention.attention_dropout = {}
+            trax.layers.SelfAttention.output_dropout = {}
+            trax.layers.SelfAttention.causal = {}
+            trax.layers.SelfAttention.masked= True
+            trax.layers.SelfAttention.use_reference_code = True
+            """.format(
+            config.num_attention_heads,
+            config.attention_head_size,
+            config.attention_head_size,
+            config.local_attn_chunk_length,
+            config.local_num_chunks_before,
+            config.local_num_chunks_after,
+            config.local_attention_probs_dropout_prob,
+            config.hidden_dropout_prob,
+            config.is_decoder,
+        )
+        gin.parse_config(gin_config)
+        layer = trax.layers.SelfAttention(mode=mode)
+        return layer
+
+    def load_reformer_lm_model(self, config, mode="eval"):
+        if config.hidden_act == "gelu":
+            hidden_act = "Gelu"
+        elif config.hidden_act == "relu":
+            hidden_act = "Relu"
+        else:
+            raise ValueError()
+        attn_type = config.attn_layers[0]
+        if attn_type == "lsh":
+            attn_type = "LSHSelfAttention"
+        elif attn_type == "local":
+            attn_type = "SelfAttention"
+        else:
+            raise ValueError()
+
+        axial_pos_shape = config.axial_pos_shape
+        d_axial_pos_embs = config.axial_pos_embds_dim
+
+        gin_config = """
+            import trax.layers
+            import trax.models
+            # Parameters for LSHSelfAttention:
+            # ==============================================================================
+            trax.layers.LSHSelfAttention.chunk_len = {}
+            trax.layers.LSHSelfAttention.predict_mem_len = {}
+            trax.layers.LSHSelfAttention.predict_drop_len = {}
+            trax.layers.LSHSelfAttention.n_chunks_before = {}
+            trax.layers.LSHSelfAttention.n_chunks_after = {}
+            trax.layers.LSHSelfAttention.n_hashes = {}
+            trax.layers.LSHSelfAttention.n_buckets = {}
+            trax.layers.LSHSelfAttention.lsh_seed = {}
+            trax.layers.LSHSelfAttention.causal= {}
+            trax.layers.LSHSelfAttention.use_reference_code = True
+            # Parameters for SelfAttention:
+            # ==============================================================================
+            trax.layers.SelfAttention.chunk_len = {}
+            trax.layers.SelfAttention.n_chunks_before = {}
+            trax.layers.SelfAttention.n_chunks_after = {}
+            trax.layers.SelfAttention.causal= {}
+            trax.layers.SelfAttention.use_reference_code = True
+            trax.layers.SelfAttention.share_qk = False
+            # Parameters for ReformerLM:
+            # ==============================================================================
+            trax.models.ReformerLM.vocab_size = {}
+            trax.models.ReformerLM.d_model = {}
+            trax.models.ReformerLM.d_ff = {}
+            trax.models.ReformerLM.d_attention_key = {}
+            trax.models.ReformerLM.d_attention_value = {}
+            trax.models.ReformerLM.n_layers = {}
+            trax.models.ReformerLM.n_heads = {}
+            trax.models.ReformerLM.max_len = {}
+            trax.models.ReformerLM.axial_pos_shape = {}
+            trax.models.ReformerLM.d_axial_pos_embs = {}
+            trax.models.ReformerLM.ff_chunk_size = {}
+            trax.models.ReformerLM.ff_activation = @trax.layers.{}
+            trax.models.ReformerLM.attention_type = @trax.layers.{}
+            trax.models.ReformerLM.dropout = 0.0
+            trax.models.ReformerLM.ff_use_sru = 0
+            """.format(
+            config.lsh_attn_chunk_length,
+            config.lsh_attn_chunk_length,
+            config.lsh_attn_chunk_length // 2,
+            config.lsh_num_chunks_before,
+            config.lsh_num_chunks_after,
+            config.num_hashes,
+            config.num_buckets,
+            config.hash_seed,
+            config.is_decoder,
+            config.local_attn_chunk_length,
+            config.local_num_chunks_before,
+            config.local_num_chunks_after,
+            config.is_decoder,
+            config.vocab_size,
+            config.hidden_size,
+            config.feed_forward_size,
+            config.attention_head_size,
+            config.attention_head_size,
+            config.num_hidden_layers,
+            config.num_attention_heads,
+            config.max_position_embeddings,
+            axial_pos_shape,
+            d_axial_pos_embs,
+            config.chunk_size_feed_forward,
+            hidden_act,
+            attn_type,
+        )
+        gin.parse_config(gin_config)
+        model = trax.models.ReformerLM(mode=mode)
+        return model
+
+    # (PVP) - delete when enwiki works
+    def load_crime_and_punishment_model(self, trax_model_path, input_signature, mode="predict"):
+        gin.parse_config(
+            """
+            import trax.layers
+            import trax.models
+            import trax.optimizers
+            import trax.supervised.inputs
+            import trax.supervised.trainer_lib
+            # Parameters that will vary between experiments:
+            # ==============================================================================
+            train.model = @trax.models.ReformerLM
+            # Our model will have 6 layers, alternating between the LSH attention proposed
+            # in the Reformer paper and local attention within a certain context window.
+            n_layers = 6
+            attn_type = [
+              @SelfAttention,
+              @LSHSelfAttention,
+              @SelfAttention,
+              @LSHSelfAttention,
+              @SelfAttention,
+              @LSHSelfAttention,
+              ]
+            n_heads = 2
+            attn_kv = 64
+            dropout = 0.05
+            n_tokens = 524288
+            # Parameters for SelfAttention:
+            # ==============================================================================
+            SelfAttention.chunk_len = 64
+            SelfAttention.n_chunks_before = 1
+            SelfAttention.n_parallel_heads = 1
+            SelfAttention.share_qk = False
+            # Parameters for LSHSelfAttention:
+            # ==============================================================================
+            LSHSelfAttention.chunk_len = 64
+            LSHSelfAttention.n_buckets = [64, 128]
+            LSHSelfAttention.n_chunks_after = 0
+            LSHSelfAttention.n_chunks_before = 1
+            LSHSelfAttention.n_hashes = 1
+            LSHSelfAttention.n_parallel_heads = 1
+            LSHSelfAttention.predict_drop_len = 32 # different from original to make code equal
+            LSHSelfAttention.predict_mem_len = 64 # different from original to make code equal
+            LSHSelfAttention.lsh_seed = 0
+            # Parameters for ReformerLM:
+            # ==============================================================================
+            ReformerLM.attention_type = %attn_type
+            ReformerLM.d_attention_key = %attn_kv
+            ReformerLM.d_attention_value = %attn_kv
+            ReformerLM.d_model = 256
+            ReformerLM.d_ff = 512
+            ReformerLM.dropout = %dropout
+            ReformerLM.ff_activation = @trax.layers.Relu
+            ReformerLM.max_len = %n_tokens
+            ReformerLM.mode = 'train'
+            ReformerLM.n_heads = %n_heads
+            ReformerLM.n_layers = %n_layers
+            ReformerLM.vocab_size = 320
+            ReformerLM.axial_pos_shape = (512, 1024)
+            ReformerLM.d_axial_pos_embs= (64, 192)
+            """
+        )
+        trax_model = trax.models.ReformerLM(mode=mode)
+        trax_model.init(input_signature)
+        trax_model.init_from_file(trax_model_path, weights_only=True)
+        return trax_model
+
+    def load_enwik8_model(self, trax_model_path, input_signature, mode="predict"):
+        gin.parse_config(
+            """
+            import trax.layers
+            import trax.models
+            import trax.optimizers
+            import trax.supervised.inputs
+            import trax.supervised.trainer_lib
+
+            # Macros:
+            # ==============================================================================
+            attn_kv = 128
+            attn_type = \
+                [@SelfAttention,
+                 @SelfAttention,
+                 @LSHSelfAttention,
+                 @SelfAttention]
+            dropout = 0.2
+            n_layers = 12
+
+            # SelfAttention: attend to nearby items
+            # Specifying chunk_len restricts an item to attend within its own chunk, as well
+            # as the previous `n_chunks_before` chunks.
+            SelfAttention.chunk_len = 128
+            SelfAttention.n_chunks_before = 1
+
+            # LSHSelfAttention: locality-sensitive hashing (LSH) attention
+            LSHSelfAttention.chunk_len = 256
+            LSHSelfAttention.n_buckets = 512
+            LSHSelfAttention.n_chunks_before = 1
+            LSHSelfAttention.n_hashes = 4
+
+
+            # Parameters for SelfAttention:
+            # ==============================================================================
+            SelfAttention.attention_dropout = 0.2
+            # SelfAttention.chunk_len: see top
+            SelfAttention.n_chunks_after = 0
+            # SelfAttention.n_chunks_before: see top
+
+            # Parameters for LSHSelfAttention:
+            # ==============================================================================
+            LSHSelfAttention.attention_dropout = 0.1
+            # LSHSelfAttention.chunk_len: see top
+            # LSHSelfAttention.n_buckets: see top
+            LSHSelfAttention.n_chunks_after = 0
+            # LSHSelfAttention.n_chunks_before: see top
+            # LSHSelfAttention.n_hashes: see top
+            LSHSelfAttention.n_parallel_heads = 1
+            LSHSelfAttention.predict_drop_len = 64  # different from original to make code equal
+            LSHSelfAttention.predict_mem_len = 128  # different from original to make code equal
+            LSHSelfAttention.lsh_seed = 0
+
+            # Parameters for ReformerLM:
+            # ==============================================================================
+            ReformerLM.attention_type = %attn_type
+            ReformerLM.d_attention_key = %attn_kv
+            ReformerLM.d_attention_value = %attn_kv
+            ReformerLM.d_model = 1024
+            ReformerLM.d_ff = 4096
+            ReformerLM.dropout = %dropout
+            ReformerLM.ff_activation = @trax.layers.Relu
+            ReformerLM.max_len = 65536
+            ReformerLM.mode = 'train'
+            ReformerLM.n_heads = 8
+            ReformerLM.n_layers = %n_layers
+            ReformerLM.vocab_size = 258  # Includes pad token and unused EOS token
+            ReformerLM.axial_pos_shape = (128, 512)
+            ReformerLM.d_axial_pos_embs= (256, 768)
+            """
+        )
+        trax_model = trax.models.ReformerLM(mode=mode)
+        trax_model.init(input_signature)
+        trax_model.init_from_file(trax_model_path, weights_only=True)
+        return trax_model
+
+    def _set_param(self, torch_layer, weight, bias=None, name=None):
+        with torch.no_grad():
+            assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch_layer)
+            torch_layer.weight = torch.nn.Parameter(weight)
+            if bias is not None:
+                assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch_layer)
+                torch_layer.bias = torch.nn.Parameter(bias)
+        return True
+
+    def _test_param(self, torch_layer, grad, bias_grad=None, name=""):
+        assert torch_layer.weight.grad.shape == grad.shape, "{} layer.grad does not match".format(torch_layer)
+        if torch.allclose(torch_layer.weight.grad, grad, atol=1e-3):
+            print("{}-{} layer.grad is good!".format(name, torch_layer))
+        else:
+            print("ERROR {}-{} layer.grad is not good!".format(name, torch_layer))
+            return False
+        if bias_grad is not None:
+            assert torch_layer.bias.grad.shape == bias_grad.shape, "{} layer.bias does not match".format(torch_layer)
+            if torch.allclose(torch_layer.bias.grad, bias_grad, atol=1e-3):
+                print("{}-{} layer.grad bias is good!".format(name, torch_layer))
+            else:
+                print("ERROR {}-{} layer.grad bias is not good!".format(name, torch_layer))
+                return False
+        return True
+
+    def _set_layer_weights_in_torch_lsh(self, weights, torch_layer, hidden_size, exec_fn=None):
+        all_test_true = True
+        if exec_fn is None:
+            exec_fn = self._set_param
+
+        # set torch weights for 1-to-1 comparison
+        np_query_key = np.asarray(weights[0])
+        np_value = np.asarray(weights[1])
+        np_dense = np.asarray(weights[2])
+
+        all_test_true = (
+            exec_fn(
+                torch_layer.self_attention.query_key,
+                torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size),
+                name="attn_query_key",
+            )
+            and all_test_true
+        )
+
+        all_test_true = (
+            exec_fn(
+                torch_layer.self_attention.value,
+                torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
+                name="attn_value",
+            )
+            and all_test_true
+        )
+
+        all_test_true = (
+            exec_fn(
+                torch_layer.output.dense,
+                torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
+                name="attn_dense",
+            )
+            and all_test_true
+        )
+        return all_test_true
+
+    def _set_layer_weights_in_torch_local(self, weights, torch_layer, hidden_size, exec_fn=None):
+        all_test_true = True
+
+        if exec_fn is None:
+            exec_fn = self._set_param
+
+        # set torch weights for 1-to-1 comparison
+        np_query = np.asarray(weights[0])
+        np_key = np.asarray(weights[1])
+        np_value = np.asarray(weights[2])
+        np_dense = np.asarray(weights[3])
+
+        all_test_true = (
+            exec_fn(
+                torch_layer.self_attention.query,
+                torch.tensor(np_query).transpose(1, 2).contiguous().view(-1, hidden_size),
+            )
+            and all_test_true
+        )
+        all_test_true = (
+            exec_fn(
+                torch_layer.self_attention.key,
+                torch.tensor(np_key).transpose(1, 2).contiguous().view(-1, hidden_size),
+            )
+            and all_test_true
+        )
+        all_test_true = (
+            exec_fn(
+                torch_layer.self_attention.value,
+                torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
+            )
+            and all_test_true
+        )
+        all_test_true = (
+            exec_fn(
+                torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
+            )
+            and all_test_true
+        )
+        return all_test_true
+
+    def _set_block_weights_in_torch(self, weights, torch_block, hidden_size, exec_fn=None):
+        all_test_true = True
+
+        if exec_fn is None:
+            exec_fn = self._set_param
+
+        # intermediate weighs
+        intermediate_weights = weights[2][0]
+
+        # Chunked Feed Forward
+        if len(intermediate_weights) == 4:
+            intermediate_weights = intermediate_weights[2]
+
+        # intermediate out
+        out_dense_weight = np.asarray(intermediate_weights[4][0])
+        out_dense_bias = np.asarray(intermediate_weights[4][1])
+        all_test_true = (
+            exec_fn(
+                torch_block.feed_forward.output.dense,
+                torch.tensor(out_dense_weight).transpose(0, 1).contiguous(),
+                torch.tensor(out_dense_bias),
+                name="res_feed_forward_2",
+            )
+            and all_test_true
+        )
+
+        # intermediate dense
+        inter_dense_weight = np.asarray(intermediate_weights[1][0])
+        inter_dense_bias = np.asarray(intermediate_weights[1][1])
+        all_test_true = (
+            exec_fn(
+                torch_block.feed_forward.dense.dense,
+                torch.tensor(inter_dense_weight).transpose(0, 1).contiguous(),
+                torch.tensor(inter_dense_bias),
+                name="res_feed_forward_1",
+            )
+            and all_test_true
+        )
+
+        # layernorm 2
+        layer_norm_2_weight = np.asarray(intermediate_weights[0][0])
+        layer_norm_2_bias = np.asarray(intermediate_weights[0][1])
+        all_test_true = (
+            exec_fn(
+                torch_block.feed_forward.layer_norm,
+                torch.tensor(layer_norm_2_weight),
+                torch.tensor(layer_norm_2_bias),
+                name="layer_norm_2",
+            )
+            and all_test_true
+        )
+
+        # lsh weights + output
+        attn_weights = weights[0][1]
+        if len(attn_weights) < 4:
+            all_test_true = (
+                self._set_layer_weights_in_torch_lsh(attn_weights, torch_block.attention, hidden_size, exec_fn=exec_fn)
+                and all_test_true
+            )
+        else:
+            all_test_true = (
+                self._set_layer_weights_in_torch_local(
+                    attn_weights, torch_block.attention, hidden_size, exec_fn=exec_fn
+                )
+                and all_test_true
+            )
+
+        # layernorm 1
+        layer_norm_1 = weights[0][0][0]
+        layer_norm_1_weight = np.asarray(layer_norm_1[0])
+        layer_norm_1_bias = np.asarray(layer_norm_1[1])
+        all_test_true = (
+            exec_fn(
+                torch_block.attention.layer_norm,
+                torch.tensor(layer_norm_1_weight),
+                torch.tensor(layer_norm_1_bias),
+                name="layer_norm",
+            )
+            and all_test_true
+        )
+
+        return all_test_true
+
+    def _set_model_weights_in_torch(self, weights, torch_model, hidden_size, set_params=True):
+        # reformer model
+        torch_model_reformer = torch_model.reformer
+
+        all_test_true = True
+        if set_params is True:
+            exec_fn = self._set_param
+        else:
+            exec_fn = self._test_param
+
+        # output embeddings
+        output_embed_weights = np.asarray(weights[9][0])
+        output_embed_bias = np.asarray(weights[9][1])
+        all_test_true = (
+            exec_fn(
+                torch_model.lm_head.decoder,
+                torch.tensor(output_embed_weights).transpose(0, 1).contiguous(),
+                torch.tensor(output_embed_bias),
+                name="lm_head",
+            )
+            and all_test_true
+        )
+
+        # output layer norm
+        layer_norm_out_weight = np.asarray(weights[7][0])
+        layer_norm_out_bias = np.asarray(weights[7][1])
+        all_test_true = (
+            exec_fn(
+                torch_model_reformer.encoder.layer_norm,
+                torch.tensor(layer_norm_out_weight),
+                torch.tensor(layer_norm_out_bias),
+                name="last layer norm",
+            )
+            and all_test_true
+        )
+
+        trax_layer_weights = weights[5]
+        assert len(torch_model_reformer.encoder.layers) * 4 == len(
+            trax_layer_weights
+        ), "HF and trax model do not have the same number of layers"
+        for layer_idx, layer in enumerate(torch_model_reformer.encoder.layers[::-1]):
+            block_weights = trax_layer_weights[::-1][4 * layer_idx : 4 * (layer_idx + 1)][::-1]
+            all_test_true = (
+                self._set_block_weights_in_torch(block_weights, layer, hidden_size, exec_fn=exec_fn) and all_test_true
+            )
+
+        if isinstance(weights[3], tuple):
+            position_embeddings = torch_model_reformer.embeddings.position_embeddings
+            for emb_idx in range(len(position_embeddings.weights)):
+                emb_weights = np.asarray(weights[3][emb_idx][0])
+                assert position_embeddings.weights[emb_idx].shape == emb_weights.shape, "{} emb does not match".format(
+                    position_embeddings[emb_idx]
+                )
+                if set_params is True:
+                    position_embeddings.weights[emb_idx] = torch.nn.Parameter(torch.tensor(emb_weights))
+                else:
+                    if torch.allclose(
+                        position_embeddings.weights[emb_idx].grad, torch.tensor(emb_weights), atol=1e-3,
+                    ):
+                        print("{} layer.grad is good!".format(position_embeddings))
+                    else:
+                        print("ERROR: {}-{} layer.grad is not good".format(position_embeddings, "axs_pos_embeds"))
+
+        # word embeds
+        word_embeddings = np.asarray(weights[1])
+        all_test_true = (
+            exec_fn(torch_model_reformer.embeddings.word_embeddings, torch.tensor(word_embeddings), name="word_embed",)
+            and all_test_true
+        )
+
+        return all_test_true

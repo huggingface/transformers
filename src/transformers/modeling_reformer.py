@@ -373,7 +373,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # use cached buckets for backprop only
             if buckets is None:
                 # hash query key vectors into buckets
-                buckets = self._hash_vectors(query_key_vectors, num_hashes)
+                buckets = self._hash_vectors(query_key_vectors, num_hashes, attention_mask)
 
             assert (
                 int(buckets.shape[-1]) == num_hashes * sequence_length
@@ -460,7 +460,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         return LSHSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs, buckets=buckets)
 
-    def _hash_vectors(self, vectors, num_hashes):
+    def _hash_vectors(self, vectors, num_hashes, attention_mask):
         batch_size = vectors.shape[0]
 
         # See https://arxiv.org/pdf/1509.02897.pdf
@@ -487,14 +487,20 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         if self.hash_seed is not None:
             # for determinism
-            torch.manual_seed(self.hash_seed)
+            rotations_shape = (vectors.shape[-1], num_hashes, rotation_size // 2)
+            #            torch.manual_seed(self.hash_seed)
+            np.random.seed(self.hash_seed)
+            random_rotations = torch.tensor(
+                np.random.normal(size=rotations_shape), dtype=vectors.dtype, device=vectors.device,
+            )
+            rotated_vectors = torch.einsum("bmtd,dhr->bmhtr", vectors, random_rotations)
+        else:
+            rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
+            # create a random self.attention_head_size x num_hashes x num_buckets/2
+            random_rotations = torch.randn(rotations_shape, device=vectors.device, dtype=vectors.dtype)
 
-        rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
-        # create a random self.attention_head_size x num_hashes x num_buckets/2
-        random_rotations = torch.randn(rotations_shape, device=vectors.device, dtype=vectors.dtype)
-
-        # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
-        rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
+            # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
+            rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
 
         if isinstance(self.num_buckets, int) or len(self.num_buckets) == 1:
             rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
@@ -513,6 +519,15 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                     buckets = buckets + (cur_product * torch.argmax(rotated_vectors_factor, dim=-1))
 
                 cur_product = cur_product * bucket_factor
+
+        if attention_mask is not None:
+            # add an extra bucket for padding tokens only
+            num_buckets = num_buckets + 1
+            # assign padding tokens extra bucket
+            buckets_mask = attention_mask.to(torch.uint8)[:, None, None, :].expand(buckets.shape)
+            buckets = torch.where(
+                buckets_mask, buckets, torch.tensor(num_buckets - 1, dtype=torch.long, device=buckets.device)
+            )
 
         # buckets is now (Batch_size x Num_Attn_Heads x Num_Hashes x Seq_Len).
         # Next we add offsets so that bucket numbers from different hashing rounds don't overlap.
@@ -614,7 +629,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
 
-        mask = self._compute_attn_mask(query_bucket_idx, key_value_bucket_idx, attention_mask, sequence_length)
+        mask = self._compute_attn_mask(
+            query_bucket_idx, key_value_bucket_idx, attention_mask, query_key_dots.shape, sequence_length
+        )
 
         if mask is not None:
             query_key_dots = torch.where(mask, query_key_dots, mask_value)
@@ -669,7 +686,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         return out_vectors, logits, attention_probs
 
-    def _compute_attn_mask(self, query_indices, key_indices, attention_mask, sequence_length):
+    def _compute_attn_mask(self, query_indices, key_indices, attention_mask, query_key_dot_shape, sequence_length):
         mask = None
 
         # Causal mask
@@ -680,32 +697,19 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
+            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
             if sequence_length > self.chunk_length:
-                attention_mask = attention_mask.to(torch.uint8)[:, None, None, :]
                 # expand attn_mask to fit with key_value_bucket_idx shape
                 attention_mask = attention_mask.expand(query_indices.shape[:-1] + (-1,))
-                key_attn_mask = torch.gather(attention_mask, -1, key_indices)
-                query_attn_mask = torch.gather(attention_mask, -1, query_indices)
-                # expand to query_key_dots shape: duplicate along query axis since key sorting is the same for each query position in chunk
-                attn_mask = query_attn_mask.unsqueeze(-1) * key_attn_mask.unsqueeze(-2)
+                attention_mask = torch.gather(attention_mask, -1, key_indices)
 
-                # free memory
-                del query_attn_mask, key_attn_mask
-            else:
-                # usual attention mask creation
-                attention_mask = attention_mask.to(torch.uint8)[:, None, :]
-                attn_mask = (attention_mask.unsqueeze(-1) * attention_mask.unsqueeze(-2)).expand(
-                    query_indices.shape + attention_mask.shape[-1:]
-                )
-
-            # free memory
-            del attention_mask
+            attention_mask = attention_mask.unsqueeze(-2).expand(query_key_dot_shape)
 
             # multiply by casaul mask if necessary
             if mask is not None:
-                mask = mask * attn_mask
+                mask = mask * attention_mask
             else:
-                mask = attn_mask
+                mask = attention_mask
 
         return mask
 
@@ -931,9 +935,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
             if self.chunk_length < sequence_length:
                 attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
-                attention_mask_key = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
-            else:
-                attention_mask_key = attention_mask
+                attention_mask = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
 
         # Causal mask
         if self.is_decoder is True:
@@ -942,12 +944,12 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         # Attention mask
         if attention_mask is not None:
             # create attn_mask
-            attn_mask = (attention_mask.unsqueeze(-1) * attention_mask_key.unsqueeze(-2)).expand(query_key_dots_shape)
+            attention_mask = attention_mask.unsqueeze(-2).expand(query_key_dots_shape)
             # multiply by casaul mask if necessary
             if mask is not None:
-                mask = mask * attn_mask
+                mask = mask * attention_mask
             else:
-                mask = attn_mask
+                mask = attention_mask
         return mask
 
 
@@ -1796,9 +1798,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 class ReformerForMaskedLM(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert (
-            not config.is_decoder
-        ), "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+        #        assert (
+        #            not config.is_decoder
+        #        ), "If you want to use `ReformerForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 

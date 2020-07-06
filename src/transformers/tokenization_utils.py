@@ -307,6 +307,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                             full_word = ""
                             continue
                     # Strip white spaces on the right
+                    import ipdb
+
+                    ipdb.set_trace()
                     if tok_extended.rstrip and i > 0:
                         # A bit counter-intuitive but we strip the left of the string
                         # since tok_extended.rstrip means the special token is eating all white spaces on its right
