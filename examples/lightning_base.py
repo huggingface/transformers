@@ -116,7 +116,8 @@ class BaseTransformer(pl.LightningModule):
         self.opt = optimizer
         return [optimizer]
 
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
+    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None,
+                       using_native_amp=None):
         if self.trainer.use_tpu:
             xm.optimizer_step(optimizer)
         else:
