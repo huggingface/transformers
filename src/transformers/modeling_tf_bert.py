@@ -27,7 +27,6 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
-    replace_return_docstrings,
 )
 from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
@@ -409,7 +408,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         # Add last layer
         if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
-        
+
         outputs = (hidden_states,)
         if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
@@ -537,7 +536,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -735,7 +733,7 @@ class TFBertModel(TFBertPreTrainedModel):
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -772,10 +770,12 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
 
