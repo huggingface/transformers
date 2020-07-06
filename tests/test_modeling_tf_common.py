@@ -289,7 +289,7 @@ class TFModelTesterMixin:
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
+        config.return_tuple = True
         optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
@@ -319,7 +319,7 @@ class TFModelTesterMixin:
             outputs_dict = model(input_ids)
             hidden_states = outputs_dict[0]
 
-            # Add a dense layer on top to test intetgration with other keras modules
+            # Add a dense layer on top to test integration with other keras modules
             outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
 
             # Compile extended model

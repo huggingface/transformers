@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-import torch
+import tensorflow as tf
 
 from .file_utils import ModelOutput
 
@@ -27,9 +27,9 @@ class TFEncoderOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
@@ -45,7 +45,7 @@ class TFEncoderOutputWithPooling(ModelOutput):
             further processed by a Linear layer and a Tanh activation function. The Linear
             layer weights are trained from the next sentence prediction (classification)
             objective during Bert pretraining.
-            
+
             This output is usually *not* a good summary of the semantic content of the input, you're often better with
             averaging or pooling the sequence of hidden-states for the whole input sequence.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -61,10 +61,10 @@ class TFEncoderOutputWithPooling(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor
-    pooler_output: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: tf.Tensor
+    pooler_output: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
@@ -90,10 +90,10 @@ class TFCausalLMOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[tf.Tensor]
+    logits: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
@@ -119,10 +119,10 @@ class TFMaskedLMOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[tf.Tensor]
+    logits: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
@@ -148,14 +148,14 @@ class TFNextSentencePredictorOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[tf.Tensor]
+    logits: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
-class SequenceClassifierOutput(ModelOutput):
+class TFSequenceClassifierOutput(ModelOutput):
     """
     Base class for outputs of sentence classification models.
 
@@ -177,14 +177,14 @@ class SequenceClassifierOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[tf.Tensor]
+    logits: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
-class MultipleChoiceModelOutput(ModelOutput):
+class TFMultipleChoiceModelOutput(ModelOutput):
     """
     Base class for outputs of multiple choice models.
 
@@ -208,14 +208,14 @@ class MultipleChoiceModelOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[tf.Tensor]
+    logits: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
-class TokenClassifierOutput(ModelOutput):
+class TFTokenClassifierOutput(ModelOutput):
     """
     Base class for outputs of token classification models.
 
@@ -237,14 +237,14 @@ class TokenClassifierOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[tf.Tensor]
+    logits: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 @dataclass
-class QuestionAnsweringModelOutput(ModelOutput):
+class TFQuestionAnsweringModelOutput(ModelOutput):
     """
     Base class for outputs of question answering models.
 
@@ -268,8 +268,8 @@ class QuestionAnsweringModelOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    start_logits: torch.FloatTensor
-    end_logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[tf.Tensor]
+    start_logits: tf.Tensor
+    end_logits: tf.Tensor
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None

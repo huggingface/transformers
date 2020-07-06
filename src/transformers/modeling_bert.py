@@ -53,8 +53,8 @@ from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, p
 
 logger = logging.getLogger(__name__)
 
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 _CONFIG_FOR_DOC = "BertConfig"
+_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",

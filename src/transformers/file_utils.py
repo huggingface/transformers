@@ -868,3 +868,7 @@ class ModelOutput:
 
     def __len__(self):
         return len(self.to_tuple())
+
+    @property
+    def shape(self):
+        return self[0].shape

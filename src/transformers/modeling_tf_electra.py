@@ -243,6 +243,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_tuple=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -254,7 +255,8 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
             output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            assert len(inputs) <= 8, "Too many inputs."
+            return_tuple = inputs[8] if len(inputs) > 8 else return_tuple
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -264,7 +266,8 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 8, "Too many inputs."
+            return_tuple = inputs.get("return_tuple", return_tuple)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -272,6 +275,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_tuple = return_tuple if return_tuple is not None else self.config.return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -296,7 +300,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             hidden_states = self.embeddings_project(hidden_states, training=training)
 
         hidden_states = self.encoder(
-            [hidden_states, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            [hidden_states, extended_attention_mask, head_mask, output_attentions, output_hidden_states, return_tuple],
             training=training,
         )
 
