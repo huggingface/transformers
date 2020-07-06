@@ -75,7 +75,7 @@ class RobertaTokenizer(GPT2Tokenizer):
         [0, 31414, 232, 328, 2]
         >>> tokenizer(" Hello world")['input_ids']
         [0, 20920, 232, 2]
-    
+
     You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
     call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
 
