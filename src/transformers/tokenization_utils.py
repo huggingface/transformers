@@ -649,7 +649,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def convert_ids_to_tokens(
         self, ids: Union[int, List[int]], skip_special_tokens: bool = False
-    ) -> Union[int, List[int]]:
+    ) -> Union[str, List[str]]:
         """ Converts a single index or a sequence of indices (integers) in a token "
             (resp.) a sequence of tokens (str), using the vocabulary and added tokens.
 
