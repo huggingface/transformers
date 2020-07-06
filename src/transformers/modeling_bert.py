@@ -428,8 +428,8 @@ class BertEncoder(nn.Module):
         output_hidden_states=False,
         return_tuple=False,
     ):
-        all_hidden_states = ()
-        all_attentions = ()
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -460,10 +460,12 @@ class BertEncoder(nn.Module):
                     output_attentions,
                 )
             hidden_states = layer_outputs[0]
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
 
-            all_attentions = all_attentions + (layer_outputs[1],) if output_attentions else None
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
-        all_hidden_states = all_hidden_states + (hidden_states,) if output_hidden_states else None
         if return_tuple:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return EncoderOutput(
@@ -767,7 +769,7 @@ class BertModel(BertPreTrainedModel):
         pooled_output = self.pooler(sequence_output)
 
         if return_tuple:
-            return (sequence_output, pooled_output) + encoder_outputs[2:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return EncoderOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -1114,8 +1116,6 @@ class BertForMaskedLM(BertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-        return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape

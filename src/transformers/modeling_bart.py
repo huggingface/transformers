@@ -17,6 +17,7 @@ import logging
 import math
 import random
 import warnings
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -28,16 +29,26 @@ from torch.nn import CrossEntropyLoss
 from .activations import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
+from .modeling_outputs import (
+    EncoderOutput,
+    EncoderOutputWithPooling,
+    QuestionAnsweringModelOutput,
+    Seq2SeqLMOutput,
+    SequenceClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
@@ -103,6 +114,10 @@ BART_INPUTS_DOCSTRING = r"""
             See diagram 1 in the paper for more info on the default strategy
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
 
