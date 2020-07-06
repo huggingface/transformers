@@ -588,8 +588,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 first_ids,
                 second_ids,
                 add_special_tokens=add_special_tokens,
-                padding_strategy=PaddingStrategy.DO_NOT_PAD,  # we pad in batch afterward
-                truncation_strategy=truncation_strategy,
+                padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
+                truncation=truncation_strategy.value,
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=None,  # we pad in batch afterward
