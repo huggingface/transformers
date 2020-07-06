@@ -173,7 +173,7 @@ class DataCollatorForPermutationLanguageModeling:
             1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
             2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be masked
             3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length - span_length]` and mask tokens `start_index:start_index + span_length`
-            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the sequence to be processed), repeat from Step 1. 
+            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the sequence to be processed), repeat from Step 1.
         """
 
         if self.tokenizer.mask_token is None:
@@ -181,7 +181,7 @@ class DataCollatorForPermutationLanguageModeling:
                 "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
             )
 
-        if inputs.shape(1) % 2 is not 0:
+        if inputs.size(1) % 2 != 0:
             raise ValueError(
                 "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
             )
@@ -233,7 +233,7 @@ class DataCollatorForPermutationLanguageModeling:
             Generate permutation indices i.e. sample a random factorisation order for the sequence. This will
             determine which tokens a given token can attend to (encoded in `perm_mask`).
             Note: Length of token sequence being permuted has to be less than or equal to reused sequence length
-            (see documentation for `mems`), otherwise information may leak through due to reuse. In this implementation, 
+            (see documentation for `mems`), otherwise information may leak through due to reuse. In this implementation,
             we assume that reused length is half of sequence length and permutation length is equal to reused length.
             This requires that the sequence length be even.
             """
