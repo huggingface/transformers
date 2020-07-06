@@ -21,8 +21,8 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
     Very simple data collator that:
     - simply collates batches of dict-like objects
     - Performs special handling for potential keys named:
-        - `label`: handles a single value (int or float) per object
-        - `label_ids`: handles a list of values per object
+        - ``label``: handles a single value (int or float) per object
+        - ``label_ids``: handles a list of values per object
     - does not do any additional preprocessing
 
     i.e., Property names of the input object will be used as corresponding inputs to the model.
@@ -169,11 +169,11 @@ class DataCollatorForPermutationLanguageModeling:
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         The masked tokens to be predicted for a particular sequence are determined by the following algorithm:
-            0. Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
-            1. Sample a `span_length` from the interval `[1, max_span_length]` (length of span of tokens to be masked)
-            2. Reserve a context of length `context_length = span_length / plm_probability` to surround span to be masked
-            3. Sample a starting point `start_index` from the interval `[cur_len, cur_len + context_length - span_length]` and mask tokens `start_index:start_index + span_length`
-            4. Set `cur_len = cur_len + context_length`. If `cur_len < max_len` (i.e. there are tokens remaining in the sequence to be processed), repeat from Step 1.
+            0. Start from the beginning of the sequence by setting ``cur_len = 0`` (number of tokens processed so far).
+            1. Sample a ``span_length`` from the interval ``[1, max_span_length]`` (length of span of tokens to be masked)
+            2. Reserve a context of length ``context_length = span_length / plm_probability`` to surround span to be masked
+            3. Sample a starting point ``start_index`` from the interval ``[cur_len, cur_len + context_length - span_length]`` and mask tokens ``start_index:start_index + span_length``
+            4. Set ``cur_len = cur_len + context_length``. If ``cur_len < max_len`` (i.e. there are tokens remaining in the sequence to be processed), repeat from Step 1.
         """
 
         if self.tokenizer.mask_token is None:
@@ -229,14 +229,13 @@ class DataCollatorForPermutationLanguageModeling:
         perm_mask = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.float32)
 
         for i in range(labels.size(0)):
-            """
-            Generate permutation indices i.e. sample a random factorisation order for the sequence. This will
-            determine which tokens a given token can attend to (encoded in `perm_mask`).
-            Note: Length of token sequence being permuted has to be less than or equal to reused sequence length
-            (see documentation for `mems`), otherwise information may leak through due to reuse. In this implementation,
-            we assume that reused length is half of sequence length and permutation length is equal to reused length.
-            This requires that the sequence length be even.
-            """
+            # Generate permutation indices i.e. sample a random factorisation order for the sequence. This will
+            # determine which tokens a given token can attend to (encoded in `perm_mask`).
+            # Note: Length of token sequence being permuted has to be less than or equal to reused sequence length
+            # (see documentation for `mems`), otherwise information may leak through due to reuse. In this implementation,
+            # we assume that reused length is half of sequence length and permutation length is equal to reused length.
+            # This requires that the sequence length be even.
+
             # Create a linear factorisation order
             perm_index = torch.arange(labels.size(1))
             # Split this into two halves, assuming that half the sequence is reused each time
