@@ -165,6 +165,7 @@ conversion utilities for the following models:
     :caption: Research
 
     bertology
+    perplexity
     benchmarks
 
 .. toctree::
