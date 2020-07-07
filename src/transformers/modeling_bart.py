@@ -36,19 +36,19 @@ from .file_utils import (
     add_start_docstrings_to_callable,
 )
 
-# from .modeling_outputs import (
-#    EncoderOutput,
-#    EncoderOutputWithPooling,
-#    QuestionAnsweringModelOutput,
-#    Seq2SeqLMOutput,
-#    SequenceClassifierOutput,
-# )
+from .modeling_outputs import (
+    EncoderOutput,
+    EncoderOutputWithPast,
+    QuestionAnsweringModelOutput,
+    Seq2SeqLMOutput,
+    SequenceClassifierOutput,
+)
 from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
-# _CONFIG_FOR_DOC = "BartConfig"
+_CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
@@ -295,20 +295,20 @@ class BartEncoder(nn.Module):
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
-    def forward(self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False):
+    def forward(self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=False):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
                 `(batch, src_len)`
             attention_mask (torch.LongTensor): indicating which indices are padding tokens.
         Returns:
-            Tuple comprised of:
+            EncoderOutput or Tuple comprised of:
                 - **x** (Tensor): the last encoder layer's output of
                   shape `(src_len, batch, embed_dim)`
-                - **encoder_states** (List[Tensor]): all intermediate
+                - **encoder_states** (tuple(torch.FloatTensor)): all intermediate
                   hidden states of shape `(src_len, batch, embed_dim)`.
                   Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (List[Tensor]): Attention weights for each layer.
+                - **all_attentions** (tuple(torch.FloatTensor)): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
         # check attention mask and invert
@@ -324,7 +324,8 @@ class BartEncoder(nn.Module):
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
-        encoder_states, all_attentions = [], []
+        encoder_states = [] if output_hidden_states else None
+        all_attentions = () if output_attentions else None
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states.append(x)
@@ -336,18 +337,23 @@ class BartEncoder(nn.Module):
                 x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
 
             if output_attentions:
-                all_attentions.append(attn)
+                all_attentions = all_attentions + (attn,)
 
         if self.layer_norm:
             x = self.layer_norm(x)
         if output_hidden_states:
             encoder_states.append(x)
+            # T x B x C -> B x T x C
+            encoder_states = tuple(hidden_state.transpose(0, 1) for hidden_state in encoder_states)
 
         # T x B x C -> B x T x C
-        encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
         x = x.transpose(0, 1)
 
-        return x, encoder_states, all_attentions
+        if return_tuple:
+            return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
+        return EncoderOutput(
+            last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
 class DecoderLayer(nn.Module):
@@ -481,6 +487,7 @@ class BartDecoder(nn.Module):
         use_cache=False,
         output_attentions=False,
         output_hidden_states=False,
+        return_tuple=False,
         **unused,
     ):
         """
@@ -496,8 +503,9 @@ class BartDecoder(nn.Module):
             decoder_cached_states (dict or None): dictionary used for storing state during generation
 
         Returns:
-            tuple:
+            EncoderOutputWithPast or tuple:
                 - the decoder's features of shape `(batch, tgt_len, embed_dim)`
+                - the cache
                 - hidden states
                 - attentions
         """
@@ -523,8 +531,8 @@ class BartDecoder(nn.Module):
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # decoder layers
-        all_hidden_states = ()
-        all_self_attns = ()
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -555,7 +563,8 @@ class BartDecoder(nn.Module):
                 all_self_attns += (layer_self_attn,)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
+        if output_hidden_states:
+            all_hidden_states = [tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
@@ -563,7 +572,12 @@ class BartDecoder(nn.Module):
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
-        return x, next_cache, all_hidden_states, list(all_self_attns)
+
+        if return_tuple:
+            return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
+        return EncoderOutputWithPast(
+            last_hidden_state=x, past=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
+        )
 
 
 def _reorder_buffer(attn_cache, new_order):
