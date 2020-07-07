@@ -404,6 +404,7 @@ if is_torch_available():
         default_data_collator,
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForPermutationLanguageModeling,
     )
     from .data.datasets import (
         GlueDataset,
