@@ -1,6 +1,7 @@
 ---
 language: english
-thumbnail:
+datasets:
+- squad_v2
 ---
 
 # T5-base fine-tuned on SQuAD v2
@@ -13,16 +14,25 @@ The **T5** model was presented in [Exploring the Limits of Transfer Learning wit
 
 Transfer learning, where a model is first pre-trained on a data-rich task before being fine-tuned on a downstream task, has emerged as a powerful technique in natural language processing (NLP). The effectiveness of transfer learning has given rise to a diversity of approaches, methodology, and practice. In this paper, we explore the landscape of transfer learning techniques for NLP by introducing a unified framework that converts every language problem into a text-to-text format. Our systematic study compares pre-training objectives, architectures, unlabeled datasets, transfer approaches, and other factors on dozens of language understanding tasks. By combining the insights from our exploration with scale and our new “Colossal Clean Crawled Corpus”, we achieve state-of-the-art results on many benchmarks covering summarization, question answering, text classification, and more. To facilitate future work on transfer learning for NLP, we release our dataset, pre-trained models, and code.
 
+![model image](https://i.imgur.com/jVFMMWR.png)
+
 
 ## Details of the downstream task (Q&A) - Dataset 📚 🧐 ❓
 
-[SQuAD v2](https://rajpurkar.github.io/SQuAD-explorer/) combines the 100,000 questions in SQuAD1.1 with over 50,000 unanswerable questions written adversarially by crowdworkers to look similar to answerable ones. To do well on SQuAD2.0, systems must not only answer questions when possible, but also determine when no answer is supported by the paragraph and abstain from answering.
+Dataset ID: ```squad_v2``` from  [HugginFace/NLP](https://github.com/huggingface/nlp)
 
 | Dataset  | Split | # samples |
 | -------- | ----- | --------- |
-| SQuAD2.0 | train | 130k      |
-| SQuAD2.0 | eval  | 12.3k     |
+| squad_v2 | train | 130319    |
+| squad_v2 | valid  | 11873    |
 
+How to load it from [nlp](https://github.com/huggingface/nlp)
+
+```python
+train_dataset  = nlp.load_dataset('squad_v2', split=nlp.Split.TRAIN)
+valid_dataset = nlp.load_dataset('squad_v2', split=nlp.Split.VALIDATION)
+```
+Check out more about this dataset and others in [NLP Viewer](https://huggingface.co/nlp/viewer/)
 
 
 ## Model fine-tuning 🏋️‍
@@ -48,7 +58,7 @@ model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-squadv2")
 
 def get_answer(question, context):
   input_text = "question: %s  context: %s </s>" % (question, context)
-  features = tokenizer.batch_encode_plus([input_text], return_tensors='pt')
+  features = tokenizer([input_text], return_tensors='pt')
 
   output = model.generate(input_ids=features['input_ids'], 
                attention_mask=features['attention_mask'])

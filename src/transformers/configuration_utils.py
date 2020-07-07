@@ -44,10 +44,10 @@ class PretrainedConfig(object):
                 Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow or PyTorch) checkpoint.
             num_labels (:obj:`int`, `optional`, defaults to `2`):
                 Number of classes to use when the model is a classification model (sequences/tokens)
-            output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Should the model returns attentions weights.
-            output_hidden_states (:obj:`string`, `optional`, defaults to :obj:`False`):
+            output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Should the model returns all hidden-states.
+            output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Should the model returns all attentions.
             torchscript (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Is the model used with Torchscript (for PyTorch models).
     """
@@ -55,8 +55,8 @@ class PretrainedConfig(object):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.output_attentions = kwargs.pop("output_attentions", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
+        self.output_attentions = kwargs.pop("output_attentions", False)
         self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
@@ -132,10 +132,9 @@ class PretrainedConfig(object):
             save_directory (:obj:`string`):
                 Directory where the configuration JSON file will be saved.
         """
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
-
+        if os.path.isfile(save_directory):
+            raise AssertionError("Provided path ({}) should be a directory, not a file".format(save_directory))
+        os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 

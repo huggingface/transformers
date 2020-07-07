@@ -18,10 +18,10 @@ import json
 import os
 import unittest
 
+from transformers.testing_utils import slow
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import slow
 
 
 class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -65,7 +65,7 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w") as fp:
             fp.write("\n".join(merges))
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text

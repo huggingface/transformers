@@ -71,10 +71,10 @@ from transformers import (
     XLMRobertaConfig,
     XLNetConfig,
     cached_path,
-    hf_bucket_url,
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
+from transformers.file_utils import hf_bucket_url
 
 
 if is_torch_available():
@@ -240,7 +240,6 @@ def convert_all_pt_checkpoints_to_tf(
     remove_cached_files=False,
     only_convert_finetuned_models=False,
 ):
-    assert os.path.isdir(args.tf_dump_path), "--tf_dump_path should be a directory"
 
     if args_model_type is None:
         model_types = list(MODEL_CLASSES.keys())

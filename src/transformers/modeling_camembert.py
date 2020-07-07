@@ -31,6 +31,8 @@ from .modeling_roberta import (
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "CamembertTokenizer"
+
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "camembert-base",
     "Musixmatch/umberto-commoncrawl-cased-v1",
@@ -49,6 +51,8 @@ CAMEMBERT_START_DOCSTRING = r"""
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 

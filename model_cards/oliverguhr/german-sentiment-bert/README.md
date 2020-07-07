@@ -55,7 +55,7 @@ class SentimentModel():
     def predict_sentiment(self, texts: List[str])-> List[str]:
         texts = [self.clean_text(text) for text in texts]
         # Add special tokens takes care of adding [CLS], [SEP], <s>... tokens in the right way for each model.
-        input_ids = self.tokenizer.batch_encode_plus(texts,pad_to_max_length=True, add_special_tokens=True)
+        input_ids = self.tokenizer(texts, padding=True, truncation=True, add_special_tokens=True)
         input_ids = torch.tensor(input_ids["input_ids"])
 
         with torch.no_grad():

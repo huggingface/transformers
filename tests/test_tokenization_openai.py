@@ -64,7 +64,7 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w") as fp:
             fp.write("\n".join(merges))
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         return "lower newer", "lower newer"
 
     def test_full_tokenizer(self):

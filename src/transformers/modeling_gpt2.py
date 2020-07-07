@@ -26,11 +26,19 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import ACT2FN
 from .configuration_gpt2 import GPT2Config
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_utils import (
+    Conv1D,
+    PreTrainedModel,
+    SequenceSummary,
+    find_pruneable_heads_and_indices,
+    prune_conv1d_layer,
+)
 
 
 logger = logging.getLogger(__name__)
+
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "gpt2",
@@ -100,7 +108,6 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 class Attention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
         super().__init__()
-        self.output_attentions = config.output_attentions
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -122,14 +129,9 @@ class Attention(nn.Module):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        mask = torch.ones(self.n_head, self.split_size // self.n_head)
-        heads = set(heads) - self.pruned_heads  # Convert to set and emove already pruned heads
-        for head in heads:
-            # Compute how many pruned heads are before the head and move the index accordingly
-            head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_head, self.split_size // self.n_head, self.pruned_heads
+        )
         index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
 
         # Prune conv1d layers
@@ -141,7 +143,7 @@ class Attention(nn.Module):
         self.n_head = self.n_head - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, q, k, v, attention_mask=None, head_mask=None):
+    def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / (float(v.size(-1)) ** 0.5)
@@ -161,7 +163,7 @@ class Attention(nn.Module):
             w = w * head_mask
 
         outputs = [torch.matmul(w, v)]
-        if self.output_attentions:
+        if output_attentions:
             outputs.append(w)
         return outputs
 
@@ -178,7 +180,9 @@ class Attention(nn.Module):
         else:
             return x.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(
+        self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False
+    ):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
@@ -194,7 +198,7 @@ class Attention(nn.Module):
         else:
             present = (None,)
 
-        attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
+        attn_outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -229,13 +233,16 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(
+        self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False,
+    ):
         output_attn = self.attn(
             self.ln_1(x),
             layer_past=layer_past,
             attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
@@ -295,7 +302,7 @@ GPT2_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
 
@@ -330,6 +337,8 @@ GPT2_INPUTS_DOCSTRING = r"""
             If `past` is used, optionally only the last `inputs_embeds` have to be input (see `past`).
         use_cache (:obj:`bool`):
             If `use_cache` is True, `past` key value states are returned and can be used to speed up decoding (see `past`). Defaults to `True`.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -340,8 +349,6 @@ GPT2_INPUTS_DOCSTRING = r"""
 class GPT2Model(GPT2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
 
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
@@ -365,6 +372,7 @@ class GPT2Model(GPT2PreTrainedModel):
             self.h[layer].attn.prune_heads(heads)
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
     def forward(
         self,
         input_ids=None,
@@ -374,7 +382,9 @@ class GPT2Model(GPT2PreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
     Return:
@@ -385,30 +395,23 @@ class GPT2Model(GPT2PreTrainedModel):
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``) is passed or when ``config.output_hidden_states=True``:
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        from transformers import GPT2Tokenizer, GPT2Model
-        import torch
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2Model.from_pretrained('gpt2')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -478,7 +481,7 @@ class GPT2Model(GPT2PreTrainedModel):
         all_attentions = []
         all_hidden_states = ()
         for i, (block, layer_past) in enumerate(zip(self.h, past)):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
             outputs = block(
@@ -487,28 +490,29 @@ class GPT2Model(GPT2PreTrainedModel):
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 use_cache=use_cache,
+                output_attentions=output_attentions,
             )
 
             hidden_states, present = outputs[:2]
             if use_cache is True:
                 presents = presents + (present,)
 
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions.append(outputs[2])
 
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(*output_shape)
         # Add last hidden state
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             outputs = outputs + (presents,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0].shape[-2:]
             all_attentions = tuple(t.view(*attention_output_shape) for t in all_attentions)
@@ -540,6 +544,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         return {"input_ids": input_ids, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
     def forward(
         self,
         input_ids=None,
@@ -550,7 +555,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=True,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -569,30 +576,17 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-
-    Examples::
-
-        import torch
-        from transformers import GPT2Tokenizer, GPT2LMHeadModel
-
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2LMHeadModel.from_pretrained('gpt2')
-
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=input_ids)
-        loss, logits = outputs[:2]
-
         """
         transformer_outputs = self.transformer(
             input_ids,
@@ -603,6 +597,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         hidden_states = transformer_outputs[0]
 
@@ -655,7 +651,9 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         mc_token_ids=None,
         labels=None,
         mc_labels=None,
-        use_cache=True,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
         **kwargs
     ):
         r"""
@@ -688,12 +686,12 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -702,26 +700,26 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     Examples::
 
-        import torch
-        from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
+        >>> import torch
+        >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
 
-        tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+        >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
 
-        # Add a [CLS] to the vocabulary (we should train it also!)
-        tokenizer.add_special_tokens({'cls_token': '[CLS]'})
-        model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
-        print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
+        >>> # Add a [CLS] to the vocabulary (we should train it also!)
+        >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
 
-        choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        encoded_choices = [tokenizer.encode(s) for s in choices]
-        cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
+        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
 
-        input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
-        mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+        >>> encoded_choices = [tokenizer.encode(s) for s in choices]
+        >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
 
-        outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        lm_prediction_scores, mc_prediction_scores = outputs[:2]
+        >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
+        >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+
+        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
         """
         if "lm_labels" in kwargs:
@@ -741,6 +739,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         hidden_states = transformer_outputs[0]
