@@ -24,6 +24,7 @@ import tensorflow as tf
 from .configuration_gpt2 import GPT2Config
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
     TFConv1D,
     TFPreTrainedModel,
     TFSequenceSummary,
@@ -272,8 +273,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
-            output_attentions = inputs[8] if len(inputs) > 7 else output_attentions
-            output_hidden_states = inputs[9] if len(inputs) > 8 else output_hidden_states
+            output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
+            output_hidden_states = inputs[9] if len(inputs) > 9 else output_hidden_states
             assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
@@ -524,7 +525,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     (linear layer with weights tied to the input embeddings). """,
     GPT2_START_DOCSTRING,
 )
-class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
+class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name="transformer")
@@ -541,8 +542,26 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
-    def call(self, inputs, **kwargs):
+    def call(
+        self,
+        inputs,
+        past=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the cross entropy classification loss.
+            Indices should be in ``[0, ..., config.vocab_size - 1]``.
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
         prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -563,12 +582,38 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         """
-        transformer_outputs = self.transformer(inputs, **kwargs)
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[10] if len(inputs) > 10 else labels
+            if len(inputs) > 10:
+                inputs = inputs[:10]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
+        transformer_outputs = self.transformer(
+            inputs,
+            past=past,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
+
         hidden_states = transformer_outputs[0]
 
-        lm_logits = self.transformer.wte(hidden_states, mode="linear")
+        logits = self.transformer.wte(hidden_states, mode="linear")
 
-        outputs = (lm_logits,) + transformer_outputs[1:]
+        outputs = (logits,) + transformer_outputs[1:]
+        if labels is not None:
+            # shift labels to the left and cut last logit token
+            logits = logits[:, :-1]
+            labels = labels[:, 1:]
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
 
         return outputs  # lm_logits, presents, (all hidden_states), (attentions)
 

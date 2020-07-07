@@ -453,6 +453,9 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TFAutoModel,
         TFAutoModelForMultipleChoice,
         TFAutoModelForPreTraining,
@@ -460,6 +463,9 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
+        TFAutoModelForCausalLM,
+        TFAutoModelForMaskedLM,
+        TFAutoModelForSeq2SeqLM,
     )
 
     from .modeling_tf_albert import (
@@ -478,6 +484,7 @@ if is_tf_available():
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
+        TFBertLMHeadModel,
         TFBertForMaskedLM,
         TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,
