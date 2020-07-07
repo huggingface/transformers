@@ -18,8 +18,8 @@ import argparse
 import logging
 import sys
 import unittest
-from unittest.mock import patch
 from time import time
+from unittest.mock import patch
 
 import xla_spawn
 
