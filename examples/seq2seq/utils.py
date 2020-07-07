@@ -14,6 +14,8 @@ from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 
+from transformers import BartTokenizer
+
 
 def encode_file(
     tokenizer,
@@ -25,6 +27,7 @@ def encode_file(
     prefix="",
     tok_name="",
 ):
+    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
     cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
     if not overwrite_cache and cache_path.exists():
         try:
@@ -46,8 +49,8 @@ def encode_file(
             max_length=max_length,
             padding="max_length" if pad_to_max_length else None,
             truncation=True,
-            add_prefix_space=True,
             return_tensors=return_tensors,
+            **extra_kw,
         )
         assert tokenized.input_ids.shape[1] == max_length
         examples.append(tokenized)
@@ -230,8 +233,8 @@ def get_git_info():
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
 
-def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
-    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
+def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
+    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
 
     for reference_ln, output_ln in zip(reference_lns, output_lns):
