@@ -699,7 +699,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         hidden_states = distilbert_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
         prediction_logits = self.act(prediction_logits)  # (bs, seq_length, dim)
-        prediction_logits = self.vocab_layer_norm(prediction_logits, training=training)  # (bs, seq_length, dim)
+        prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)
 
         outputs = (prediction_logits,) + distilbert_output[1:]
