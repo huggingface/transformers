@@ -91,7 +91,10 @@ class SummarizationDataset(Dataset):
         tgt_lang=None,
     ):
         super().__init__()
+        # FIXME: use the rstrip logic strips all the chars, it seems.
         tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
+        if hasattr(tokenizer, "set_lang") and src_lang is not None:
+            tokenizer.set_lang(src_lang)  # HACK: only applies to mbart
         self.source = encode_file(
             tokenizer,
             os.path.join(data_dir, type_path + ".source"),

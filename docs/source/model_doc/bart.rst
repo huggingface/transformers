@@ -43,7 +43,7 @@ MBartTokenizer
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.MBartTokenizer
-    :members:
+    :members: build_inputs_with_special_tokens, prepare_translation_batch
 
 
 BartModel

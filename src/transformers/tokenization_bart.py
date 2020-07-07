@@ -118,14 +118,32 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
         self.reset_special_tokens()
 
-    def reset_special_tokens(self):
-
+    def reset_special_tokens(self) -> None:
+        """Reset the special tokens to the source lang setting. No prefix and suffix [eos, cur_lang_code]."""
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
-        """Build model inputs from a sequence by appending eos_token_id."""
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens. The special tokens depend on calling set_lang.
+        An MBART sequence has the following format, where ``X`` represents the sequence:
+            - input_ids (for encoder) ``X [eos, src_lang_code]``
+            - decoder_input_ids: (for decoder) ``[tgt_lang_code] X [eos]``
+        BOS is never used.
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
 
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
@@ -176,45 +194,45 @@ class MBartTokenizer(XLMRobertaTokenizer):
         tgt_texts: Optional[List[str]] = None,
         tgt_lang: str = "ro_RO",
         max_length: Optional[int] = None,
-        pad_to_max_length: bool = True,
+        padding: str = "longest",
         return_tensors: str = "pt",
     ) -> BatchEncoding:
-        """
+        """Prepare a batch that can be passed directly to an instance of MBartModel.
         Arguments:
             src_texts: list of src language texts
-            src_lang: default en_XX (english)
+            src_lang: default en_XX (english), the language we are translating from
             tgt_texts: list of tgt language texts
-            tgt_lang: default ro_RO (romanian)
-            max_length: (None) defer to config (1024 for mbart-large-en-ro)
-            pad_to_max_length: (bool)
+            tgt_lang: default ro_RO (romanian), the language we are translating to
+            max_length: (default=None, which defers to the config value of 1024 for facebook/mbart-large*
+            padding: strategy for padding input_ids and decoder_input_ids. Should be max_length or longest.
 
         Returns:
-            dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
+            :obj:`BatchEncoding`: with keys input_ids, attention_mask, decoder_input_ids, decoder_attention_mask.
         """
         if max_length is None:
             max_length = self.max_len
         self.cur_lang_code = self.lang_code_to_id[src_lang]
-        model_inputs: BatchEncoding = self.batch_encode_plus(
+        model_inputs: BatchEncoding = self(
             src_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
-            pad_to_max_length=pad_to_max_length,
+            padding=padding,
             truncation=True,
         )
         if tgt_texts is None:
             return model_inputs
         self.set_lang(tgt_lang)
-        decoder_inputs: BatchEncoding = self.batch_encode_plus(
+        decoder_inputs: BatchEncoding = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
+            padding=padding,
             max_length=max_length,
-            pad_to_max_length=pad_to_max_length,
             truncation=True,
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
         self.cur_lang_code = self.lang_code_to_id[src_lang]
-        self.reset_special_tokens()
+        self.reset_special_tokens()  # sets to src_lang
         return model_inputs
