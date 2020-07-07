@@ -71,10 +71,10 @@ from transformers import (
     XLMRobertaConfig,
     XLNetConfig,
     cached_path,
-    hf_bucket_url,
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
+from transformers.file_utils import hf_bucket_url
 
 
 if is_torch_available():
