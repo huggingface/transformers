@@ -903,6 +903,7 @@ class TokenizerTesterMixin:
                 tokenizer.padding_side = "right"
                 encoded_sequence = tokenizer.encode(sequence)
                 sequence_length = len(encoded_sequence)
+                # FIXME: the next line should be padding(max_length) to avoid warning
                 padded_sequence = tokenizer.encode(
                     sequence, max_length=sequence_length + padding_size, pad_to_max_length=True
                 )
