@@ -132,12 +132,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("")
-    def test_tie_model_weights(self):
-        pass
-
     def test_initialization_more(self):
-        # (config, input_ids, token_type_ids, input_mask, *unused) = \
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = BartModel(config)
         model.to(torch_device)
