@@ -271,7 +271,7 @@ class CustomDPRReaderTokenizerMixin:
 
         """
         input_ids = reader_input["input_ids"]
-        start_logits, end_logits, relevance_logits = reader_output
+        start_logits, end_logits, relevance_logits = reader_output[:3]
         n_passages = len(relevance_logits)
         sorted_docs = sorted(range(n_passages), reverse=True, key=relevance_logits.__getitem__)
         nbest_spans_predictions: List[DPRReaderOutput] = []

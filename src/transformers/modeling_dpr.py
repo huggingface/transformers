@@ -213,13 +213,13 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary.
             To match pre-training, DPR input sequence should be formatted with [CLS] and [SEP] tokens as follows:
 
-            (a) For sequence pairs:
+            (a) For sequence pairs (for a pair title+text for example):
 
                 ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
 
                 ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
 
-            (b) For single sequences:
+            (b) For single sequences (for a question for example):
 
                 ``tokens:         [CLS] the dog is hairy . [SEP]``
 
@@ -323,7 +323,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
         model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids)  # the embeddings of the given context.
+        embeddings = model(input_ids)[0]  # the embeddings of the given context.
 
         """
 
@@ -412,7 +412,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
         model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids)  # the embeddings of the given question.
+        embeddings = model(input_ids)[0]  # the embeddings of the given question.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -482,6 +482,17 @@ class DPRReader(DPRPretrainedReader):
         relevance_logits: (:obj:`torch.FloatTensor`` of shape ``(n_passages, )``):
             Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage
             to answer the question, compared to all the other passages.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
     Examples::
 
