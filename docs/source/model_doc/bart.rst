@@ -45,6 +45,11 @@ MBartTokenizer
 .. autoclass:: transformers.MBartTokenizer
     :members: build_inputs_with_special_tokens, prepare_translation_batch
 
+BartForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartForConditionalGeneration
+    :members: generate, forward
 
 BartModel
 ~~~~~~~~~~~~~
@@ -69,8 +74,3 @@ BartForQuestionAnswering
     :members: forward
 
 
-BartForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BartForConditionalGeneration
-    :members: generate, forward

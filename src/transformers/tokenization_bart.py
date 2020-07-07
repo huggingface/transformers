@@ -62,8 +62,9 @@ SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-la
 class MBartTokenizer(XLMRobertaTokenizer):
     """
     This inherits from XLMRobertaTokenizer. ``prepare_translation_batch`` should be used to encode inputs.
-    Other tokenizer methods like encode do not work properly.
-    The tokenization method is <tokens> <eos> <language code>. There is no BOS token.
+    Other tokenizer methods like ``encode`` do not work properly.
+    The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and
+    ``<language code> <tokens> <eos>``` for target language documents.
 
     Examples::
 
