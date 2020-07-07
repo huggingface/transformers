@@ -157,13 +157,13 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             The passages titles to be encoded. This can be a string, a list of strings if there are several passages.
         texts (:obj:`str`, :obj:`List[str]`):
             The passages texts to be encoded. This can be a string, a list of strings if there are several passages.
-        padding (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
             Activate and control padding. Accepts the following values:
 
             * `True` or `'longest'`: pad to the longest sequence in the batch (or no padding if only a single sequence if provided),
             * `'max_length'`: pad to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`)
             * `False` or `'do_not_pad'` (default): No padding (i.e. can output batch with sequences of uneven lengths)
-        truncation (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`True`):
+        truncation (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
             Activate and control truncation. Accepts the following values:
 
             * `True` or `'only_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`).
@@ -205,8 +205,8 @@ class CustomDPRReaderTokenizerMixin:
         questions,
         titles: Optional[str] = None,
         texts: Optional[str] = None,
-        padding: Union[bool, str] = True,
-        truncation: Union[bool, str] = True,
+        padding: Union[bool, str] = False,
+        truncation: Union[bool, str] = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
