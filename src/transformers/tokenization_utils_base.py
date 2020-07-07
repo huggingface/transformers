@@ -1352,6 +1352,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         added_tokens_file = os.path.join(save_directory, ADDED_TOKENS_FILE)
         tokenizer_config_file = os.path.join(save_directory, TOKENIZER_CONFIG_FILE)
 
+        def convert_values(dic):
+            write_dict = {}
+            for key, value in dic.items():
+                if isinstance(value, AddedToken):
+                    write_dict[key] = value.__getstate__()
+                else:
+                    write_dict[key] = value
+            return write_dict
+
         tokenizer_config = copy.deepcopy(self.init_kwargs)
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
@@ -1359,16 +1368,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             tokenizer_config.pop(file_id, None)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(tokenizer_config, ensure_ascii=False))
+            f.write(json.dumps(convert_values(tokenizer_config), ensure_ascii=False))
 
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            write_dict = {}
-            for key, value in self.special_tokens_map_extended.items():
-                if isinstance(value, AddedToken):
-                    write_dict[key] = value.__getstate__()
-                else:
-                    write_dict[key] = value
-            f.write(json.dumps(write_dict, ensure_ascii=False))
+            f.write(json.dumps(convert_values(self.special_tokens_map_extended), ensure_ascii=False))
 
         added_vocab = self.get_added_vocab()
         if added_vocab:
