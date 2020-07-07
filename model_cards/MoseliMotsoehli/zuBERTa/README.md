@@ -6,7 +6,7 @@ language: zulu
 zuBERTa is a RoBERTa style transformer language model trained on zulu text.
 
 ## Intended uses & limitations
-The model can  be used for getting embeddings to use on a down-stream task such as question answering.
+The model can be used for getting embeddings to use on a down-stream task such as question answering.
 
 #### How to use
 
