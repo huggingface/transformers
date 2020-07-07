@@ -1101,7 +1101,7 @@ class TFAutoModelForMaskedLM:
         Args:
             config (:class:`~transformers.TFPretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
+                - isInstance of `distilbert` configuration class: :class:`~transformers.TFDistilBertForMaskedLM` (DistilBERT model)
                 - isInstance of `roberta` configuration class: :class:`~transformers.TFRobertaForMaskedLM` (RoBERTa model)
                 - isInstance of `bert` configuration class: :class:`~transformers.TFBertForMaskedLM` (Bert model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.TFFlaubertWithLMHeadModel` (Flaubert model)
