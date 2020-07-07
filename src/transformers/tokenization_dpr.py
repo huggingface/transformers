@@ -213,10 +213,27 @@ class CustomDPRReaderTokenizerMixin:
         **kwargs
     ) -> BatchEncoding:
         if titles is None and texts is None:
-            return super().__call__(questions, padding=padding, truncation=truncation, max_length=max_length, return_tensors=return_tensors, return_attention_mask=return_attention_mask, **kwargs)
+            return super().__call__(
+                questions,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                return_attention_mask=return_attention_mask,
+                **kwargs,
+            )
         elif titles is None or texts is None:
             text_pair = titles if texts is None else texts
-            return super().__call__(questions, text_pair, padding=padding, truncation=truncation, max_length=max_length, return_tensors=return_tensors, return_attention_mask=return_attention_mask, **kwargs)
+            return super().__call__(
+                questions,
+                text_pair,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                return_attention_mask=return_attention_mask,
+                **kwargs,
+            )
         titles = titles if not isinstance(titles, str) else [titles]
         texts = texts if not isinstance(texts, str) else [texts]
         n_passages = len(titles)
