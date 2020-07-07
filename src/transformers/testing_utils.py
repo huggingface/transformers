@@ -2,8 +2,7 @@ import os
 import unittest
 from distutils.util import strtobool
 
-from transformers.file_utils import _tf_available, _torch_available
-
+from transformers.file_utils import _tf_available, _torch_available, _torch_tpu_available
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
@@ -110,6 +109,16 @@ def require_multigpu(test_case):
 
     if torch.cuda.device_count() < 2:
         return unittest.skip("test requires multiple GPUs")(test_case)
+    return test_case
+
+
+def require_torch_tpu(test_case):
+    """
+    Decorator marking a test that requires a TPU (in PyTorch).
+    """
+    if not _torch_tpu_available:
+        return unittest.skip("test requires PyTorch TPU")
+
     return test_case
 
 
