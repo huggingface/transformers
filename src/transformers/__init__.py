@@ -27,6 +27,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
@@ -129,6 +130,14 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenize
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from .tokenization_dpr import (
+    DPRContextEncoderTokenizer,
+    DPRContextEncoderTokenizerFast,
+    DPRQuestionEncoderTokenizer,
+    DPRQuestionEncoderTokenizerFast,
+    DPRReaderTokenizer,
+    DPRReaderTokenizerFast,
+)
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
@@ -382,6 +391,14 @@ if is_torch_available():
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
+    from .modeling_dpr import (
+        DPRPretrainedContextEncoder,
+        DPRPretrainedQuestionEncoder,
+        DPRPretrainedReader,
+        DPRContextEncoder,
+        DPRQuestionEncoder,
+        DPRReader,
+    )
     from .modeling_retribert import (
         RetriBertPreTrainedModel,
         RetriBertModel,
