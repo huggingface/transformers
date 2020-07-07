@@ -1242,7 +1242,7 @@ class TFAutoModelForSeq2SeqLM:
             config (:class:`~transformers.TFPretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `t5` configuration class: :class:`~transformers.T5ForConditionalGeneration` (T5 model)
+                - isInstance of `t5` configuration class: :class:`~transformers.TFT5ForConditionalGeneration` (T5 model)
                 - isInstance of `bart` configuration class: :class:`~transformers.BartForConditionalGeneration` (Bart model)
                 - isInstance of `marian` configuration class: :class:`~transformers.MarianMTModel` (Marian model)
                 - isInstance of `encoder-decoder` configuration class: :class:`~transformers.EncoderDecoderModel` (Encoder Decoder model)
