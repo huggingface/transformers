@@ -38,6 +38,9 @@ if is_tf_available():
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -92,6 +95,12 @@ class TFModelTesterMixin:
             elif model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size)
             elif model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values():
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
+            elif model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
+            elif model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.values():
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
+            elif model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length))
         return inputs_dict
 
@@ -290,7 +299,7 @@ class TFModelTesterMixin:
                     "decoder_input_ids": tf.keras.Input(
                         batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"
                     ),
-                    "inputs": tf.keras.Input(batch_shape=(2, 2000), name="inputs", dtype="int32"),
+                    "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
                 }
             elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
                 input_ids = tf.keras.Input(batch_shape=(4, 2, 2000), name="input_ids", dtype="int32")
@@ -325,7 +334,7 @@ class TFModelTesterMixin:
             outputs_dict = model(inputs)
 
             inputs_keywords = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "inputs", None,)
+            input_ids = inputs_keywords.pop("input_ids", None)
             outputs_keywords = model(input_ids, **inputs_keywords)
             output_dict = outputs_dict[0].numpy()
             output_keywords = outputs_keywords[0].numpy()
@@ -472,9 +481,9 @@ class TFModelTesterMixin:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
-                encoder_input_ids = inputs["inputs"]
+                encoder_input_ids = inputs["input_ids"]
                 decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["inputs"]
+                del inputs["input_ids"]
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
@@ -589,9 +598,15 @@ class TFModelTesterMixin:
                 added_label = prepared_for_class[list(prepared_for_class.keys() - inputs_dict.keys())[0]]
                 loss_size = tf.size(added_label)
 
+                if model.__class__ in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
+                    # if loss is causal lm loss, labels are shift, so that one label per batch
+                    # is cut
+                    loss_size = loss_size - self.model_tester.batch_size
+
                 # Test that model correctly compute the loss with kwargs
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 input_ids = prepared_for_class.pop("input_ids")
+
                 loss = model(input_ids, **prepared_for_class)[0]
                 self.assertEqual(loss.shape, [loss_size])
 

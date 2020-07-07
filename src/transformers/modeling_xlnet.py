@@ -1041,9 +1041,9 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`, defaults to :obj:`None`):
