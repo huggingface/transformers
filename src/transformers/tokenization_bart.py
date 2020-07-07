@@ -132,8 +132,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens. The special tokens depend on calling set_lang.
         An MBART sequence has the following format, where ``X`` represents the sequence:
-            - input_ids (for encoder) ``X [eos, src_lang_code]``
-            - decoder_input_ids: (for decoder) ``[tgt_lang_code] X [eos]``
+        - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
+        - ``decoder_input_ids``: (for decoder) ``[tgt_lang_code] X [eos]``
         BOS is never used.
         Pairs of sequences are not the expected use case, but they will be handled without a separator.
 
