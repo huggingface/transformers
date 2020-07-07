@@ -25,7 +25,6 @@ from .configuration_dpr import DPRConfig
 from .file_utils import add_start_docstrings
 from .modeling_bert import BertModel
 from .modeling_utils import PreTrainedModel
-from .tokenization_dpr import DPRReaderOutput
 
 
 logger = logging.getLogger(__name__)
@@ -42,6 +41,9 @@ DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class DPREncoder(PreTrainedModel):
+
+    base_model_prefix = "bert_model"
+
     def __init__(self, config: DPRConfig):
         super().__init__(config)
         self.bert_model = BertModel(config)
@@ -52,19 +54,35 @@ class DPREncoder(PreTrainedModel):
         self.init_weights()
 
     def forward(
-        self, input_ids: Tensor, attention_mask: Optional[Tensor] = None, token_type_ids: Optional[Tensor] = None
+        self,
+        input_ids: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
     ) -> Tuple[Tensor, ...]:
         outputs = self.bert_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
             output_hidden_states=True,
+            output_attentions=output_attentions,
         )
-        sequence_output, pooled_output, hidden_states = outputs
+        sequence_output, pooled_output, hidden_states = outputs[:3]
         pooled_output = sequence_output[:, 0, :]
         if self.projection_dim > 0:
             pooled_output = self.encode_proj(pooled_output)
-        return sequence_output, pooled_output, hidden_states
+
+        dpr_encoder_outputs = (sequence_output, pooled_output)
+
+        if output_hidden_states:
+            dpr_encoder_outputs += (hidden_states,)
+        if output_attentions:
+            dpr_encoder_outputs += (outputs[-1],)
+
+        return dpr_encoder_outputs
 
     @property
     def embeddings_size(self) -> int:
@@ -79,6 +97,9 @@ class DPREncoder(PreTrainedModel):
 
 
 class DPRSpanPredictor(PreTrainedModel):
+
+    base_model_prefix = "encoder"
+
     def __init__(self, config: DPRConfig):
         super().__init__(config)
         self.encoder = DPREncoder(config)
@@ -86,11 +107,26 @@ class DPRSpanPredictor(PreTrainedModel):
         self.qa_classifier = nn.Linear(self.encoder.embeddings_size, 1)
         self.init_weights()
 
-    def forward(self, input_ids: Tensor, attention_mask: Tensor):
+    def forward(
+        self,
+        input_ids: Tensor,
+        attention_mask: Tensor,
+        inputs_embeds: Optional[Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+    ):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
-        n_passages, sequence_length = input_ids.size()
+        n_passages, sequence_length = input_ids.size() if input_ids is not None else inputs_embeds.size()[:2]
         # feed encoder
-        sequence_output, *_ = self.encoder(input_ids, attention_mask=attention_mask)
+        outputs = self.encoder(
+            input_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        sequence_output = outputs[0]
+
         # compute logits
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -102,7 +138,7 @@ class DPRSpanPredictor(PreTrainedModel):
             start_logits.view(n_passages, sequence_length),
             end_logits.view(n_passages, sequence_length),
             relevance_logits.view(n_passages),
-        )
+        ) + outputs[2:]
 
     def init_weights(self):
         self.encoder.init_weights()
@@ -256,16 +292,49 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         self.init_weights()
 
     def forward(
-        self, input_ids: Tensor, attention_mask: Optional[Tensor] = None, token_type_ids: Optional[Tensor] = None,
+        self,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        output_attentions=None,
+        output_hidden_states=None,
     ) -> Tensor:
-        if attention_mask is None:
-            attention_mask = input_ids != self.config.pad_token_id
-        if token_type_ids is None:
-            token_type_ids = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device)
-        sequence_output, pooled_output, hidden_states = self.ctx_encoder(
-            input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return pooled_output
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = (
+                torch.ones(input_shape, device=device)
+                if input_ids is None
+                else (input_ids != self.config.pad_token_id)
+            )
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        outputs = self.ctx_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        sequence_output, pooled_output = outputs[:2]
+        return (pooled_output,) + outputs[2:]
 
 
 @add_start_docstrings(
@@ -298,16 +367,49 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         self.init_weights()
 
     def forward(
-        self, input_ids: Tensor, attention_mask: Optional[Tensor] = None, token_type_ids: Optional[Tensor] = None,
+        self,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        output_attentions=None,
+        output_hidden_states=None,
     ) -> Tensor:
-        if attention_mask is None:
-            attention_mask = input_ids != self.config.pad_token_id
-        if token_type_ids is None:
-            token_type_ids = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device)
-        sequence_output, pooled_output, hidden_states = self.question_encoder(
-            input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return pooled_output
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = (
+                torch.ones(input_shape, device=device)
+                if input_ids is None
+                else (input_ids != self.config.pad_token_id)
+            )
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        outputs = self.question_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        sequence_output, pooled_output = outputs[:2]
+        return (pooled_output,) + outputs[2:]
 
 
 @add_start_docstrings(
@@ -351,9 +453,41 @@ class DPRReader(DPRPretrainedReader):
         self.span_predictor = DPRSpanPredictor(config)
         self.init_weights()
 
-    def forward(self, input_ids: Tensor, attention_mask: Optional[Tensor] = None) -> Tuple[Tensor, ...]:
+    def forward(
+        self,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        output_attentions: bool = None,
+        output_hidden_states: bool = None,
+    ) -> Tuple[Tensor, ...]:
         """Compute logits from batched inputs of size (n_questions, n_passages, sequence_length)"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if attention_mask is None:
-            attention_mask = input_ids != self.config.pad_token_id
-        start_logits, end_logits, relevance_logits = self.span_predictor(input_ids, attention_mask)
-        return DPRReaderOutput(start_logits, end_logits, relevance_logits)
+            attention_mask = torch.ones(input_shape, device=device)
+
+        span_outputs = self.span_predictor(
+            input_ids,
+            attention_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        start_logits, end_logits, relevance_logits = span_outputs[:3]
+
+        return (start_logits, end_logits, relevance_logits) + span_outputs[3:]
