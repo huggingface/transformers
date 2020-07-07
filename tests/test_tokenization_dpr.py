@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+from transformers.testing_utils import slow
 from transformers.tokenization_dpr import (
     DPRContextEncoderTokenizer,
     DPRContextEncoderTokenizerFast,
@@ -26,7 +27,6 @@ from transformers.tokenization_dpr import (
 from transformers.tokenization_utils_base import BatchEncoding
 
 from .test_tokenization_bert import BertTokenizationTest
-from .utils import slow
 
 
 class DPRContextEncoderTokenizationTest(BertTokenizationTest):
