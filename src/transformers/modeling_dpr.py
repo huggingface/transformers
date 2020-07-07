@@ -22,7 +22,7 @@ import torch
 from torch import Tensor, nn
 
 from .configuration_dpr import DPRConfig
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertModel
 from .modeling_utils import PreTrainedModel
 
@@ -208,8 +208,8 @@ DPR_START_DOCSTRING = r"""
 """
 
 DPR_ENCODERS_INPUTS_DOCSTRING = r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+    Args:
+        input_ids: (:obj:``torch.LongTensor`` of shape ``(batch_size, sequence_length)``):
             Indices of input sequence tokens in the vocabulary.
             To match pre-training, DPR input sequence should be formatted with [CLS] and [SEP] tokens as follows:
 
@@ -231,19 +231,26 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             Indices can be obtained using :class:`transformers.DPRTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        attention_mask: (:obj:``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        token_type_ids: (:obj:``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states tensors of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
 """
 
 DPR_READER_INPUTS_DOCSTRING = r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(n_passages, sequence_length)``:
+    Args:
+        input_ids: (:obj:``torch.LongTensor`` of shape ``(n_passages, sequence_length)``):
             Indices of input sequence tokens in the vocabulary.
             It has to be a sequence triplet with 1) the question and 2) the passages titles and 3) the passages texts
             To match pre-training, DPR `input_ids` sequence should be formatted with [CLS] and [SEP] with the format:
@@ -255,42 +262,32 @@ DPR_READER_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.DPRReaderTokenizer`.
             See :class:`transformers.DPRReaderTokenizer` for more details
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        attention_mask: (:obj:torch.FloatTensor``, of shape ``(n_passages, sequence_length)``, `optional`, defaults to :obj:`None):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(n_passages, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states tensors of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
 """
 
 
 @add_start_docstrings(
     "The bare DPRContextEncoder transformer outputting pooler outputs as context representations.",
     DPR_START_DOCSTRING,
-    DPR_ENCODERS_INPUTS_DOCSTRING,
 )
 class DPRContextEncoder(DPRPretrainedContextEncoder):
-    r"""
-    Outputs: The DPR encoder only outputs the `pooler_output` that corresponds to the context representation:
-        **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer. This output is to be used to embed contexts for
-            nearest neighbors queries with question embeddings.
-
-    Examples::
-
-        from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
-        tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids)  # the embeddings of the given context.
-
-    """
-
     def __init__(self, config: DPRConfig):
         super().__init__(config)
         self.config = config
         self.ctx_encoder = DPREncoder(config)
         self.init_weights()
 
+    @add_start_docstrings_to_callable(DPR_ENCODERS_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
@@ -300,6 +297,36 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         output_attentions=None,
         output_hidden_states=None,
     ) -> Tensor:
+        r"""
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DPRConfig`) and inputs:
+        pooler_output: (:obj:``torch.FloatTensor`` of shape ``(batch_size, embeddings_size)``):
+            The DPR encoder outputs the `pooler_output` that corresponds to the context representation.
+            Last layer hidden-state of the first token of the sequence (classification token)
+            further processed by a Linear layer. This output is to be used to embed contexts for
+            nearest neighbors queries with questions embeddings.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
+        tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+        embeddings = model(input_ids)  # the embeddings of the given context.
+
+        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -340,25 +367,8 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
 @add_start_docstrings(
     "The bare DPRQuestionEncoder transformer outputting pooler outputs as question representations.",
     DPR_START_DOCSTRING,
-    DPR_ENCODERS_INPUTS_DOCSTRING,
 )
 class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
-    r"""
-    Outputs: The DPR encoder only outputs the `pooler_output` that corresponds to the question representation:
-        **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer. This output is to be used to embed questions for
-            nearest neighbors queries with context embeddings.
-
-    Examples::
-
-        from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
-        tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-        model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids)  # the embeddings of the given question.
-
-    """
 
     def __init__(self, config: DPRConfig):
         super().__init__(config)
@@ -366,6 +376,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         self.question_encoder = DPREncoder(config)
         self.init_weights()
 
+    @add_start_docstrings_to_callable(DPR_ENCODERS_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[Tensor] = None,
@@ -375,6 +386,34 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         output_attentions=None,
         output_hidden_states=None,
     ) -> Tensor:
+        r"""
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DPRConfig`) and inputs:
+        pooler_output: (:obj:``torch.FloatTensor`` of shape ``(batch_size, embeddings_size)``):
+            The DPR encoder outputs the `pooler_output` that corresponds to the question representation.
+            Last layer hidden-state of the first token of the sequence (classification token)
+            further processed by a Linear layer. This output is to be used to embed questions for
+            nearest neighbors queries with context embeddings.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
+        tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+        model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+        input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
+        embeddings = model(input_ids)  # the embeddings of the given question.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -413,21 +452,36 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
 
 @add_start_docstrings(
-    "The bare DPRReader transformer outputting span predictions.", DPR_START_DOCSTRING, DPR_READER_INPUTS_DOCSTRING,
+    "The bare DPRReader transformer outputting span predictions.", DPR_START_DOCSTRING,
 )
 class DPRReader(DPRPretrainedReader):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **input_ids**: ``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``
+    def __init__(self, config: DPRConfig):
+        super().__init__(config)
+        self.config = config
+        self.span_predictor = DPRSpanPredictor(config)
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(DPR_READER_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        inputs_embeds: Optional[Tensor] = None,
+        output_attentions: bool = None,
+        output_hidden_states: bool = None,
+    ) -> Tuple[Tensor, ...]:
+        r"""
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DPRConfig`) and inputs:
+        input_ids: (:obj:``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``)
             They correspond to the combined `input_ids` from `(question + context title + context content`).
-        **start_logits**: ``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``
+        start_logits: (:obj:``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``):
             Logits of the start index of the span for each passage.
-        **end_logits**: ``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``
+        end_logits: (:obj:``torch.FloatTensor`` of shape ``(n_passages, sequence_length)``):
             Logits of the end index of the span for each passage.
-        **relevance_logits**: `torch.FloatTensor`` of shape ``(n_passages, )``
+        relevance_logits: (:obj:`torch.FloatTensor`` of shape ``(n_passages, )``):
             Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage
             to answer the question, compared to all the other passages.
-
 
     Examples::
 
@@ -443,25 +497,9 @@ class DPRReader(DPRPretrainedReader):
         outputs = model(**encoded_inputs)
         start_logits = outputs[0]  # The logits of the start of the spans
         end_logits = outputs[1]  # The logits of the end of the spans
-        relevance_logits = outputs[2]  # The relrevance score of the passages
+        relevance_logits = outputs[2]  # The relevance scores of the passages
 
-    """
-
-    def __init__(self, config: DPRConfig):
-        super().__init__(config)
-        self.config = config
-        self.span_predictor = DPRSpanPredictor(config)
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids: Optional[Tensor] = None,
-        attention_mask: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
-        output_attentions: bool = None,
-        output_hidden_states: bool = None,
-    ) -> Tuple[Tensor, ...]:
-        """Compute logits from batched inputs of size (n_questions, n_passages, sequence_length)"""
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
