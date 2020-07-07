@@ -23,7 +23,7 @@ import unittest
 from importlib import import_module
 
 from transformers import is_tf_available, is_torch_available
-from transformers.testing_utils import _tf_gpu_memory_limit, require_tf
+from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
 
 
 if is_tf_available():
@@ -131,9 +131,13 @@ class TFModelTesterMixin:
                 self.assert_outputs_same(after_outputs, outputs)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     @slow
 =======
 >>>>>>> Add tests for saved model creation + bug fix for multiple choices models
+=======
+    @slow
+>>>>>>> Fix the input for several layers
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -142,9 +146,13 @@ class TFModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
 <<<<<<< HEAD
+<<<<<<< HEAD
             num_out = len(model(inputs_dict))
 =======
 >>>>>>> Add tests for saved model creation + bug fix for multiple choices models
+=======
+            num_out = len(model(inputs_dict))
+>>>>>>> Fix the input for several layers
             model._saved_model_inputs_spec = None
             model._set_save_spec(inputs_dict)
 
@@ -152,6 +160,9 @@ class TFModelTesterMixin:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> Fix the input for several layers
                 outputs = model(inputs_dict)
                 hidden_states = [t.numpy() for t in outputs[-1]]
                 self.assertEqual(len(outputs), num_out)
@@ -159,6 +170,7 @@ class TFModelTesterMixin:
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size],
                 )
+<<<<<<< HEAD
 
     @slow
     def test_saved_model_with_attentions_output(self):
@@ -175,19 +187,38 @@ class TFModelTesterMixin:
 =======
                 out = model(inputs_dict)
                 self.assertEqual(len(out[-1]), self.model_tester.num_hidden_layers + 1)
+=======
+>>>>>>> Fix the input for several layers
 
+    @slow
     def test_saved_model_with_attentions_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
+<<<<<<< HEAD
 >>>>>>> Add tests for saved model creation + bug fix for multiple choices models
+=======
+        encoder_seq_length = (
+            self.model_tester.encoder_seq_length
+            if hasattr(self.model_tester, "encoder_seq_length")
+            else self.model_tester.seq_length
+        )
+        encoder_key_length = (
+            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
+        )
+>>>>>>> Fix the input for several layers
 
         for model_class in self.all_model_classes:
+            print(model_class.__name__)
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
+<<<<<<< HEAD
 <<<<<<< HEAD
             num_out = len(model(inputs_dict))
 =======
 >>>>>>> Add tests for saved model creation + bug fix for multiple choices models
+=======
+            num_out = len(model(inputs_dict))
+>>>>>>> Fix the input for several layers
             model._saved_model_inputs_spec = None
             model._set_save_spec(inputs_dict)
 
@@ -195,6 +226,9 @@ class TFModelTesterMixin:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> Fix the input for several layers
                 outputs = model(inputs_dict)
                 attentions = [t.numpy() for t in outputs[-1]]
                 self.assertEqual(len(outputs), num_out)
@@ -203,10 +237,13 @@ class TFModelTesterMixin:
                     list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
+<<<<<<< HEAD
 =======
                 out = model(inputs_dict)
                 self.assertEqual(len(out[-1]), self.model_tester.num_hidden_layers)
 >>>>>>> Add tests for saved model creation + bug fix for multiple choices models
+=======
+>>>>>>> Fix the input for several layers
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
