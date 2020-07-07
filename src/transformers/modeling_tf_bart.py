@@ -28,14 +28,15 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 
 # Public API
 from .modeling_tf_t5 import _NoLayerEmbedTokens
-from .modeling_tf_utils import DUMMY_INPUTS, TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
 from .modeling_tf_utils import (
+    DUMMY_INPUTS,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     cast_bool_to_primitive,
     keras_serializable,
     shape_list,
 )
+
 
 # from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
@@ -230,6 +231,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
         return x, attn_weights
 
+
 @keras_serializable
 class TFBartEncoder(tf.keras.layers.Layer):
     config_class = BartConfig
@@ -423,6 +425,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
+
 @keras_serializable
 class TFBartDecoder(tf.keras.layers.Layer):
     """
@@ -432,7 +435,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
         config: BartConfig
         embed_tokens: output embedding
     """
+
     config_class = BartConfig
+
     def __init__(self, config: BartConfig, embed_tokens, **kwargs):
         super().__init__(**kwargs)
         self.layerdrop = config.decoder_layerdrop
@@ -892,7 +897,6 @@ class TFBartModel(TFPretrainedBartModel):
         decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
         assert isinstance(decoder_outputs[0], T)
         encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
-        import ipdb; ipdb.set_trace()
         return decoder_outputs + encoder_outputs
 
     def get_input_embeddings(self):
@@ -963,10 +967,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             kwargs.update(inputs)
         else:
             kwargs["inputs"] = inputs
-        assert 'input_ids' not in kwargs
+        assert "input_ids" not in kwargs
 
-
-        inputs = kwargs.pop('inputs', kwargs.pop('input_ids', None))
+        inputs = kwargs.pop("inputs", kwargs.pop("input_ids", None))
         # if isinstance(inputs, T):
         #     input_ids = inputs
         # elif isinstance(inputs, dict):

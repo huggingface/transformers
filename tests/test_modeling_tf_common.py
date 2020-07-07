@@ -305,7 +305,6 @@ class TFModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
 
-
             outputs_dict = model(input_ids)
             hidden_states = outputs_dict[0]
 
@@ -344,7 +343,7 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
-            inputs_dict['use_cache'] = False
+            inputs_dict["use_cache"] = False
             config.output_hidden_states = False
             model = model_class(config)
             model_inputs = self._prepare_for_class(inputs_dict, model_class)
