@@ -225,10 +225,28 @@ def test_finetune(model):
         task=task,
         src_lang="en_XX",
         tgt_lang="ro_RO",
+        freeze_encoder=True,
+        freeze_embeds=True,
     )
     assert "n_train" in args_d
     args = argparse.Namespace(**args_d)
-    main(args)
+    module = main(args)
+
+    input_embeds = module.model.get_input_embeddings()
+    assert not input_embeds.weight.requires_grad
+    if model == T5_TINY:
+        lm_head = module.model.lm_head
+        assert not lm_head.weight.requires_grad
+        assert (lm_head.weight == input_embeds.weight).all().item()
+
+    else:
+        bart = module.model.model
+        embed_pos = bart.decoder.embed_positions
+        assert not embed_pos.weight.requires_grad
+        assert not bart.shared.weight.requires_grad
+        # check that embeds are the same
+        assert bart.decoder.embed_tokens == bart.encoder.embed_tokens
+        assert bart.decoder.embed_tokens == bart.shared
 
 
 @pytest.mark.parametrize(

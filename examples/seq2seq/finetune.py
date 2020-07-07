@@ -19,6 +19,7 @@ from transformers import MBartTokenizer, get_linear_schedule_with_warmup
 
 try:
     from .utils import (
+        assert_all_frozen,
         use_task_specific_params,
         SummarizationDataset,
         lmap,
@@ -47,6 +48,7 @@ except ImportError:
         get_git_info,
         ROUGE_KEYS,
         calculate_bleu_score,
+        assert_all_frozen,
     )
     from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 
@@ -92,10 +94,9 @@ class SummarizationModule(BaseTransformer):
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
         if self.hparams.freeze_encoder:
-            try:
-                freeze_params(self.model.model.encoder)
-            except AttributeError:
-                freeze_params(self.model.encoder)
+            freeze_params(self.model.get_encoder())
+            assert_all_frozen(self.model.get_encoder())
+
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.decoder_start_token_id = None
