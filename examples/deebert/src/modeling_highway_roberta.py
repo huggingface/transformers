@@ -19,16 +19,10 @@ class DeeRobertaModel(DeeBertModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(DeeRobertaModel, self).__init__(config)
+        super().__init__(config)
 
         self.embeddings = RobertaEmbeddings(config)
         self.init_weights()
-
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
 
 
 @add_start_docstrings(
@@ -42,7 +36,7 @@ class DeeRobertaForSequenceClassification(BertPreTrainedModel):
     base_model_prefix = "roberta"
 
     def __init__(self, config):
-        super(DeeRobertaForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
         self.num_layers = config.num_hidden_layers
 

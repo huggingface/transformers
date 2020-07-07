@@ -24,7 +24,7 @@ def entropy(x):
 
 class DeeBertEncoder(nn.Module):
     def __init__(self, config):
-        super(DeeBertEncoder, self).__init__()
+        super().__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
@@ -108,7 +108,7 @@ class DeeBertEncoder(nn.Module):
 )
 class DeeBertModel(BertPreTrainedModel):
     def __init__(self, config):
-        super(DeeBertModel, self).__init__(config)
+        super().__init__(config)
         self.config = config
 
         self.embeddings = BertEmbeddings(config)
@@ -247,7 +247,7 @@ class BertHighway(nn.Module):
     """
 
     def __init__(self, config):
-        super(BertHighway, self).__init__()
+        super().__init__()
         self.pooler = BertPooler(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
@@ -278,7 +278,7 @@ class BertHighway(nn.Module):
 )
 class DeeBertForSequenceClassification(BertPreTrainedModel):
     def __init__(self, config):
-        super(DeeBertForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
         self.num_layers = config.num_hidden_layers
 

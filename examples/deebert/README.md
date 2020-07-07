@@ -1,7 +1,8 @@
 # DeeBERT: Early Exiting for *BERT
 
-This is the code base for the paper [DeeBERT: Dynamic Early Exiting for Accelerating BERT Inference](https://www.aclweb.org/anthology/2020.acl-main.204/).
+This is the code base for the paper [DeeBERT: Dynamic Early Exiting for Accelerating BERT Inference](https://www.aclweb.org/anthology/2020.acl-main.204/), modified from its [original code base](https://github.com/castorini/deebert).
 
+The original code base also has information for downloading sample models that we have trained in advance.
 
 ## Usage
 
