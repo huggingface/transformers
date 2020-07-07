@@ -416,14 +416,21 @@ if is_torch_available():
     )
 
     # Trainer
-    from .trainer import Trainer, torch_distributed_zero_first
+    from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
     from .data.data_collator import (
         default_data_collator,
         DataCollator,
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
     )
-    from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
+    from .data.datasets import (
+        GlueDataset,
+        TextDataset,
+        LineByLineTextDataset,
+        GlueDataTrainingArguments,
+        SquadDataset,
+        SquadDataTrainingArguments,
+    )
 
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
