@@ -369,7 +369,6 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
     DPR_START_DOCSTRING,
 )
 class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
-
     def __init__(self, config: DPRConfig):
         super().__init__(config)
         self.config = config
