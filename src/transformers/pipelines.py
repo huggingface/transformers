@@ -1032,7 +1032,7 @@ class TokenClassificationPipeline(Pipeline):
             return answers[0]
         return answers
 
-    def group_sub_entities(self, entities):
+    def group_sub_entities(self, entities: List[dict]) -> dict:
         """
         Returns grouped sub entities
         """
@@ -1048,7 +1048,7 @@ class TokenClassificationPipeline(Pipeline):
         }
         return entity_group
 
-    def group_entities(self, entities):
+    def group_entities(self, entities: List[dict]) -> List[dict]:
         """
         Returns grouped entities
         """
