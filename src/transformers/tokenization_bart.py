@@ -109,7 +109,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
     }
     id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
     cur_lang_code = lang_code_to_id["en_XX"]
-    prefix_tokens = []
+    prefix_tokens: List[int] = []
+    suffix_tokens: List[int] = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -119,7 +120,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.reset_special_tokens()
 
     def reset_special_tokens(self) -> None:
-        """Reset the special tokens to the source lang setting. No prefix and suffix [eos, cur_lang_code]."""
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
 
