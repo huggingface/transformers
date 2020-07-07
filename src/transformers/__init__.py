@@ -404,7 +404,6 @@ if is_torch_available():
         default_data_collator,
         DataCollator,
         DataCollatorForLanguageModeling,
-        DataCollatorForQuestionAnswering,
     )
     from .data.datasets import (
         GlueDataset,
