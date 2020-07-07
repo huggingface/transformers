@@ -407,7 +407,8 @@ class ReformerModelTester:
         model.to(torch_device)
         model.half()
         model.eval()
-        output = model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+        # only use last 10 inputs for generation
+        output = model.generate(input_ids[:, -10:], attention_mask=input_mask, do_sample=False)
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_reformer_no_chunking(self, config, input_ids, input_mask, choice_labels):
