@@ -2,7 +2,7 @@ import logging
 import os
 import pickle
 import time
-from typing import List
+from typing import Dict
 
 import torch
 from filelock import FileLock
@@ -93,32 +93,13 @@ class LineByLineTextDataset(Dataset):
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
 
         batch_encoding = tokenizer(lines, add_special_tokens=True, truncation=True, max_length=block_size)
-        self.examples = batch_encoding["input_ids"]
-
-    def __len__(self):
-        return len(self.examples)
-
-    def __getitem__(self, i) -> torch.Tensor:
-        return torch.tensor(self.examples[i], dtype=torch.long)
-
-
-class LineByLineTextMaskDataset(Dataset):
-
-    def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
-        assert os.path.isfile(file_path)
-        logger.info("Creating features from dataset file at %s", file_path)
-
-        with open(file_path, encoding="utf-8") as f:
-            lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
-
-        batch_encoding = tokenizer(lines, add_special_tokens=True, truncation=True, max_length=block_size)
         self.examples = batch_encoding
 
     def __len__(self):
         return len(self.examples["input_ids"])
 
-    def __getitem__(self, i) -> List[torch.Tensor]:
-        input_ids = torch.tensor(self.examples["input_ids"][i], dtype=torch.long)
-        token_type_ids = torch.tensor(self.examples["token_type_ids"][i], dtype=torch.long)
-        attention_mask = torch.tensor(self.examples["attention_mask"][i], dtype=torch.long)
-        return [input_ids, token_type_ids, attention_mask]
+    def __getitem__(self, i) -> Dict[str, torch.Tensor]:
+        example = {}
+        for k in self.examples.keys():
+            example[k] = torch.tensor(self.examples[k][i], dtype=torch.long)
+        return example
