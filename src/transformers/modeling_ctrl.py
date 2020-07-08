@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from .configuration_ctrl import CTRLConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_outputs import CausalLMOutputWithPast, BaseModelOutputWithPast
+from .modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from .modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
@@ -464,7 +464,10 @@ class CTRLModel(CTRLPreTrainedModel):
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states, past_key_values=presents, hidden_states=all_hidden_states, attentions=all_attentions,
+            last_hidden_state=hidden_states,
+            past_key_values=presents,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 

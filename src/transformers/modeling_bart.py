@@ -36,7 +36,6 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -297,7 +296,9 @@ class BartEncoder(nn.Module):
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
-    def forward(self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=False):
+    def forward(
+        self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=False
+    ):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -353,9 +354,7 @@ class BartEncoder(nn.Module):
 
         if return_tuple:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
 class DecoderLayer(nn.Module):
@@ -898,11 +897,10 @@ class BartModel(PretrainedBartModel):
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_tuple=False
         elif not return_tuple and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0], 
+                last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -920,7 +918,7 @@ class BartModel(PretrainedBartModel):
 
         if return_tuple:
             return decoder_outputs + encoder_outputs
-        
+
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             decoder_past_key_values=decoder_outputs.past_key_values,
@@ -1039,7 +1037,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             return_tuple=return_tuple,
         )
         lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
-        
+
         masked_lm_loss = None
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
@@ -1047,9 +1045,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if return_tuple:
-            output = (lm_logits,) + outputs[1:] 
+            output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-        
+
         return Seq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
@@ -1133,10 +1131,10 @@ class BartForSequenceClassification(PretrainedBartModel):
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC, 
+        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
         output_type=Seq2SeqSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC
+        config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
@@ -1178,15 +1176,15 @@ class BartForSequenceClassification(PretrainedBartModel):
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
-        
+
         loss = None
         if labels is not None:
             loss = F.cross_entropy(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if return_tuple:
-            output = (logits,) + outputs[1:] 
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
-        
+
         return Seq2SeqSequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -1218,10 +1216,10 @@ class BartForQuestionAnswering(PretrainedBartModel):
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC, 
+        tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/bart-large",
         output_type=Seq2SeqQuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC
+        config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
@@ -1290,7 +1288,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
         if return_tuple:
             output = (start_logits, end_logits,) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
-        
+
         return Seq2SeqQuestionAnsweringModelOutput(
             loss=total_loss,
             start_logits=start_logits,
