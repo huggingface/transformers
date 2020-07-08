@@ -25,6 +25,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     from transformers import (
         ReformerConfig,
+        ReformerForMaskedLM,
         ReformerModel,
         ReformerModelWithLMHead,
         ReformerTokenizer,
@@ -209,7 +210,24 @@ class ReformerModelTester:
         )
         self.check_loss_output(result)
 
-    def create_and_check_reformer_model_with_attn_mask(self, config, input_ids, input_mask, choice_labels, is_decoder):
+    def create_and_check_reformer_with_mlm(self, config, input_ids, input_mask, choice_labels):
+        config.is_decoder = False
+        model = ReformerForMaskedLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=input_ids)
+        result = {
+            "loss": loss,
+            "prediction_scores": prediction_scores,
+        }
+        self.parent.assertListEqual(
+            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size],
+        )
+        self.check_loss_output(result)
+
+    def create_and_check_reformer_model_with_attn_mask(
+        self, config, input_ids, input_mask, choice_labels, is_decoder=False
+    ):
         # no special position embeddings
         config.axial_pos_embds = False
         config.is_decoder = is_decoder
@@ -250,7 +268,9 @@ class ReformerModelTester:
 
         self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
 
-    def create_and_check_reformer_layer_dropout_seed(self, config, input_ids, input_mask, choice_labels, is_decoder):
+    def create_and_check_reformer_layer_dropout_seed(
+        self, config, input_ids, input_mask, choice_labels, is_decoder=False
+    ):
         config.is_decoder = is_decoder
         layer = ReformerLayer(config).to(torch_device)
         layer.train()
@@ -387,7 +407,8 @@ class ReformerModelTester:
         model.to(torch_device)
         model.half()
         model.eval()
-        output = model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+        # only use last 10 inputs for generation
+        output = model.generate(input_ids[:, -10:], attention_mask=input_mask, do_sample=False)
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_reformer_no_chunking(self, config, input_ids, input_mask, choice_labels):
@@ -441,17 +462,21 @@ class ReformerTesterMixin:
 
     def test_reformer_model_attn_masking(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, True)
-        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, False)
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, is_decoder=True)
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, is_decoder=False)
 
     def test_reformer_with_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_with_lm(*config_and_inputs)
 
+    def test_reformer_with_mlm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_with_mlm(*config_and_inputs)
+
     def test_reformer_layer_training_dropout(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, True)
-        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, False)
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=True)
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=False)
 
     def test_reformer_chunking_forward_equality(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -501,7 +526,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
             "batch_size": 13,
             "seq_length": 32,
             "is_training": True,
-            "is_decoder": False,
+            "is_decoder": True,
             "use_input_mask": True,
             "use_labels": True,
             "vocab_size": 32,
@@ -560,7 +585,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "use_input_mask": True,
             "use_labels": True,
             "is_training": False,
-            "is_decoder": False,
+            "is_decoder": True,
             "vocab_size": 32,
             "attention_head_size": 16,
             "hidden_size": 64,
@@ -599,7 +624,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
     """
-    These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/04/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "local" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `branch_to_save_trax_integration_tests`.
+    These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "local" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
     """
 
     def _get_basic_config_and_input(self):
@@ -910,13 +935,13 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["num_buckets"] = [2, 4]
         config["is_decoder"] = False
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(ReformerConfig(**config)).to(torch_device)
+        model = ReformerForMaskedLM(ReformerConfig(**config)).to(torch_device)
         model.eval()
         input_ids, attn_mask = self._get_input_ids_and_mask()
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[1, -1, :5]
         expected_output_slice = torch.tensor(
-            [0.0324, -0.0121, 0.0615, 0.0031, -0.0297], dtype=torch.float, device=torch_device,
+            [0.0256, -0.0121, 0.0636, 0.0024, -0.0393], dtype=torch.float, device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 
