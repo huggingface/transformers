@@ -223,7 +223,7 @@ class TensorFlowBenchmark(Benchmark):
                 end_time = time.time() - start_time
 
                 print("Time", end_time / 10)
-#                print("Grads", grads)
+                print("Grads", grads[0][0])
                 return end_time / 10
 
 
