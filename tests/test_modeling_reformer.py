@@ -446,10 +446,11 @@ class ReformerModelTester:
         return config, inputs_dict
 
     def create_and_check_reformer_for_sequence_classification(
-        self, config, input_ids, input_mask, choice_labels, sequence_labels
+        self, config, input_ids, input_mask, choice_labels, is_decoder
     ):
+        config.is_decoder = is_decoder
+        sequence_labels = ids_tensor([self.batch_size], config.num_labels)
         model = ReformerForSequenceClassification(config)
-        config.num_labels = self.num_labels
         model.to(torch_device)
         model.eval()
         loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
@@ -529,10 +530,7 @@ class ReformerTesterMixin:
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        batch_size = 13
-        type_sequence_label_size = 2
-        sequence_labels = ids_tensor([batch_size], type_sequence_label_size)
-        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, sequence_labels)
+        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, is_decoder=False)
 
 
 @require_torch
