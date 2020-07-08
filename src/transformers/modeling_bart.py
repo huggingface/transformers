@@ -893,6 +893,7 @@ class BartModel(PretrainedBartModel):
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                return_tuple=return_tuple,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_tuple=False
         elif not return_tuple and not isinstance(encoder_outputs, BaseModelOutput):
