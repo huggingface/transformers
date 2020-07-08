@@ -352,8 +352,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
-        output_attentions=False,
         buckets=None,
+        cached_hidden_states_and_buckets=None,
+        use_cache=False,
+        output_attentions=False,
         **kwargs
     ):
         sequence_length = hidden_states.shape[1]
@@ -362,9 +364,33 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # num hashes can optionally be overwritten by user
         num_hashes = num_hashes if num_hashes is not None else self.num_hashes
 
-        # project hidden_states to query_key and value
-        query_key_vectors = self.query_key(hidden_states)
-        value_vectors = self.value(hidden_states)
+        # check if cache shall be used and that hidden states are already cached
+        if use_cache and cached_hidden_states_and_buckets[1] is not None:
+            cached_buckets = cached_hidden_states_and_buckets[0]
+            cached_hidden_states = cached_hidden_states_and_buckets[1]
+
+            if cached_buckets is not None:
+                query_vectors = self.query_key(hidden_states)
+                buckets = self._hash_vectors(query_vectors, num_hashes, attention_mask)
+
+                key_value_hidden_states = self._retrieve_relevant_hidden_states(cached_hidden_states, self.chunk_length, self.num_chunks_before, cached_buckets, buckets, hidden_states)
+                # TODO: reshape for num hashes here
+            else:
+                hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
+
+            query_key_vectors = self.query_key(hidden_states)
+            # only query vector for last token
+            query_vectors = self.query(hidden_states)
+            # compute key and value for relevant chunk
+            key_vectors = self.key(key_value_hidden_states)
+            value_vectors = self.value(key_value_hidden_states)
+
+            # free memory
+            del key_value_hidden_states
+        else:
+            # project hidden_states to query_key and value
+            query_key_vectors = self.query_key(hidden_states)
+            value_vectors = self.value(hidden_states)
 
         # free memory
         del hidden_states
@@ -385,8 +411,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             value_vectors.shape[-1], self.attention_head_size
         )
 
+        has_to_run_lsh_attention_with_use_cache = (use_cache is True and cached_hidden_states_and_buckets[0] is None and cached_hidden_states_and_buckets[1].shape[1] >= sequence_length)
+        do_standard_self_attention = sequence_length <= self.chunk_length and not has_to_run_lsh_attention_with_use_cache
+
         # LSH attention only makes sense if chunked attention should be performed
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             # set `num_buckets` on the fly, recommended way to do it
             if self.num_buckets is None:
                 self._set_num_buckets(sequence_length)
@@ -439,14 +468,14 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             sorted_bucket_idx_per_hash=sorted_bucket_idx_per_hash,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            sequence_length=sequence_length,
+            do_standard_self_attention=do_standard_self_attention,
         )
 
         # free memory
         del query_key_vectors, key_vectors, value_vectors
 
         # re-order out_vectors and logits
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             # sort clusters back to correct ordering
             out_vectors, logits = ReverseSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
@@ -613,11 +642,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         sorted_bucket_idx_per_hash,
         attention_mask,
         head_mask,
-        sequence_length,
+        do_standard_self_attention,
     ):
 
         # look at previous and following chunks if chunked attention
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
             value_vectors = self._look_adjacent(value_vectors, self.num_chunks_before, self.num_chunks_after)
 
@@ -628,7 +657,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         del query_vectors, key_vectors
 
         # if chunked attention split bucket idxs to query and key
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             query_bucket_idx = self._split_seq_length_dim_to(
                 sorted_bucket_idx_per_hash, -1, self.chunk_length, self.num_attention_heads
             )
@@ -645,7 +674,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             mask_value = self.mask_value_float32
 
         mask = self._compute_attn_mask(
-            query_bucket_idx, key_value_bucket_idx, attention_mask, query_key_dots.shape, sequence_length
+            query_bucket_idx, key_value_bucket_idx, attention_mask, query_key_dots.shape, do_standard_self_attention
         )
 
         if mask is not None:
@@ -695,19 +724,19 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         del value_vectors
 
         # merge chunk length
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             logits = logits.flatten(start_dim=2, end_dim=3).squeeze(-1)
             out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
         return out_vectors, logits, attention_probs
 
-    def _compute_attn_mask(self, query_indices, key_indices, attention_mask, query_key_dot_shape, sequence_length):
+    def _compute_attn_mask(self, query_indices, key_indices, attention_mask, query_key_dot_shape, do_standard_self_attention):
 
         # attention mask for LSH
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]
-            if sequence_length > self.chunk_length:
+            if not do_standard_self_attention:
                 # expand attn_mask to fit with key_value_bucket_idx shape
                 attention_mask = attention_mask[:, None, :]
                 attention_mask = attention_mask.expand(query_indices.shape[:-1] + (-1,))
