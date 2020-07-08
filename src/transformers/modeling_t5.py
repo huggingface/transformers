@@ -27,13 +27,14 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_t5 import T5Config
-from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
-from .modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
+from .file_utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+    replace_return_docstrings,
 )
+from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
@@ -674,7 +675,7 @@ class T5Stack(T5PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None
+        return_tuple=None,
     ):
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -787,9 +788,16 @@ class T5Stack(T5PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if return_tuple:
-            return tuple(v for v in [hidden_states, present_key_value_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, present_key_value_states, all_hidden_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states, past_key_values=present_key_value_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            past_key_values=present_key_value_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
