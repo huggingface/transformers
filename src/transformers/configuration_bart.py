@@ -126,6 +126,9 @@ class BartConfig(PretrainedConfig):
 
         # pos embedding offset
         self.extra_pos_embeddings = self.pad_token_id + 1
+        
+        # use attn mask to define pos embedding
+        #self.use_attn_position_embeddings = use_attn_position_embeddings
 
     @property
     def num_attention_heads(self) -> int:

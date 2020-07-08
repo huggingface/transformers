@@ -56,7 +56,7 @@ class BlenderbotConfig(BartConfig):
         encoder_layers=2,
         encoder_attention_heads=32,
         decoder_ffn_dim=10240,
-        decoder_layers=24,
+        decoder_layers=4,
         decoder_attention_heads=32,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
@@ -70,13 +70,14 @@ class BlenderbotConfig(BartConfig):
         eos_token_id=2,
         unk_token_id=3,
         activation_function='gelu',
-        normalize_before=False,
+        normalize_before=True,
         add_final_layer_norm=False,
         scale_embedding=False,
-        normalize_embedding=True,
+        normalize_embedding=False,
         static_position_embeddings=False,
         is_encoder_decoder=True,
         extra_pos_embeddings=0,
+        use_attn_position_embeddings=True,
         **kwargs
     ):
         super().__init__(

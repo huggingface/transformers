@@ -203,3 +203,5 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
 
         past = ((new_enc_out, new_enc_mask), reordered_past)
         return past
+
+
