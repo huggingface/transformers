@@ -220,11 +220,11 @@ class TensorFlowBenchmark(Benchmark):
 #                runtimes = timeit.repeat(func, repeat=self.args.repeat, number=10,)
                 start_time = time.time()
                 grads = [func() for i in range(10)]
-                end_time = time.time()
+                end_time = time.time() - start_time
 
                 print("Time", end_time / 10)
-                print("Grads", grads)
-                return end_time
+#                print("Grads", grads)
+                return end_time / 10
 
 
 #                return min(runtimes) / 10.0
