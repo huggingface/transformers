@@ -1,13 +1,11 @@
 ---
 language: "ca"
 tags:
-  - pytorch
-  - albert
   - lm-head
   - masked-lm
   - catalan
   - exbert
-license: "MIT"
+license: mit
 ---
 
 # Calbert: a Catalan Language Model
