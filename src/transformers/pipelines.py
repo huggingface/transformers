@@ -1003,8 +1003,6 @@ class TokenClassificationPipeline(Pipeline):
             labels_idx = score.argmax(axis=-1)
 
             entities = []
-            entity_groups = []
-            entity_group_disagg = []
             # Filter to labels not in `self.ignore_labels`
             filtered_labels_idx = [
                 (idx, label_idx)
@@ -1020,37 +1018,13 @@ class TokenClassificationPipeline(Pipeline):
                     "entity": self.model.config.id2label[label_idx],
                     "index": idx,
                 }
-                last_idx, _ = filtered_labels_idx[-1]
-                if self.grouped_entities:
-                    if not entity_group_disagg:
-                        entity_group_disagg += [entity]
-                        if idx == last_idx:
-                            entity_groups += [self.group_entities(entity_group_disagg)]
-                        continue
-
-                    # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
-                    if (
-                        entity["entity"] == entity_group_disagg[-1]["entity"]
-                        and entity["index"] == entity_group_disagg[-1]["index"] + 1
-                    ):
-                        entity_group_disagg += [entity]
-                        # Group the entities at the last entity
-                        if idx == last_idx:
-                            entity_groups += [self.group_entities(entity_group_disagg)]
-                    # If the current entity is different from the previous entity, aggregate the disaggregated entity group
-                    else:
-                        entity_groups += [self.group_entities(entity_group_disagg)]
-                        entity_group_disagg = [entity]
 
                 entities += [entity]
 
-            # Ensure if an entity is the latest one in the sequence it gets appended to the output
-            if len(entity_group_disagg) > 0:
-                entity_groups.append(self.group_entities(entity_group_disagg))
-
-            # Append
+            # Append grouped entities
             if self.grouped_entities:
-                answers += [entity_groups]
+                answers += [self.group_entities(entities)]
+            # Append ungrouped entities
             else:
                 answers += [entities]
 
@@ -1058,12 +1032,12 @@ class TokenClassificationPipeline(Pipeline):
             return answers[0]
         return answers
 
-    def group_entities(self, entities):
+    def group_sub_entities(self, entities: List[dict]) -> dict:
         """
-        Returns grouped entities
+        Returns grouped sub entities
         """
-        # Get the last entity in the entity group
-        entity = entities[-1]["entity"]
+        # Get the first entity in the entity group
+        entity = entities[0]["entity"]
         scores = np.mean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
 
@@ -1073,6 +1047,45 @@ class TokenClassificationPipeline(Pipeline):
             "word": self.tokenizer.convert_tokens_to_string(tokens),
         }
         return entity_group
+
+    def group_entities(self, entities: List[dict]) -> List[dict]:
+        """
+        Returns grouped entities
+        """
+
+        entity_groups = []
+        entity_group_disagg = []
+
+        if entities:
+            last_idx = entities[-1]["index"]
+
+        for entity in entities:
+            is_last_idx = entity["index"] == last_idx
+            if not entity_group_disagg:
+                entity_group_disagg += [entity]
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+                continue
+
+            # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
+            # The split is meant to account for the "B" and "I" suffixes
+            if (
+                entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
+                and entity["index"] == entity_group_disagg[-1]["index"] + 1
+            ):
+                entity_group_disagg += [entity]
+                # Group the entities at the last entity
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+            # If the current entity is different from the previous entity, aggregate the disaggregated entity group
+            else:
+                entity_groups += [self.group_sub_entities(entity_group_disagg)]
+                entity_group_disagg = [entity]
+                # If it's the last entity, add it to the entity groups
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+
+        return entity_groups
 
 
 NerPipeline = TokenClassificationPipeline
