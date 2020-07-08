@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from .configuration_ctrl import CTRLConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_outputs import CausalLMOutputWithPast, EncoderOutputWithPast
+from .modeling_outputs import CausalLMOutputWithPast, BaseModelOutputWithPast
 from .modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
@@ -337,7 +337,7 @@ class CTRLModel(CTRLPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="ctrl",
-        output_type=EncoderOutputWithPast,
+        output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -463,8 +463,8 @@ class CTRLModel(CTRLPreTrainedModel):
         if return_tuple:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
 
-        return EncoderOutputWithPast(
-            last_hidden_state=hidden_states, past=presents, hidden_states=all_hidden_states, attentions=all_attentions,
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states, past_key_values=presents, hidden_states=all_hidden_states, attentions=all_attentions,
         )
 
 
@@ -557,7 +557,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=lm_logits,
-            past=transformer_outputs.past,
+            past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )

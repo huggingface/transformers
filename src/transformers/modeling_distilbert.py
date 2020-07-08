@@ -37,7 +37,7 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .modeling_outputs import (
-    EncoderOutput,
+    BaseModelOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -326,7 +326,7 @@ class Transformer(nn.Module):
 
         if return_tuple:
             return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)
-        return EncoderOutput(
+        return BaseModelOutput(
             last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
@@ -432,7 +432,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
-        output_type=EncoderOutput,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")

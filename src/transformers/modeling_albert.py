@@ -35,8 +35,8 @@ from .file_utils import (
 )
 from .modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
 from .modeling_outputs import (
-    EncoderOutput,
-    EncoderOutputWithPooling,
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -377,7 +377,7 @@ class AlbertTransformer(nn.Module):
 
         if return_tuple:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-        return EncoderOutput(
+        return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
@@ -515,7 +515,7 @@ class AlbertModel(AlbertPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="albert-base-v2",
-        output_type=EncoderOutputWithPooling,
+        output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -576,7 +576,7 @@ class AlbertModel(AlbertPreTrainedModel):
         if return_tuple:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return EncoderOutputWithPooling(
+        return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
