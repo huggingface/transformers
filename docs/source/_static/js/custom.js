@@ -149,6 +149,7 @@ function addHfMenu() {
     <div class="menu">
         <a href="/welcome">🔥 Sign in</a>
         <a href="/models">🚀 Models</a>
+        <a href="http://discuss.huggingface.co">💬 Forum</a>
     </div>
     `;
     document.body.insertAdjacentHTML('afterbegin', div);
