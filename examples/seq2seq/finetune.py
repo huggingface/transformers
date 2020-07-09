@@ -167,6 +167,7 @@ class SummarizationModule(BaseTransformer):
         t0 = time.time()
         generated_ids = self.model.generate(
             input_ids=source_ids,
+            max_length=self.hparams.max_target_length,
             attention_mask=source_mask,
             use_cache=True,
             decoder_start_token_id=self.decoder_start_token_id,
