@@ -1,6 +1,9 @@
 XLM-RoBERTa
 ------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The XLM-RoBERTa model was proposed in `Unsupervised Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`__
 by Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán,
 Edouard Grave, Myle Ott, Luke Zettlemoyer and Veselin Stoyanov. It is based on Facebook's RoBERTa model released in 2019.
@@ -27,6 +30,9 @@ Tips:
   language from the input ids.
 - This implementation is the same as RoBERTa. Refer to the `documentation of RoBERTa <./roberta.html>`__ for usage
   examples as well as the information relative to the inputs and outputs.
+
+The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/xlmr>`_.
+
 
 XLMRobertaConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,6 +84,13 @@ XLMRobertaForTokenClassification
     :members:
 
 
+XLMRobertaForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLMRobertaForQuestionAnswering
+    :members:
+
+
 TFXLMRobertaModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -99,8 +112,22 @@ TFXLMRobertaForSequenceClassification
     :members:
 
 
+TFXLMRobertaForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMRobertaForMultipleChoice
+    :members:
+
+
 TFXLMRobertaForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFXLMRobertaForTokenClassification
+    :members:
+
+
+TFXLMRobertaForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMRobertaForQuestionAnswering
     :members:

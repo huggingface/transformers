@@ -24,18 +24,19 @@ import os
 import pickle
 import re
 from collections import Counter, OrderedDict
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
-from tokenizers import Encoding, Tokenizer
+from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
-from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
+from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalizer_from_str
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
 from .file_utils import cached_path, is_torch_available
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 if is_torch_available():
@@ -80,6 +81,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,
@@ -100,13 +102,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             unk_token=unk_token, eos_token=eos_token, additional_special_tokens=additional_special_tokens, **kwargs
         )
 
-        self.max_len_single_sentence = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
-        self.max_len_sentences_pair = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
-
         if never_split is None:
             never_split = self.all_special_tokens
         if special is None:
@@ -119,7 +114,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.delimiter = delimiter
         self.vocab_file = vocab_file
         self.never_split = never_split
-        self.punctuation_symbols = '!"#$%&()*+,-./\:;<=>?@[\\]^_`{|}~'  # noqa: W605
+        self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
 
@@ -146,7 +141,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _compile_space_around_punctuation_pattern(self):
         look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
-        look_ahead_to_match_all_except_space = "(?=[^\s])"  # noqa: W605
+        look_ahead_to_match_all_except_space = r"(?=[^\s])"
         return re.compile(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space)
 
     def count_file(self, path, verbose=False, add_eos=False):
@@ -277,6 +272,33 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.idx2sym.append(sym)
             self.sym2idx[sym] = len(self.idx2sym) - 1
 
+    def move_added_token(self, token: str, target_idx: int):
+        """
+        Moves an added token to a specific position in the vocab.
+        This method should be used when resizing an embedding layer other than the last one in the `AdaptiveEmbedding`
+        in order to move the token in the tokenizer from the default position (at the very end) to the desired one.
+
+        Args:
+            token: The token to move to a specific position in the vocab.
+            target_idx: The position where the token should be moved to.
+        """
+        assert token in self.added_tokens_encoder, "Token which should be moved has to be an added token"
+        assert token not in self.idx2sym, "Token which should be moved is already in vocab"
+
+        # Insert sym into vocab
+        self.idx2sym.insert(target_idx, token)
+        self.sym2idx[token] = target_idx
+
+        # Shift following indices in sym2idx
+        for idx in range(target_idx + 1, len(self.idx2sym)):
+            current_sym = self.idx2sym[idx]
+            self.sym2idx[current_sym] = idx
+
+        # Delete token from added_tokens
+        old_index = self.added_tokens_encoder[token]
+        del self.added_tokens_decoder[old_index]
+        del self.added_tokens_encoder[token]
+
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
         assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
@@ -333,10 +355,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         else:
             return symbols
 
-    def prepare_for_tokenization(self, text, **kwargs):
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
         # add spaces before punctuation symbols as should be done in transfo-xl
-
-        if "add_space_before_punct_symbol" in kwargs and kwargs["add_space_before_punct_symbol"]:
+        add_space_before_punct_symbol = kwargs.pop("add_space_before_punct_symbol", False)
+        if add_space_before_punct_symbol:
             text = self.punctuation_with_space_around_pattern.sub(r" ", text)
         elif self.punction_without_space_before_pattern.search(text):
             # searches until the first occurence of a punctuation symbol without surrounding spaces
@@ -344,7 +366,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
             )
 
-        return text
+        return (text, kwargs)
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
@@ -361,7 +383,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
     ):
 
         try:
-            tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
+            tokenizer = WordLevel(vocab_file, unk_token=unk_token)
             tokenizer = Tokenizer(tokenizer)
         except Exception:
             raise ValueError(
@@ -380,6 +402,9 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         # Include case normalization
         if lowercase:
             normalizer += [Lowercase()]
+
+        # Strip normalizer at the end
+        normalizer += [Strip(left=True, right=True)]
 
         if len(normalizer) > 0:
             tokenizer.normalizer = Sequence(normalizer) if len(normalizer) > 1 else normalizer[0]
@@ -404,20 +429,23 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
 
         super().__init__(tokenizer, parameters)
 
-    def encode_batch(self, sequences: List[Union[str, Tuple[str, str]]]) -> List[Encoding]:
-        return super().encode_batch(
-            [seq.strip() if isinstance(seq, str) else (seq[0].strip(), seq[1].strip()) for seq in sequences]
-        )
-
-    def encode(self, sequence: str, pair: Optional[str] = None) -> Encoding:
-        return super().encode(sequence.strip(), pair.strip() if pair else pair)
-
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
+    """
+    Construct a "Fast" Transformer-XL tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    The Transformer-XL tokenizer is a word-level tokenizer (no sub-word tokenization).
+
+    Adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+    """
 
     vocab_files_names = VOCAB_FILES_NAMES_FAST
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP_FAST
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,

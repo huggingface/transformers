@@ -17,10 +17,10 @@
 import os
 import unittest
 
+from transformers.testing_utils import slow
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import slow
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
@@ -36,14 +36,6 @@ class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # We have a SentencePiece fixture for testing
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return XLNetTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_input_output_texts(self):
-        input_text = "This is a test"
-        output_text = "This is a test"
-        return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = XLNetTokenizer(SAMPLE_VOCAB, keep_accents=True)

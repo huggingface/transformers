@@ -44,8 +44,15 @@ Did not find it? :( So we can act quickly on it, please follow these steps:
 To get the OS and software versions automatically, you can run the following command:
 
 ```bash
-python transformers-cli env
+transformers-cli env
 ```
+
+or from the root of the repository the following command:
+
+```bash
+python src/transformers/commands/transformers_cli.py env
+```
+
 
 ### Do you want to implement a new model?
 
@@ -58,7 +65,8 @@ Awesome! Please provide the following information:
 If you are willing to contribute the model yourself, let us know so we can best
 guide you.
 
-We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder.
+We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them 
+in the [`templates`](https://github.com/huggingface/transformers/templates) folder.
 
 ### Do you want a new feature (that is not a model)?
 
@@ -79,7 +87,9 @@ A world-class feature request addresses the following points:
 If your issue is well written we're already 80% of the way there by the time you
 post it.
 
-We have added **templates** to guide you in the process of adding a new example script for training or testing the models in the library. You can find them in the [`templates`](./templates) folder.
+We have added **templates** to guide you in the process of adding a new example script for training or testing the 
+models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/templates) 
+folder.
 
 ## Start contributing! (Pull Requests)
 
@@ -130,7 +140,6 @@ Follow these steps to start contributing:
    ```bash
    $ pip install -U git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
    ```
-
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
@@ -199,15 +208,22 @@ Follow these steps to start contributing:
    are useful to avoid duplicated work, and to differentiate it from PRs ready
    to be merged;
 4. Make sure existing tests pass;
-5. Add high-coverage tests. No quality test, no merge. 
- - If you are adding a new model, make sure that you use `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`, which triggers the common tests.
- - If you are adding new `@slow` tests, make sure they pass using `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
-CircleCI does not run them. 
-6. All public methods must have informative docstrings;
+5. Add high-coverage tests. No quality testing = no merge. 
+   - If you are adding a new model, make sure that you use 
+     `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`, which triggers the common tests.
+   - If you are adding new `@slow` tests, make sure they pass using 
+     `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
+   - If you are adding a new tokenizer, write tests, and make sure 
+     `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
+   CircleCI does not run the slow tests. 
+6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an 
+   example.
 
 ### Tests
 
-You can run 🤗 Transformers tests with `unittest` or `pytest`.
+An extensive test suite is included to test the library behavior and several examples. Library tests can be found in 
+the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the 
+[examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the
 repository, here's how to run tests with `pytest` for the library:
@@ -254,7 +270,8 @@ $ python -m unittest discover -s examples -t examples -v
 
 ### Style guide
 
-For documentation strings, `transformers` follows the [google
-style](https://google.github.io/styleguide/pyguide.html).
+For documentation strings, `transformers` follows the [google style](https://google.github.io/styleguide/pyguide.html).
+Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/master/docs#writing-documentation---specification)
+for more information.
 
 #### This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/master/CONTRIBUTING.md)

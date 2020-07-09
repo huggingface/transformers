@@ -1,3 +1,9 @@
+---
+thumbnail: https://huggingface.co/front/thumbnails/google.png
+
+license: apache-2.0
+---
+
 BERT Miniatures
 ===
 

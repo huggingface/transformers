@@ -5,6 +5,8 @@ To create the package for pypi.
 
 1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
 
+2. Unpin specific versions from setup.py (like isort).
+
 2. Commit these changes with the message: "Release: VERSION"
 
 3. Add a tag in git to mark the release: "git tag VERSION -m'Adds tag VERSION for pypi' "
@@ -34,7 +36,7 @@ To create the package for pypi.
 
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-8. Update the documentation commit in .circleci/deploy.sh for the accurate documentation to be displayed
+8. Add the release version to docs/source/_static/js/custom.js and .circleci/deploy.sh
 
 9. Update README.md to redirect to correct documentation.
 """
@@ -63,25 +65,45 @@ if stale_egg_info.exists():
 
 extras = {}
 
-extras["mecab"] = ["mecab-python3"]
-extras["sklearn"] = ["scikit-learn==0.22.1"]
-extras["tf"] = ["tensorflow"]
-extras["tf-cpu"] = ["tensorflow-cpu"]
+extras["mecab"] = ["mecab-python3<1"]
+extras["sklearn"] = ["scikit-learn"]
+
+# keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
+extras["tf"] = [
+    "tensorflow",
+    # "onnxconverter-common",
+    # "keras2onnx"
+    "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
+    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx"
+]
+extras["tf-cpu"] = [
+    "tensorflow-cpu",
+    # "onnxconverter-common",
+    # "keras2onnx"
+    "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
+    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx"
+]
 extras["torch"] = ["torch"]
 extras["xlm"] = ["sacremoses"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
-extras["testing"] = ["pytest", "pytest-xdist"]
-extras["quality"] = ["black", "isort", "flake8"]
-extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "psutil"]
+# sphinx-rtd-theme==0.5.0 introduced big changes in the style.
+extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
+extras["quality"] = [
+    "black",
+    # "isort",
+    "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
+    "flake8",
+]
+extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3<1", "scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",
-    version="2.5.1",
-    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
+    version="3.0.2",
+    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
     long_description=open("README.md", "r", encoding="utf-8").read(),
@@ -93,9 +115,11 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.5.2",
-        # accessing files from S3 directly
-        "boto3",
+        "tokenizers == 0.8.1.rc1",
+        # dataclasses for Python versions that don't have it
+        "dataclasses;python_version<'3.7'",
+        # utilities from PyPA to e.g. compare versions
+        "packaging",
         # filesystem locks e.g. to prevent parallel downloads
         "filelock",
         # for downloading models over HTTPS
@@ -105,11 +129,13 @@ setup(
         # for OpenAI GPT
         "regex != 2019.12.17",
         # for XLNet
-        "sentencepiece",
+        "sentencepiece != 0.1.92",
     ],
     extras_require=extras,
-    scripts=["transformers-cli"],
-    python_requires=">=3.5.0",
+    entry_points={
+        "console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]
+    },
+    python_requires=">=3.6.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
@@ -118,7 +144,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",

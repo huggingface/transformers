@@ -1,4 +1,4 @@
-Optimizer
+Optimization
 ----------------------------------------------------
 
 The ``.optimization`` module provides:
@@ -7,25 +7,25 @@ The ``.optimization`` module provides:
 - several schedules in the form of schedule objects that inherit from ``_LRSchedule``:
 - a gradient accumulation class to accumulate the gradients of multiple batches
 
-``AdamW``
-~~~~~~~~~~~~~~~~
+``AdamW`` (PyTorch)
+~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AdamW
     :members:
 
-``AdamWeightDecay``
-~~~~~~~~~~~~~~~~~~~
+``AdamWeightDecay`` (TensorFlow)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AdamWeightDecay
-    :members:
 
 .. autofunction:: transformers.create_optimizer
 
 Schedules
-----------------------------------------------------
+~~~~~~~~~~~~~~~~~~~
 
-Learning Rate Schedules
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Learning Rate Schedules (Pytorch)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 .. autofunction:: transformers.get_constant_schedule
 
 
@@ -57,16 +57,16 @@ Learning Rate Schedules
     :target: /imgs/warmup_linear_schedule.png
     :alt:
 
-``Warmup``
-~~~~~~~~~~~~~~~~
+``Warmup`` (TensorFlow)
+^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.WarmUp
     :members:
 
 Gradient Strategies
-----------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~
 
-``GradientAccumulator``
-~~~~~~~~~~~~~~~~~~~~~~~
+``GradientAccumulator`` (TensorFlow)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.GradientAccumulator

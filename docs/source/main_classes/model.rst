@@ -14,6 +14,12 @@ The base class ``PreTrainedModel`` implements the common methods for loading/sav
 .. autoclass:: transformers.PreTrainedModel
     :members:
 
+``Helper Functions``
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: transformers.apply_chunking_to_forward
+
+
 ``TFPreTrainedModel``
 ~~~~~~~~~~~~~~~~~~~~~
 
