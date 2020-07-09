@@ -361,7 +361,7 @@ class PretrainedConfig(object):
     @classmethod
     def from_json_file(cls, json_file: str) -> "PretrainedConfig":
         """
-        Instantiates a `Config` from the path to a json file of parameters.
+        Instantiates a :class:`~transformers.PretrainedConfig` from the path to a json file of parameters.
 
         Args:
             json_file (:obj:`str`):
@@ -428,7 +428,7 @@ class PretrainedConfig(object):
         Args:
             use_diff (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 If set to ``True``, only the difference between the config instance and the default
-                :class:`~transformers.PretrainedConfig` is serialized to JSON string.
+                ``PretrainedConfig()`` is serialized to JSON string.
 
         Returns:
             :obj:`str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -448,7 +448,7 @@ class PretrainedConfig(object):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
             use_diff (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 If set to ``True``, only the difference between the config instance and the default
-                :class:`~transformers.PretrainedConfig` is serialized to JSON file.
+                ``PretrainedConfig()`` is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
