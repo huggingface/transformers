@@ -12,6 +12,10 @@ from ...tokenization_bert import whitespace_tokenize
 from .utils import DataProcessor
 
 
+# Store the tokenizers which insert 2 separators tokens
+MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
+
+
 if is_torch_available():
     import torch
     from torch.utils.data import TensorDataset
@@ -124,10 +128,12 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
         example.question_text, add_special_tokens=False, truncation=True, max_length=max_query_length
     )
 
+    # Tokenizers who insert 2 SEP tokens in-between <context> & <question> need to have special handling
+    # in the way they compute mask of added tokens.
     tokenizer_type = type(tokenizer).__name__.replace("Tokenizer", "").lower()
     sequence_added_tokens = (
         tokenizer.max_len - tokenizer.max_len_single_sentence + 1
-        if tokenizer_type in {"roberta", "camembert", "bart"}
+        if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
         else tokenizer.max_len - tokenizer.max_len_single_sentence
     )
     sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair
