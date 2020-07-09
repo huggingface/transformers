@@ -61,7 +61,7 @@ class PretrainedConfig(object):
                 2.
             xla_device (:obj:`bool`, `optional`):
                 A flag to indicate if TPU are available or not.
-        
+
         Parameters for sequence generation
             - **max_length** (:obj:`int`, `optional`, defaults to :obj:`20`) -- Maximum length that will be used by
               default to the :obj:`generate` method of the model.
