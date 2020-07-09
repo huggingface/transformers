@@ -426,10 +426,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_pretokenized:
+                    return self.convert_tokens_to_ids(text)
+                else:
                     tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
                     return self.convert_tokens_to_ids(tokens)
-                else:
-                    return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
@@ -506,10 +506,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
                 if is_pretokenized:
+                    return self.convert_tokens_to_ids(text)
+                else:
                     tokens = list(itertools.chain(*(self.tokenize(t, is_pretokenized=True, **kwargs) for t in text)))
                     return self.convert_tokens_to_ids(tokens)
-                else:
-                    return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
