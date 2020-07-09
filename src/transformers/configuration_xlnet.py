@@ -15,11 +15,10 @@
 # limitations under the License.
 """ XLNet configuration """
 
-
 import logging
+import warnings
 
 from .configuration_utils import PretrainedConfig
-
 
 logger = logging.getLogger(__name__)
 
@@ -128,33 +127,33 @@ class XLNetConfig(PretrainedConfig):
     model_type = "xlnet"
 
     def __init__(
-        self,
-        vocab_size=32000,
-        d_model=1024,
-        n_layer=24,
-        n_head=16,
-        d_inner=4096,
-        ff_activation="gelu",
-        untie_r=True,
-        attn_type="bi",
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        dropout=0.1,
-        mem_len=None,
-        reuse_len=None,
-        bi_data=False,
-        clamp_len=-1,
-        same_length=False,
-        summary_type="last",
-        summary_use_proj=True,
-        summary_activation="tanh",
-        summary_last_dropout=0.1,
-        start_n_top=5,
-        end_n_top=5,
-        pad_token_id=5,
-        bos_token_id=1,
-        eos_token_id=2,
-        **kwargs
+            self,
+            vocab_size=32000,
+            d_model=1024,
+            n_layer=24,
+            n_head=16,
+            d_inner=4096,
+            ff_activation="gelu",
+            untie_r=True,
+            attn_type="bi",
+            initializer_range=0.02,
+            layer_norm_eps=1e-12,
+            dropout=0.1,
+            mem_len=None,
+            reuse_len=None,
+            bi_data=False,
+            clamp_len=-1,
+            same_length=False,
+            summary_type="last",
+            summary_use_proj=True,
+            summary_activation="tanh",
+            summary_last_dropout=0.1,
+            start_n_top=5,
+            end_n_top=5,
+            pad_token_id=5,
+            bos_token_id=1,
+            eos_token_id=2,
+            **kwargs
     ):
         """Constructs XLNetConfig.
         """
@@ -166,7 +165,7 @@ class XLNetConfig(PretrainedConfig):
         assert d_model % n_head == 0
         if "d_head" in kwargs:
             assert (
-                kwargs["d_head"] == d_model // n_head
+                    kwargs["d_head"] == d_model // n_head
             ), f"`d_head` ({kwargs['d_head']}) should be equal to `d_model // n_head` ({d_model // n_head})"
         self.d_head = d_model // n_head
         self.ff_activation = ff_activation
@@ -194,6 +193,14 @@ class XLNetConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+
+        if mem_len is None or mem_len == 0:
+            warnings.warn("This config doesn't use attention memories, a core feature of XLNet."
+                          " Consider setting `men_len` to a non-zero value, for example "
+                          "`xlnet = XLNetLMHeadModel.from_pretrained('xlnet-base-cased'', mem_len=1024)`,"
+                          " for accurate training performance as well as an order of magnitude faster inference."
+                          " Starting from version 3.5.0, the default parameter will be 1024, following"
+                          " the implementation in https://arxiv.org/abs/1906.08237", FutureWarning)
 
     @property
     def max_position_embeddings(self):
