@@ -30,6 +30,7 @@ from .modeling_tf_xlm import (
     TFXLMForTokenClassification,
     TFXLMMainLayer,
     TFXLMModel,
+    TFXLMPredLayer,
     TFXLMWithLMHeadModel,
     get_masks,
 )
@@ -123,6 +124,8 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         super().__init__(config, *inputs, **kwargs)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
 
     def call(
         self,
@@ -136,8 +139,8 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
-        output_attentions=False,
-        output_hidden_states=False,
+        output_attentions=None,
+        output_hidden_states=None,
     ):
         # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
@@ -150,7 +153,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             cache = inputs[6] if len(inputs) > 6 else cache
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
-            assert len(inputs) <= 9, "Too many inputs."
+            output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
+            output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -161,9 +166,14 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             cache = inputs.get("cache", cache)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -249,7 +259,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         for i in range(self.n_layers):
             # LayerDrop
             dropout_probability = random.uniform(0, 1)
-            if training and (dropout_probability < self.layerdrop):
+            if training and dropout_probability < self.layerdrop:
                 continue
 
             if output_hidden_states:
@@ -257,9 +267,12 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 
             # self attention
             if not self.pre_norm:
-                attn_outputs = self.attentions[i]([tensor, attn_mask, None, cache, head_mask[i]], training=training)
+                attn_outputs = self.attentions[i](
+                    [tensor, attn_mask, None, cache, head_mask[i], output_attentions], training=training
+                )
                 attn = attn_outputs[0]
-                attentions = attentions + (attn_outputs[1],)
+                if output_attentions:
+                    attentions = attentions + (attn_outputs[1],)
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
                 tensor = self.layer_norm1[i](tensor)
@@ -321,6 +334,7 @@ class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
+        self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
 
 
 @add_start_docstrings(
