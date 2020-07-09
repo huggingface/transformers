@@ -103,6 +103,8 @@ from .modeling_flaubert import (
     FlaubertForTokenClassification,
     FlaubertModel,
     FlaubertWithLMHeadModel,
+    FlaubertForTokenClassification,
+    FlaubertForMultipleChoice
 )
 from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
 from .modeling_longformer import (
@@ -339,6 +341,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
+        (FlaubertConfig, FlaubertForTokenClassification)
     ]
 )
 
@@ -355,6 +358,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForMultipleChoice),
         (AlbertConfig, AlbertForMultipleChoice),
         (XLMConfig, XLMForMultipleChoice),
+        (FlaubertConfig, FlaubertForMultipleChoice)
     ]
 )
 

@@ -168,7 +168,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 9, "Too many inputs."
+            assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -259,7 +259,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         for i in range(self.n_layers):
             # LayerDrop
             dropout_probability = random.uniform(0, 1)
-            if training and dropout_probability < self.layerdrop:
+            if training and (dropout_probability < self.layerdrop):
                 continue
 
             if output_hidden_states:
