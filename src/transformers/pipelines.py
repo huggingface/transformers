@@ -1287,9 +1287,6 @@ class QuestionAnsweringPipeline(Pipeline):
                 # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
                 undesired_tokens = np.abs(np.array(feature.p_mask) - 1) & feature.attention_mask
 
-                # Mask CLS
-                undesired_tokens[0] = 0.0
-
                 # Generate mask
                 undesired_tokens_mask = undesired_tokens == 0.0
 
@@ -1303,6 +1300,9 @@ class QuestionAnsweringPipeline(Pipeline):
 
                 if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+
+                # Mask CLS
+                undesired_tokens[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)
