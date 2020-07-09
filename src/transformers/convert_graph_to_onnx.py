@@ -1,9 +1,9 @@
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 from os import listdir, makedirs
 from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
 
-from transformers import is_tf_available, is_torch_available
+from transformers import is_tf_available, is_torch_available, AutoTokenizer, AutoModel
 from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
 
@@ -36,8 +36,18 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb")
-        self.add_argument("output")
+        self.add_argument("output", type=abspath)
 
+def get_tokenizer_and_model(tokenizer_name, model_name):
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    model = AutoModel.from_pretrained(model_name)
+    return tokenizer, model
+
+def ensure_onnx_requirements_met(args):
+    import torch
+    if (args.framework == 'pt') and args.use_external_format and (torch.__version__ < "1.5.0"):
+        raise ArgumentTypeError(f"use-external-format requires torch>=1.5.0\n"
+                                f"Update your pytorch version, or if your model is <2Gb set '--use-external-format false'")
 
 def ensure_valid_input(model, tokens, input_names):
     """
@@ -51,9 +61,9 @@ def ensure_valid_input(model, tokens, input_names):
 
     """
     print("Ensuring inputs are in correct order")
-
     model_args_name = model.forward.__code__.co_varnames
     model_args, ordered_input_names = [], []
+
     for arg_name in model_args_name[1:]:  # start at index 1 to skip "self" argument
         if arg_name in input_names:
             ordered_input_names.append(arg_name)
@@ -143,18 +153,24 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format:
     with torch.no_grad():
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
         ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
+        kwargs = {
+            'f': output,
+            'input_names': ordered_input_names,
+            'output_names': output_names,
+            'dynamic_axes': dynamic_axes,
+            'do_constant_folding': True,
+            'enable_onnx_checker': True,
+            'opset_version': opset,
+        }
+
+        # Older versions of pytorch do not have the use_external_data_format option
+        if use_external_format:
+            kwargs['use_external_data_format'] = True
 
         export(
             nlp.model,
             model_args,
-            f=output,
-            input_names=ordered_input_names,
-            output_names=output_names,
-            dynamic_axes=dynamic_axes,
-            do_constant_folding=True,
-            use_external_data_format=use_external_format,
-            enable_onnx_checker=True,
-            opset_version=opset,
+            **kwargs
         )
 
 
@@ -191,9 +207,12 @@ def convert(
     opset: int,
     tokenizer: Optional[str] = None,
     use_external_format: bool = False,
-    pipeline_name: str = "feature-extraction",
+    pipeline_name: Optional[str] = "feature-extraction",
 ):
     print("ONNX opset version set to: {}".format(opset))
+
+    if tokenizer:
+
 
     # Load the pipeline
     nlp = load_graph_from_args(pipeline_name, framework, model, tokenizer)
@@ -228,9 +247,15 @@ def verify(path: str):
 if __name__ == "__main__":
     parser = OnnxConverterArgumentParser()
     args = parser.parse_args()
+    ensure_onnx_requirements_met(args)
 
-    # Make sure output is absolute path
-    args.output = abspath(args.output)
+    if (args.pipeline is None) and (args.tokenizer is None):
+        args.tokenizer = args.model
+
+    if args.pipeline is not None:
+        if tokenizer is None:
+            args.tokenizer = args.pipeline.tokenizer
+        args.model = args.pipeline.model
 
     try:
         # Convert
