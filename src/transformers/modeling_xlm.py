@@ -19,6 +19,8 @@
 import itertools
 import logging
 import math
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -29,6 +31,7 @@ from torch.nn import functional as F
 from .activations import gelu
 from .configuration_xlm import XLMConfig
 from .file_utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
@@ -38,7 +41,6 @@ from .modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
     QuestionAnsweringModelOutput,
-    QuestionAnsweringModelWithSquadHeadOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
@@ -252,6 +254,47 @@ class XLMPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+
+
+@dataclass
+class XLMForQuestionAnsweringOutput(ModelOutput):
+    """
+    Base class for outputs of question answering models using a :obj:`SquadHead`.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
+            Classification loss as the sum of start token, end token (and is_impossible if provided) classification losses.
+        start_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
+            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
+        start_top_index (``torch.LongTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
+            Indices for the top config.start_n_top start token possibilities (beam-search).
+        end_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
+            Log probabilities for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
+        end_top_index (``torch.LongTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
+            Indices for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
+        cls_logits (``torch.FloatTensor`` of shape ``(batch_size,)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
+            Log probabilities for the ``is_impossible`` label of the answers.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    start_top_log_probs: Optional[torch.FloatTensor] = None
+    start_top_index: Optional[torch.LongTensor] = None
+    end_top_log_probs: Optional[torch.FloatTensor] = None
+    end_top_index: Optional[torch.LongTensor] = None
+    cls_logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 XLM_START_DOCSTRING = r"""
@@ -893,7 +936,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=QuestionAnsweringModelWithSquadHeadOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=XLMForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -980,7 +1023,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         if return_tuple:
             return outputs + transformer_outputs[1:]
 
-        return QuestionAnsweringModelWithSquadHeadOutput(
+        return XLMForQuestionAnsweringOutput(
             loss=outputs.loss,
             start_top_log_probs=outputs.start_top_log_probs,
             start_top_index=outputs.start_top_index,

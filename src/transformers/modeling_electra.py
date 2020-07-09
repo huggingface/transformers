@@ -185,6 +185,35 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
     base_model_prefix = "electra"
 
 
+@dataclass
+class ElectraForPretrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.ElectraForPretrainingModel`.
+
+    Args:
+        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Total loss of the ELECTRA objective.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`)
+            Prediction scores of the head (scores for each token before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor]
+    logits: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 ELECTRA_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
@@ -445,35 +474,6 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
         )
-
-
-@dataclass
-class ElectraForPretrainingOutput(ModelOutput):
-    """
-    Output type of :class:`~transformers.ElectraForPretrainingModel`.
-
-    Args:
-        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Total loss of the ELECTRA objective.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`)
-            Prediction scores of the head (scores for each token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @add_start_docstrings(

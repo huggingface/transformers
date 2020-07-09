@@ -404,6 +404,39 @@ class AlbertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+@dataclass
+class AlbertForPretrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.AlbertForPretrainingModel`.
+
+    Args:
+        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
+        prediction_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        sop_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False
+            continuation before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor]
+    prediction_logits: torch.FloatTensor
+    sop_logits: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 ALBERT_START_DOCSTRING = r"""
 
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
@@ -582,39 +615,6 @@ class AlbertModel(AlbertPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-@dataclass
-class AlbertForPretrainingOutput(ModelOutput):
-    """
-    Output type of :class:`~transformers.AlbertForPretrainingModel`.
-
-    Args:
-        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
-        prediction_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        sop_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False
-            continuation before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor]
-    prediction_logits: torch.FloatTensor
-    sop_logits: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @add_start_docstrings(
