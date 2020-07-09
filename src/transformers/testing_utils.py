@@ -4,6 +4,7 @@ from distutils.util import strtobool
 
 from transformers.file_utils import _tf_available, _torch_available, _torch_tpu_available
 
+
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKWOWN_IDENTIFIER = "julien-c/dummy-unknown"
 # Used to test Auto{Config, Model, Tokenizer} model_type detection.

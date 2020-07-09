@@ -23,6 +23,7 @@ from unittest.mock import patch
 
 from transformers.testing_utils import require_torch_tpu
 
+
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
@@ -39,6 +40,7 @@ def get_setup_file():
 class TorchXLAExamplesTests(unittest.TestCase):
     def test_run_glue(self):
         import xla_spawn
+
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
