@@ -5,7 +5,7 @@ By [Mawdoo3-AI](https://ai.mawdoo3.com/).
 
 <p align="center">
     <br>
-    <img src="https://github.com/mawdoo3/Multi-dialect-Arabic-BERT/blob/master/multidialct_arabic_bert.png" alt="Background reference: http://www.qfi.org/wp-content/uploads/2018/02/Qfi_Infographic_Mother-Language_Final.pdf" width="500"/>
+    <img src="https://raw.githubusercontent.com/mawdoo3/Multi-dialect-Arabic-BERT/master/multidialct_arabic_bert.png" alt="Background reference: http://www.qfi.org/wp-content/uploads/2018/02/Qfi_Infographic_Mother-Language_Final.pdf" width="500"/>
     <br>
 <p>
 
