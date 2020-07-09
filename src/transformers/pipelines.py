@@ -687,36 +687,38 @@ class TextGenerationPipeline(Pipeline):
 
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
 
-            result = []
-            for generated_sequence in output_sequences:
-                generated_sequence = generated_sequence.numpy().tolist()
-                record = {}
-                if return_tensors:
-                    record["generated_token_ids"] = generated_sequence
-                if return_text:
-                    # Decode text
-                    text = self.tokenizer.decode(
-                        generated_sequence,
-                        skip_special_tokens=True,
-                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                    )
-
-                    # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
-                    if input_ids is None:
-                        prompt_length = 0
-                    else:
-                        prompt_length = len(
-                            self.tokenizer.decode(
-                                input_ids[0],
-                                skip_special_tokens=True,
-                                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                            )
+                result = []
+                for generated_sequence in output_sequences:
+                    if self.framework == "pt" and generated_sequence is not None:
+                        generated_sequence = generated_sequence.cpu()
+                    generated_sequence = generated_sequence.numpy().tolist()
+                    record = {}
+                    if return_tensors:
+                        record["generated_token_ids"] = generated_sequence
+                    if return_text:
+                        # Decode text
+                        text = self.tokenizer.decode(
+                            generated_sequence,
+                            skip_special_tokens=True,
+                            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
 
-                    record["generated_text"] = prompt_text + text[prompt_length:]
+                        # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
+                        if input_ids is None:
+                            prompt_length = 0
+                        else:
+                            prompt_length = len(
+                                self.tokenizer.decode(
+                                    input_ids[0],
+                                    skip_special_tokens=True,
+                                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                                )
+                            )
 
-                result.append(record)
-            results += [result]
+                        record["generated_text"] = prompt_text + text[prompt_length:]
+
+                    result.append(record)
+                results += [result]
 
         if len(results) == 1:
             return results[0]
