@@ -28,7 +28,13 @@ from torch.nn import functional as F
 
 from .activations import gelu_new, swish
 from .configuration_xlnet import XLNetConfig
-from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
 from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
 
 
@@ -1225,7 +1231,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
         if return_tuple:
             return tuple(v for v in [output, new_mems, hidden_states, attentions] if v is not None)
-        
+
         return XLNetModelOutput(
             last_hidden_state=output, mems=new_mems, hidden_states=hidden_states, attentions=attentions
         )
@@ -1561,7 +1567,11 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return XLNetForTokenClassificationOutput(
-            loss=loss, logits=logits, mems=outputs.mems, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            mems=outputs.mems,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1649,7 +1659,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels.view(-1))
-            outputs = (loss,) + outputs
 
         if return_tuple:
             output = (reshaped_logits,) + transformer_outputs[1:]
