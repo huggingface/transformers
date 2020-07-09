@@ -73,7 +73,7 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install -r examples/requirements.txt
-            - run: python -m pytest -n 8 --dist=loadfile -s ./examples/ --ignore=examples/test_xla_examples.py | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s ./examples/ | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt
