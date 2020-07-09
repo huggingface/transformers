@@ -28,11 +28,15 @@ from torch.nn import functional as F
 
 from .activations import gelu
 from .configuration_xlm import XLMConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
 from .modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
-    MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     QuestionAnsweringModelWithSquadHeadOutput,
     SequenceClassifierOutput,
@@ -548,9 +552,7 @@ class XLMModel(XLMPreTrainedModel):
 
         if return_tuple:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions
-        )
+        return BaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
 class XLMPredLayer(nn.Module):
@@ -674,8 +676,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         )
 
         output = transformer_outputs[0]
-        outputs = self.pred_layer(output, labels) # (loss, logits) or (logits,) depending on if labels are provided.
-        
+        outputs = self.pred_layer(output, labels)  # (loss, logits) or (logits,) depending on if labels are provided.
+
         if return_tuple:
             return outputs + transformer_outputs[1:]
 
@@ -767,7 +769,10 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
 
 

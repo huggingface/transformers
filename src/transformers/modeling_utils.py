@@ -1023,7 +1023,14 @@ class SQuADHead(nn.Module):
         self.answer_class = PoolerAnswerClass(config)
 
     def forward(
-        self, hidden_states, start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None, return_tuple=False,
+        self,
+        hidden_states,
+        start_positions=None,
+        end_positions=None,
+        cls_index=None,
+        is_impossible=None,
+        p_mask=None,
+        return_tuple=False,
     ):
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 
