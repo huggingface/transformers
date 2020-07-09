@@ -689,6 +689,8 @@ class TextGenerationPipeline(Pipeline):
 
             result = []
             for generated_sequence in output_sequences:
+                if self.framework == "pt" and generated_sequence is not None:
+                    generated_sequence = generated_sequence.cpu()
                 generated_sequence = generated_sequence.numpy().tolist()
                 record = {}
                 if return_tensors:
