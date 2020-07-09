@@ -1302,7 +1302,7 @@ class QuestionAnsweringPipeline(Pipeline):
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
 
                 # Mask CLS
-                undesired_tokens[0] = 0.0
+                start_[0] = end_[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)
