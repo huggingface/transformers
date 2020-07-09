@@ -366,6 +366,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # check if cache shall be used and that hidden states are already cached
         if use_cache and cached_hidden_states_and_buckets[1] is not None:
+            assert (
+                sequence_length == 1
+            ), f"At the moment, auto-regressive language generation is only possible one word at a time. Make sure that input sequence length {sequence_length} equals 1, when `cached_hidden_states_and_buckets` is passed."
             cached_buckets = cached_hidden_states_and_buckets[0]
             cached_hidden_states = cached_hidden_states_and_buckets[1]
 
@@ -379,19 +382,30 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 query_buckets = self._hash_vectors(query_vectors, num_hashes, attention_mask)
 
                 key_value_hidden_states = self._retrieve_relevant_hidden_states(
-                    cached_hidden_states,
-                    self.chunk_length,
-                    self.num_chunks_before,
-                    cached_buckets,
-                    query_buckets,
-                    hidden_states,
+                    cached_hidden_states=cached_hidden_states,
+                    cached_buckets=cached_buckets,
+                    query_buckets=query_buckets,
+                    num_hashes=num_hashes,
+                    hidden_states=hidden_states,
                 )
                 # TODO: reshape for num hashes here
+
+                per_head_query_key = self.query_key.weight.view(
+                    self.num_attention_heads, self.attention_head_size, self.hidden_size
+                )
+                per_head_value = self.value.weight.view(
+                    self.num_attention_heads, self.attention_head_size, self.hidden_size
+                )
+
+                # only relevant for inference and no bias => we can use einsum here
+                query_key_vectors = torch.einsum("balh,ahr->balr", key_value_hidden_states, per_head_query_key)
+                value_vectors = torch.einsum("balh,ahr->balr", key_value_hidden_states, per_head_value)
+
             else:
                 key_value_hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
 
-            query_key_vectors = self.query_key(key_value_hidden_states)
-            value_vectors = self.value(key_value_hidden_states)
+                query_key_vectors = self.query_key(key_value_hidden_states)
+                value_vectors = self.value(key_value_hidden_states)
 
             if cached_buckets is None and key_value_hidden_states.shape[1] >= sequence_length:
                 # split query key vectors and calculate buckets for next prediction
@@ -415,10 +429,18 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             use_cache and cached_hidden_states_and_buckets[1] is not None
         )
 
-        query_key_vectors = self._split_hidden_size_dim(
-            query_key_vectors, self.num_attention_heads, self.attention_head_size
-        )
-        value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
+        import ipdb
+
+        ipdb.set_trace()
+
+        # if query key is not already split
+        if query_key_vectors.ndim < 4:
+            query_key_vectors = self._split_hidden_size_dim(
+                query_key_vectors, self.num_attention_heads, self.attention_head_size
+            )
+            value_vectors = self._split_hidden_size_dim(
+                value_vectors, self.num_attention_heads, self.attention_head_size
+            )
 
         assert (
             query_key_vectors.shape[-1] == self.attention_head_size
@@ -785,6 +807,65 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 attention_mask = causal_mask
 
         return attention_mask
+
+    def _retrieve_relevant_hidden_states(
+        self, cached_hidden_states, cached_buckets, query_buckets, num_hashes, hidden_states
+    ):
+        hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=-2)
+        buckets = torch.cat([cached_buckets, query_buckets.unsqueeze(-1)], dim=-1)
+
+        batch_size = hidden_states.shape[0]
+        sequence_length = hidden_states.shape[1]
+
+        # buckets has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
+        assert buckets.shape == (
+            batch_size,
+            self.num_attention_heads,
+            num_hashes,
+            sequence_length,
+        ), f"buckets should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {buckets.shape}."
+
+        _, sorted_index = torch.sort(buckets, dim=-1)
+        # find indices of new buckets
+        relevant_indices = (sorted_index == buckets.shape[-1] - 1).nonzero()
+        #        relevant_hidden_states = torch.reshape(hidden_states[relevant_indices],
+        chunk_relevant_indices = self._expand_to_indices_in_relevant_chunk(relevant_indices, sequence_length)
+        chunk_relevant_indices = tuple(chunk_relevant_indices.transpose(0, 1))
+
+        sorted_chunk_relevant_indices = sorted_index[chunk_relevant_indices]
+        sorted_chunk_relevant_indices += torch.arange(sorted_chunk_relevant_indices.shape[-1]) // batch_size
+
+        hidden_states = hidden_states.reshape((-1, self.hidden_size))
+        relevant_hidden_states = hidden_states.index_select(0, sorted_chunk_relevant_indices)
+
+        relevant_hidden_states = relevant_hidden_states.reshape(
+            batch_size, self.num_attention_heads, -1, self.hidden_size
+        )
+
+        assert (
+            relevant_hidden_states.shape[2]
+            == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
+        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
+
+        return relevant_hidden_states
+
+    def _expand_to_indices_in_relevant_chunk(self, indices, sequence_length):
+        # get relevant indices of where chunk starts and ends
+        start_indices_chunk = ((indices[:, -1] // self.chunk_length) - self.num_chunks_before) * self.chunk_length
+        total_chunk_size = self.chunk_length * (1 + self.num_chunks_before + self.num_chunks_after)
+
+        # expand start indices and add torch arange
+        expanded_start_indices = start_indices_chunk.unsqueeze(-1).expand(indices.shape[0], total_chunk_size)
+        chunk_sequence_indices = expanded_start_indices + torch.arange(total_chunk_size).unsqueeze(0).expand(
+            indices.shape[0], total_chunk_size
+        )
+        chunk_sequence_indices = chunk_sequence_indices.flatten() % sequence_length
+
+        # expand indices and set correct sequence indices
+        indices = indices.unsqueeze(1).expand((indices.shape[0], total_chunk_size, -1)).flatten(0, 1)
+        indices[:, -1] = chunk_sequence_indices
+
+        return indices
 
     def _len_and_dim_norm(self, vectors):
         """
