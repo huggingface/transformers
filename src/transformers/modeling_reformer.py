@@ -1854,10 +1854,9 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         inputs_embeds=None,
         num_hashes=None,
         labels=None,
-        output_hidden_states=False,
-        output_attentions=False,
+        output_hidden_states=None,
+        output_attentions=None,
     ):
-
         reformer_outputs = self.reformer(
             input_ids,
             position_ids=position_ids,
@@ -1866,6 +1865,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
             output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
 
         sequence_output = reformer_outputs[0]
