@@ -39,6 +39,7 @@ class TFGenerationMixin:
             return False
         return True
 
+    @tf.function
     def generate(
         self,
         input_ids=None,
@@ -437,7 +438,8 @@ class TFGenerationMixin:
 
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
-        while cur_len < max_length:
+        cur_len = tf.constant(cur_len, dtype=tf.int32)
+        while tf.less(cur_len, max_length):
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
             )
@@ -619,7 +621,8 @@ class TFGenerationMixin:
         # done sentences
         done = [False for _ in range(batch_size)]
 
-        while cur_len < max_length:
+        cur_len = tf.constant(cur_len, dtype=tf.int32)
+        while tf.less(cur_len, max_length):
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
             )
