@@ -443,10 +443,10 @@ class ReformerModelTester:
     def create_and_check_cached_hidden_states_and_buckets(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = True
         #        config.lsh_num_chunks_before = 1
-        config.lsh_num_chunks_before = 0
+        config.lsh_num_chunks_before = 1
         config.lsh_num_chunks_after = 0
         config.num_hashes = 1
-        config.num_attention_heads = 1
+        config.num_attention_heads = 2
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()

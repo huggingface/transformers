@@ -394,8 +394,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 # argsort
                 sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
 
-                print("Sorted_buckets 2", sorted_bucket_idx)
-
                 # concat hidden states
                 concat_hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
 
@@ -404,17 +402,16 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 )
                 # TODO: reshape for num hashes here
 
-                per_head_query_key = self.query_key.weight.view(
+                per_head_query_key = self.query_key.weight.transpose(0, 1).reshape(
                     self.num_attention_heads, self.attention_head_size, self.hidden_size
                 )
-                per_head_value = self.value.weight.view(
+                per_head_value = self.value.weight.transpose(0, 1).reshape(
                     self.num_attention_heads, self.attention_head_size, self.hidden_size
                 )
 
                 # only relevant for inference and no bias => we can use einsum here
                 query_key_vectors = torch.einsum("balh,ahr->balr", key_value_hidden_states, per_head_query_key)
                 value_vectors = torch.einsum("balh,ahr->balr", key_value_hidden_states, per_head_value)
-
             else:
                 key_value_hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
 
@@ -676,7 +673,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
             # Hash-based sort
             sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
-            print("Sorted_buckets", sorted_bucket_idx)
 
             # create simple indices to scatter to, to have undo sort
             indices = (
@@ -865,8 +861,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         relevant_bucket_idx_chunk = bucket_idx[tuple(relevant_bucket_idx_chunk.transpose(0, 1))]
 
         # adapt bucket_idx for batch and hidden states for index select
-        bucket_idx_batch_offset = (
-            torch.arange(batch_size * relevant_bucket_idx_chunk.shape[-1]) // relevant_bucket_idx_chunk.shape[-1]
+        bucket_idx_batch_offset = sequence_length * (
+            batch_size * torch.arange(relevant_bucket_idx_chunk.shape[-1]) // relevant_bucket_idx_chunk.shape[-1]
         )
         relevant_bucket_idx_chunk_flat_batch = relevant_bucket_idx_chunk + bucket_idx_batch_offset
         hidden_states = hidden_states.reshape((-1, self.hidden_size))
