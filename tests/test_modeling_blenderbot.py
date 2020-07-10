@@ -1,11 +1,11 @@
 import unittest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, BlenderbotTokenizer, BlenderbotConfig
 from transformers.file_utils import cached_property
 
 # from .utils import require_torch, slow, torch_device
 from transformers.testing_utils import require_torch, slow, torch_device
-
+from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -15,8 +15,6 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
     from transformers import (
-        BlenderbotTokenizer,
-        BlenderbotConfig,
         BlenderbotForConditionalGeneration,
     )
 
@@ -37,8 +35,8 @@ class BlenderbotModelTester:
         hidden_dropout_prob=0.2,
         max_position_embeddings=50,
         eos_token_id=2,
-        bos_token_id=1,
-        pad_token_id=0,
+        bos_token_id=0,
+        pad_token_id=1,
         use_labels=True,
         ffn_size=4,
         attention_dropout=0.2,
@@ -81,6 +79,9 @@ class BlenderbotModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            num_beams=1,
+            min_length=3,
+            max_length=10,
         )
         attention_mask = ids_tensor([self.batch_size, self.seq_len], vocab_size=2)
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
@@ -125,7 +126,7 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class AbstractBlenderBotIntegrationTests(unittest.TestCase):
     checkpoint_name = "sshleifer/blenderbot-3B"
-
+    tokenizer_cls = BlenderbotTokenizer
     @cached_property
     def model(self):
         model = BlenderbotForConditionalGeneration.from_pretrained(self.checkpoint_name).to(torch_device)
@@ -135,7 +136,7 @@ class AbstractBlenderBotIntegrationTests(unittest.TestCase):
 
     @cached_property
     def tokenizer(self):
-        return BlenderbotTokenizer.from_pretrained(self.checkpoint_name)
+        return self.tokenizer_cls.from_pretrained(self.checkpoint_name)
 
 
 class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
@@ -167,6 +168,7 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
 
 class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
     checkpoint_name = 'sshleifer/blenderbot-90M'
+    tokenizer_cls = BlenderbotSmallTokenizer
     @slow
     def test_generation_same_as_parlai_90(self):
         src_text = [
