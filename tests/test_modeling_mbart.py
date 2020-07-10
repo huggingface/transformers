@@ -4,7 +4,7 @@ from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from .test_modeling_bart import TOLERANCE, _assert_tensors_equal, _long_tensor
+from .test_modeling_bart import TOLERANCE, _long_tensor, assert_tensors_close
 
 
 if is_torch_available():
@@ -79,7 +79,7 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
 
         expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=logits.device, dtype=logits.dtype)
         result_slice = logits[0, 0, :3]
-        _assert_tensors_equal(expected_slice, result_slice, atol=TOLERANCE)
+        assert_tensors_close(expected_slice, result_slice, atol=TOLERANCE)
 
     @slow
     def test_enro_generate(self):

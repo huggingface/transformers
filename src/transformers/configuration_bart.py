@@ -70,6 +70,7 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
+        extra_layer_norm=False,
         **common_kwargs
     ):
         r"""
@@ -111,6 +112,7 @@ class BartConfig(PretrainedConfig):
         self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
         self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
+        self.extra_layer_norm = extra_layer_norm # True for mbart
 
         # Params introduced for Marian
         self.add_bias_logits = add_bias_logits
@@ -126,9 +128,9 @@ class BartConfig(PretrainedConfig):
 
         # pos embedding offset
         self.extra_pos_embeddings = self.pad_token_id + 1
-        
+
         # use attn mask to define pos embedding
-        #self.use_attn_position_embeddings = use_attn_position_embeddings
+        # self.use_attn_position_embeddings = use_attn_position_embeddings
 
     @property
     def num_attention_heads(self) -> int:

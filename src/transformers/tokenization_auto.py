@@ -98,7 +98,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
-        (BlenderbotConfig, (BlenderbotTokenizer, None))
+        (BlenderbotConfig, (BlenderbotTokenizer, None)),
     ]
 )
 

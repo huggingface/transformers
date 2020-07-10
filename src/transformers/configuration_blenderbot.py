@@ -3,9 +3,7 @@ import os
 from transformers.configuration_bart import BartConfig
 
 
-BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "blenderbot": "sshleifer/blenderbot-3B"
-}
+BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"blenderbot": "sshleifer/blenderbot-3B"}
 
 
 class BlenderbotConfig(BartConfig):
@@ -69,7 +67,7 @@ class BlenderbotConfig(BartConfig):
         bos_token_id=0,
         eos_token_id=2,
         unk_token_id=3,
-        activation_function='gelu',
+        activation_function="gelu",
         normalize_before=True,
         add_final_layer_norm=False,
         scale_embedding=False,

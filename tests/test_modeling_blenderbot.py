@@ -1,32 +1,25 @@
-import tempfile
 import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.modeling_bart import _prepare_bart_decoder_inputs
+
+# from .utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-#from .utils import require_torch, slow, torch_device
-from transformers.testing_utils import require_torch, slow, torch_device
 
 
-#parlai import to test Blenderbot outputs agains parlai (will be removed at the end)
-from parlai.agents.transformer.modules import MultiHeadAttention, TransformerEncoderLayer, TransformerDecoderLayer, TransformerEncoder, TransformerDecoder
+# parlai import to test Blenderbot outputs agains parlai (will be removed at the end)
 
 if is_torch_available():
     import torch
     from transformers import (
-        AutoModel,
-        AutoTokenizer,
         BlenderbotTokenizer,
         BlenderbotConfig,
         BlenderbotForConditionalGeneration,
-        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
-
-weights_path = "sshleifer/blenderbot-3B"
 
 
 @require_torch
@@ -127,188 +120,74 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         expected_shape = (config.max_position_embeddings, config.d_model)
         self.assertEqual(model.encoder.embed_positions.weight.shape, expected_shape)
         self.assertEqual(model.decoder.embed_positions.weight.shape, expected_shape)
-        
 
 
 @require_torch
-class BlenderbotIntegrationTests(unittest.TestCase):
-    def get_config_and_data(self):
-        input_ids = torch.tensor(
-            [
-                [64, 61, 14, 42, 96, 32, 82, 7, 64, 61, 14, 42, 96, 32, 82, 7, 2],
-                [94, 23, 54, 10, 10, 41, 90, 48, 94, 23, 54, 10, 10, 41, 90, 48, 2]
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        
-
-        config = BlenderbotConfig(
-            d_model=16,
-            vocab_size=100,
-            encoder_layers=1,
-            decoder_layers=1,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=8,
-            decoder_ffn_dim=8,
-            max_position_embeddings=24,
-            eos_token_id=2,
-            pad_token_id=0,
-            bos_token_id=1,
-        )
-        mask = (input_ids != config.pad_token_id).to(torch.long)
-        return config, input_ids, mask
+class AbstractBlenderBotIntegrationTests(unittest.TestCase):
+    checkpoint_name = "sshleifer/blenderbot-3B"
 
     @cached_property
     def model(self):
-        model = BlenderbotForConditionalGeneration.from_pretrained(weights_path).to(torch_device)
+        model = BlenderbotForConditionalGeneration.from_pretrained(self.checkpoint_name).to(torch_device)
         if torch_device == "cuda":
             model = model.half()
         return model
-    
-    def _set_param(self, blender_layer, parlai_layer, bias=None):
-        with torch.no_grad():
-            assert blender_layer.weight.shape == parlai_layer.weight.shape, "{} layer.weight does not match".format(layer)
-            blender_layer.weight = torch.nn.Parameter(parlai_layer.weight)
-            if bias is not None:
-                assert blender_layer.bias.shape == parlai_layer.bias.shape, "{} layer.bias does not match".format(layer)
-                blender_layer.bias = torch.nn.Parameter(parlai_layer.bias)
-        return True
-    
-    def _copy_layer_weights_in_blender_self_attn(self, blender_layer, parlai_layer):
-        self._set_param(blender_layer.q_proj, parlai_layer.q_lin, bias=True)
-        self._set_param(blender_layer.v_proj, parlai_layer.v_lin, bias=True)
-        self._set_param(blender_layer.k_proj, parlai_layer.k_lin, bias=True)
-        self._set_param(blender_layer.out_proj, parlai_layer.out_lin, bias=True)
-    
-    def _copy_layer_weights_in_blender_encoder_layer(self, blender_layer, parlai_layer):
-        self._copy_layer_weights_in_blender_self_attn(blender_layer.self_attn, parlai_layer.attention)
-        self._set_param(blender_layer.self_attn_layer_norm, parlai_layer.norm1, bias=True)
-        self._set_param(blender_layer.fc1, parlai_layer.ffn.lin1, bias=True)
-        self._set_param(blender_layer.fc2, parlai_layer.ffn.lin2, bias=True)
-        self._set_param(blender_layer.final_layer_norm, parlai_layer.norm2, bias=True)
-        
-    def _copy_layer_weights_in_blender_decoder_layer(self, blender_layer, parlai_layer):
-        self._copy_layer_weights_in_blender_self_attn(blender_layer.self_attn, parlai_layer.self_attention)
-        self._copy_layer_weights_in_blender_self_attn(blender_layer.encoder_attn, parlai_layer.encoder_attention)
-        self._set_param(blender_layer.self_attn_layer_norm, parlai_layer.norm1, bias=True)
-        self._set_param(blender_layer.fc1, parlai_layer.ffn.lin1, bias=True)
-        self._set_param(blender_layer.fc2, parlai_layer.ffn.lin2, bias=True)
-        self._set_param(blender_layer.final_layer_norm, parlai_layer.norm3, bias=True)
-        self._set_param(blender_layer.encoder_attn_layer_norm, parlai_layer.norm2, bias=True)
-        
-    def _copy_layer_weights_in_blender_encoder(self, blender_encoder, parlai_encoder, num_layers):
-        for i in range(num_layers):
-            self._copy_layer_weights_in_blender_encoder_layer(blender_encoder.layers[i], parlai_encoder.layers[i])
-        self._set_param(blender_encoder.layer_norm, parlai_encoder.norm_embeddings, bias=True)
-        self._set_param(blender_encoder.embed_positions, parlai_encoder.position_embeddings)
-        self._set_param(blender_encoder.embed_tokens, parlai_encoder.embeddings)
-    
-    def test_blenderbot_encoder_selfAttention_forward(self):
-        config, input_ids, mask = self.get_config_and_data()
-        
-        hidden_states = torch.tensor(2*[5*[config.d_model*[0.1]]])
-        mask = torch.ones(hidden_states.shape[:2])
-        
-        torch.manual_seed(0)
-        
-        blenderbot_model = BlenderbotForConditionalGeneration(config).to(torch_device)
-        self_attn = blenderbot_model.encoder.layers[0].self_attn
-        self_attn.eval()
-        
-        parlai_attn = MultiHeadAttention(config.encoder_attention_heads, config.d_model, dropout=config.dropout)
-        parlai_attn.eval()
-        
-        self._copy_layer_weights_in_blender_self_attn(self_attn, parlai_attn)
-        expected_output = parlai_attn(query=hidden_states, mask=mask, key=None)[0]
-        blender_output = self_attn(query=hidden_states.transpose(1,0), key_padding_mask=mask, key=None)[0].transpose(1,0)
-        self.assertTrue(torch.allclose(expected_output, blender_output, atol=1e-3))
-        
-    def test_blenderbot_encoder_layer_forward(self):
-        config, input_ids, mask = self.get_config_and_data()
-        
-        hidden_states = torch.tensor(2*[5*[config.d_model*[0.1]]])
-        mask = torch.ones(hidden_states.shape[:2])
-        
-        torch.manual_seed(0)
-        
-        blenderbot_model = BlenderbotForConditionalGeneration(config).to(torch_device)
-        blender_encoder_layer = blenderbot_model.encoder.layers[0]
-        blender_encoder_layer.eval()
-        
-        parlai_encoder_layer = TransformerEncoderLayer(config.encoder_attention_heads, config.d_model, config.encoder_ffn_dim, 
-                                                       dropout=config.dropout, activation='gelu', variant='prelayernorm')
-        parlai_encoder_layer.eval()
-        
-        self._copy_layer_weights_in_blender_encoder_layer(blender_encoder_layer, parlai_encoder_layer)
-        expected_output = parlai_encoder_layer(hidden_states, mask)
-        blender_output = blender_encoder_layer(hidden_states.transpose(1,0), encoder_padding_mask=mask)[0].transpose(1,0)
-        self.assertTrue(torch.allclose(expected_output, blender_output, atol=1e-4))
-        
-    def test_blenderbot_encoder_forward(self):
-        config, input_ids, mask = self.get_config_and_data()
-        embeddings = torch.nn.Embedding(config.vocab_size, config.d_model, padding_idx=config.pad_token_id)
-        
-        torch.manual_seed(0)
-        
-        blenderbot_model = BlenderbotForConditionalGeneration(config).to(torch_device)
-        blender_encoder = blenderbot_model.encoder
-        #blender_encoder.embed_tokens = embeddings
-        blender_encoder.eval()
-        
-        parlai_encoder = TransformerEncoder(config.encoder_attention_heads, config.encoder_layers, config.d_model, config.encoder_ffn_dim,
-                                            config.vocab_size, learn_positional_embeddings=True, variant='prelayernorm',n_positions=config.max_position_embeddings,
-                                            activation=config.activation_function, dropout=config.dropout, embedding=embeddings, reduction_type=None)
-        parlai_encoder.eval()
-        
-        self._copy_layer_weights_in_blender_encoder(blender_encoder, parlai_encoder, config.encoder_layers)
-        
-        expected_output = parlai_encoder(input_ids)[0]
-        blender_output = blender_encoder(input_ids, attention_mask=mask)[0]
-        self.assertTrue(torch.allclose(expected_output, blender_output, atol=1e-3))
-        
-    def test_blenderbot_decoder_layer_forward(self):
-        config, input_ids, mask = self.get_config_and_data()
-        
-        torch.manual_seed(0)
-        embeddings = torch.nn.Embedding(config.vocab_size, config.d_model, padding_idx=config.pad_token_id)
-        
-        blenderbot_model = BlenderbotForConditionalGeneration(config).to(torch_device)
-        blender_decoder_layer = blenderbot_model.decoder.layers[0]
-        blender_decoder_layer.eval()
-        
-        parlai_decoder_layer = TransformerDecoderLayer(config.encoder_attention_heads, config.d_model, config.encoder_ffn_dim, 
-                                                       dropout=config.dropout, activation='gelu', variant='prelayernorm')
-        parlai_decoder_layer.eval()
-        
-        blender_encoder = blenderbot_model.encoder
-        #blender_encoder.embed_tokens = embeddings
-        blender_encoder.eval()
-        
-        parlai_encoder = TransformerEncoder(config.encoder_attention_heads, config.encoder_layers, config.d_model, config.encoder_ffn_dim,
-                                            config.vocab_size, learn_positional_embeddings=True, variant='prelayernorm',n_positions=config.max_position_embeddings,
-                                            activation=config.activation_function, dropout=config.dropout, embedding=embeddings, reduction_type=None)
-        parlai_encoder.eval()
-        
-        self._copy_layer_weights_in_blender_encoder(blender_encoder, parlai_encoder, config.encoder_layers)
-        
-        expected_encoder_output = parlai_encoder(input_ids)[0]
-        blender_encoder_output = blender_encoder(input_ids, attention_mask=mask)[0]
-        self.assertTrue(torch.allclose(expected_encoder_output, blender_encoder_output, atol=1e-3))
-        
-        self._copy_layer_weights_in_blender_decoder_layer(blender_decoder_layer, parlai_decoder_layer)
-        tensor = embeddings(input_ids)
-        expected_decoder_layer_output = parlai_decoder_layer(tensor, encoder_output=expected_encoder_output, encoder_mask=mask)
-        
-        blender_decoder_layer_output = blender_decoder_layer(tensor.transpose(1,0), encoder_hidden_states=blender_encoder_output, encoder_attn_mask=mask)[0] 
-        print(blender_decoder_layer_output)
-        # self.assertTrue(torch.allclose(expected_output, blender_output, atol=1e-4))
 
+    @cached_property
+    def tokenizer(self):
+        return BlenderbotTokenizer.from_pretrained(self.checkpoint_name)
+
+
+class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
     @slow
-    def test_inference(self):
+    def test_generation_same_as_parlai_3B(self):
+        src_text = [
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+        ]
+        tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
+        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+        generated_utterances = self.model.generate(**model_inputs)
+        self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
+
+    @unittest.skip('broken')
+    def test_loss_same_as_parlai_3B(self):
         config, input_ids, mask, batch_size = self.get_config_data()
         inputs_dict = {"input_ids": input_ids, "attention_mask": mask}
+        src_text = [
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel "
+            "like i'm going to throw up.\nand why is that?"
+        ]
+        tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
+        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+
+        with torch.no_grad():
+            output = self.model(**inputs_dict)[0]
+        expected_shape = torch.Size((batch_size, input_ids.size(1), self.model.config.vocab_size))
+        self.assertEqual(output.size(), expected_shape)
+
+class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
+    checkpoint_name = 'sshleifer/blenderbot-90M'
+    @slow
+    def test_generation_same_as_parlai_90(self):
+        src_text = [
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+        ]
+        tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
+        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+        generated_utterances = self.model.generate(**model_inputs)
+        self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
+
+    @unittest.skip('broken')
+    def test_loss_same_as_parlai_90(self):
+        config, input_ids, mask, batch_size = self.get_config_data()
+        inputs_dict = {"input_ids": input_ids, "attention_mask": mask}
+        src_text = [
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel "
+            "like i'm going to throw up.\nand why is that?"
+        ]
+        tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
+        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+
         with torch.no_grad():
             output = self.model(**inputs_dict)[0]
         expected_shape = torch.Size((batch_size, input_ids.size(1), self.model.config.vocab_size))

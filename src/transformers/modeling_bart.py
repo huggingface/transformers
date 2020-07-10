@@ -278,7 +278,7 @@ class BartEncoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
-        self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
+        self.layer_norm = LayerNorm(config.d_model) if config.extra_layer_norm else None
 
     def forward(self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False):
         """
