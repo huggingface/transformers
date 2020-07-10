@@ -30,6 +30,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
 )
 from .modeling_tf_utils import (
+    TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -116,7 +117,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
     def call(self, inputs, inputs_embeds=None, mode="embedding", training=False):
         """Get token embeddings of inputs.
         Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
+            inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
             mode: string, a valid value is one of "embedding" and "linear".
         Returns:
             outputs: (1) If mode == "embedding", output embedding tensor, float32 with
@@ -528,9 +529,9 @@ DISTILBERT_START_DOCSTRING = r"""
 
         - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+          :obj:`model([input_ids, attention_mask])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+          :obj:`model({'input_ids': input_ids})`
 
     Parameters:
         config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
@@ -626,7 +627,7 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 @add_start_docstrings(
     """DistilBert Model with a `masked language modeling` head on top. """, DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
+class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.vocab_size = config.vocab_size
@@ -644,8 +645,23 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
-    def call(self, inputs, **kwargs):
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
 
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
@@ -663,7 +679,22 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         """
-        distilbert_output = self.distilbert(inputs, **kwargs)
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[6] if len(inputs) > 6 else labels
+            if len(inputs) > 6:
+                inputs = inputs[:6]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
+        distilbert_output = self.distilbert(
+            inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
 
         hidden_states = distilbert_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
@@ -672,6 +703,11 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         prediction_logits = self.vocab_projector(prediction_logits)
 
         outputs = (prediction_logits,) + distilbert_output[1:]
+
+        if labels is not None:
+            loss = self.compute_loss(labels, prediction_logits)
+            outputs = (loss,) + outputs
+
         return outputs  # logits, (hidden_states), (attentions)
 
 
