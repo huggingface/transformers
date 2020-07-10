@@ -883,14 +883,14 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
-        
+
         offset = 2
 
         effective_batch_size = inputs.shape[0]
         dummy_token = tf.zeros((effective_batch_size, 1), dtype=tf.int32)
 
         if past:
-            inputs = tf.concat([inputs[:, -offset:], dummy_token], dim=1)
+            inputs = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
         else:
             inputs = tf.concat([inputs, dummy_token], axis=1)
 
