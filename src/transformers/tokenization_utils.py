@@ -20,7 +20,7 @@ import itertools
 import logging
 import re
 import unicodedata
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
@@ -155,12 +155,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        # Added tokens - We store this for both slow and fast tokenizers
-        # until the serialization of Fast tokenizers is updated
-        self.added_tokens_encoder: Dict[str, int] = {}
-        self.added_tokens_decoder: Dict[int, str] = {}
-        self.unique_no_split_tokens: List[str] = []
+        # Added tokens
+        self.added_tokens_encoder = {}
+        self.unique_added_tokens_encoder = []
+        self.added_tokens_decoder = {}
 
     @property
     def is_fast(self) -> bool:
@@ -175,14 +173,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
         raise NotImplementedError()
 
-    def get_added_vocab(self) -> Dict[str, int]:
-        return self.added_tokens_encoder
-
     def __len__(self):
         """ Size of the full vocabulary with the added tokens """
         return self.vocab_size + len(self.added_tokens_encoder)
 
-    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens=False) -> int:
+    def add_tokens(self, new_tokens: Union[str, List[str]], special_token=False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -204,12 +199,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             print('We have added', num_added_toks, 'tokens')
             model.resize_token_embeddings(len(tokenizer))  # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
         """
-        new_tokens = [str(tok) for tok in new_tokens]
+        if not new_tokens:
+            return 0
+
+        if not isinstance(new_tokens, list):
+            new_tokens = [new_tokens]
 
         tokens_to_add = []
         for token in new_tokens:
-            assert isinstance(token, str)
-            if not special_tokens and self.init_kwargs.get("do_lower_case", False):
+            assert isinstance(token, (str, AddedToken))
+            if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
                 token = token.lower()
             if (
                 token != self.unk_token
@@ -223,14 +222,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
+        self.unique_added_tokens_encoder = list(
+            set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
+        )
         self.added_tokens_decoder.update(added_tok_decoder)
-
-        # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
-        if special_tokens:
-            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(new_tokens)))
-        else:
-            # Or on the newly added tokens
-            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
 
         return len(tokens_to_add)
 
@@ -345,7 +340,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             for tok in tok_list:
                 tokenized_text = []
                 for sub_text in text_list:
-                    if sub_text not in self.unique_no_split_tokens:
+                    if sub_text not in self.unique_added_tokens_encoder:
                         tokenized_text += split_on_token(tok, sub_text)
                     else:
                         tokenized_text += [sub_text]
@@ -354,14 +349,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return list(
                 itertools.chain.from_iterable(
                     (
-                        self._tokenize(token) if token not in self.unique_no_split_tokens else [token]
+                        self._tokenize(token) if token not in self.unique_added_tokens_encoder else [token]
                         for token in tokenized_text
                     )
                 )
             )
 
-        no_split_token = self.unique_no_split_tokens
-        tokenized_text = split_on_tokens(no_split_token, text)
+        added_tokens = self.unique_added_tokens_encoder
+        tokenized_text = split_on_tokens(added_tokens, text)
         return tokenized_text
 
     def _tokenize(self, text, **kwargs):
@@ -409,7 +404,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -462,7 +456,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             truncation=truncation_strategy.value,
             max_length=max_length,
             stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
@@ -489,7 +482,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -544,7 +536,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -565,7 +556,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -581,6 +571,18 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Args:
             batch_ids_pairs: list of tokenized input ids or input ids pairs
         """
+        if padding_strategy == PaddingStrategy.LONGEST:
+            # For simplicity we keep the single sentnce path here
+            def total_sequence_length(input_pairs):
+                first_ids, second_ids = input_pairs
+                return len(first_ids) + (
+                    self.num_special_tokens_to_add()
+                    if second_ids is None
+                    else (len(second_ids) + self.num_special_tokens_to_add(pair=True))
+                )
+
+            max_length = max([total_sequence_length(input_pairs) for input_pairs in batch_ids_pairs])
+            padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
         for first_ids, second_ids in batch_ids_pairs:
@@ -588,17 +590,21 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 first_ids,
                 second_ids,
                 add_special_tokens=add_special_tokens,
+<<<<<<< Updated upstream
                 padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
                 truncation=truncation_strategy.value,
+=======
+                padding_strategy=padding_strategy,
+                truncation_strategy=truncation_strategy,
+>>>>>>> Stashed changes
                 max_length=max_length,
                 stride=stride,
-                pad_to_multiple_of=None,  # we pad in batch afterward
-                return_attention_mask=False,  # we pad in batch afterward
+                return_attention_mask=return_attention_mask,
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_length=return_length,
-                return_tensors=None,  # We convert the whole batch to tensors at the end
+                return_tensors=None,  # We will convert the whole batch to tensors at the end
                 prepend_batch_axis=False,
                 verbose=verbose,
             )
@@ -608,18 +614,111 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
 
-        batch_outputs = self.pad(
-            batch_outputs,
-            padding=padding_strategy.value,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
-        )
-
         batch_outputs = BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
         return batch_outputs
 
+<<<<<<< Updated upstream
+=======
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    def _prepare_for_model(
+        self,
+        ids: List[int],
+        pair_ids: Optional[List[int]] = None,
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        return_tensors: Optional[str] = None,
+        prepend_batch_axis: bool = False,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+    ) -> BatchEncoding:
+        """ Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
+        It adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
+        manages a moving window (with user defined stride) for overflowing tokens
+
+        Args:
+            ids: list of tokenized input ids. Can be obtained from a string by chaining the
+                `tokenize` and `convert_tokens_to_ids` methods.
+            pair_ids: Optional second list of input ids. Can be obtained from a string by chaining the
+                `tokenize` and `convert_tokens_to_ids` methods.
+        """
+        pair = bool(pair_ids is not None)
+        len_ids = len(ids)
+        len_pair_ids = len(pair_ids) if pair else 0
+
+        # Load from model defaults
+        if return_token_type_ids is None:
+            return_token_type_ids = "token_type_ids" in self.model_input_names
+        if return_attention_mask is None:
+            return_attention_mask = "attention_mask" in self.model_input_names
+
+        encoded_inputs = {}
+
+        # Truncation: Handle max sequence length
+        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+            ids, pair_ids, overflowing_tokens = self.truncate_sequences(
+                ids,
+                pair_ids=pair_ids,
+                num_tokens_to_remove=total_len - max_length,
+                truncation_strategy=truncation_strategy,
+                stride=stride,
+            )
+            if return_overflowing_tokens:
+                encoded_inputs["overflowing_tokens"] = overflowing_tokens
+                encoded_inputs["num_truncated_tokens"] = total_len - max_length
+
+        # Add special tokens
+        if add_special_tokens:
+            sequence = self.build_inputs_with_special_tokens(ids, pair_ids)
+            token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
+        else:
+            sequence = ids + pair_ids if pair else ids
+            token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
+
+        # Build output dictionnary
+        encoded_inputs["input_ids"] = sequence
+        if return_token_type_ids:
+            encoded_inputs["token_type_ids"] = token_type_ids
+        if return_special_tokens_mask:
+            if add_special_tokens:
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+            else:
+                encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
+
+        # Check lengths
+        if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
+            logger.warning(
+                "Token indices sequence length is longer than the specified maximum sequence length "
+                "for this model ({} > {}). Running this sequence through the model will result in "
+                "indexing errors".format(len(ids), self.model_max_length)
+            )
+
+        # Padding
+        encoded_inputs = self.pad(
+            encoded_inputs,
+            max_length=max_length,
+            padding=padding_strategy.value,
+            return_attention_mask=return_attention_mask,
+        )
+
+        if return_length:
+            encoded_inputs["length"] = len(encoded_inputs["input_ids"])
+
+        batch_outputs = BatchEncoding(
+            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+        )
+
+        return batch_outputs
+
+>>>>>>> Stashed changes
     def prepare_for_tokenization(self, text: str, is_pretokenized=False, **kwargs) -> (str, dict):
         """ Performs any necessary transformations before tokenization.
 
@@ -628,12 +727,85 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         return (text, kwargs)
 
+<<<<<<< Updated upstream
+=======
+    def truncate_sequences(
+        self,
+        ids: List[int],
+        pair_ids: Optional[List[int]] = None,
+        num_tokens_to_remove: int = 0,
+        truncation_strategy: Union[str, TruncationStrategy] = "only_first",
+        stride: int = 0,
+    ) -> Tuple[List[int], List[int], List[int]]:
+        """ Truncates a sequence pair in place to the maximum length.
+
+        Args:
+            ids: list of tokenized input ids. Can be obtained from a string by chaining the
+                `tokenize` and `convert_tokens_to_ids` methods.
+            pair_ids: Optional second list of input ids. Can be obtained from a string by chaining the
+                `tokenize` and `convert_tokens_to_ids` methods.
+            num_tokens_to_remove (:obj:`int`, `optional`, defaults to ``0``):
+                number of tokens to remove using the truncation strategy
+            truncation_strategy (:obj:`string`, `optional`, defaults to "only_first"):
+                String selected in the following options:
+
+                - 'only_first' (default): Only truncate the first sequence. raise an error if the first sequence is shorter or equal to than num_tokens_to_remove.
+                - 'only_second': Only truncate the second sequence
+                - 'longest_first': Iteratively reduce the inputs sequence until the input is under max_length
+                  starting from the longest one at each token (when there is a pair of input sequences).
+                  Overflowing tokens only contains overflow from the first sequence.
+                - 'do_not_truncate'
+            stride (:obj:`int`, `optional`, defaults to ``0``):
+                If set to a number along with max_length, the overflowing tokens returned will contain some tokens
+                from the main sequence returned. The value of this argument defines the number of additional tokens.
+        """
+        if num_tokens_to_remove <= 0:
+            return ids, pair_ids, []
+
+        if not isinstance(truncation_strategy, TruncationStrategy):
+            truncation_strategy = TruncationStrategy(truncation_strategy)
+
+        overflowing_tokens = []
+        if truncation_strategy == TruncationStrategy.LONGEST_FIRST:
+            for _ in range(num_tokens_to_remove):
+                if pair_ids is None or len(ids) > len(pair_ids):
+                    ids = ids[:-1]
+                else:
+                    pair_ids = pair_ids[:-1]
+        elif truncation_strategy == TruncationStrategy.ONLY_FIRST:
+            assert len(ids) > num_tokens_to_remove
+            window_len = min(len(ids), stride + num_tokens_to_remove)
+            overflowing_tokens = ids[-window_len:]
+            ids = ids[:-num_tokens_to_remove]
+        elif truncation_strategy == TruncationStrategy.ONLY_SECOND:
+            assert pair_ids is not None and len(pair_ids) > num_tokens_to_remove
+            window_len = min(len(pair_ids), stride + num_tokens_to_remove)
+            overflowing_tokens = pair_ids[-window_len:]
+            pair_ids = pair_ids[:-num_tokens_to_remove]
+
+        return (ids, pair_ids, overflowing_tokens)
+
+    def create_token_type_ids_from_sequences(self, token_ids_0: List, token_ids_1: Optional[List] = None) -> List[int]:
+        if token_ids_1 is None:
+            return len(token_ids_0) * [0]
+        return [0] * len(token_ids_0) + [1] * len(token_ids_1)
+
+    def build_inputs_with_special_tokens(self, token_ids_0: List, token_ids_1: Optional[List] = None) -> List:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens. This implementation does not add special tokens.
+        """
+        if token_ids_1 is None:
+            return token_ids_0
+        return token_ids_0 + token_ids_1
+
+>>>>>>> Stashed changes
     def get_special_tokens_mask(
         self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
 
         Args:
             token_ids_0: list of ids (must not contain special tokens)

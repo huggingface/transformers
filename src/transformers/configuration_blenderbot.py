@@ -75,7 +75,6 @@ class BlenderbotConfig(BartConfig):
         static_position_embeddings=False,
         is_encoder_decoder=True,
         extra_pos_embeddings=0,
-        use_attn_position_embeddings=True,
         **kwargs
     ):
         super().__init__(
