@@ -191,9 +191,9 @@ class ElectraForPretrainingOutput(ModelOutput):
     Output type of :class:`~transformers.ElectraForPretrainingModel`.
 
     Args:
-        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss of the ELECTRA objective.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`)
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Prediction scores of the head (scores for each token before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
