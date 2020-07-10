@@ -653,7 +653,12 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
-                if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                if self.model.__class__.__name__ in [
+                    "XLNetLMHeadModel",
+                    "TransfoXLLMHeadModel",
+                    "TFXLNetLMHeadModel",
+                    "TFTransfoXLLMHeadModel",
+                ]:
                     # For XLNet and TransformerXL we had an article to the prompt to give more state to the model.
                     padding_text = self.PADDING_TEXT + self.tokenizer.eos_token
                     padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
