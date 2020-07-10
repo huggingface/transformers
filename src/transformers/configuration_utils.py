@@ -38,7 +38,7 @@ class PretrainedConfig(object):
             initialize a model does **not** load the model weights.
             It only affects the model's configuration.
 
-        Class attributes (overridden by derived classes):
+        Class attributes (overridden by derived classes)
             - **model_type** (:obj:`str`): An identifier for the model type, serialized into the JSON file, and used to
               recreate the correct object in :class:`~transformers.AutoConfig`.
 
@@ -63,24 +63,48 @@ class PretrainedConfig(object):
                 A flag to indicate if TPU are available or not.
 
         Parameters for sequence generation
-            - **max_length** (:obj:`int`, `optional`, defaults to :obj:`20`) -- Maximum length that will be used by
-              default to the :obj:`generate` method of the model.
-            - **min_length** (:obj:`int`, `optional`, defaults to :obj:`10`) -- Minimum length that will be used by
-              default to the :obj:`generate` method of the model.
-            - **do_sample** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not to use sampling when
-              decoding in the :obj:`generate` method of the model. Use greedy decoding otherwise.
-            - **early_stopping** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether to stop the beam search
-              when at least ``num_beams`` sentences are finished per batch or not.
-            - **num_beams** (:obj:`int`, `optional`, defaults to :obj:`1`) -- Number of beams for beam search in the
-              :obj:`generate` method of the model. 1 means no beam search.
+            - **max_length** (:obj:`int`, `optional`, defaults to 20) -- Maximum length that will be used by
+              default in the :obj:`generate` method of the model.
+            - **min_length** (:obj:`int`, `optional`, defaults to 10) -- Minimum length that will be used by
+              default in the :obj:`generate` method of the model.
+            - **do_sample** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Flag that will be used by default in
+              the :obj:`generate` method of the model. Whether or not to use sampling ; use greedy decoding otherwise.
+            - **early_stopping** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Flag that will be used by
+              default in the :obj:`generate` method of the model. Whether to stop the beam search when at least
+              ``num_beams`` sentences are finished per batch or not.
+            - **num_beams** (:obj:`int`, `optional`, defaults to 1) -- Number of beams for beam search that will be
+              used by default in the :obj:`generate` method of the model. 1 means no beam search.
+            - **temperature** (:obj:`float`, `optional`, defaults to 1) -- The value used to module the next token
+              probabilities that will be used by default in the :obj:`generate` method of the model. Must be strictly
+              positive.
+            - **top_k** (:obj:`int`, `optional`, defaults to 50) -- Number of highest probability vocabulary tokens to
+              keep for top-k-filtering that will be used by default in the :obj:`generate` method of the model.
+            - **top_p** (:obj:`float`, `optional`, defaults to 1) --  Value that will be used by default in the
+              :obj:`generate` method of the model for ``top_p``. If set to float < 1, only the most probable tokens
+              with probabilities that add up to ``top_p`` or highest are kept for generation.
+            - **repetition_penalty** (:obj:`float`, `optional`, defaults to 1) -- Parameter for repetition penalty
+              that will be used by default in the :obj:`generate` method of the model. 1.0 means no penalty.
+            - **length_penalty** (:obj:`float`, `optional`, defaults to 1) -- Exponential penalty to the length that
+              will be used by default in the :obj:`generate` method of the model.
+            - **no_repeat_ngram_size** (:obj:`int`, `optional`, defaults to 0) -- Value that will be used by default
+              in the :obj:`generate` method of the model for ``no_repeat_ngram_size``. If set to int > 0, all ngrams of
+              that size can only occur once.
+            - **bad_words_ids** (:obj:`List[int]`, `optional`) -- List of token ids that are not allowed to be
+              generated that will be used by default in the :obj:`generate` method of the model. In order to get the
+              tokens of the words that should not appear in the generated text, use
+              :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
+            - **num_return_sequences** (:obj:`int`, `optional`, defaults to 1) -- Number of independently computed
+              returned sequences for each element in the batch that will be used by default in the :obj:`generate`
+              method of the model.
 
         Parameters for fine-tuning tasks
             - **architectures** (:obj:List[`str`], `optional`) -- Model architectures that can be used with the
               model pretrained weights.
             - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
               used when converting from an original (TensorFlow or PyTorch) checkpoint.
-            - **id2label** (:obj:`List[str]`, `optional`) -- Correspondence prediction index to label.
-            - **label2id** (:obj:`Dict[str, int]`, `optional`) -- Correspondence label to index for the model.
+            - **id2label** (:obj:`List[str]`, `optional`) -- A map from index (for instance prediction index, or target
+              index) to label.
+            - **label2id** (:obj:`Dict[str, int]`, `optional`) -- A map from label to index for the model.
             - **num_labels** (:obj:`int`, `optional`) -- Number of labels to use in the last layer added to the model,
               typically for a classification task.
             - **task_specific_params** (:obj:`Dict[str, Any]`, `optional`) -- Additional keyword arguments to store for
@@ -177,7 +201,7 @@ class PretrainedConfig(object):
 
     def save_pretrained(self, save_directory: str):
         """
-        Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
+        Save a configuration object to the directory ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.PretrainedConfig.from_pretrained` class method.
 
         Args:
@@ -203,10 +227,10 @@ class PretrainedConfig(object):
             pretrained_model_name_or_path (:obj:`str`):
                 This can be either:
 
-                - a string with the `shortcut name` of a pre-trained model configuration to load from cache or
-                  download, e.g.: ``bert-base-uncased``.
-                - a string with the `identifier name` of a pre-trained model configuration that was user-uploaded to
-                  our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - the `shortcut name` of a pretrained model configuration to load from cache or download, e.g.,
+                  ``bert-base-uncased``.
+                - the `identifier name` of a pretrained model configuration that was uploaded to our S3 by any user,
+                  e.g., ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a configuration file saved using the
                   :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g., ``./my_model_directory/``.
                 - a path or url to a saved configuration JSON `file`, e.g.,
@@ -215,10 +239,11 @@ class PretrainedConfig(object):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Force to (re-)download the model weights and configuration files and override the cached versions if
-                they exist.
+                Wheter or not to force to (re-)download the configuration files and override the cached versions if they
+                exist.
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
+                exists.
             proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.,
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.`
@@ -235,7 +260,7 @@ class PretrainedConfig(object):
                 controlled by the ``return_unused_kwargs`` keyword parameter.
 
         Returns:
-            :class:`PretrainedConfig`: An instance of a configuration object
+            :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
 
         Examples::
 
@@ -327,14 +352,14 @@ class PretrainedConfig(object):
 
         Args:
             config_dict (:obj:`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the configuration object. Such a dictionary can be retrieved
-                from a pre-trained checkpoint by leveraging the :func:`~transformers.PretrainedConfig.get_config_dict`
-                method.
+                Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
+                :func:`~transformers.PretrainedConfig.get_config_dict` method.
             kwargs (:obj:`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            :class:`PretrainedConfig`: An instance of a configuration object
+            :class:`PretrainedConfig`: The configuration object instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
@@ -361,14 +386,14 @@ class PretrainedConfig(object):
     @classmethod
     def from_json_file(cls, json_file: str) -> "PretrainedConfig":
         """
-        Instantiates a :class:`~transformers.PretrainedConfig` from the path to a json file of parameters.
+        Instantiates a :class:`~transformers.PretrainedConfig` from the path to a JSON file of parameters.
 
         Args:
             json_file (:obj:`str`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            :class:`PretrainedConfig`: An instance of a configuration object
+            :class:`PretrainedConfig`: The configuration object instantiated from that JSON file.
 
         """
         config_dict = cls._dict_from_json_file(json_file)
@@ -441,7 +466,7 @@ class PretrainedConfig(object):
 
     def to_json_file(self, json_file_path: str, use_diff: bool = True):
         """
-        Save this instance to a json file.
+        Save this instance to a JSON file.
 
         Args:
             json_file_path (:obj:`str`):
