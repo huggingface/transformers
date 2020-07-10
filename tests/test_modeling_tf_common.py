@@ -319,7 +319,7 @@ class TFModelTesterMixin:
             outputs_dict = model(input_ids)
             hidden_states = outputs_dict[0]
 
-            # Add a dense layer on top to test intetgration with other keras modules
+            # Add a dense layer on top to test integration with other keras modules
             outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
 
             # Compile extended model
