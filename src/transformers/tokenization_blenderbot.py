@@ -30,8 +30,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "blenderbot-3B": 128,
-    "blenderbot-9B": 128,
+    "facebook/blenderbot-3B": 128,
+    "facebook/blenderbot-9B": 128,
 }
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "blenderbot-90M": 512,
+    "facebook/blenderbot-90M": 512,
 }
 
 
@@ -97,8 +97,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, merges_file, bos_token="__start__", eos_token="__end__", unk_token="__unk__", **kwargs):
-        super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, **kwargs)
+    def __init__(self, vocab_file, merges_file, bos_token="__start__", eos_token="__end__", unk_token="__unk__", pad_token="__null",  **kwargs):
+        super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -155,6 +155,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
                 break
             else:
                 pairs = get_pairs(word)
+        print(pairs)
         word = "@@ ".join(word)
         word = word[:-4]
         self.cache[token] = word
