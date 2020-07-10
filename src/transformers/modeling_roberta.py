@@ -223,7 +223,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         if "masked_lm_labels" in kwargs:
             warnings.warn(
                 "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                DeprecationWarning,
+                FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."

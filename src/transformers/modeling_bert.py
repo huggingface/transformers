@@ -879,7 +879,7 @@ class BertForPreTraining(BertPreTrainedModel):
         if "masked_lm_labels" in kwargs:
             warnings.warn(
                 "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                DeprecationWarning,
+                FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
@@ -1076,7 +1076,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         if "masked_lm_labels" in kwargs:
             warnings.warn(
                 "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                DeprecationWarning,
+                FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
         assert "lm_labels" not in kwargs, "Use `BertWithLMHead` for autoregressive language modeling task."
