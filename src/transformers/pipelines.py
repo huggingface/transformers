@@ -689,6 +689,8 @@ class TextGenerationPipeline(Pipeline):
 
             result = []
             for generated_sequence in output_sequences:
+                if self.framework == "pt" and generated_sequence is not None:
+                    generated_sequence = generated_sequence.cpu()
                 generated_sequence = generated_sequence.numpy().tolist()
                 record = {}
                 if return_tensors:
@@ -1003,8 +1005,6 @@ class TokenClassificationPipeline(Pipeline):
             labels_idx = score.argmax(axis=-1)
 
             entities = []
-            entity_groups = []
-            entity_group_disagg = []
             # Filter to labels not in `self.ignore_labels`
             filtered_labels_idx = [
                 (idx, label_idx)
@@ -1020,37 +1020,13 @@ class TokenClassificationPipeline(Pipeline):
                     "entity": self.model.config.id2label[label_idx],
                     "index": idx,
                 }
-                last_idx, _ = filtered_labels_idx[-1]
-                if self.grouped_entities:
-                    if not entity_group_disagg:
-                        entity_group_disagg += [entity]
-                        if idx == last_idx:
-                            entity_groups += [self.group_entities(entity_group_disagg)]
-                        continue
-
-                    # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
-                    if (
-                        entity["entity"] == entity_group_disagg[-1]["entity"]
-                        and entity["index"] == entity_group_disagg[-1]["index"] + 1
-                    ):
-                        entity_group_disagg += [entity]
-                        # Group the entities at the last entity
-                        if idx == last_idx:
-                            entity_groups += [self.group_entities(entity_group_disagg)]
-                    # If the current entity is different from the previous entity, aggregate the disaggregated entity group
-                    else:
-                        entity_groups += [self.group_entities(entity_group_disagg)]
-                        entity_group_disagg = [entity]
 
                 entities += [entity]
 
-            # Ensure if an entity is the latest one in the sequence it gets appended to the output
-            if len(entity_group_disagg) > 0:
-                entity_groups.append(self.group_entities(entity_group_disagg))
-
-            # Append
+            # Append grouped entities
             if self.grouped_entities:
-                answers += [entity_groups]
+                answers += [self.group_entities(entities)]
+            # Append ungrouped entities
             else:
                 answers += [entities]
 
@@ -1058,12 +1034,12 @@ class TokenClassificationPipeline(Pipeline):
             return answers[0]
         return answers
 
-    def group_entities(self, entities):
+    def group_sub_entities(self, entities: List[dict]) -> dict:
         """
-        Returns grouped entities
+        Returns grouped sub entities
         """
-        # Get the last entity in the entity group
-        entity = entities[-1]["entity"]
+        # Get the first entity in the entity group
+        entity = entities[0]["entity"]
         scores = np.mean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
 
@@ -1073,6 +1049,45 @@ class TokenClassificationPipeline(Pipeline):
             "word": self.tokenizer.convert_tokens_to_string(tokens),
         }
         return entity_group
+
+    def group_entities(self, entities: List[dict]) -> List[dict]:
+        """
+        Returns grouped entities
+        """
+
+        entity_groups = []
+        entity_group_disagg = []
+
+        if entities:
+            last_idx = entities[-1]["index"]
+
+        for entity in entities:
+            is_last_idx = entity["index"] == last_idx
+            if not entity_group_disagg:
+                entity_group_disagg += [entity]
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+                continue
+
+            # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
+            # The split is meant to account for the "B" and "I" suffixes
+            if (
+                entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
+                and entity["index"] == entity_group_disagg[-1]["index"] + 1
+            ):
+                entity_group_disagg += [entity]
+                # Group the entities at the last entity
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+            # If the current entity is different from the previous entity, aggregate the disaggregated entity group
+            else:
+                entity_groups += [self.group_sub_entities(entity_group_disagg)]
+                entity_group_disagg = [entity]
+                # If it's the last entity, add it to the entity groups
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+
+        return entity_groups
 
 
 NerPipeline = TokenClassificationPipeline
@@ -1284,14 +1299,15 @@ class QuestionAnsweringPipeline(Pipeline):
             min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
-                # Mask padding and question
-                start_, end_ = (
-                    start_ * np.abs(np.array(feature.p_mask) - 1),
-                    end_ * np.abs(np.array(feature.p_mask) - 1),
-                )
+                # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
+                undesired_tokens = np.abs(np.array(feature.p_mask) - 1) & feature.attention_mask
 
-                # Mask CLS
-                start_[0] = end_[0] = 0
+                # Generate mask
+                undesired_tokens_mask = undesired_tokens == 0.0
+
+                # Make sure non-context indexes in the tensor cannot contribute to the softmax
+                start_ = np.where(undesired_tokens_mask, -10000.0, start_)
+                end_ = np.where(undesired_tokens_mask, -10000.0, end_)
 
                 # Normalize logits and spans to retrieve the answer
                 start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
@@ -1299,6 +1315,9 @@ class QuestionAnsweringPipeline(Pipeline):
 
                 if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+
+                # Mask CLS
+                start_[0] = end_[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)
