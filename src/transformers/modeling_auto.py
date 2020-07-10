@@ -935,10 +935,9 @@ class AutoModelForCausalLM:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
-            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        # config variable should not be further stored in kwargs
-        kwargs = {key: value for key, value in kwargs.items() if not hasattr(config, key)}
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
 
         for config_class, model_class in MODEL_FOR_CAUSAL_LM_MAPPING.items():
             if isinstance(config, config_class):
