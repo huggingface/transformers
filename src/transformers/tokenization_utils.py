@@ -590,13 +590,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 first_ids,
                 second_ids,
                 add_special_tokens=add_special_tokens,
-<<<<<<< Updated upstream
-                padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
-                truncation=truncation_strategy.value,
-=======
                 padding_strategy=padding_strategy,
                 truncation_strategy=truncation_strategy,
->>>>>>> Stashed changes
                 max_length=max_length,
                 stride=stride,
                 return_attention_mask=return_attention_mask,
@@ -618,8 +613,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         return batch_outputs
 
-<<<<<<< Updated upstream
-=======
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _prepare_for_model(
         self,
@@ -718,7 +711,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         return batch_outputs
 
->>>>>>> Stashed changes
     def prepare_for_tokenization(self, text: str, is_pretokenized=False, **kwargs) -> (str, dict):
         """ Performs any necessary transformations before tokenization.
 
@@ -727,8 +719,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         return (text, kwargs)
 
-<<<<<<< Updated upstream
-=======
     def truncate_sequences(
         self,
         ids: List[int],
@@ -799,7 +789,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return token_ids_0
         return token_ids_0 + token_ids_1
 
->>>>>>> Stashed changes
     def get_special_tokens_mask(
         self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
