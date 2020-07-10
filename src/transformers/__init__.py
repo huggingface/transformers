@@ -353,6 +353,7 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
         FlaubertForSequenceClassification,
+        FlaubertForTokenClassification,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
