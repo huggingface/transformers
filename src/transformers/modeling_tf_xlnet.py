@@ -884,6 +884,9 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
+        # At every pass, the attention values for the new token and the two last generated tokens
+        # are computed, the rest is reloaded from the `past` cache. A purely auto-regressive model would have
+        # offset = 1; offset = 2 seems to have slightly better computation.
         offset = 2
 
         effective_batch_size = inputs.shape[0]

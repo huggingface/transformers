@@ -1001,8 +1001,9 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         effective_batch_size = input_ids.shape[0]
         dummy_token = torch.zeros((effective_batch_size, 1), dtype=torch.long, device=input_ids.device)
 
-        # at every pass, the attention values for the new token and the two last generated tokens
-        # are computed, the rest is reloaded from the `past` cache
+        # At every pass, the attention values for the new token and the two last generated tokens
+        # are computed, the rest is reloaded from the `past` cache. A purely auto-regressive model would have
+        # offset = 1; offset = 2 seems to have slightly better computation.
         offset = 2
 
         if past:
