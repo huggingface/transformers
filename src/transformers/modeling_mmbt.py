@@ -22,11 +22,14 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .modeling_outputs import BaseModelOutputWithPooling
 from .modeling_utils import ModuleUtilsMixin
 
 
 logger = logging.getLogger(__name__)
+
+_CONFIG_FOR_DOC = "MMBTConfig"
 
 
 class ModalEmbeddings(nn.Module):
@@ -100,91 +103,68 @@ MMBT_START_DOCSTRING = r"""    MMBT model was proposed in
 """
 
 MMBT_INPUTS_DOCSTRING = r"""    Inputs:
-        **input_modal**: ``torch.FloatTensor`` of shape ``(batch_size, ***)``:
+        input_modal (``torch.FloatTensor`` of shape ``(batch_size, ***)``):
             The other modality data. It will be the shape that the encoder for that type expects.
             e.g. With an Image Encoder, the shape would be (batch_size, channels, height, width)
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        input_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``):
             Indices of input sequence tokens in the vocabulary.
             It does not expect [CLS] token to be added as it's appended to the end of other modality embeddings.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **modal_start_tokens**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+        modal_start_tokens (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Optional start token to be added to Other Modality Embedding. [CLS] Most commonly used for Classification tasks.
-        **modal_end_tokens**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
+        modal_end_tokens (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Optional end token to be added to Other Modality Embedding. [SEP] Most commonly used.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        attention_mask (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        token_type_ids (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Segment token indices to indicate different portions of the inputs.
-        **modal_token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``:
+        modal_token_type_ids (`optional`) ``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``:
             Segment token indices to indicate different portions of the non-text modality.
             The embeddings from these tokens will be summed with the respective token embeddings for the non-text modality.
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        position_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
-        **modal_position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``:
+        modal_position_ids (``torch.LongTensor`` of shape ``(batch_size, modal_sequence_length)``, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings for the non-text modality.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
+        head_mask (``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``, `optional`):
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
+        inputs_embeds (``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``, `optional`):
             Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        **encoder_hidden_states**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``:
+        encoder_hidden_states (``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``, `optional`):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
             is configured as a decoder.
-        **encoder_attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        encoder_attention_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
 
 @add_start_docstrings(
-    "The bare MMBT Model outputting raw hidden-states without any specific head on top.",
-    MMBT_START_DOCSTRING,
-    MMBT_INPUTS_DOCSTRING,
+    "The bare MMBT Model outputting raw hidden-states without any specific head on top.", MMBT_START_DOCSTRING,
 )
 class MMBTModel(nn.Module, ModuleUtilsMixin):
-    r"""
-        Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-            **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-                Sequence of hidden-states at the output of the last layer of the model.
-            **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-                Last layer hidden-state of the first token of the sequence (classification token)
-                further processed by a Linear layer and a Tanh activation function. The Linear
-                layer weights are trained from the next sentence prediction (classification)
-                objective during Bert pretraining. This output is usually *not* a good summary
-                of the semantic content of the input, you're often better with averaging or pooling
-                the sequence of hidden-states for the whole input sequence.
-            **hidden_states**: (`optional`, returned when ``output_hidden_states=True``)
-                list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-                of shape ``(batch_size, sequence_length, hidden_size)``:
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            **attentions**: (`optional`, returned when ``output_attentions=True``)
-                list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-        Examples::
-
-            # For example purposes. Not runnable.
-            transformer = BertModel.from_pretrained('bert-base-uncased')
-            encoder = ImageEncoder(args)
-            mmbt = MMBTModel(config, transformer, encoder)
-        """
-
     def __init__(self, config, transformer, encoder):
         super().__init__()
         self.config = config
         self.transformer = transformer
         self.modal_encoder = ModalEmbeddings(config, encoder, transformer.embeddings)
 
+    @add_start_docstrings_to_callable(MMBT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_modal,
@@ -200,8 +180,25 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=None,
         output_hidden_states=None,
+        return_tuple=None,
     ):
+        r"""
+        Returns:
+
+        Examples::
+
+            # For example purposes. Not runnable.
+            transformer = BertModel.from_pretrained('bert-base-uncased')
+            encoder = ImageEncoder(args)
+            mmbt = MMBTModel(config, transformer, encoder)
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -258,16 +255,23 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_tuple=return_tuple,
         )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.transformer.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
-        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+        if return_tuple:
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings

@@ -77,7 +77,7 @@ exact_match = 86.91
 ```
 
 This fine-tuned model is available as a checkpoint under the reference
-`bert-large-uncased-whole-word-masking-finetuned-squad`.
+[`bert-large-uncased-whole-word-masking-finetuned-squad`](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
 
 #### Fine-tuning XLNet on SQuAD
 
@@ -176,4 +176,5 @@ python run_tf_squad.py \
     --doc_stride 128    
 ```
 
-For the moment the evaluation is not available in the Tensorflow Trainer only the training.
+
+For the moment evaluation is not available in the Tensorflow Trainer only the training.

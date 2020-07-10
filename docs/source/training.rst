@@ -39,7 +39,7 @@ of the specified model are used to initialize the model. The
 library also includes a number of task-specific final layers or 'heads' whose
 weights are instantiated randomly when not present in the specified
 pre-trained model. For example, instantiating a model with
-``BertForSequenceClassification.from_pretrained('bert-base-uncased', num_classes=2)``
+``BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)``
 will create a BERT model instance with encoder weights copied from the
 ``bert-base-uncased`` model and a randomly initialized sequence
 classification head on top of the encoder with an output size of 2. Models
@@ -272,7 +272,7 @@ optimize.
 :func:`~transformers.Trainer` uses a built-in default function to collate
 batches and prepare them to be fed into the model. If needed, you can also
 use the ``data_collator`` argument to pass your own collator function which
-takes in the data in the format provides by your dataset and returns a
+takes in the data in the format provided by your dataset and returns a
 batch ready to be fed into the model. Note that
 :func:`~transformers.TFTrainer` expects the passed datasets to be dataset
 objects from ``tensorflow_datasets``.

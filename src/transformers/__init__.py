@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "3.0.1"
+__version__ = "3.0.2"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -27,6 +27,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
@@ -129,6 +130,14 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenize
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from .tokenization_dpr import (
+    DPRContextEncoderTokenizer,
+    DPRContextEncoderTokenizerFast,
+    DPRQuestionEncoderTokenizer,
+    DPRQuestionEncoderTokenizerFast,
+    DPRReaderTokenizer,
+    DPRReaderTokenizerFast,
+)
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
@@ -383,6 +392,14 @@ if is_torch_available():
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
+    from .modeling_dpr import (
+        DPRPretrainedContextEncoder,
+        DPRPretrainedQuestionEncoder,
+        DPRPretrainedReader,
+        DPRContextEncoder,
+        DPRQuestionEncoder,
+        DPRReader,
+    )
     from .modeling_retribert import (
         RetriBertPreTrainedModel,
         RetriBertModel,
@@ -400,9 +417,21 @@ if is_torch_available():
     )
 
     # Trainer
-    from .trainer import Trainer, torch_distributed_zero_first
-    from .data.data_collator import default_data_collator, DataCollator, DataCollatorForLanguageModeling
-    from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
+    from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
+    from .data.data_collator import (
+        default_data_collator,
+        DataCollator,
+        DataCollatorForLanguageModeling,
+        DataCollatorForPermutationLanguageModeling,
+    )
+    from .data.datasets import (
+        GlueDataset,
+        TextDataset,
+        LineByLineTextDataset,
+        GlueDataTrainingArguments,
+        SquadDataset,
+        SquadDataTrainingArguments,
+    )
 
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
@@ -425,6 +454,9 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TFAutoModel,
         TFAutoModelForMultipleChoice,
         TFAutoModelForPreTraining,
@@ -432,6 +464,9 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
+        TFAutoModelForCausalLM,
+        TFAutoModelForMaskedLM,
+        TFAutoModelForSeq2SeqLM,
     )
 
     from .modeling_tf_albert import (
@@ -450,6 +485,7 @@ if is_tf_available():
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
+        TFBertLMHeadModel,
         TFBertForMaskedLM,
         TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,
