@@ -21,7 +21,7 @@ By [Mawdoo3-AI](https://ai.mawdoo3.com/).
 Instead of training the Multi-dialect Arabic BERT model from scratch, we initialized the weights of the model using [Arabic-BERT](https://github.com/alisafaya/Arabic-BERT) and trained it on 10M arabic tweets from the unlabled data of [The Nuanced Arabic Dialect Identification (NADI) shared task](https://sites.google.com/view/nadi-shared-task).
 
 ### To cite this work
-We haven't published any paper on this work. Please cite this repository:
+Please cite this paper for now:
 ```
 @inproceedings{talafha-etal-2020-nadi,
     title ={{Multi-dialect Arabic BERT for Country-level Dialect Identification}},
