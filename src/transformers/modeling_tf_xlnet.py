@@ -884,9 +884,18 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
+        # At every pass, the attention values for the new token and the two last generated tokens
+        # are computed, the rest is reloaded from the `past` cache. A purely auto-regressive model would have
+        # offset = 1; offset = 2 seems to have slightly better computation.
+        offset = 2
+
         effective_batch_size = inputs.shape[0]
         dummy_token = tf.zeros((effective_batch_size, 1), dtype=tf.int32)
-        inputs = tf.concat([inputs, dummy_token], axis=1)
+
+        if past:
+            inputs = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
+        else:
+            inputs = tf.concat([inputs, dummy_token], axis=1)
 
         # Build permutation mask so that previous tokens don't see last token
         sequence_length = inputs.shape[1]
@@ -908,7 +917,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
-            inputs["mems"] = past
+            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past)
 
         return inputs
 
