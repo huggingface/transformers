@@ -442,13 +442,17 @@ class ReformerModelTester:
 
     def create_and_check_cached_hidden_states_and_buckets(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = True
-        config.lsh_num_chunks_before = 1
-        config.lsh_num_chunks_after = 1
+        #        config.lsh_num_chunks_before = 1
+        config.lsh_num_chunks_before = 0
+        config.lsh_num_chunks_after = 0
+        config.num_hashes = 1
+        config.num_attention_heads = 1
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()
-        input_ids_first = input_ids[:, :-1]
-        input_ids_second = input_ids[:, -1:]
+        input_ids = input_ids[:, :12]
+        input_ids_first = input_ids[:1, :-1]
+        input_ids_second = input_ids[:1, -1:]
 
         # return saved cache
         _, cached_hidden_states_and_buckets = model(input_ids_first, use_cache=True)
@@ -457,17 +461,18 @@ class ReformerModelTester:
         outputs_with_cache, _ = model(
             input_ids_second, cached_hidden_states_and_buckets=cached_hidden_states_and_buckets, use_cache=True
         )
-        outputs_without_cache = model(input_ids)[0][:, -1]
+        outputs_without_cache = model(input_ids[:1])[0][:, -1]
 
         # select random slice idx
         random_slice_idx = torch.randint(outputs_without_cache.shape[-1], (1, 1), device=torch_device).item()
 
         # outputs should be similar within range
-        self.parent.assertTrue(
-            torch.allclose(
-                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-3
-            )
-        )
+        #        self.parent.assertTrue(
+        #            torch.allclose(
+        #                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-3
+        #            )
+        #        )
+        self.parent.assertTrue(torch.allclose(outputs_with_cache[:, 0], outputs_without_cache, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

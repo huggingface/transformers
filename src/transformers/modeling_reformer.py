@@ -364,8 +364,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # num hashes can optionally be overwritten by user
         num_hashes = num_hashes if num_hashes is not None else self.num_hashes
 
+        do_cached_attention = use_cache and cached_hidden_states_and_buckets[1] is not None
+
         # check if cache shall be used and that hidden states are already cached
-        if use_cache and cached_hidden_states_and_buckets[1] is not None:
+        if do_cached_attention:
             assert (
                 sequence_length == 1
             ), f"At the moment, auto-regressive language generation is only possible one word at a time. Make sure that input sequence length {sequence_length} equals 1, when `cached_hidden_states_and_buckets` is passed."
@@ -379,14 +381,26 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 query_vectors = self._split_hidden_size_dim(
                     query_vectors, self.num_attention_heads, self.attention_head_size
                 )
-                query_buckets = self._hash_vectors(query_vectors, num_hashes, attention_mask)
 
-                key_value_hidden_states = self._retrieve_relevant_hidden_states(
-                    cached_hidden_states=cached_hidden_states,
-                    cached_buckets=cached_buckets,
-                    query_buckets=query_buckets,
-                    num_hashes=num_hashes,
-                    hidden_states=hidden_states,
+                # concat buckets
+                query_buckets = self._hash_vectors(query_vectors, num_hashes, attention_mask)
+                buckets = torch.cat([cached_buckets, query_buckets.unsqueeze(-1)], dim=-1)
+
+                # arange and expand
+                # we add a scale offset to buckets to make argsort stable
+                scale_offset = torch.arange(buckets.shape[-1], device=buckets.device).view(1, 1, -1)
+                scale_offset = scale_offset.expand(batch_size, self.num_attention_heads, num_hashes, -1)
+                scaled_buckets = buckets.shape[-1] * buckets + (scale_offset % buckets.shape[-1])
+                # argsort
+                sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
+
+                print("Sorted_buckets 2", sorted_bucket_idx)
+
+                # concat hidden states
+                concat_hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
+
+                key_value_hidden_states, sorted_bucket_idx = self._retrieve_relevant_hidden_states(
+                    bucket_idx=sorted_bucket_idx, num_hashes=num_hashes, hidden_states=concat_hidden_states,
                 )
                 # TODO: reshape for num hashes here
 
@@ -429,12 +443,19 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             use_cache and cached_hidden_states_and_buckets[1] is not None
         )
 
-        import ipdb
-
-        ipdb.set_trace()
-
         # if query key is not already split
-        if query_key_vectors.ndim < 4:
+        if do_cached_attention and cached_buckets is not None:
+            # split key & value vectors by num hashes to apply
+            # self attention on each separately
+            query_key_vectors = self._split_seq_length_dim_to(
+                query_key_vectors, num_hashes, -1, self.num_attention_heads, self.attention_head_size,
+            )
+            value_vectors = self._split_seq_length_dim_to(
+                value_vectors, num_hashes, -1, self.num_attention_heads, self.attention_head_size,
+            )
+            # repeat query vectors across hash dimension
+            query_vectors = query_vectors.unsqueeze(2).repeat(1, 1, num_hashes, 1, 1)
+        else:
             query_key_vectors = self._split_hidden_size_dim(
                 query_key_vectors, self.num_attention_heads, self.attention_head_size
             )
@@ -493,6 +514,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 assert (
                     self.num_chunks_before == 0 and self.num_chunks_after == 0
                 ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+        elif do_cached_attention and cached_buckets is not None:
+            # use max sequence length
+            sorted_bucket_idx_per_hash = sorted_bucket_idx
         else:
             # get sequence length indices
             sorted_bucket_idx_per_hash = torch.arange(sequence_length, device=query_key_vectors.device).repeat(
@@ -516,6 +540,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             attention_mask=attention_mask,
             head_mask=head_mask,
             do_standard_self_attention=do_standard_self_attention,
+            do_cached_attention=do_cached_attention,
         )
 
         del query_key_vectors, key_vectors, value_vectors
@@ -525,6 +550,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # sort clusters back to correct ordering
             out_vectors, logits = ReverseSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
+        if not do_standard_self_attention or (do_cached_attention and cached_buckets is not None):
             # sum up all hash rounds
             if num_hashes > 1:
                 out_vectors = self._split_seq_length_dim_to(
@@ -555,7 +581,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             attention_probs = ()
 
         if buckets is not None:
-            buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes, sequence_length)
+            buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes, -1)
 
         return LSHSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs, buckets=buckets)
 
@@ -650,6 +676,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
             # Hash-based sort
             sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
+            print("Sorted_buckets", sorted_bucket_idx)
 
             # create simple indices to scatter to, to have undo sort
             indices = (
@@ -692,6 +719,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         attention_mask,
         head_mask,
         do_standard_self_attention,
+        do_cached_attention,
     ):
 
         # look at previous and following chunks if chunked attention
@@ -700,6 +728,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             value_vectors = self._look_adjacent(value_vectors, self.num_chunks_before, self.num_chunks_after)
 
         # get logits and dots
+        # (BS, NumAttn, NumHash x NumChunk, Chunk_L x Hidden),(BS, NumAttn, NumHash x NumChunk, Chunk_L * (Num_bef + Num_aft + 1) x Hidden) -> (BS, NumAttn, NumHash x NumChunk, Chunk_L, Chunk_L * (1 + Num_bef + Num_aft))
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
 
         # free memory
@@ -711,6 +740,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 sorted_bucket_idx_per_hash, -1, self.chunk_length, self.num_attention_heads
             )
             key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
+        elif do_cached_attention and query_key_dots.ndim > 4:
+            key_value_bucket_idx = sorted_bucket_idx_per_hash
+            query_bucket_idx = (
+                key_value_bucket_idx.new_ones(key_value_bucket_idx.shape[:-1] + (1,)) * key_value_bucket_idx.max()
+            )
         else:
             query_bucket_idx = key_value_bucket_idx = sorted_bucket_idx_per_hash
 
@@ -722,15 +756,20 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
 
-        mask = self._compute_attn_mask(
-            query_bucket_idx, key_value_bucket_idx, attention_mask, query_key_dots.shape, do_standard_self_attention
-        )
+        if not do_cached_attention:
+            mask = self._compute_attn_mask(
+                query_bucket_idx,
+                key_value_bucket_idx,
+                attention_mask,
+                query_key_dots.shape,
+                do_standard_self_attention,
+            )
 
-        if mask is not None:
-            query_key_dots = torch.where(mask, query_key_dots, mask_value)
+            if mask is not None:
+                query_key_dots = torch.where(mask, query_key_dots, mask_value)
 
-        # free memory
-        del mask
+            # free memory
+            del mask
 
         # Self mask is ALWAYS applied.
         # From the reformer paper (https://arxiv.org/pdf/2001.04451.pdf):
@@ -773,7 +812,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         del value_vectors
 
         # merge chunk length
-        if not do_standard_self_attention:
+        if out_vectors.ndim > 4:
             logits = logits.flatten(start_dim=2, end_dim=3).squeeze(-1)
             out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
@@ -782,7 +821,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
     def _compute_attn_mask(
         self, query_indices, key_indices, attention_mask, query_key_dot_shape, do_standard_self_attention
     ):
-
         # attention mask for LSH
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
@@ -808,38 +846,39 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         return attention_mask
 
-    def _retrieve_relevant_hidden_states(
-        self, cached_hidden_states, cached_buckets, query_buckets, num_hashes, hidden_states
-    ):
-        hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=-2)
-        buckets = torch.cat([cached_buckets, query_buckets.unsqueeze(-1)], dim=-1)
-
+    def _retrieve_relevant_hidden_states(self, bucket_idx, num_hashes, hidden_states):
         batch_size = hidden_states.shape[0]
         sequence_length = hidden_states.shape[1]
 
-        # buckets has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
-        assert buckets.shape == (
+        # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
+        assert bucket_idx.shape == (
             batch_size,
             self.num_attention_heads,
             num_hashes,
             sequence_length,
-        ), f"buckets should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {buckets.shape}."
+        ), f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {bucket_idx.shape}."
 
-        _, sorted_index = torch.sort(buckets, dim=-1)
-        # find indices of new buckets
-        relevant_indices = (sorted_index == buckets.shape[-1] - 1).nonzero()
-        #        relevant_hidden_states = torch.reshape(hidden_states[relevant_indices],
-        chunk_relevant_indices = self._expand_to_indices_in_relevant_chunk(relevant_indices, sequence_length)
-        chunk_relevant_indices = tuple(chunk_relevant_indices.transpose(0, 1))
+        # find indices of new bucket_idx
+        relevant_bucket_idx = (bucket_idx == (bucket_idx.shape[-1] - 1)).nonzero()
 
-        sorted_chunk_relevant_indices = sorted_index[chunk_relevant_indices]
-        sorted_chunk_relevant_indices += torch.arange(sorted_chunk_relevant_indices.shape[-1]) // batch_size
+        relevant_bucket_idx_chunk = self._expand_to_indices_in_relevant_chunk(relevant_bucket_idx, sequence_length)
+        relevant_bucket_idx_chunk = bucket_idx[tuple(relevant_bucket_idx_chunk.transpose(0, 1))]
 
+        # adapt bucket_idx for batch and hidden states for index select
+        bucket_idx_batch_offset = (
+            torch.arange(batch_size * relevant_bucket_idx_chunk.shape[-1]) // relevant_bucket_idx_chunk.shape[-1]
+        )
+        relevant_bucket_idx_chunk_flat_batch = relevant_bucket_idx_chunk + bucket_idx_batch_offset
         hidden_states = hidden_states.reshape((-1, self.hidden_size))
-        relevant_hidden_states = hidden_states.index_select(0, sorted_chunk_relevant_indices)
 
+        relevant_hidden_states = hidden_states.index_select(0, relevant_bucket_idx_chunk_flat_batch)
+
+        # reshape hidden states and bucket_idx to correct output
         relevant_hidden_states = relevant_hidden_states.reshape(
             batch_size, self.num_attention_heads, -1, self.hidden_size
+        )
+        relevant_bucket_idx_chunk = relevant_bucket_idx_chunk.reshape(
+            batch_size, self.num_attention_heads, num_hashes, -1
         )
 
         assert (
@@ -847,7 +886,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
         ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
 
-        return relevant_hidden_states
+        assert (
+            relevant_bucket_idx_chunk.shape[-1]
+            == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
+        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+
+        return relevant_hidden_states, relevant_bucket_idx_chunk
 
     def _expand_to_indices_in_relevant_chunk(self, indices, sequence_length):
         # get relevant indices of where chunk starts and ends
@@ -862,7 +906,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         chunk_sequence_indices = chunk_sequence_indices.flatten() % sequence_length
 
         # expand indices and set correct sequence indices
-        indices = indices.unsqueeze(1).expand((indices.shape[0], total_chunk_size, -1)).flatten(0, 1)
+        indices = indices.unsqueeze(1).expand((indices.shape[0], total_chunk_size, -1)).flatten(0, 1).clone()
         indices[:, -1] = chunk_sequence_indices
 
         return indices
@@ -1989,6 +2033,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         assert (
             "local" not in self.config.attn_layers or config.local_num_chunks_after == 0
         ), f"If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not {config.local_num_chunks_after}."
+
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 
