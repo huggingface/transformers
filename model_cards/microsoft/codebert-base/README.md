@@ -2,7 +2,7 @@
 Pretrained weights for [CodeBERT: A Pre-Trained Model for Programming and Natural Languages](https://arxiv.org/abs/2002.08155).
 
 ### Training Data
-The model is trained on bi-modal data (documents & code) of CodeSearchNet: https://github.com/github/CodeSearchNet
+The model is trained on bi-modal data (documents & code) of [CodeSearchNet](https://github.com/github/CodeSearchNet)
 
 ### Training Objective
 This model is initialized with Roberta-base and trained with MLM+RTD objective (cf. the paper).
