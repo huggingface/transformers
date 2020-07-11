@@ -46,6 +46,10 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     )
 
 if is_torch_available():
@@ -57,6 +61,11 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
         AutoModelForSeq2SeqLM,
+        MODEL_WITH_LM_HEAD_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     )
 
 if TYPE_CHECKING:
@@ -65,6 +74,8 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
 
 
 def get_framework(model=None):
@@ -396,6 +407,7 @@ class Pipeline(_ScikitCompat):
         if framework is None:
             framework = get_framework()
 
+        self.task = task
         self.model = model
         self.tokenizer = tokenizer
         self.modelcard = modelcard
@@ -468,6 +480,19 @@ class Pipeline(_ScikitCompat):
         :return:
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
+
+    def check_model_validity(self, supported_models):
+        """
+        Check if the model class is in the supported class list of the pipeline.
+        """
+        if not isinstance(supported_models, list):  # Create from a model mapping
+            supported_models = [item[1].__name__ for item in supported_models.items()]
+        if self.model.__class__.__name__ not in supported_models:
+            raise PipelineException(
+                self.task,
+                self.model.base_model_prefix,
+                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
+            )
 
     def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
         """
@@ -586,34 +611,39 @@ class TextGenerationPipeline(Pipeline):
     `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
     """
 
-    # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
-    # in https://github.com/rusiaaman/XLNet-gen#methodology
-    # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
-    (except for Alexei and Maria) are discovered.
-    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
-    remainder of the story. 1883 Western Siberia,
-    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
-    Rasputin has a vision and denounces one of the men as a horse thief. Although his
-    father initially slaps him for making such an accusation, Rasputin watches as the
-    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
-    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
-    with people, even a bishop, begging for his blessing. """
+        # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
+        # in https://github.com/rusiaaman/XLNet-gen#methodology
+        # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
 
-    ALLOWED_MODELS = [
-        "XLNetLMHeadModel",
-        "TransfoXLLMHeadModel",
-        "ReformerModelWithLMHead",
-        "GPT2LMHeadModel",
-        "OpenAIGPTLMHeadModel",
-        "CTRLLMHeadModel",
-        "TFXLNetLMHeadModel",
-        "TFTransfoXLLMHeadModel",
-        "TFGPT2LMHeadModel",
-        "TFOpenAIGPTLMHeadModel",
-        "TFCTRLLMHeadModel",
-    ]
+        self.PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+        (except for Alexei and Maria) are discovered.
+        The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+        remainder of the story. 1883 Western Siberia,
+        a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+        Rasputin has a vision and denounces one of the men as a horse thief. Although his
+        father initially slaps him for making such an accusation, Rasputin watches as the
+        man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+        the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+        with people, even a bishop, begging for his blessing. """
+
+        self.ALLOWED_MODELS = [
+            "XLNetLMHeadModel",
+            "TransfoXLLMHeadModel",
+            "ReformerModelWithLMHead",
+            "GPT2LMHeadModel",
+            "OpenAIGPTLMHeadModel",
+            "CTRLLMHeadModel",
+            "TFXLNetLMHeadModel",
+            "TFTransfoXLLMHeadModel",
+            "TFGPT2LMHeadModel",
+            "TFOpenAIGPTLMHeadModel",
+            "TFCTRLLMHeadModel",
+        ]
+
+        self.check_model_validity(self.ALLOWED_MODELS)
 
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
 
@@ -640,12 +670,6 @@ class TextGenerationPipeline(Pipeline):
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
-        if self.model.__class__.__name__ not in self.ALLOWED_MODELS:
-            raise NotImplementedError(
-                "Generation is currently not supported for {}. Please select a model from {} for generation.".format(
-                    self.model.__class__.__name__, self.ALLOWED_MODELS
-                )
-            )
 
         text_inputs = self._args_parser(*args)
 
@@ -771,6 +795,8 @@ class TextClassificationPipeline(Pipeline):
     def __init__(self, return_all_scores: bool = False, **kwargs):
         super().__init__(**kwargs)
 
+        self.check_model_validity(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING if self.framework == "tf" else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+
         self.return_all_scores = return_all_scores
 
     def __call__(self, *args, **kwargs):
@@ -846,6 +872,8 @@ class FillMaskPipeline(Pipeline):
             binary_output=True,
             task=task,
         )
+
+        self.check_model_validity(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
 
         self.topk = topk
 
@@ -979,6 +1007,9 @@ class TokenClassificationPipeline(Pipeline):
             binary_output=binary_output,
             task=task,
         )
+
+        self.check_model_validity(
+            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING if self.framework == "tf" else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
@@ -1219,6 +1250,9 @@ class QuestionAnsweringPipeline(Pipeline):
             task=task,
             **kwargs,
         )
+
+        self.check_model_validity(
+            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING)
 
     @staticmethod
     def create_sample(
@@ -1487,6 +1521,9 @@ class SummarizationPipeline(Pipeline):
         kwargs.update(task="summarization")
         super().__init__(**kwargs)
 
+        self.check_model_validity(
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
+
     def __call__(
         self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
@@ -1614,6 +1651,12 @@ class TranslationPipeline(Pipeline):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
             on the associated CUDA device id.
     """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.check_model_validity(
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
