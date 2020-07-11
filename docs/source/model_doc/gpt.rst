@@ -71,6 +71,13 @@ OpenAIGPTTokenizerFast
     :members:
 
 
+OpenAI specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_openai.OpenAIGPTDoubleHeadsModelOutput
+    :members:
+
+
 OpenAIGPTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
