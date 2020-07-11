@@ -195,7 +195,7 @@ class ONNXExportFastIntegrationTest(unittest.TestCase):
     @require_tf
     def test_bert_export_tf(self):
         convert(
-            "td", self.model_path, self.out_dir, 11, self.tokenizer_path, True,
+            "tf", self.model_path, self.out_dir, 11, self.tokenizer_path, True,
         )
 
         verify(self.out_dir)
