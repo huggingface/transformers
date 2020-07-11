@@ -55,8 +55,8 @@ def ensure_onnx_requirements_met(framework, use_external_format):
 
         if use_external_format and (torch.__version__ < "1.5.0"):
             raise ArgumentTypeError(
-                f"use-external-format requires torch>=1.5.0\n"
-                f"Update your pytorch version, or if your model is <2Gb set '--use-external-format false'"
+                "use-external-format requires torch>=1.5.0\n"
+                "Update your pytorch version, or if your model is <2Gb set '--use-external-format false'"
             )
     if framework == "tf" and not is_tf_available():
         raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
