@@ -9,7 +9,7 @@ This model is initialized with Roberta-base and trained with a simple MLM (Maske
 
 ### Usage
 ```python
-from transformers import RobertaConfig, RobertaTokenizer, RobertaForMaskedLM, pipeline
+from transformers import RobertaTokenizer, RobertaForMaskedLM, pipeline
 
 model = RobertaForMaskedLM.from_pretrained('microsoft/codebert-base-mlm')
 tokenizer = RobertaTokenizer.from_pretrained('microsoft/codebert-base-mlm')
