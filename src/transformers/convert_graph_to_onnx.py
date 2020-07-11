@@ -3,7 +3,7 @@ from os import listdir, makedirs
 from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
 
-from transformers import is_tf_available, is_torch_available, AutoTokenizer, AutoModel
+from transformers import AutoModel, AutoTokenizer, is_tf_available, is_torch_available
 from transformers.tokenization_utils import BatchEncoding
 
 
@@ -23,21 +23,27 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb")
         self.add_argument("output", type=abspath)
 
+
 def get_tokenizer_and_model(tokenizer_name, model_name):
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
     model = AutoModel.from_pretrained(model_name)
     return tokenizer, model
+
 
 def ensure_onnx_requirements_met(framework, use_external_format):
     # Check the wanted framework is available
     if framework == "pt" and not is_torch_available():
         raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
         import torch
+
         if use_external_format and (torch.__version__ < "1.5.0"):
-            raise ArgumentTypeError(f"use-external-format requires torch>=1.5.0\n"
-                                    f"Update your pytorch version, or if your model is <2Gb set '--use-external-format false'")
+            raise ArgumentTypeError(
+                f"use-external-format requires torch>=1.5.0\n"
+                f"Update your pytorch version, or if your model is <2Gb set '--use-external-format false'"
+            )
     if framework == "tf" and not is_tf_available():
         raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
+
 
 def ensure_valid_input(model, tokens, input_names):
     """
@@ -124,24 +130,20 @@ def convert_pytorch(tokenizer, model, model_name: str, opset: int, output: str, 
         input_names, output_names, dynamic_axes, tokens = infer_shapes(tokenizer, model, "pt")
         ordered_input_names, model_args = ensure_valid_input(model, tokens, input_names)
         kwargs = {
-            'f': output,
-            'input_names': ordered_input_names,
-            'output_names': output_names,
-            'dynamic_axes': dynamic_axes,
-            'do_constant_folding': True,
-            'enable_onnx_checker': True,
-            'opset_version': opset,
+            "f": output,
+            "input_names": ordered_input_names,
+            "output_names": output_names,
+            "dynamic_axes": dynamic_axes,
+            "do_constant_folding": True,
+            "enable_onnx_checker": True,
+            "opset_version": opset,
         }
 
         # Older versions of pytorch do not have the use_external_data_format option
         if use_external_format:
-            kwargs['use_external_data_format'] = True
+            kwargs["use_external_data_format"] = True
 
-        export(
-            model,
-            model_args,
-            **kwargs
-        )
+        export(model, model_args, **kwargs)
 
 
 def convert_tensorflow(tokenizer, model, model_name: str, opset: int, output: str):
@@ -219,12 +221,7 @@ if __name__ == "__main__":
     try:
         # Convert
         convert(
-            args.framework,
-            args.model,
-            args.output,
-            args.opset,
-            args.tokenizer,
-            args.use_external_format,
+            args.framework, args.model, args.output, args.opset, args.tokenizer, args.use_external_format,
         )
 
         # And verify

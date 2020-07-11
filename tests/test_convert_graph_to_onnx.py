@@ -15,28 +15,31 @@
 
 import os
 import unittest
+import tempfile
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.convert_graph_to_onnx import convert, verify
+from transformers.testing_utils import require_torch
 from transformers.tokenization_bert import VOCAB_FILES_NAMES
 
-from transformers.convert_graph_to_onnx import convert, verify
 from .test_modeling_bert import BertModelTester
 from .test_tokenization_common import TokenizerTesterMixin
+
+
 if is_torch_available():
-    from transformers import (
-        BertModel,
-        BertTokenizer
-    )
+    from transformers import BertModel, BertTokenizer
+
 
 @require_torch
-class ONNXExportTest(TokenizerTesterMixin, unittest.TestCase):
+class ONNXExportTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
+
+        self.tmpdirname = tempfile.mkdtemp()
         self.model_tester = BertModelTester(self)
 
         # Setting up model files dir
-        output_dir = f'{self.tmpdirname}/model_files'
+        output_dir = f"{self.tmpdirname}/model_files"
 
         # Setting up vocab files
         vocab_tokens = [
@@ -64,38 +67,28 @@ class ONNXExportTest(TokenizerTesterMixin, unittest.TestCase):
         config, input_ids, _, _, _, _, _ = self.model_tester.prepare_config_and_inputs()
         model = BertModel(config=config)
         tokenizer = BertTokenizer(self.vocab_file)
-        self.model_path = f'{self.tmpdirname}/model'
-        self.tokenizer_path = f'{self.tmpdirname}/bert'
+        self.model_path = f"{self.tmpdirname}/model"
+        self.tokenizer_path = f"{self.tmpdirname}/bert"
 
         model.save_pretrained(self.model_path)
         tokenizer.save_pretrained(self.tokenizer_path)
 
         # Necessary since AutoTokenizer looks for config.json by default
-        os.rename(f'{self.tokenizer_path}/tokenizer_config.json', f'{self.tokenizer_path}/config.json')
+        os.rename(f"{self.tokenizer_path}/tokenizer_config.json", f"{self.tokenizer_path}/config.json")
 
         # Conversion to ONNX
-        self.out_dir = f'{output_dir}/out'
+        self.out_dir = f"{output_dir}/out"
 
     def test_bert_export_pt(self):
         convert(
-            'pt',
-            self.model_path,
-            self.out_dir,
-            11,
-            self.tokenizer_path,
-            False,
+            "pt", self.model_path, self.out_dir, 11, self.tokenizer_path, False,
         )
 
         verify(self.out_dir)
 
     def test_bert_export_large(self):
         convert(
-            'pt',
-            self.model_path,
-            self.out_dir,
-            11,
-            self.tokenizer_path,
-            True,
+            "pt", self.model_path, self.out_dir, 11, self.tokenizer_path, True,
         )
 
         verify(self.out_dir)
