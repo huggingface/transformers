@@ -479,7 +479,7 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def check_model_validity(self, supported_models):
+    def check_model_type(self, supported_models):
         """
         Check if the model class is in the supported class list of the pipeline.
         """
@@ -641,7 +641,7 @@ class TextGenerationPipeline(Pipeline):
             "TFCTRLLMHeadModel",
         ]
 
-        self.check_model_validity(self.ALLOWED_MODELS)
+        self.check_model_type(self.ALLOWED_MODELS)
 
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
 
@@ -793,7 +793,7 @@ class TextClassificationPipeline(Pipeline):
     def __init__(self, return_all_scores: bool = False, **kwargs):
         super().__init__(**kwargs)
 
-        self.check_model_validity(
+        self.check_model_type(
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
             if self.framework == "tf"
             else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
@@ -875,7 +875,7 @@ class FillMaskPipeline(Pipeline):
             task=task,
         )
 
-        self.check_model_validity(
+        self.check_model_type(
             TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING
         )
 
@@ -1012,7 +1012,7 @@ class TokenClassificationPipeline(Pipeline):
             task=task,
         )
 
-        self.check_model_validity(
+        self.check_model_type(
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
             if self.framework == "tf"
             else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
@@ -1258,7 +1258,7 @@ class QuestionAnsweringPipeline(Pipeline):
             **kwargs,
         )
 
-        self.check_model_validity(
+        self.check_model_type(
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
         )
 
@@ -1529,7 +1529,7 @@ class SummarizationPipeline(Pipeline):
         kwargs.update(task="summarization")
         super().__init__(**kwargs)
 
-        self.check_model_validity(
+        self.check_model_type(
             TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
         )
 
@@ -1664,7 +1664,7 @@ class TranslationPipeline(Pipeline):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.check_model_validity(
+        self.check_model_type(
             TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING
         )
 
