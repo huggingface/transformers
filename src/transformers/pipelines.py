@@ -76,8 +76,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-
-
 def get_framework(model=None):
     """ Select framework (TensorFlow/PyTorch) to use.
         If both frameworks are installed and no specific model is provided, defaults to using PyTorch.
@@ -795,7 +793,11 @@ class TextClassificationPipeline(Pipeline):
     def __init__(self, return_all_scores: bool = False, **kwargs):
         super().__init__(**kwargs)
 
-        self.check_model_validity(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING if self.framework == "tf" else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+        self.check_model_validity(
+            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+            if self.framework == "tf"
+            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+        )
 
         self.return_all_scores = return_all_scores
 
@@ -873,7 +875,9 @@ class FillMaskPipeline(Pipeline):
             task=task,
         )
 
-        self.check_model_validity(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
+        self.check_model_validity(
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING
+        )
 
         self.topk = topk
 
@@ -1009,7 +1013,10 @@ class TokenClassificationPipeline(Pipeline):
         )
 
         self.check_model_validity(
-            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING if self.framework == "tf" else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)
+            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+            if self.framework == "tf"
+            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+        )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
@@ -1252,7 +1259,8 @@ class QuestionAnsweringPipeline(Pipeline):
         )
 
         self.check_model_validity(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING)
+            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
+        )
 
     @staticmethod
     def create_sample(
@@ -1522,7 +1530,8 @@ class SummarizationPipeline(Pipeline):
         super().__init__(**kwargs)
 
         self.check_model_validity(
-            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        )
 
     def __call__(
         self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -1656,7 +1665,8 @@ class TranslationPipeline(Pipeline):
         super().__init__(**kwargs)
 
         self.check_model_validity(
-            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING
+        )
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
