@@ -83,7 +83,7 @@ BART_GENERATION_EXAMPLE = r"""
         tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
         ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        inputs = tokenizer.encode_plus(ARTICLE_TO_SUMMARIZE, max_length=1024, return_tensors='pt')
 
         # Generate Summary
         summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
