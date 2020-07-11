@@ -864,7 +864,7 @@ class FillMaskPipeline(Pipeline):
                 f"No mask_token ({self.tokenizer.mask_token}) found on the input",
             )
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, clean_up_tokenization_spaces=True, **kwargs):
         inputs = self._parse_and_tokenize(*args, **kwargs)
         outputs = self._forward(inputs, return_tensors=True)
 
@@ -902,7 +902,9 @@ class FillMaskPipeline(Pipeline):
                 tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
                 result.append(
                     {
-                        "sequence": self.tokenizer.decode(tokens),
+                        "sequence": self.tokenizer.decode(
+                            tokens, skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces
+                        ),
                         "score": v,
                         "token": p,
                         "token_str": self.tokenizer.convert_ids_to_tokens(p),
