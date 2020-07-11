@@ -88,18 +88,6 @@ class ONNXExportTest(TokenizerTesterMixin, unittest.TestCase):
 
         verify(self.out_dir)
 
-    def test_bert_export_tf(self):
-        convert(
-            'tf',
-            self.model_path,
-            self.out_dir,
-            11,
-            self.tokenizer_path,
-            False,
-        )
-
-        verify(self.out_dir)
-
     def test_bert_export_large(self):
         convert(
             'pt',
