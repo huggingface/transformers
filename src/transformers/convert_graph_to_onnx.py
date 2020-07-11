@@ -86,7 +86,7 @@ def infer_shapes(tokenizer, model, framework: str) -> Tuple[List[str], List[str]
         print("Found {} {} with shape: {}".format("input" if is_input else "output", name, axes))
         return axes
 
-    tokens = tokenizer("This is a sample output")
+    tokens = tokenizer("This is a sample output", return_tensors=framework)
     seq_len = tokens.input_ids.shape[-1]
     outputs = model(**tokens) if framework == "pt" else model(tokens)
 
