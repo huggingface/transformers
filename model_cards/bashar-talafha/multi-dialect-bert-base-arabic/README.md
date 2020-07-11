@@ -1,3 +1,9 @@
+---
+language: arabic
+thumbnail: https://raw.githubusercontent.com/mawdoo3/Multi-dialect-Arabic-BERT/master/multidialct_arabic_bert.png
+datasets:
+- nadi
+---
 # Multi-dialect-Arabic-BERT
 This is a repository of Multi-dialect Arabic BERT model.
 
@@ -5,7 +11,7 @@ By [Mawdoo3-AI](https://ai.mawdoo3.com/).
 
 <p align="center">
     <br>
-    <img src="https://github.com/mawdoo3/Multi-dialect-Arabic-BERT/blob/master/multidialct_arabic_bert.png" alt="Background reference: http://www.qfi.org/wp-content/uploads/2018/02/Qfi_Infographic_Mother-Language_Final.pdf" width="500"/>
+    <img src="https://raw.githubusercontent.com/mawdoo3/Multi-dialect-Arabic-BERT/master/multidialct_arabic_bert.png" alt="Background reference: http://www.qfi.org/wp-content/uploads/2018/02/Qfi_Infographic_Mother-Language_Final.pdf" width="500"/>
     <br>
 <p>
 
@@ -15,7 +21,7 @@ By [Mawdoo3-AI](https://ai.mawdoo3.com/).
 Instead of training the Multi-dialect Arabic BERT model from scratch, we initialized the weights of the model using [Arabic-BERT](https://github.com/alisafaya/Arabic-BERT) and trained it on 10M arabic tweets from the unlabled data of [The Nuanced Arabic Dialect Identification (NADI) shared task](https://sites.google.com/view/nadi-shared-task).
 
 ### To cite this work
-We haven't published any paper on this work. Please cite this repository:
+Please cite this paper for now:
 ```
 @inproceedings{talafha-etal-2020-nadi,
     title ={{Multi-dialect Arabic BERT for Country-level Dialect Identification}},

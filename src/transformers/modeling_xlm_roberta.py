@@ -55,6 +55,10 @@ XLM_ROBERTA_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
 
