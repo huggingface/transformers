@@ -1,11 +1,15 @@
+import os
+import tempfile
 import unittest
 from os.path import dirname, exists
 from shutil import rmtree
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
-from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes
+from transformers import BertModel, BertConfig, BertTokenizerFast, FeatureExtractionPipeline
+from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes, verify
 from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.tokenization_bert import VOCAB_FILES_NAMES
+from .test_modeling_bert import BertModelTester
 
 
 class FuncContiguousArgs:
@@ -90,7 +94,7 @@ class OnnxExportTestCase(unittest.TestCase):
         nlp = FeatureExtractionPipeline(model, tokenizer)
 
         variable_names = ["input_ids", "token_type_ids", "attention_mask", "output_0", "output_1"]
-        input_vars, output_vars, shapes, tokens = infer_shapes(nlp, framework)
+        input_vars, output_vars, shapes, tokens = infer_shapes(nlp.tokenizer, nlp.model, framework)
 
         # Assert all variables are present
         self.assertEqual(len(shapes), len(variable_names))
@@ -138,3 +142,60 @@ class OnnxExportTestCase(unittest.TestCase):
         # Should have only "input_ids"
         self.assertEqual(inputs_args[0], tokens["input_ids"])
         self.assertEqual(ordered_input_names[0], "input_ids")
+
+
+class ONNXExportFastIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+
+        self.tmpdirname = tempfile.mkdtemp()
+        self.model_tester = BertModelTester(self)
+
+        # Setting up model files dir
+        output_dir = f"{self.tmpdirname}/model_files"
+
+        # Setting up vocab files
+        vocab_tokens = ["[UNK]", "[SEP]", "[CLS]", "[PAD]", "[MASK]", "some", "other", "words"]
+        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+            vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
+
+        # Creation of model files
+        config, input_ids, _, _, _, _, _ = self.model_tester.prepare_config_and_inputs()
+        model = BertModel(config=config)
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        self.model_path = f"{self.tmpdirname}/model"
+        self.tokenizer_path = f"{self.tmpdirname}/bert"
+
+        model.save_pretrained(self.model_path)
+        tokenizer.save_pretrained(self.tokenizer_path)
+
+        # Necessary since AutoTokenizer looks for config.json by default
+        os.rename(f"{self.tokenizer_path}/tokenizer_config.json", f"{self.tokenizer_path}/config.json")
+
+        # Conversion to ONNX
+        self.out_dir = f"{output_dir}/out"
+
+    @require_torch
+    def test_bert_export_pt(self):
+        convert(
+            "pt", self.model_path, self.out_dir, 11, self.tokenizer_path, False,
+        )
+
+        verify(self.out_dir)
+
+    @require_torch
+    def test_bert_export_large(self):
+        convert(
+            "pt", self.model_path, self.out_dir, 11, self.tokenizer_path, True,
+        )
+
+        verify(self.out_dir)
+
+    @require_tf
+    def test_bert_export_tf(self):
+        convert(
+            "td", self.model_path, self.out_dir, 11, self.tokenizer_path, True,
+        )
+
+        verify(self.out_dir)
