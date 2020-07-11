@@ -23,7 +23,6 @@ from transformers.testing_utils import require_torch
 from transformers.tokenization_bert import VOCAB_FILES_NAMES
 
 from .test_modeling_bert import BertModelTester
-from .test_tokenization_common import TokenizerTesterMixin
 
 
 if is_torch_available():
