@@ -6,11 +6,11 @@ import os
 
 import regex as re
 
+from .tokenization_roberta import RobertaTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
-from .tokenization_roberta import RobertaTokenizer
 
 
 VOCAB_FILES_NAMES = {
@@ -20,13 +20,14 @@ VOCAB_FILES_NAMES = {
 
 # will update paths once uploded files on S3
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-3B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/vocab.json",
-                   "facebook/blenderbot-9B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/vocab.json", #uses the same vocab and merges files as the 3B model
-                   
-                   },
-    "merges_file": {"facebook/blenderbot-3B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/merges.txt",
-                    "facebook/blenderbot-9B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/merges.txt",
-    }
+    "vocab_file": {
+        "facebook/blenderbot-3B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/vocab.json",
+        "facebook/blenderbot-9B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/vocab.json",  # uses the same vocab and merges files as the 3B model
+    },
+    "merges_file": {
+        "facebook/blenderbot-3B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/merges.txt",
+        "facebook/blenderbot-9B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/merges.txt",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -42,13 +43,10 @@ class BlenderbotTokenizer(RobertaTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
+
 BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
-    'vocab_file': {
-        "facebook/blenderbot-90M": "https://cdn.huggingface.co/sshleifer/blenderbot-90M/vocab.json"
-    },
-    'merges_file': {
-        "facebook/blenderbot-90M": "https://cdn.huggingface.co/sshleifer/blenderbot-90M/merges.txt"
-    },   
+    "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/sshleifer/blenderbot-90M/vocab.json"},
+    "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/sshleifer/blenderbot-90M/merges.txt"},
 }
 
 BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -69,6 +67,7 @@ def get_pairs(word):
 
     pairs = set(pairs)
     return pairs
+
 
 class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
@@ -97,7 +96,16 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, merges_file, bos_token="__start__", eos_token="__end__", unk_token="__unk__", pad_token="__null",  **kwargs):
+    def __init__(
+        self,
+        vocab_file,
+        merges_file,
+        bos_token="__start__",
+        eos_token="__end__",
+        unk_token="__unk__",
+        pad_token="__null",
+        **kwargs
+    ):
         super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:

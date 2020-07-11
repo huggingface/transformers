@@ -1,11 +1,12 @@
 import unittest
 
-from transformers import is_torch_available, BlenderbotTokenizer, BlenderbotConfig
+from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available
 from transformers.file_utils import cached_property
 
 # from .utils import require_torch, slow, torch_device
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
+
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -14,10 +15,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
-    from transformers import (
-        BlenderbotForConditionalGeneration,
-    )
-
+    from transformers import BlenderbotForConditionalGeneration
 
 
 @require_torch
@@ -127,6 +125,7 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 class AbstractBlenderBotIntegrationTests(unittest.TestCase):
     checkpoint_name = "sshleifer/blenderbot-3B"
     tokenizer_cls = BlenderbotTokenizer
+
     @cached_property
     def model(self):
         model = BlenderbotForConditionalGeneration.from_pretrained(self.checkpoint_name).to(torch_device)
@@ -146,11 +145,11 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
         ]
         tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
-        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
         generated_utterances = self.model.generate(**model_inputs)
         self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
 
-    @unittest.skip('broken')
+    @unittest.skip("broken")
     def test_loss_same_as_parlai_3B(self):
         config, input_ids, mask, batch_size = self.get_config_data()
         inputs_dict = {"input_ids": input_ids, "attention_mask": mask}
@@ -159,27 +158,29 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
             "like i'm going to throw up.\nand why is that?"
         ]
         tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
-        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             output = self.model(**inputs_dict)[0]
         expected_shape = torch.Size((batch_size, input_ids.size(1), self.model.config.vocab_size))
         self.assertEqual(output.size(), expected_shape)
 
+
 class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
-    checkpoint_name = 'sshleifer/blenderbot-90M'
+    checkpoint_name = "sshleifer/blenderbot-90M"
     tokenizer_cls = BlenderbotSmallTokenizer
+
     @slow
     def test_generation_same_as_parlai_90(self):
         src_text = [
             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
         ]
         tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
-        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
         generated_utterances = self.model.generate(**model_inputs)
         self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
 
-    @unittest.skip('broken')
+    @unittest.skip("broken")
     def test_loss_same_as_parlai_90(self):
         config, input_ids, mask, batch_size = self.get_config_data()
         inputs_dict = {"input_ids": input_ids, "attention_mask": mask}
@@ -188,7 +189,7 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
             "like i'm going to throw up.\nand why is that?"
         ]
         tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
-        model_inputs = self.tokenizer(src_text, return_tensors='pt').to(torch_device)
+        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             output = self.model(**inputs_dict)[0]

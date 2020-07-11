@@ -3,12 +3,13 @@ import os
 import unittest
 
 from transformers.testing_utils import slow
-from transformers.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotTokenizer, BlenderbotSmallTokenizer
+from transformers.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotSmallTokenizer, BlenderbotTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
+
 class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    
+
     tokenizer_class = BlenderbotSmallTokenizer
 
     def setUp(self):
@@ -22,7 +23,12 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         with open(merges) as f1:
             merges = f1.readlines()
         # merges = ["#version: 0.2", "a p", "ap t</w>", "r e", "a d", "ad apt</w>", ""]
-        self.special_tokens_map = {"bos_token": "__start", "eos_token": "__end__", "pad_token": "__null__", "unk_token": "__unk__"}
+        self.special_tokens_map = {
+            "bos_token": "__start",
+            "eos_token": "__end__",
+            "pad_token": "__null__",
+            "unk_token": "__unk__",
+        }
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
@@ -39,11 +45,11 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = "adapt react readapt apt"
         output_text = "adapt react readapt apt"
         return input_text, output_text
-    
+
     def test_full_blenderbot_small_tokenizer(self):
         tokenizer = BlenderbotSmallTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "adapt react readapt apt"
-        bpe_tokens = ['adapt', 'react', 'read@@', 'ap@@', 't', 'ap@@', 't']
+        bpe_tokens = ["adapt", "react", "read@@", "ap@@", "t", "ap@@", "t"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 

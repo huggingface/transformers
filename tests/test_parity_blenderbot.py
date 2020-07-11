@@ -120,9 +120,9 @@ class BlenderbotParityTests(unittest.TestCase):
         dummy_encoder_output = torch.rand(bs, 11, config.d_model)
         mask = torch.ones(dummy_encoder_output.shape[:2])
         # This passed
-        #parlai_way = cross_attn.prepare_head(dummy_encoder_output)
-        #hf_way = cross_attn._shape(dummy_encoder_output.transpose(0, 1), 11, bs)
-        #assert_tensors_close(parlai_way, hf_way, atol=1e-6)
+        # parlai_way = cross_attn.prepare_head(dummy_encoder_output)
+        # hf_way = cross_attn._shape(dummy_encoder_output.transpose(0, 1), 11, bs)
+        # assert_tensors_close(parlai_way, hf_way, atol=1e-6)
 
         mask[-1, -1] = 0
         bart_mask = invert_mask(mask)
@@ -141,7 +141,7 @@ class BlenderbotParityTests(unittest.TestCase):
     def test_encoder_layer_parity(self):
         config, input_ids, mask = self.get_config_and_data()
 
-        #hidden_states = torch.tensor(2 * [5 * [config.d_model * [0.1]]])
+        # hidden_states = torch.tensor(2 * [5 * [config.d_model * [0.1]]])
         bs, seq_len = 3, 5  # odd numbers for less confusion
         hidden_states = torch.rand(bs, seq_len, config.d_model)
         mask = torch.ones(hidden_states.shape[:2])
@@ -176,10 +176,10 @@ class BlenderbotParityTests(unittest.TestCase):
         config, input_ids, mask = self.get_config_and_data()
         embeddings = torch.nn.Embedding(config.vocab_size, config.d_model, padding_idx=config.pad_token_id)
         bs, seq_len = input_ids.shape  # odd numbers for less confusion
-        #hidden_states = torch.rand(bs, seq_len, config.d_model)
+        # hidden_states = torch.rand(bs, seq_len, config.d_model)
         bart_mask = input_ids != config.pad_token_id  # gets inverted by code
-        #mask[-1, -1] = 0
-        #bart_mask = invert_mask(mask)
+        # mask[-1, -1] = 0
+        # bart_mask = invert_mask(mask)
 
         torch.manual_seed(0)
 
@@ -207,7 +207,7 @@ class BlenderbotParityTests(unittest.TestCase):
 
         self._copy_layer_weights_in_blender_encoder(bart_encoder, parlai_encoder, config.encoder_layers)
 
-        expected_output = parlai_encoder.forward(input_ids)[0]  #makes own mask
+        expected_output = parlai_encoder.forward(input_ids)[0]  # makes own mask
         blender_output = bart_encoder(input_ids, attention_mask=bart_mask)[0]
         assert_tensors_close(expected_output[:-1], blender_output[:-1], atol=1e-4)
         assert_tensors_close(expected_output[-1, :-1], blender_output[-1, :-1], atol=1e-4)
@@ -261,10 +261,9 @@ class BlenderbotParityTests(unittest.TestCase):
 
         self._copy_layer_weights_in_blender_decoder_layer(bart_dec_layer, parlai_decoder_layer)
         tensor = embeddings(input_ids)
-        #decoder_padding
+        # decoder_padding
         expected_decoder_layer_output, *_ = parlai_decoder_layer.forward(
             tensor, encoder_output=expected_encoder_output, encoder_mask=mask,
-
         )
         causal_mask = parlai_decoder_layer._create_selfattn_mask(tensor)
 
@@ -273,9 +272,29 @@ class BlenderbotParityTests(unittest.TestCase):
             dtype=tensor.dtype, device=tensor.device
         )
         # import ipdb; ipdb.set_trace()
-        expected_slice = torch.tensor([-1.7712, 0.2689, -1.8851, -2.8012, 1.3736, -0.7266, 3.1182, 1.1434, -1.4304, 1.2469, -0.3417, 0.3943, 3.1211, 3.3170, 2.1522, -2.1234], device=torch_device)
+        expected_slice = torch.tensor(
+            [
+                -1.7712,
+                0.2689,
+                -1.8851,
+                -2.8012,
+                1.3736,
+                -0.7266,
+                3.1182,
+                1.1434,
+                -1.4304,
+                1.2469,
+                -0.3417,
+                0.3943,
+                3.1211,
+                3.3170,
+                2.1522,
+                -2.1234,
+            ],
+            device=torch_device,
+        )
 
-        bart_mask =  invert_mask(mask)
+        bart_mask = invert_mask(mask)
         blender_decoder_layer_output = bart_dec_layer.forward(
             tensor.transpose(1, 0),
             expected_encoder_output.transpose(1, 0),

@@ -75,9 +75,9 @@ class BlenderbotConfig(BartConfig):
         static_position_embeddings=False,
         is_encoder_decoder=True,
         extra_pos_embeddings=0,
-            num_beams=10,
-            min_length=20,
-            length_penalty=0.65, # add no_repeat_n_gram?
+        num_beams=10,
+        min_length=20,
+        length_penalty=0.65,  # add no_repeat_n_gram?
         **kwargs
     ):
         super().__init__(
@@ -107,7 +107,9 @@ class BlenderbotConfig(BartConfig):
             normalize_embedding=normalize_embedding,
             add_final_layer_norm=add_final_layer_norm,
             is_encoder_decoder=is_encoder_decoder,
-            num_beams=num_beams, min_length=min_length, length_penalty=length_penalty,
+            num_beams=num_beams,
+            min_length=min_length,
+            length_penalty=length_penalty,
             **kwargs,
         )
         self.extra_pos_embeddings = extra_pos_embeddings
