@@ -1047,11 +1047,13 @@ class TokenClassificationPipeline(Pipeline):
         entity = entities[0]["entity"]
         scores = np.mean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
+        indexes = [entity["index"] for entity in entities]
 
         entity_group = {
             "entity_group": entity,
             "score": np.mean(scores),
             "word": self.tokenizer.convert_tokens_to_string(tokens),
+            "indexes": indexes
         }
         return entity_group
 
