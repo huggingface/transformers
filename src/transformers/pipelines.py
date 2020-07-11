@@ -609,8 +609,8 @@ class TextGenerationPipeline(Pipeline):
     `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
         # in https://github.com/rusiaaman/XLNet-gen#methodology
@@ -1525,9 +1525,9 @@ class SummarizationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         kwargs.update(task="summarization")
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
 
         self.check_model_type(
             TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
@@ -1661,8 +1661,8 @@ class TranslationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.check_model_type(
             TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING
