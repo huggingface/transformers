@@ -14,8 +14,8 @@
 # limitations under the License.
 
 import os
-import unittest
 import tempfile
+import unittest
 
 from transformers import is_torch_available
 from transformers.convert_graph_to_onnx import convert, verify

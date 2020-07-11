@@ -4,8 +4,8 @@ from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
 
 from transformers import AutoModel, AutoTokenizer, is_tf_available, is_torch_available
-from transformers.tokenization_utils import BatchEncoding
 from transformers.file_utils import ModelOutput
+from transformers.tokenization_utils import BatchEncoding
 
 
 class OnnxConverterArgumentParser(ArgumentParser):
@@ -23,6 +23,22 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb")
         self.add_argument("output", type=abspath)
+
+
+if is_torch_available():
+    import torch
+
+    class UnwrappedModel(torch.nn.Module):
+        def __init__(self, underlying_model):
+            """
+            Class to convert BaseModelOutput* to tuples since ONNX only support those
+            """
+            super(UnwrappedModel, self).__init__()
+            self.underlying_model = underlying_model
+
+        def forward(self, *args, **kwargs):
+            output = self.underlying_model(*args, **kwargs)
+            return output[:]
 
 
 def get_tokenizer_and_model(tokenizer_name, model_name):
@@ -146,6 +162,7 @@ def convert_pytorch(tokenizer, model, model_name: str, opset: int, output: str, 
         if use_external_format:
             kwargs["use_external_data_format"] = True
 
+        model = UnwrappedModel(model)
         export(model, model_args, **kwargs)
 
 
