@@ -4,6 +4,7 @@ from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
 
 from transformers import AutoModel, AutoTokenizer, is_tf_available, is_torch_available
+from transformers.file_utils import ModelOutput
 from transformers.tokenization_utils import BatchEncoding
 
 
@@ -94,6 +95,9 @@ def infer_shapes(tokenizer, model, framework: str) -> Tuple[List[str], List[str]
 
     tokens = tokenizer("This is a sample output", return_tensors=framework)
     seq_len = tokens.input_ids.shape[-1]
+    outputs = nlp.model(**tokens) if framework == "pt" else nlp.model(tokens)
+    if isinstance(outputs, ModelOutput):
+        outputs = outputs.to_tuple()
     outputs = model(**tokens) if framework == "pt" else model(tokens)
 
     if not isinstance(outputs, (list, tuple)):

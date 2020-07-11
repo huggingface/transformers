@@ -55,7 +55,7 @@ Original GPT
    <a href="https://huggingface.co/models?filter=openai-gpt">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-openai--gpt-blueviolet">
    </a>
-   <a href="model_doc/gpt">
+   <a href="model_doc/gpt.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-openai--gpt-blueviolet">
    </a>
 
@@ -75,7 +75,7 @@ GPT-2
    <a href="https://huggingface.co/models?filter=gpt2">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt2-blueviolet">
    </a>
-   <a href="model_doc/gpt2">
+   <a href="model_doc/gpt2.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-gpt2-blueviolet">
    </a>
 
@@ -96,7 +96,7 @@ CTRL
    <a href="https://huggingface.co/models?filter=ctrl">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-ctrl-blueviolet">
    </a>
-   <a href="model_doc/ctrl">
+   <a href="model_doc/ctrl.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-ctrl-blueviolet">
    </a>
 
@@ -117,7 +117,7 @@ Transformer-XL
    <a href="https://huggingface.co/models?filter=transfo-xl">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-transfo--xl-blueviolet">
    </a>
-   <a href="model_doc/transformerxl">
+   <a href="model_doc/transformerxl.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-transfo--xl-blueviolet">
    </a>
 
@@ -148,7 +148,7 @@ Reformer
    <a href="https://huggingface.co/models?filter=reformer">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-reformer-blueviolet">
    </a>
-   <a href="model_doc/reformer">
+   <a href="model_doc/reformer.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-reformer-blueviolet">
    </a>
 
@@ -183,7 +183,7 @@ XLNet
    <a href="https://huggingface.co/models?filter=xlnet">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlnet-blueviolet">
    </a>
-   <a href="model_doc/xlnet">
+   <a href="model_doc/xlnet.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlnet-blueviolet">
    </a>
 
@@ -217,7 +217,7 @@ BERT
    <a href="https://huggingface.co/models?filter=bert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-bert-blueviolet">
    </a>
-   <a href="model_doc/bert">
+   <a href="model_doc/bert.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-bert-blueviolet">
    </a>
 
@@ -246,7 +246,7 @@ ALBERT
    <a href="https://huggingface.co/models?filter=albert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-albert-blueviolet">
    </a>
-   <a href="model_doc/albert">
+   <a href="model_doc/albert.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-albert-blueviolet">
    </a>
 
@@ -275,7 +275,7 @@ RoBERTa
    <a href="https://huggingface.co/models?filter=roberta">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-roberta-blueviolet">
    </a>
-   <a href="model_doc/roberta">
+   <a href="model_doc/roberta.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-roberta-blueviolet">
    </a>
 
@@ -301,7 +301,7 @@ DistilBERT
    <a href="https://huggingface.co/models?filter=distilbert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-distilbert-blueviolet">
    </a>
-   <a href="model_doc/distilbert">
+   <a href="model_doc/distilbert.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-distilbert-blueviolet">
    </a>
 
@@ -326,7 +326,7 @@ XLM
    <a href="https://huggingface.co/models?filter=xlm">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm-blueviolet">
    </a>
-   <a href="model_doc/xlm">
+   <a href="model_doc/xlm.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlm-blueviolet">
    </a>
 
@@ -361,7 +361,7 @@ XLM-RoBERTa
    <a href="https://huggingface.co/models?filter=xlm-roberta">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm--roberta-blueviolet">
    </a>
-   <a href="model_doc/xlmroberta">
+   <a href="model_doc/xlmroberta.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlm--roberta-blueviolet">
    </a>
 
@@ -383,7 +383,7 @@ FlauBERT
    <a href="https://huggingface.co/models?filter=flaubert">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-flaubert-blueviolet">
    </a>
-   <a href="model_doc/flaubert">
+   <a href="model_doc/flaubert.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-flaubert-blueviolet">
    </a>
 
@@ -401,7 +401,7 @@ ELECTRA
    <a href="https://huggingface.co/models?filter=electra">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-electra-blueviolet">
    </a>
-   <a href="model_doc/electra">
+   <a href="model_doc/electra.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-electra-blueviolet">
    </a>
 
@@ -427,7 +427,7 @@ Longformer
    <a href="https://huggingface.co/models?filter=longformer">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-longformer-blueviolet">
    </a>
-   <a href="model_doc/longformer">
+   <a href="model_doc/longformer.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-longformer-blueviolet">
    </a>
 
@@ -461,7 +461,7 @@ BART
    <a href="https://huggingface.co/models?filter=bart">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-bart-blueviolet">
    </a>
-   <a href="model_doc/bart">
+   <a href="model_doc/bart.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-bart-blueviolet">
    </a>
 
@@ -488,7 +488,7 @@ MarianMT
    <a href="https://huggingface.co/models?filter=marian">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-marian-blueviolet">
    </a>
-   <a href="model_doc/marian">
+   <a href="model_doc/marian.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-marian-blueviolet">
    </a>
 
@@ -506,7 +506,7 @@ T5
    <a href="https://huggingface.co/models?filter=t5">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-t5-blueviolet">
    </a>
-   <a href="model_doc/t5">
+   <a href="model_doc/t5.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-t5-blueviolet">
    </a>
 
@@ -555,7 +555,7 @@ model know which part of the input vector corresponds to the text or the image.
 The pretrained model only works for classification.
 
 ..
-    More information in this :doc:`model documentation </model_doc/mmbt>`.
+    More information in this :doc:`model documentation </model_doc/mmbt.html>`.
     TODO: write this page
 
 More technical aspects
