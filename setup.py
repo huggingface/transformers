@@ -88,7 +88,7 @@ extras["torch"] = ["torch>=1.5.0"]
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch>=1.5.0"]
 
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "psutil"]
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "psutil", "torch>=1.5.0", "keras2onnx==1.7.0", "onnxruntime"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
 extras["quality"] = [
