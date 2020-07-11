@@ -5,10 +5,11 @@ from os.path import dirname, exists
 from shutil import rmtree
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from transformers import BertModel, BertConfig, BertTokenizerFast, FeatureExtractionPipeline
+from transformers import BertConfig, BertModel, BertTokenizerFast, FeatureExtractionPipeline
 from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes, verify
 from transformers.testing_utils import require_tf, require_torch, slow
 from transformers.tokenization_bert import VOCAB_FILES_NAMES
+
 from .test_modeling_bert import BertModelTester
 
 
@@ -188,14 +189,6 @@ class ONNXExportFastIntegrationTest(unittest.TestCase):
     def test_bert_export_large(self):
         convert(
             "pt", self.model_path, self.out_dir, 11, self.tokenizer_path, True,
-        )
-
-        verify(self.out_dir)
-
-    @require_tf
-    def test_bert_export_tf(self):
-        convert(
-            "tf", self.model_path, self.out_dir, 11, self.tokenizer_path, True,
         )
 
         verify(self.out_dir)
