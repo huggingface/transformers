@@ -345,6 +345,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             FlaubertForQuestionAnswering,
             FlaubertForQuestionAnsweringSimple,
             FlaubertForSequenceClassification,
+            FlaubertForTokenClassification,
         )
         if is_torch_available()
         else ()
