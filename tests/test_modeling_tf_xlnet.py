@@ -347,6 +347,7 @@ class TFXLNetModelTester:
             "mems_1": [mem.numpy() for mem in mems_1],
             "logits": logits.numpy(),
         }
+
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
         self.parent.assertListEqual(
             list(list(mem.shape) for mem in result["mems_1"]),
