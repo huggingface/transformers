@@ -35,6 +35,7 @@ if is_torch_available():
         XLNetForSequenceClassification,
         XLNetForTokenClassification,
         XLNetForQuestionAnswering,
+        XLNetForQuestionAnsweringSimple,
     )
     from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -458,6 +459,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             XLNetForTokenClassification,
             XLNetForSequenceClassification,
             XLNetForQuestionAnswering,
+            XLNetForQuestionAnsweringSimple,
             XLNetForMultipleChoice,
         )
         if is_torch_available()

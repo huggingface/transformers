@@ -347,6 +347,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             XLMForQuestionAnswering,
             XLMForSequenceClassification,
             XLMForQuestionAnsweringSimple,
+            XLMForTokenClassification,
         )
         if is_torch_available()
         else ()
