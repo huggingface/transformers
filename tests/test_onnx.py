@@ -94,6 +94,9 @@ class OnnxExportTestCase(unittest.TestCase):
     def _test_infer_dynamic_axis(self, model, tokenizer, framework):
         nlp = FeatureExtractionPipeline(model, tokenizer)
 
+        # Since the test does not use the WrapperModel it requires an output_names parameter
+        nlp.model.output_names = {}
+
         variable_names = ["input_ids", "token_type_ids", "attention_mask", "output_0", "output_1"]
         input_vars, output_vars, shapes, tokens = infer_shapes(nlp.tokenizer, nlp.model, framework)
 

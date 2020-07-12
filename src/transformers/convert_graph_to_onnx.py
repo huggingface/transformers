@@ -28,17 +28,40 @@ class OnnxConverterArgumentParser(ArgumentParser):
 if is_torch_available():
     import torch
 
-    class UnwrappedModel(torch.nn.Module):
+    class WrappedModel(torch.nn.Module):
         def __init__(self, underlying_model):
             """
-            Class to convert BaseModelOutput* to tuples since ONNX only support those
+            Class to recursively convert BaseModelOutput* to ONNX supported structs
             """
-            super(UnwrappedModel, self).__init__()
+            super(WrappedModel, self).__init__()
             self.underlying_model = underlying_model
+            self.output_names = {}
+
+        def output_to_tensor(self, output, names=None):
+            if isinstance(output, ModelOutput):
+                parameters = vars(output)
+                output_names = [k for k, v in parameters.items() if v is not None]
+                return self.output_to_tensor(output[:], names=output_names)
+            if isinstance(output, (tuple, list)):
+                output_list = []
+                for o, element in enumerate(output):
+                    element = self.output_to_tensor(element)
+                    # Checks that is a tensor to avoid iterating over it, otherwise flattens the output
+                    if torch.is_tensor(element):
+                        if names is not None:
+                            self.output_names[self.index_output] = names[o]
+                        output_list.append(element)
+                        self.index_output += 1
+                    else:
+                        output_list.extend(element)
+                return output_list
+            return output
 
         def forward(self, *args, **kwargs):
+            self.index_output = 0
             output = self.underlying_model(*args, **kwargs)
-            return output[:]
+            output = self.output_to_tensor(output)
+            return output
 
 
 def get_tokenizer_and_model(tokenizer_name, model_name):
@@ -74,7 +97,10 @@ def ensure_valid_input(model, tokens, input_names):
 
     """
     print("Ensuring inputs are in correct order")
-    model_args_name = model.forward.__code__.co_varnames
+    if isinstance(model, WrappedModel):
+        model_args_name = model.underlying_model.forward.__code__.co_varnames
+    else:
+        model_args_name = model.forward.__code__.co_varnames
     model_args, ordered_input_names = [], []
 
     for arg_name in model_args_name[1:]:  # start at index 1 to skip "self" argument
@@ -122,21 +148,18 @@ def infer_shapes(tokenizer, model, framework: str) -> Tuple[List[str], List[str]
     input_vars = list(tokens.keys())
     input_dynamic_axes = {k: build_shape_dict(k, v, True, seq_len) for k, v in tokens.items()}
 
-    # flatten potentially grouped outputs (past for gpt2, attentions)
-    outputs_flat = []
-    for output in outputs:
-        if isinstance(output, (tuple, list)):
-            outputs_flat.extend(output)
-        else:
-            outputs_flat.append(output)
-
     # Generate output names & axes
-    output_names = ["output_{}".format(i) for i in range(len(outputs_flat))]
-    output_dynamic_axes = {k: build_shape_dict(k, v, False, seq_len) for k, v in zip(output_names, outputs_flat)}
-
+    if framework == "pt":
+        outputs_dict = {
+            (model.output_names[i] if i in model.output_names else "output_{}".format(i)): v
+            for i, v in enumerate(outputs)
+        }
+    else:
+        outputs_dict = {"output_{}".format(i): v for i, v in enumerate(outputs)}
+    output_dynamic_axes = {k: build_shape_dict(k, v, False, seq_len) for k, v in outputs_dict.items()}
     # Create the aggregated axes representation
     dynamic_axes = dict(input_dynamic_axes, **output_dynamic_axes)
-    return input_vars, output_names, dynamic_axes, tokens
+    return input_vars, list(outputs_dict.keys()), dynamic_axes, tokens
 
 
 def convert_pytorch(tokenizer, model, model_name: str, opset: int, output: str, use_external_format: bool):
@@ -146,6 +169,7 @@ def convert_pytorch(tokenizer, model, model_name: str, opset: int, output: str, 
     print("Using framework PyTorch: {}".format(torch.__version__))
 
     with torch.no_grad():
+        model = WrappedModel(model)
         input_names, output_names, dynamic_axes, tokens = infer_shapes(tokenizer, model, "pt")
         ordered_input_names, model_args = ensure_valid_input(model, tokens, input_names)
         kwargs = {
@@ -162,7 +186,6 @@ def convert_pytorch(tokenizer, model, model_name: str, opset: int, output: str, 
         if use_external_format:
             kwargs["use_external_data_format"] = True
 
-        model = UnwrappedModel(model)
         export(model, model_args, **kwargs)
 
 
