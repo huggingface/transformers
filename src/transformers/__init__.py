@@ -65,7 +65,6 @@ from .data import (
     xnli_processors,
     xnli_tasks_num_labels,
 )
-
 # Files and general utilities
 from .file_utils import (
     CONFIG_NAME,
@@ -87,10 +86,8 @@ from .file_utils import (
     is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
-
 # Model Cards
 from .modelcard import ModelCard
-
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (
     convert_tf_weight_name_to_pt_weight_name,
@@ -101,7 +98,6 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_model_in_pytorch_model,
     load_tf2_weights_in_pytorch_model,
 )
-
 # Pipelines
 from .pipelines import (
     CsvPipelineDataFormat,
@@ -120,7 +116,6 @@ from .pipelines import (
     TranslationPipeline,
     pipeline,
 )
-
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
@@ -162,7 +157,6 @@ from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
-
 # Trainer
 from .trainer_utils import EvalPrediction, set_seed
 from .training_args import TrainingArguments
