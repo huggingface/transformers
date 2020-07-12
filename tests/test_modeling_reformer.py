@@ -193,13 +193,18 @@ class ReformerModelTester:
         )
 
     def create_and_check_reformer_model_with_lm_backward(self, config, input_ids, input_mask, choice_labels):
-        model = ReformerModelWithLMHead(config=config)
+        config.is_decoder = False
+        config.lsh_num_chunks_after = 1
+        model = ReformerForMaskedLM(config=config)
+
         model.to(torch_device)
         model.eval()
         loss = model(input_ids, attention_mask=input_mask, labels=input_ids)[0]
         loss.backward()
 
     def create_and_check_reformer_with_lm(self, config, input_ids, input_mask, choice_labels):
+        config.lsh_num_chunks_after = 0
+        config.is_decoder = True
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()
@@ -332,9 +337,13 @@ class ReformerModelTester:
         config.hidden_dropout_prob = 0
         config.local_attention_probs_dropout_prob = 0
         config.lsh_attention_probs_dropout_prob = 0
+        config.lsh_num_chunks_after = 1
+        config.is_decoder = False
 
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(config=config)
+
+        model = ReformerForMaskedLM(config=config)
+
         model.to(torch_device)
         model.train()
         model.zero_grad()
@@ -348,7 +357,9 @@ class ReformerModelTester:
         config.chunk_size_feed_forward = 1
 
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(config=config)
+
+        model = ReformerForMaskedLM(config=config)
+
         model.to(torch_device)
         model.train()
         model.zero_grad()
@@ -406,6 +417,8 @@ class ReformerModelTester:
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, choice_labels):
+        config.is_decoder = True
+        config.lsh_num_chunks_after = 0
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.half()
@@ -418,7 +431,9 @@ class ReformerModelTester:
         # force chunk length to be bigger than input_ids
         config.lsh_attn_chunk_length = 2 * input_ids.shape[-1]
         config.local_attn_chunk_length = 2 * input_ids.shape[-1]
-        model = ReformerModelWithLMHead(config=config)
+        config.lsh_num_chunks_after = 1
+        config.is_decoder = False
+        model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         output_logits = model(input_ids, attention_mask=input_mask)[0]
@@ -442,17 +457,13 @@ class ReformerModelTester:
 
     def create_and_check_cached_hidden_states_and_buckets(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = True
-        #        config.lsh_num_chunks_before = 1
         config.lsh_num_chunks_before = 1
         config.lsh_num_chunks_after = 0
-        config.num_hashes = 1
-        config.num_attention_heads = 2
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()
-        input_ids = input_ids[:, :12]
-        input_ids_first = input_ids[:1, :-1]
-        input_ids_second = input_ids[:1, -1:]
+        input_ids_first = input_ids[:, :-1]
+        input_ids_second = input_ids[:, -1:]
 
         # return saved cache
         _, cached_hidden_states_and_buckets = model(input_ids_first, use_cache=True)
@@ -461,7 +472,7 @@ class ReformerModelTester:
         outputs_with_cache, _ = model(
             input_ids_second, cached_hidden_states_and_buckets=cached_hidden_states_and_buckets, use_cache=True
         )
-        outputs_without_cache = model(input_ids[:1])[0][:, -1]
+        outputs_without_cache = model(input_ids)[0][:, -1]
 
         # select random slice idx
         random_slice_idx = torch.randint(outputs_without_cache.shape[-1], (1, 1), device=torch_device).item()
@@ -469,10 +480,10 @@ class ReformerModelTester:
         # outputs should be similar within range
         #        self.parent.assertTrue(
         #            torch.allclose(
-        #                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-3
+        #                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-2
         #            )
-        #        )
-        self.parent.assertTrue(torch.allclose(outputs_with_cache[:, 0], outputs_without_cache, atol=1e-3))
+
+        self.parent.assertTrue(torch.allclose(outputs_with_cache[:, 0], outputs_without_cache, atol=1e-2))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -663,8 +674,8 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "num_buckets": 2,
             "num_hashes": 4,
             "lsh_attn_chunk_length": 4,
-            "lsh_num_chunks_before": 2,
-            "lsh_num_chunks_after": 3,
+            "lsh_num_chunks_before": 1,
+            "lsh_num_chunks_after": 0,
             "chunk_size_lm_head": 5,
             "chunk_size_feed_forward": 6,
             "feed_forward_size": 32,
@@ -678,6 +689,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "axial_pos_embds": True,
             "axial_pos_shape": [4, 8],
             "axial_pos_embds_dim": [16, 48],
+            #            sanotheu
             #            "attn_layers": ["lsh", "lsh", "lsh", "lsh"],
             "attn_layers": ["lsh"],
             "pad_token_id": 0,
