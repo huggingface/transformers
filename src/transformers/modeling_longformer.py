@@ -432,7 +432,7 @@ class LongformerSelfAttention(nn.Module):
                 # It doesn't not return local attention. Only tokens with global attention have values > 0.0
                 attn_probs = attn_probs[:, :, :, :max_num_global_attn_indices]
                 # pad attn_probs to max length with 0.0 since global attn did not attend there
-                window_size = (self.one_sided_attn_window_size * 2 + 1,)
+                window_size = self.one_sided_attn_window_size * 2 + 1
                 attn_probs = F.pad(attn_probs, (0, window_size - max_num_global_attn_indices), value=0.0,)
                 attn_probs = attn_probs.permute(0, 2, 1, 3)
             else:
