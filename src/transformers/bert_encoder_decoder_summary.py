@@ -17,7 +17,7 @@ tokenizer.bos_token = tokenizer.cls_token
 # SEP token will work as EOS token
 tokenizer.eos_token = tokenizer.sep_token
 
-train_dataset = nlp.load_dataset("cnn_dailymail", "3.0.0", split="train[:20%]")
+train_dataset = nlp.load_dataset("cnn_dailymail", "3.0.0", split="train")
 val_dataset = nlp.load_dataset("cnn_dailymail", "3.0.0", split="validation[:10%]")
 
 rouge = nlp.load_metric("rouge")
@@ -25,6 +25,7 @@ rouge = nlp.load_metric("rouge")
 
 # set decoding params
 model.config.decoder_start_token_id = tokenizer.bos_token_id
+model.config.eos_token_id = tokenizer.eos_token_id
 model.config.max_length = 142
 model.config.min_length = 56
 model.config.no_repeat_ngram_size = 3
@@ -79,14 +80,14 @@ train_dataset = train_dataset.map(
     map_to_encoder_decoder_inputs, batched=True, batch_size=batch_size, remove_columns=["article", "highlights"],
 )
 train_dataset.set_format(
-    type="torch", columns=["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels",],
+    type="torch", columns=["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels"],
 )
 
 val_dataset = val_dataset.map(
     map_to_encoder_decoder_inputs, batched=True, batch_size=batch_size, remove_columns=["article", "highlights"],
 )
 val_dataset.set_format(
-    type="torch", columns=["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels",],
+    type="torch", columns=["input_ids", "attention_mask", "decoder_input_ids", "decoder_attention_mask", "labels"],
 )
 
 training_args = TrainingArguments(
@@ -98,9 +99,9 @@ training_args = TrainingArguments(
     evaluate_during_training=True,
     do_train=True,
     do_eval=True,
-    logging_steps=200,
+    logging_steps=500,
     save_steps=500,
-    eval_steps=200,
+    eval_steps=500,
     overwrite_output_dir=True,
 )
 
