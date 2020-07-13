@@ -157,6 +157,12 @@ class TrainingArguments:
         default=1,
         metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
     )
+    predict_from_generate: bool = field(
+        default=False,
+        metadata={
+            "help": "Use generate function to predict logits. This is usually the case for summarization or translation."
+        },
+    )
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})

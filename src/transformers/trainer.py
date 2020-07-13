@@ -820,15 +820,22 @@ class Trainer:
                 inputs["mems"] = past
 
             with torch.no_grad():
-                outputs = model(**inputs)
-                if has_labels:
-                    step_eval_loss, logits = outputs[:2]
-                    eval_losses += [step_eval_loss.mean().item()]
+                if self.args.predict_from_generate:
+                    logits = model.generate(inputs["input_ids"], attention_mask=inputs["attention_mask"])
+                    if has_labels:
+                        outputs = model(**inputs)
+                        step_eval_loss = outputs[0]
+                        eval_losses += [step_eval_loss.mean().item()]
                 else:
-                    logits = outputs[0]
-                if self.args.past_index >= 0:
-                    past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
+                    outputs = model(**inputs)
 
+                    if has_labels:
+                        step_eval_loss, logits = outputs[:2]
+                        eval_losses += [step_eval_loss.mean().item()]
+                    else:
+                        logits = outputs[0]
+                    if self.args.past_index >= 0:
+                        past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
             if not prediction_loss_only:
                 if preds is None:
                     preds = logits.detach()
