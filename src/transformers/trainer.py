@@ -618,6 +618,9 @@ class Trainer:
 
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
+        # Our model outputs do not work with DataParallel, so forcing return tuple.
+        if self.args.n_gpu > 1:
+            inputs["return_tuple"] = True
 
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
@@ -818,6 +821,9 @@ class Trainer:
                     inputs[k] = v.to(self.args.device)
             if self.args.past_index >= 0:
                 inputs["mems"] = past
+            # Our model outputs do not work with DataParallel, so forcing return tuple.
+            if self.args.n_gpu > 1:
+                inputs["return_tuple"] = True
 
             with torch.no_grad():
                 outputs = model(**inputs)
