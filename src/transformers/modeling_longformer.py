@@ -432,9 +432,10 @@ class LongformerSelfAttention(nn.Module):
                 # It doesn't not return local attention
                 # In case of variable number of global attantion in the rows of a batch,
                 # attn_probs are padded with -10000.0 attention scores
-
                 # only use first global attn probs
                 attn_probs = attn_probs[:, :, :, :max_num_global_attn_indices]
+                # pad attn_probs to max length
+                attn_probs = F.pad(attn_probs, (0, seq_len - max_num_global_attn_indices), value=-10000.0,)
                 attn_probs = attn_probs.permute(0, 2, 1, 3)
             else:
                 # without global attention, return local attention probabilities
