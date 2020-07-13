@@ -90,7 +90,7 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_head_masking = False
     test_pruning = False
-    test_torchscript = False
+    test_torchscript = True
     test_resize_embeddings = True
     test_missing_keys = False
 
@@ -135,23 +135,36 @@ class AbstractBlenderBotIntegrationTests(unittest.TestCase):
         return self.tokenizer_cls.from_pretrained(self.checkpoint_name)
 
 
-@unittest.skip("3b test are Slow, likely broken")
+@unittest.skipUnless(torch_device != "cpu", "3b test are very slow on CPU.")
+@require_torch
 class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
+    @torch.no_grad()
     @slow
     def test_generation_same_as_parlai_3B(self):
         src_text = [
-            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+            "sam",
         ]
-        tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
         generated_utterances = self.model.generate(**model_inputs)
-        self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
+        tgt_text = ['Sam is a great name. It means "sunshine" in Gaelic.']
+        """
+        Batch[  0] Beam[  0]: (-6.57): Sam is a great name. It means "sunshine" in Gaelic.
+        Batch[  0] Beam[  0]: tokens: tensor([   1, 5502,  315,  265,  848, 1356,   21,  452,
+ 1361,  472,   90,  415,
+         803,  556,    9,  302,  485,   72,  491,  317,   21,    2],
+       device='cuda:0')
+        """
+        generated_txt = self.tokenizer.batch_decode(generated_utterances)
+        self.assertListEqual(tgt_text, generated_txt)
 
+    @torch.no_grad()
+    @slow
     def test_loss_same_as_parlai_3B(self):
         input_ids = _long_tensor([[268, 343, 2]])  # sam
 
         generated_ids = self.model.generate(input_ids).tolist()[0]
+
         expected_ids = [
             1,
             5502,
@@ -178,55 +191,17 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
         ]
         self.assertListEqual(expected_ids, generated_ids)
 
-    @torch.no_grad()
-    @slow
-    def test_3bsamgen(self):
-        input_ids = _long_tensor([[1384]])  # sam
 
-        encoder_output = self.model.encoder(input_ids)[0]
-        assert encoder_output.shape == (1, 1, 512)
-        expected_slice = torch.tensor(
-            [0.0968, -0.0934, -0.1364, 0.0500, -0.0424, 0.1258, -0.0073, 0.0329, -0.1150, 0.0624]
-        )
-        assert_tensors_close(encoder_output[0, 0, :10], expected_slice, atol=1e-3)
-
-        generated_utterances = self.model.generate(input_ids, min_length=20, max_length=30).tolist()
-        expected_tokens = [
-            1,
-            49,
-            15,
-            286,
-            474,
-            10,
-            1384,
-            5186,
-            20,
-            21,
-            8,
-            17,
-            50,
-            241,
-            1789,
-            6,
-            6299,
-            6,
-            9,
-            2147,
-            5,
-            2,
-        ]
-        self.assertListEqual(expected_tokens, generated_utterances)
-
-
+@require_torch
 class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
     checkpoint_name = "sshleifer/blenderbot-90M"
     tokenizer_cls = BlenderbotSmallTokenizer
 
-    @slow
     def test_tokenization_same_as_parlai(self):
         tok = self.tokenizer
-        self.assertListEqual(tok("sam"), [1384])
+        self.assertListEqual(tok("sam").input_ids, [1384])
 
+    @torch.no_grad()
     @slow
     def test_generation_same_as_parlai_90(self):
         src_text = [
@@ -237,19 +212,8 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
         generated_utterances = self.model.generate(**model_inputs)
         self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
 
-    @unittest.skip("broken")
-    def test_loss_same_as_parlai_90(self):
-        config, input_ids, mask, batch_size = self.get_config_data()
-        inputs_dict = {"input_ids": input_ids, "attention_mask": mask}
-        src_text = [
-            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel "
-            "like i'm going to throw up.\nand why is that?"
-        ]
-        tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder"]
-        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-
     @torch.no_grad()
-    def test_samgen(self):
+    def test_generation_same_as_parlai_90_short_input(self):
         input_ids = _long_tensor([[1384]])  # sam
         assert self.model.config.variant == "xlm"
 
@@ -280,7 +244,7 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
             9,
             2147,
             5,
-        ]  # FIX ME, there should be a 2 here
+        ]  # FIXME, there should be a 2 here
 
         # PARLAI
         """
