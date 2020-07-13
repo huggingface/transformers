@@ -74,6 +74,7 @@ class BlenderbotConfig(BartConfig):
         normalize_embedding=False,
         static_position_embeddings=False,
         is_encoder_decoder=True,
+        variant='prelayernorm',
         extra_pos_embeddings=0,
         num_beams=10,
         min_length=20,
@@ -81,6 +82,7 @@ class BlenderbotConfig(BartConfig):
         **kwargs
     ):
         super().__init__(
+            variant=variant,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,

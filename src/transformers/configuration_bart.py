@@ -71,6 +71,7 @@ class BartConfig(PretrainedConfig):
         static_position_embeddings=False,
         add_bias_logits=False,
         extra_layer_norm=False,
+        variant='bart',
         **common_kwargs
     ):
         r"""
@@ -106,6 +107,7 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
+        self.variant = variant
 
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True

@@ -224,6 +224,7 @@ class EncoderLayer(nn.Module):
         self.self_attn = SelfAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
         )
+        self.variant =config.variant
         self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -246,25 +247,25 @@ class EncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
-        if self.normalize_before:
+        if self.variant == 'prelayernorm':
             x = self.self_attn_layer_norm(x)
         x, attn_weights = self.self_attn(
             query=x, key=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
+        if self.variant != 'prelayernorm':
             x = self.self_attn_layer_norm(x)
 
         residual = x
-        if self.normalize_before:
+        if self.variant == 'prelayernorm':
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
+        if self.variant != 'prelayernorm':
             x = self.final_layer_norm(x)
         return x, attn_weights
 
@@ -288,7 +289,7 @@ class BartEncoder(nn.Module):
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.padding_idx = embed_tokens.padding_idx
         self.max_source_positions = config.max_position_embeddings
-
+        self.variant = config.variant
         self.embed_tokens = embed_tokens
         if config.static_position_embeddings:
             self.embed_positions = SinusoidalPositionalEmbedding(
@@ -349,8 +350,8 @@ class BartEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-        if self.layer_norm:
-            x = self.layer_norm(x)
+        if self.variant == 'prelayernorm':
+            x = self.layernorm_embedding(x)
         if output_hidden_states:
             encoder_states.append(x)
             # T x B x C -> B x T x C
@@ -374,7 +375,7 @@ class DecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
-        self.normalize_before = config.normalize_before
+        self.variant = config.variant
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.encoder_attn = SelfAttention(
@@ -402,8 +403,8 @@ class DecoderLayer(nn.Module):
 
         if layer_state is None:
             layer_state = {}
-        if self.normalize_before:
-            x = self.self_attn_layer_norm(x)
+        if self.variant == 'prelayernorm':
+            x = self.self_attn_layer_norm(x)  # norm1 in parlai
         # Self Attention
 
         x, self_attn_weights = self.self_attn(
@@ -416,14 +417,14 @@ class DecoderLayer(nn.Module):
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
+        if self.variant != 'prelayernorm':
             x = self.self_attn_layer_norm(x)
 
         # Cross attention
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
-        if self.normalize_before:
-            x = self.encoder_attn_layer_norm(x)
+        if self.variant == 'prelayernorm':
+            x = self.encoder_attn_layer_norm(x)  # aliases: encoder_attn_layer_norm, norm 2
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
@@ -432,25 +433,26 @@ class DecoderLayer(nn.Module):
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
+        if self.variant != 'prelayernorm':
             x = self.encoder_attn_layer_norm(x)
 
         # Fully Connected
         residual = x
-        if self.normalize_before:
+        if self.variant == 'prelayernorm':
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        if not self.normalize_before:
+        if self.variant != 'prelayernorm':
             x = self.final_layer_norm(x)
         return (
             x,
             self_attn_weights,
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
+
 
 
 class BartDecoder(nn.Module):
@@ -466,6 +468,7 @@ class BartDecoder(nn.Module):
         super().__init__()
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
+        self.variant = config.variant
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
@@ -532,13 +535,18 @@ class BartDecoder(nn.Module):
         positions = self.embed_positions(input_ids, use_cache=use_cache)
 
         if use_cache:
+            assert input_ids.shape[1] == 1 or decoder_past_key_values is not None, "pass decoder_past_key_value_states to use_cache"
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]  # happens after we embed them
             # assert input_ids.ne(self.padding_idx).any()
 
         x = self.embed_tokens(input_ids) * self.embed_scale
+        if self.variant == 'xlm':
+            x = self.layernorm_embedding(x)
         x += positions
-        x = self.layernorm_embedding(x)
+        if self.variant == 'bart':
+            x = self.layernorm_embedding(x)
+
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
@@ -577,6 +585,10 @@ class BartDecoder(nn.Module):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
+        if self.variant == 'prelayernorm':
+            x = self.layernorm_embedding(x)
+
+        # Everything below here is book keeping
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
             all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
@@ -807,6 +819,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         self.offset = offset
         assert padding_idx is not None
         num_embeddings += offset
+        # TODO(SS): Do we need padding_idx?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input_ids, use_cache=False):
@@ -1133,7 +1146,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
     def get_encoder(self):
         return self.model.encoder
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Linear:
         return _make_linear_from_emb(self.model.shared)  # make it on the fly
 
 
