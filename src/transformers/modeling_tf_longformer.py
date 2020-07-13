@@ -93,18 +93,21 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                   0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
                   0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
         """
-        total_num_heads, num_chunks, window_overlap, hidden_dim = chunked_hidden_states.size()
-        chunked_hidden_states = F.pad(
-            chunked_hidden_states, (0, window_overlap + 1)
+        total_num_heads, num_chunks, window_overlap, hidden_dim = shape_list(chunked_hidden_states)
+
+        paddings = tf.constant([[0, 0], [0, 0], [0, 0], [0, window_overlap + 1]])
+        chunked_hidden_states = tf.pad(
+            chunked_hidden_states, paddings
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
-        chunked_hidden_states = chunked_hidden_states.view(
-            total_num_heads, num_chunks, -1
+
+        chunked_hidden_states = tf.reshape(
+            chunked_hidden_states, (total_num_heads, num_chunks, -1)
         )  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap+window_overlap
         chunked_hidden_states = chunked_hidden_states[
             :, :, :-window_overlap
         ]  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap
-        chunked_hidden_states = chunked_hidden_states.view(
-            total_num_heads, num_chunks, window_overlap, window_overlap + hidden_dim
+        chunked_hidden_states = tf.reshape(
+            chunked_hidden_states, (total_num_heads, num_chunks, window_overlap, window_overlap + hidden_dim)
         )  # total_num_heads x num_chunks, window_overlap x hidden_dim+window_overlap
         chunked_hidden_states = chunked_hidden_states[:, :, :, :-1]
         return chunked_hidden_states
@@ -112,19 +115,26 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
     @staticmethod
     def _chunk(hidden_states, window_overlap):
         """convert into overlapping chunkings. Chunk size = 2w, overlap size = w"""
+        batch_size, seq_length, hidden_dim = shape_list(hidden_states)
+        num_output_chunks = 2 * (seq_length // (2 * window_overlap)) - 1
 
-        # non-overlapping chunks of size = 2w
-        hidden_states = hidden_states.view(
-            hidden_states.size(0),
-            hidden_states.size(1) // (window_overlap * 2),
-            window_overlap * 2,
-            hidden_states.size(2),
+        # define frame size and frame stride (similar to convolution)
+        frame_hop_size = window_overlap * hidden_dim
+        frame_size = 2 * frame_hop_size
+
+        hidden_states = tf.reshape(hidden_states, (batch_size, seq_length * hidden_dim))
+
+        # chunk with overlap
+        chunked_hidden_states = tf.signal.frame(hidden_states, frame_size, frame_hop_size)
+
+        assert shape_list(chunked_hidden_states) == [
+            batch_size,
+            num_output_chunks,
+            frame_size,
+        ], f"Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}."
+
+        chunked_hidden_states = tf.reshape(
+            chunked_hidden_states, (batch_size, num_output_chunks, 2 * window_overlap, hidden_dim)
         )
 
-        # use `as_strided` to make the chunks overlap with an overlap size = window_overlap
-        chunk_size = list(hidden_states.size())
-        chunk_size[1] = chunk_size[1] * 2 - 1
-
-        chunk_stride = list(hidden_states.stride())
-        chunk_stride[1] = chunk_stride[1] // 2
-        return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
+        return chunked_hidden_states

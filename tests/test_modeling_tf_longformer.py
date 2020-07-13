@@ -367,34 +367,27 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
             dtype=tf.float32,
         )
 
-    def _test_diagonalize(self):
+    def test_diagonalize(self):
         hidden_states = self._get_hidden_states()
-        hidden_states = hidden_states.reshape((1, 8, 4))  # set seq length = 8, hidden dim = 4
+        hidden_states = tf.reshape(hidden_states, (1, 8, 4))  # set seq length = 8, hidden dim = 4
         chunked_hidden_states = TFLongformerSelfAttention._chunk(hidden_states, window_overlap=2)
-        window_overlap_size = chunked_hidden_states.shape[2]
+        window_overlap_size = shape_list(chunked_hidden_states)[2]
         self.assertTrue(window_overlap_size == 4)
 
         padded_hidden_states = TFLongformerSelfAttention._pad_and_diagonalize(chunked_hidden_states)
 
-        self.assertTrue(padded_hidden_states.shape[-1] == chunked_hidden_states.shape[-1] + window_overlap_size - 1)
+        self.assertTrue(
+            shape_list(padded_hidden_states)[-1] == shape_list(chunked_hidden_states)[-1] + window_overlap_size - 1
+        )
 
         # first row => [0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000]
-        self.assertTrue(torch.allclose(padded_hidden_states[0, 0, 0, :4], chunked_hidden_states[0, 0, 0], atol=1e-3))
-        self.assertTrue(
-            torch.allclose(
-                padded_hidden_states[0, 0, 0, 4:],
-                torch.zeros((3,), device=torch_device, dtype=torch.float32),
-                atol=1e-3,
-            )
-        )
+        tf.debugging.assert_near(padded_hidden_states[0, 0, 0, :4], chunked_hidden_states[0, 0, 0], rtol=1e-3)
+        tf.debugging.assert_near(padded_hidden_states[0, 0, 0, 4:], tf.zeros((3,), dtype=tf.dtypes.float32), rtol=1e-3)
+
         # last row => [0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629]
-        self.assertTrue(torch.allclose(padded_hidden_states[0, 0, -1, 3:], chunked_hidden_states[0, 0, -1], atol=1e-3))
-        self.assertTrue(
-            torch.allclose(
-                padded_hidden_states[0, 0, -1, :3],
-                torch.zeros((3,), device=torch_device, dtype=torch.float32),
-                atol=1e-3,
-            )
+        tf.debugging.assert_near(padded_hidden_states[0, 0, -1, 3:], chunked_hidden_states[0, 0, -1], rtol=1e-3)
+        tf.debugging.assert_near(
+            padded_hidden_states[0, 0, -1, :3], tf.zeros((3,), dtype=tf.dtypes.float32), rtol=1e-3
         )
 
     def test_pad_and_transpose_last_two_dims(self):
@@ -413,7 +406,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
             hidden_states[0, -1, :], tf.reshape(padded_hidden_states, (1, -1))[0, 24:32], rtol=1e-6
         )
 
-    def _test_chunk(self):
+    def test_chunk(self):
         hidden_states = self._get_hidden_states()
         batch_size = 1
         seq_length = 8
@@ -423,16 +416,12 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         chunked_hidden_states = TFLongformerSelfAttention._chunk(hidden_states, window_overlap=2)
 
         # expected slices across chunk and seq length dim
-        expected_slice_along_seq_length = torch.tensor(
-            [0.4983, -0.7584, -1.6944], device=torch_device, dtype=torch.float32
-        )
-        expected_slice_along_chunk = torch.tensor(
-            [0.4983, -1.8348, -0.7584, 2.0514], device=torch_device, dtype=torch.float32
-        )
+        expected_slice_along_seq_length = tf.convert_to_tensor([0.4983, -0.7584, -1.6944], dtype=tf.dtypes.float32)
+        expected_slice_along_chunk = tf.convert_to_tensor([0.4983, -1.8348, -0.7584, 2.0514], dtype=tf.dtypes.float32)
 
-        self.assertTrue(torch.allclose(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, atol=1e-3))
-        self.assertTrue(torch.allclose(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, atol=1e-3))
-        self.assertTrue(chunked_hidden_states.shape, (1, 3, 4, 4))
+        self.assertTrue(shape_list(chunked_hidden_states) == [1, 3, 4, 4])
+        tf.debugging.assert_near(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3)
+        tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3)
 
     def _test_layer_local_attn(self):
         model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
