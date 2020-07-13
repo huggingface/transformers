@@ -317,7 +317,6 @@ class LongformerSelfAttention(nn.Module):
             +ve: global attention
 
         """
-
         attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
 
         # is index masked or global attention
