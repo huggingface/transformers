@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: glue-datasets-europe-west4-a
+spec:
+  storageClassName: ""
+  capacity:
+    storage: 200Gi
+  accessModes:
+    - ReadOnlyMany
+  claimRef:
+    namespace: default
+    name: glue-datasets-europe-west4-a-claim
+  gcePersistentDisk:
+    pdName: glue-datasets-europe-west4-a
+    fsType: ext4
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: glue-datasets-europe-west4-a-claim
+spec:
+  # Specify "" as the storageClassName so it matches the PersistentVolume's StorageClass.
+  # A nil storageClassName value uses the default StorageClass. For details, see
+  # https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
+  storageClassName: ""
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ki

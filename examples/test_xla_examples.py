@@ -29,13 +29,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
-def get_setup_file():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f")
-    args = parser.parse_args()
-    return args.f
-
-
 @require_torch_tpu
 class TorchXLAExamplesTests(unittest.TestCase):
     def test_run_glue(self):
@@ -47,13 +40,13 @@ class TorchXLAExamplesTests(unittest.TestCase):
         output_directory = "run_glue_output"
 
         testargs = f"""
-            text-classification/run_glue.py
+            transformers/examples/text-classification/run_glue.py
             --num_cores=8
-            text-classification/run_glue.py
+            transformers/examples/text-classification/run_glue.py
             --do_train
             --do_eval
             --task_name=MRPC
-            --data_dir=../glue_data/MRPC
+            --data_dir=/datasets/glue/MRPC
             --cache_dir=./cache_dir
             --num_train_epochs=1
             --max_seq_length=128
