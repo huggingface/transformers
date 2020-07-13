@@ -150,3 +150,5 @@ class BartConfig(PretrainedConfig):
 
 class MBartConfig(BartConfig):
     model_type = "mbart"
+    def __init__(self, variant='prelayernorm', **kwargs):
+        super().__init__(variant=variant, **kwargs)
