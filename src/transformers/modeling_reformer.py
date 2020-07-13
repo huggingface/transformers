@@ -1927,7 +1927,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
                 If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        reformer_outputs = self.reformer(
+        outputs = self.reformer(
             input_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
@@ -1939,10 +1939,10 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             return_tuple=return_tuple,
         )
 
-        sequence_output = reformer_outputs[0]
+        sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
-        outputs = (logits,) + reformer_outputs[1:]
 
+        loss = None
         if labels is not None:
             if self.num_labels == 1:
                 #  We are doing regression
