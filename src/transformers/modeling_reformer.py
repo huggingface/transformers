@@ -1785,19 +1785,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         return inputs_dict
 
 
-REFORMER_START_DOCSTRING = r"""
-
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
-
-    Parameters:
-        config (:class:`~transformers.ReformerConfig`): Model configuration class with all the parameters of the
-            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
-"""
-
-
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top. """, REFORMER_START_DOCSTRING)
 class ReformerForMaskedLM(ReformerPreTrainedModel):
     def __init__(self, config):
@@ -1842,7 +1829,6 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
                 Labels for computing the masked language modeling loss.
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
