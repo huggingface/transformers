@@ -18,6 +18,7 @@ import unittest
 
 from transformers import is_tf_available
 from transformers.modeling_tf_longformer import TFLongformerSelfAttention
+from transformers.modeling_tf_utils import shape_list
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
@@ -28,12 +29,12 @@ if is_tf_available():
     import tensorflow as tf
     from transformers import (
         LongformerConfig,
-        TFLongformerModel,
-        TFLongformerForMaskedLM,
-        TFLongformerForSequenceClassification,
-        TFLongformerForTokenClassification,
-        TFLongformerForQuestionAnswering,
-        TFLongformerForMultipleChoice,
+        #        TFLongformerModel,
+        #        TFLongformerForMaskedLM,
+        #        TFLongformerForSequenceClassification,
+        #        TFLongformerForTokenClassification,
+        #        TFLongformerForQuestionAnswering,
+        #        TFLongformerForMultipleChoice,
     )
 
 
@@ -396,16 +397,21 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
             )
         )
 
-    def _test_pad_and_transpose_last_two_dims(self):
+    def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
-        self.assertTrue(hidden_states.shape, (1, 8, 4))
-        padding = (0, 0, 0, 1)
+        self.assertTrue(shape_list(hidden_states), [1, 8, 4])
 
-        padded_hidden_states = TFLongformerSelfAttention._pad_and_transpose_last_two_dims(hidden_states, padding)
-        self.assertTrue(padded_hidden_states.shape, (1, 8, 5))
+        # pad along seq length dim
+        paddings = tf.constant([[0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
 
-        expected_added_dim = torch.zeros((5,), device=torch_device, dtype=torch.float32)
-        self.assertTrue(torch.allclose(expected_added_dim, padded_hidden_states[0, -1, :], atol=1e-6))
+        padded_hidden_states = TFLongformerSelfAttention._pad_and_transpose_last_two_dims(hidden_states, paddings)
+        self.assertTrue(shape_list(padded_hidden_states) == [1, 8, 5])
+
+        expected_added_dim = tf.zeros((5,), dtype=tf.dtypes.float32)
+        tf.debugging.assert_near(expected_added_dim, padded_hidden_states[0, -1, :], rtol=1e-6)
+        tf.debugging.assert_near(
+            hidden_states[0, -1, :], tf.reshape(padded_hidden_states, (1, -1))[0, 24:32], rtol=1e-6
+        )
 
     def _test_chunk(self):
         hidden_states = self._get_hidden_states()
@@ -427,3 +433,47 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, atol=1e-3))
         self.assertTrue(torch.allclose(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, atol=1e-3))
         self.assertTrue(chunked_hidden_states.shape, (1, 3, 4, 4))
+
+    def _test_layer_local_attn(self):
+        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
+        layer = model.encoder.layer[0].attention.self.to(torch_device)
+        hidden_states = self._get_hidden_states()
+        batch_size, seq_length, hidden_size = hidden_states.size()
+        attention_mask = torch.zeros((batch_size, 1, 1, seq_length), dtype=torch.float32, device=torch_device)
+        attention_mask[:, :, :, -2:] = -10000
+        output_hidden_states = layer(hidden_states, attention_mask)[0]
+
+        self.assertTrue(output_hidden_states.shape, (1, 4, 8))
+        self.assertTrue(
+            torch.allclose(
+                output_hidden_states[0, 1],
+                torch.tensor(
+                    [0.0019, 0.0122, -0.0171, -0.0256, -0.0300, 0.0173, -0.0115, 0.0048],
+                    dtype=torch.float32,
+                    device=torch_device,
+                ),
+                atol=1e-3,
+            )
+        )
+
+    def _test_layer_global_attn(self):
+        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
+        layer = model.encoder.layer[0].attention.self.to(torch_device)
+        hidden_states = self._get_hidden_states()
+        batch_size, seq_length, hidden_size = hidden_states.size()
+        attention_mask = torch.zeros((batch_size, 1, 1, seq_length), dtype=torch.float32, device=torch_device)
+        attention_mask[:, :, :, -2:] = 10000
+        output_hidden_states = layer(hidden_states, attention_mask)[0]
+
+        self.assertTrue(output_hidden_states.shape, (1, 4, 8))
+        self.assertTrue(
+            torch.allclose(
+                output_hidden_states[0, -1],
+                torch.tensor(
+                    [-0.0429, -0.0341, 0.0231, -0.0335, -0.0111, -0.0131, -0.0186, -0.0403],
+                    dtype=torch.float32,
+                    device=torch_device,
+                ),
+                atol=1e-3,
+            )
+        )

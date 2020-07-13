@@ -417,6 +417,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
 
         expected_added_dim = torch.zeros((5,), device=torch_device, dtype=torch.float32)
         self.assertTrue(torch.allclose(expected_added_dim, padded_hidden_states[0, -1, :], atol=1e-6))
+        self.assertTrue(torch.allclose(hidden_states[0, -1, :], padded_hidden_states.view(1, -1)[0, 24:32], atol=1e-6))
 
     def test_chunk(self):
         hidden_states = self._get_hidden_states()
