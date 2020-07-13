@@ -427,12 +427,13 @@ class LongformerSelfAttention(nn.Module):
         if output_attentions:
             if is_global_attn:
                 # With global attention, return global attention probabilities only
-                # batch_size x num_heads x sequence_length x sequence_length
+                # batch_size x num_heads x sequence_length x window_size
                 # which is the attention weights from all tokens to all tokens for global attention
                 # It doesn't not return local attention. Only tokens with global attention have values > 0.0
                 attn_probs = attn_probs[:, :, :, :max_num_global_attn_indices]
                 # pad attn_probs to max length with 0.0 since global attn did not attend there
-                attn_probs = F.pad(attn_probs, (0, seq_len - max_num_global_attn_indices), value=0.0,)
+                window_size = (self.one_sided_attn_window_size * 2 + 1,)
+                attn_probs = F.pad(attn_probs, (0, window_size - max_num_global_attn_indices), value=0.0,)
                 attn_probs = attn_probs.permute(0, 2, 1, 3)
             else:
                 # without global attention, return local attention probabilities
