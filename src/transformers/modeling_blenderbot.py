@@ -53,7 +53,6 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
 """
 
 
-
 class BlenderbotForConditionalGeneration(PretrainedBartModel):
     config_class = BlenderbotConfig
     base_model_prefix = "."

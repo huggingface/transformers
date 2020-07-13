@@ -1,16 +1,13 @@
 import unittest
 
-
 from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available
 from transformers.file_utils import cached_property
-
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_bart import _long_tensor, assert_tensors_close
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-
 
 
 if is_torch_available():
@@ -121,8 +118,6 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(model.decoder.embed_positions.weight.shape, expected_shape)
 
 
-
-
 @require_torch
 class AbstractBlenderBotIntegrationTests(unittest.TestCase):
     checkpoint_name = "sshleifer/blenderbot-3B"
@@ -221,6 +216,7 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
             2,
         ]
         self.assertListEqual(expected_tokens, generated_utterances)
+
 
 class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
     checkpoint_name = "sshleifer/blenderbot-90M"

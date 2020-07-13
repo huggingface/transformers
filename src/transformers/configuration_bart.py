@@ -70,7 +70,6 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
-        extra_layer_norm=False,
         variant="bart",
         **common_kwargs
     ):
@@ -114,7 +113,6 @@ class BartConfig(PretrainedConfig):
         self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
         self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
-        self.extra_layer_norm = extra_layer_norm  # True for mbart
 
         # Params introduced for Marian
         self.add_bias_logits = add_bias_logits
@@ -141,14 +139,15 @@ class BartConfig(PretrainedConfig):
 
     def is_valid_mbart(self) -> bool:
         """Is the configuration aligned with the MBART paper."""
-        if self.variant == 'prelayernorm' and self.add_final_layer_norm and self.scale_embedding:
+        if self.variant == "prelayernorm" and self.add_final_layer_norm and self.scale_embedding:
             return True
-        if self.variant == 'prelayernorm' or self.add_final_layer_norm or self.scale_embedding:
+        if self.variant == "prelayernorm" or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
 
 
 class MBartConfig(BartConfig):
     model_type = "mbart"
-    def __init__(self, variant='prelayernorm', **kwargs):
+
+    def __init__(self, variant="prelayernorm", **kwargs):
         super().__init__(variant=variant, **kwargs)

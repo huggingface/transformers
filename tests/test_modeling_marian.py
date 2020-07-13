@@ -125,7 +125,7 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
         with torch.no_grad():
-            logits, *enc_features = self.model(**model_inputs)
+            logits, *enc_features = self.model(use_cache=False, **model_inputs)
         max_indices = logits.argmax(-1)
         self.tokenizer.batch_decode(max_indices)
 
