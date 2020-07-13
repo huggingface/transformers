@@ -74,7 +74,7 @@ class BlenderbotConfig(BartConfig):
         normalize_embedding=False,
         static_position_embeddings=False,
         is_encoder_decoder=True,
-        variant='prelayernorm',
+        variant="prelayernorm",
         extra_pos_embeddings=0,
         num_beams=10,
         min_length=20,

@@ -2,7 +2,12 @@ import unittest
 
 import torch
 
-from parlai.agents.transformer.modules import MultiHeadAttention, TransformerDecoderLayer, TransformerEncoder, TransformerGeneratorModel
+from parlai.agents.transformer.modules import (
+    MultiHeadAttention,
+    TransformerDecoderLayer,
+    TransformerEncoder,
+    TransformerGeneratorModel,
+)
 from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration
 from transformers.modeling_bart import SelfAttention, fill_with_neg_inf, invert_mask
 from transformers.testing_utils import require_torch, torch_device
@@ -13,7 +18,9 @@ from .test_modeling_bart import assert_tensors_close
 @require_torch
 class BlenderbotParityTests(unittest.TestCase):
     """Show that small randomly initialized layers with same parameters produce same outputs. Requires PARLAI"""
+
     variant = "prelayernorm"
+
     def get_config_and_data(self):
 
         torch.manual_seed(0)
@@ -123,9 +130,9 @@ class BlenderbotParityTests(unittest.TestCase):
         dummy_encoder_output = torch.rand(bs, 11, config.d_model)
         mask = torch.ones(dummy_encoder_output.shape[:2])
         # This passed
-        #parlai_way = cross_attn.prepare_head(dummy_encoder_output)
-        #hf_way = cross_attn._shape(dummy_encoder_output.transpose(0, 1), 11, bs)
-        #assert_tensors_close(parlai_way, hf_way, atol=1e-6)
+        # parlai_way = cross_attn.prepare_head(dummy_encoder_output)
+        # hf_way = cross_attn._shape(dummy_encoder_output.transpose(0, 1), 11, bs)
+        # assert_tensors_close(parlai_way, hf_way, atol=1e-6)
 
         mask[-1, -1] = 0
         bart_mask = invert_mask(mask)
@@ -144,7 +151,7 @@ class BlenderbotParityTests(unittest.TestCase):
     def test_encoder_layer_parity(self):
         config, input_ids, mask = self.get_config_and_data()
 
-        #hidden_states = torch.tensor(2 * [5 * [config.d_model * [0.1]]])
+        # hidden_states = torch.tensor(2 * [5 * [config.d_model * [0.1]]])
         bs, seq_len = 3, 5  # odd numbers for less confusion
         hidden_states = torch.rand(bs, seq_len, config.d_model)
         mask = torch.ones(hidden_states.shape[:2])
@@ -179,8 +186,8 @@ class BlenderbotParityTests(unittest.TestCase):
         config, input_ids, mask = self.get_config_and_data()
         bs, seq_len = input_ids.shape  # odd numbers for less confusion
         bart_mask = input_ids != config.pad_token_id  # gets inverted by code
-        #mask[-1, -1] = 0
-        #bart_mask = invert_mask(mask)
+        # mask[-1, -1] = 0
+        # bart_mask = invert_mask(mask)
 
         torch.manual_seed(0)
 
@@ -204,15 +211,14 @@ class BlenderbotParityTests(unittest.TestCase):
         )
         parlai_encoder.eval()
 
-
         self._copy_layer_weights_in_blender_encoder(bart_encoder, parlai_encoder, config.encoder_layers)
 
-        expected_output = parlai_encoder.forward(input_ids)[0]  #makes own mask
+        expected_output = parlai_encoder.forward(input_ids)[0]  # makes own mask
         blender_output = bart_encoder(input_ids, attention_mask=bart_mask)[0]
         assert_tensors_close(expected_output[:-1], blender_output[:-1], atol=1e-4)
         assert_tensors_close(expected_output[-1, :-1], blender_output[-1, :-1], atol=1e-4)
         # Only difference is at pad position, known Issue
-        #with self.assertRaises(AssertionError):
+        # with self.assertRaises(AssertionError):
         assert_tensors_close(expected_output[-1, -1], blender_output[-1, -1], atol=1e-4)
 
     @torch.no_grad()
@@ -231,7 +237,7 @@ class BlenderbotParityTests(unittest.TestCase):
             config.encoder_ffn_dim,
             dropout=config.dropout,
             activation="gelu",
-            variant=config.variant
+            variant=config.variant,
         ).eval()
 
         blender_encoder = blenderbot_model.encoder
@@ -261,7 +267,7 @@ class BlenderbotParityTests(unittest.TestCase):
 
         self._copy_layer_weights_in_blender_decoder_layer(bart_dec_layer, parlai_decoder_layer)
         tensor = embeddings(input_ids)
-        #decoder_padding
+        # decoder_padding
         expected_decoder_layer_output, *_ = parlai_decoder_layer.forward(
             tensor, encoder_output=expected_encoder_output, encoder_mask=mask,
         )
@@ -273,8 +279,7 @@ class BlenderbotParityTests(unittest.TestCase):
         )
         # import ipdb; ipdb.set_trace()
 
-
-        bart_mask =  invert_mask(mask)
+        bart_mask = invert_mask(mask)
         blender_decoder_layer_output = bart_dec_layer.forward(
             tensor.transpose(1, 0),
             expected_encoder_output.transpose(1, 0),
@@ -282,15 +287,36 @@ class BlenderbotParityTests(unittest.TestCase):
             causal_mask=causal_mask,
         )[0]
         assert_tensors_close(expected_decoder_layer_output, blender_decoder_layer_output.transpose(0, 1), atol=1e-4)
-        if self.variant =='xlm':
+        if self.variant == "xlm":
             return
-        expected_slice = torch.tensor([-1.7712, 0.2689, -1.8851, -2.8012, 1.3736, -0.7266, 3.1182, 1.1434, -1.4304, 1.2469, -0.3417, 0.3943, 3.1211, 3.3170, 2.1522, -2.1234], device=torch_device)
+        expected_slice = torch.tensor(
+            [
+                -1.7712,
+                0.2689,
+                -1.8851,
+                -2.8012,
+                1.3736,
+                -0.7266,
+                3.1182,
+                1.1434,
+                -1.4304,
+                1.2469,
+                -0.3417,
+                0.3943,
+                3.1211,
+                3.3170,
+                2.1522,
+                -2.1234,
+            ],
+            device=torch_device,
+        )
         assert_tensors_close(expected_slice, blender_decoder_layer_output[0, 0], atol=1e-4)
         # self.assertTrue(torch.allclose(expected_output, blender_output, atol=1e-4))
 
 
 class Blenderbot90Tests(BlenderbotParityTests):
     """Show that small randomly initialized layers with same parameters produce same outputs. Requires PARLAI"""
+
     variant = "xlm"
 
     def get_config_and_data(self):

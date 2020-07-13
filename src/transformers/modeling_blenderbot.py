@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.modeling_bart import SelfAttention
+from transformers.modeling_bart import BartForConditionalGeneration, SelfAttention
 
 from .configuration_blenderbot import BlenderbotConfig
 from .file_utils import add_start_docstrings_to_callable
@@ -17,6 +17,7 @@ from .modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
+
 
 # TODO: delete this
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["sshleifer/blenderbot-3B", "sshleifer/blenderbot-90M"]
@@ -51,7 +52,6 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
         labels: (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
 """
 
-from transformers.modeling_bart import BartForConditionalGeneration
 
 
 class BlenderbotForConditionalGeneration(PretrainedBartModel):
@@ -203,7 +203,7 @@ class BlenderbotForConditionalGeneration(PretrainedBartModel):
         return past
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        logits[:, self.config.bos_token_id] = -65504 # near infinity fp16
+        logits[:, self.config.bos_token_id] = -65504  # near infinity fp16
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
             self._force_token_ids_generation(logits, self.config.eos_token_id)
         return logits

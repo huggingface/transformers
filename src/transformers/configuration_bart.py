@@ -71,7 +71,7 @@ class BartConfig(PretrainedConfig):
         static_position_embeddings=False,
         add_bias_logits=False,
         extra_layer_norm=False,
-        variant='bart',
+        variant="bart",
         **common_kwargs
     ):
         r"""
