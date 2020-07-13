@@ -924,7 +924,7 @@ class SpecialTokensMixin:
         set_attr = self.special_tokens_map_extended
         for attr_value in set_attr.values():
             all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
-        all_toks = list(set(all_toks))
+        all_toks = sorted(list(set(all_toks)))
         return all_toks
 
     @property
