@@ -78,3 +78,32 @@ python examples/xla_spawn.py --num_cores 8 \
 ```
 
 Feedback and more use cases and benchmarks involving TPUs are welcome, please share with the community.
+
+## Logging & Experiment tracking
+
+You can easily log and monitor your runs code. [TensorBoard](https://www.tensorflow.org/tensorboard) and [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface) are currently supported.
+
+To use Weights & Biases, install the wandb package with:
+
+```bash
+pip install wandb
+```
+
+Then log in the command line:
+
+```bash
+wandb login
+```
+
+If you are in Jupyter or Colab, you should login with:
+
+```python
+import wandb
+wandb.login()
+```
+
+Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
+
+For advanced configuration and examples, refer to the [W&B documentation](https://docs.wandb.com/library/integrations/huggingface).
+
+When using 🤗 Transformers with PyTorch Lightning, runs can be tracked through `WandbLogger`. Refer to related [documentation & examples](https://docs.wandb.com/library/frameworks/pytorch/lightning).

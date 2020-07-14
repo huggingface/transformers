@@ -102,6 +102,7 @@ from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_flaubert import (
     FlaubertForQuestionAnsweringSimple,
     FlaubertForSequenceClassification,
+    FlaubertForTokenClassification,
     FlaubertModel,
     FlaubertWithLMHeadModel,
 )
@@ -328,6 +329,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
+        (FlaubertConfig, FlaubertForTokenClassification),
         (XLMConfig, XLMForTokenClassification),
         (XLMRobertaConfig, XLMRobertaForTokenClassification),
         (LongformerConfig, LongformerForTokenClassification),
@@ -1554,6 +1556,7 @@ class AutoModelForTokenClassification:
                 - isInstance of `bert` configuration class: :class:`~transformers.BertModelForTokenClassification` (Bert model)
                 - isInstance of `albert` configuration class: :class:`~transformers.AlbertForTokenClassification` (AlBert model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForTokenClassification` (XLNet model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForTokenClassification` (Flaubert model)
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForTokenClassification` (Camembert model)
                 - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForTokenClassification` (Roberta model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
@@ -1591,6 +1594,7 @@ class AutoModelForTokenClassification:
             - `camembert`: :class:`~transformers.CamembertForTokenClassification` (Camembert model)
             - `bert`: :class:`~transformers.BertForTokenClassification` (Bert model)
             - `xlnet`: :class:`~transformers.XLNetForTokenClassification` (XLNet model)
+            - `flaubert`: :class:`~transformers.FlaubertForTokenClassification` (Flaubert model)
             - `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
             - `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
 
