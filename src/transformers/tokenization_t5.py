@@ -61,7 +61,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class T5Tokenizer(PreTrainedTokenizer):
     """
-        Constructs an XLNet tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+        Constructs a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
 
         This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
         should refer to the superclass for more information regarding methods.
