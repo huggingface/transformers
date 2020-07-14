@@ -1,6 +1,9 @@
 FlauBERT
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The FlauBERT model was proposed in the paper
 `FlauBERT: Unsupervised Language Model Pre-training for French <https://arxiv.org/abs/1912.05372>`__ by Hang Le et al.
 It's a transformer pre-trained using a masked language modeling (MLM) objective (BERT-like).
@@ -58,6 +61,13 @@ FlaubertForSequenceClassification
     :members:
 
 
+FlaubertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaubertForTokenClassification
+    :members:
+
+
 FlaubertForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -72,3 +82,43 @@ FlaubertForQuestionAnswering
     :members:
 
 
+TFFlaubertModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertModel
+    :members:
+
+
+TFFlaubertWithLMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertWithLMHeadModel
+    :members:
+
+
+TFFlaubertForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForSequenceClassification
+    :members:
+
+
+TFFlaubertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForMultipleChoice
+    :members:
+
+
+TFFlaubertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForTokenClassification
+    :members:
+
+
+TFFlaubertForQuestionAnsweringSimple
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForQuestionAnsweringSimple
+    :members:

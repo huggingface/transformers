@@ -18,6 +18,8 @@
 import logging
 from collections import OrderedDict
 
+from transformers.configuration_mobilebert import MobileBertConfig
+
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -30,8 +32,10 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    MBartConfig,
     OpenAIGPTConfig,
     ReformerConfig,
+    RetriBertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -42,7 +46,7 @@ from .configuration_auto import (
 from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
-from .tokenization_bart import BartTokenizer
+from .tokenization_bart import BartTokenizer, MBartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -53,8 +57,10 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer
 from .tokenization_marian import MarianTokenizer
+from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -68,10 +74,13 @@ logger = logging.getLogger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, None)),
+        (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
+        (MBartConfig, (MBartTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
@@ -100,6 +109,7 @@ class AutoTokenizer:
         The `from_pretrained()` method takes care of returning the correct tokenizer class instance
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: T5Tokenizer (T5 model)
             - `distilbert`: DistilBertTokenizer (DistilBert model)
             - `albert`: AlbertTokenizer (ALBERT model)
@@ -133,6 +143,7 @@ class AutoTokenizer:
         The tokenizer class to instantiate is selected
         based on the `model_type` property of the config object, or when it's missing,
         falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
             - `t5`: T5Tokenizer (T5 model)
             - `distilbert`: DistilBertTokenizer (DistilBert model)
             - `albert`: AlbertTokenizer (ALBERT model)
@@ -194,7 +205,7 @@ class AutoTokenizer:
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        if "bert-base-japanese" in pretrained_model_name_or_path:
+        if "bert-base-japanese" in str(pretrained_model_name_or_path):
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         use_fast = kwargs.pop("use_fast", False)

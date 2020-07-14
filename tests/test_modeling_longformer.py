@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -36,56 +36,33 @@ if is_torch_available():
     )
 
 
-class LongformerModelTester(object):
+class LongformerModelTester:
     def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-        attention_window=4,
+        self, parent,
     ):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.attention_window = attention_window
+        self.batch_size = 13
+        self.seq_length = 7
+        self.is_training = True
+        self.use_input_mask = True
+        self.use_token_type_ids = True
+        self.use_labels = True
+        self.vocab_size = 99
+        self.hidden_size = 32
+        self.num_hidden_layers = 5
+        self.num_attention_heads = 4
+        self.intermediate_size = 37
+        self.hidden_act = "gelu"
+        self.hidden_dropout_prob = 0.1
+        self.attention_probs_dropout_prob = 0.1
+        self.max_position_embeddings = 512
+        self.type_vocab_size = 16
+        self.type_sequence_label_size = 2
+        self.initializer_range = 0.02
+        self.num_labels = 3
+        self.num_choices = 4
+        self.scope = None
+        self.attention_window = 4
 
         # `ModelTesterMixin.test_attention_outputs` is expecting attention tensors to be of size
         # [num_attention_heads, encoder_seq_length, encoder_key_length], but LongformerSelfAttention
@@ -138,6 +115,18 @@ class LongformerModelTester(object):
     def check_loss_output(self, result):
         self.parent.assertListEqual(list(result["loss"].size()), [])
 
+    def create_and_check_attention_mask_determinism(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = LongformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+        output_with_mask = model(input_ids, attention_mask=attention_mask)[0]
+        output_without_mask = model(input_ids)[0]
+        self.parent.assertTrue(torch.allclose(output_with_mask[0, 0, :5], output_without_mask[0, 0, :5], atol=1e-4))
+
     def create_and_check_longformer_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -147,6 +136,36 @@ class LongformerModelTester(object):
         sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
         sequence_output, pooled_output = model(input_ids)
+
+        result = {
+            "sequence_output": sequence_output,
+            "pooled_output": pooled_output,
+        }
+        self.parent.assertListEqual(
+            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+
+    def create_and_check_longformer_model_with_global_attention_mask(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = LongformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        global_attention_mask = input_mask.clone()
+        global_attention_mask[:, input_mask.shape[-1] // 2] = 0
+        global_attention_mask = global_attention_mask.to(torch_device)
+
+        sequence_output, pooled_output = model(
+            input_ids,
+            attention_mask=input_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+        )
+        sequence_output, pooled_output = model(
+            input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask
+        )
+        sequence_output, pooled_output = model(input_ids, global_attention_mask=global_attention_mask)
 
         result = {
             "sequence_output": sequence_output,
@@ -266,7 +285,13 @@ class LongformerModelTester(object):
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        global_attention_mask = torch.zeros_like(input_ids)
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+            "global_attention_mask": global_attention_mask,
+        }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_question_answering(self):
@@ -296,7 +321,18 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False  # head masking is not supported
     test_torchscript = False
 
-    all_model_classes = (LongformerForMaskedLM, LongformerModel) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LongformerModel,
+            LongformerForMaskedLM,
+            LongformerForSequenceClassification,
+            LongformerForQuestionAnswering,
+            LongformerForTokenClassification,
+            LongformerForMultipleChoice,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
@@ -308,6 +344,14 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_longformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_longformer_model(*config_and_inputs)
+
+    def test_longformer_model_attention_mask_determinism(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_attention_mask_determinism(*config_and_inputs)
+
+    def test_longformer_model_global_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_model_with_global_attention_mask(*config_and_inputs)
 
     def test_longformer_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -336,15 +380,31 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
         model.to(torch_device)
 
+        # 'Hello world!'
+        input_ids = torch.tensor([[0, 20920, 232, 328, 1437, 2]], dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+        output = model(input_ids, attention_mask=attention_mask)[0]
+        output_without_mask = model(input_ids)[0]
+
+        expected_output_slice = torch.tensor([0.0549, 0.1087, -0.1119, -0.0368, 0.0250], device=torch_device)
+        self.assertTrue(torch.allclose(output[0, 0, -5:], expected_output_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output_without_mask[0, 0, -5:], expected_output_slice, atol=1e-4))
+
+    @slow
+    def test_inference_no_head_long(self):
+        model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
+        model.to(torch_device)
+
         # 'Hello world! ' repeated 1000 times
         input_ids = torch.tensor(
             [[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=torch.long, device=torch_device
         )  # long input
 
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device)
-        attention_mask[:, [1, 4, 21]] = 2  # Set global attention on a few random positions
+        global_attention_mask = torch.zeros(input_ids.shape, dtype=torch.long, device=input_ids.device)
+        global_attention_mask[:, [1, 4, 21]] = 1  # Set global attention on a few random positions
 
-        output = model(input_ids, attention_mask=attention_mask)[0]
+        output = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)[0]
 
         expected_output_sum = torch.tensor(74585.8594, device=torch_device)
         expected_output_mean = torch.tensor(0.0243, device=torch_device)
@@ -352,7 +412,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
 
     @slow
-    def test_inference_masked_lm(self):
+    def test_inference_masked_lm_long(self):
         model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         model.to(torch_device)
 
@@ -363,9 +423,9 @@ class LongformerModelIntegrationTest(unittest.TestCase):
 
         loss, prediction_scores = model(input_ids, labels=input_ids)
 
-        expected_loss = torch.tensor(0.0620, device=torch_device)
-        expected_prediction_scores_sum = torch.tensor(-6.1599e08, device=torch_device)
-        expected_prediction_scores_mean = torch.tensor(-3.0622, device=torch_device)
+        expected_loss = torch.tensor(0.0074, device=torch_device)
+        expected_prediction_scores_sum = torch.tensor(-6.1048e08, device=torch_device)
+        expected_prediction_scores_mean = torch.tensor(-3.0348, device=torch_device)
         input_ids = input_ids.to(torch_device)
 
         self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))

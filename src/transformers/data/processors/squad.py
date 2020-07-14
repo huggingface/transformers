@@ -12,6 +12,10 @@ from ...tokenization_bert import whitespace_tokenize
 from .utils import DataProcessor
 
 
+# Store the tokenizers which insert 2 separators tokens
+MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
+
+
 if is_torch_available():
     import torch
     from torch.utils.data import TensorDataset
@@ -120,10 +124,16 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
 
     spans = []
 
-    truncated_query = tokenizer.encode(example.question_text, add_special_tokens=False, max_length=max_query_length)
+    truncated_query = tokenizer.encode(
+        example.question_text, add_special_tokens=False, truncation=True, max_length=max_query_length
+    )
+
+    # Tokenizers who insert 2 SEP tokens in-between <context> & <question> need to have special handling
+    # in the way they compute mask of added tokens.
+    tokenizer_type = type(tokenizer).__name__.replace("Tokenizer", "").lower()
     sequence_added_tokens = (
         tokenizer.max_len - tokenizer.max_len_single_sentence + 1
-        if "roberta" in str(type(tokenizer)) or "camembert" in str(type(tokenizer))
+        if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
         else tokenizer.max_len - tokenizer.max_len_single_sentence
     )
     sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair
@@ -131,14 +141,14 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
 
-        encoded_dict = tokenizer.encode_plus(
+        encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
             truncated_query if tokenizer.padding_side == "right" else span_doc_tokens,
             span_doc_tokens if tokenizer.padding_side == "right" else truncated_query,
+            truncation="only_second" if tokenizer.padding_side == "right" else "only_first",
+            padding="max_length",
             max_length=max_seq_length,
             return_overflowing_tokens=True,
-            pad_to_max_length=True,
             stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
-            truncation_strategy="only_second" if tokenizer.padding_side == "right" else "only_first",
             return_token_type_ids=True,
         )
 
@@ -176,7 +186,9 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
 
         spans.append(encoded_dict)
 
-        if "overflowing_tokens" not in encoded_dict:
+        if "overflowing_tokens" not in encoded_dict or (
+            "overflowing_tokens" in encoded_dict and len(encoded_dict["overflowing_tokens"]) == 0
+        ):
             break
         span_doc_tokens = encoded_dict["overflowing_tokens"]
 
@@ -385,57 +397,102 @@ def squad_convert_examples_to_features(
 
         def gen():
             for i, ex in enumerate(features):
-                yield (
-                    {
-                        "input_ids": ex.input_ids,
-                        "attention_mask": ex.attention_mask,
-                        "token_type_ids": ex.token_type_ids,
-                        "feature_index": i,
-                        "qas_id": ex.qas_id,
-                    },
-                    {
-                        "start_positions": ex.start_position,
-                        "end_positions": ex.end_position,
-                        "cls_index": ex.cls_index,
-                        "p_mask": ex.p_mask,
-                        "is_impossible": ex.is_impossible,
-                    },
-                )
+                if ex.token_type_ids is None:
+                    yield (
+                        {
+                            "input_ids": ex.input_ids,
+                            "attention_mask": ex.attention_mask,
+                            "feature_index": i,
+                            "qas_id": ex.qas_id,
+                        },
+                        {
+                            "start_positions": ex.start_position,
+                            "end_positions": ex.end_position,
+                            "cls_index": ex.cls_index,
+                            "p_mask": ex.p_mask,
+                            "is_impossible": ex.is_impossible,
+                        },
+                    )
+                else:
+                    yield (
+                        {
+                            "input_ids": ex.input_ids,
+                            "attention_mask": ex.attention_mask,
+                            "token_type_ids": ex.token_type_ids,
+                            "feature_index": i,
+                            "qas_id": ex.qas_id,
+                        },
+                        {
+                            "start_positions": ex.start_position,
+                            "end_positions": ex.end_position,
+                            "cls_index": ex.cls_index,
+                            "p_mask": ex.p_mask,
+                            "is_impossible": ex.is_impossible,
+                        },
+                    )
 
         # Why have we split the batch into a tuple? PyTorch just has a list of tensors.
-        train_types = (
-            {
-                "input_ids": tf.int32,
-                "attention_mask": tf.int32,
-                "token_type_ids": tf.int32,
-                "feature_index": tf.int64,
-                "qas_id": tf.string,
-            },
-            {
-                "start_positions": tf.int64,
-                "end_positions": tf.int64,
-                "cls_index": tf.int64,
-                "p_mask": tf.int32,
-                "is_impossible": tf.int32,
-            },
-        )
+        if "token_type_ids" in tokenizer.model_input_names:
+            train_types = (
+                {
+                    "input_ids": tf.int32,
+                    "attention_mask": tf.int32,
+                    "token_type_ids": tf.int32,
+                    "feature_index": tf.int64,
+                    "qas_id": tf.string,
+                },
+                {
+                    "start_positions": tf.int64,
+                    "end_positions": tf.int64,
+                    "cls_index": tf.int64,
+                    "p_mask": tf.int32,
+                    "is_impossible": tf.int32,
+                },
+            )
 
-        train_shapes = (
-            {
-                "input_ids": tf.TensorShape([None]),
-                "attention_mask": tf.TensorShape([None]),
-                "token_type_ids": tf.TensorShape([None]),
-                "feature_index": tf.TensorShape([]),
-                "qas_id": tf.TensorShape([]),
-            },
-            {
-                "start_positions": tf.TensorShape([]),
-                "end_positions": tf.TensorShape([]),
-                "cls_index": tf.TensorShape([]),
-                "p_mask": tf.TensorShape([None]),
-                "is_impossible": tf.TensorShape([]),
-            },
-        )
+            train_shapes = (
+                {
+                    "input_ids": tf.TensorShape([None]),
+                    "attention_mask": tf.TensorShape([None]),
+                    "token_type_ids": tf.TensorShape([None]),
+                    "feature_index": tf.TensorShape([]),
+                    "qas_id": tf.TensorShape([]),
+                },
+                {
+                    "start_positions": tf.TensorShape([]),
+                    "end_positions": tf.TensorShape([]),
+                    "cls_index": tf.TensorShape([]),
+                    "p_mask": tf.TensorShape([None]),
+                    "is_impossible": tf.TensorShape([]),
+                },
+            )
+        else:
+            train_types = (
+                {"input_ids": tf.int32, "attention_mask": tf.int32, "feature_index": tf.int64, "qas_id": tf.string},
+                {
+                    "start_positions": tf.int64,
+                    "end_positions": tf.int64,
+                    "cls_index": tf.int64,
+                    "p_mask": tf.int32,
+                    "is_impossible": tf.int32,
+                },
+            )
+
+            train_shapes = (
+                {
+                    "input_ids": tf.TensorShape([None]),
+                    "attention_mask": tf.TensorShape([None]),
+                    "feature_index": tf.TensorShape([]),
+                    "qas_id": tf.TensorShape([]),
+                },
+                {
+                    "start_positions": tf.TensorShape([]),
+                    "end_positions": tf.TensorShape([]),
+                    "cls_index": tf.TensorShape([]),
+                    "p_mask": tf.TensorShape([None]),
+                    "is_impossible": tf.TensorShape([]),
+                },
+            )
 
         return tf.data.Dataset.from_generator(gen, train_types, train_shapes)
     else:
@@ -488,11 +545,11 @@ class SquadProcessor(DataProcessor):
 
         Examples::
 
-            import tensorflow_datasets as tfds
-            dataset = tfds.load("squad")
+            >>> import tensorflow_datasets as tfds
+            >>> dataset = tfds.load("squad")
 
-            training_examples = get_examples_from_dataset(dataset, evaluate=False)
-            evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
+            >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)
+            >>> evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
         """
 
         if evaluate:

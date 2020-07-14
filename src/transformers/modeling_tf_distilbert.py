@@ -23,14 +23,21 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
-from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_utils import (
+    TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
+    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -40,6 +47,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "distilbert-base-uncased",
@@ -109,7 +117,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
     def call(self, inputs, inputs_embeds=None, mode="embedding", training=False):
         """Get token embeddings of inputs.
         Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
+            inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
             mode: string, a valid value is one of "embedding" and "linear".
         Returns:
             outputs: (1) If mode == "embedding", output embedding tensor, float32 with
@@ -186,7 +194,6 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
-        self.output_attentions = config.output_attentions
 
         assert self.dim % self.n_heads == 0
 
@@ -224,7 +231,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         context: tf.Tensor(bs, seq_length, dim)
             Contextualized layer. Optional: only if `output_attentions=True`
         """
-        query, key, value, mask, head_mask = inputs
+        query, key, value, mask, head_mask, output_attentions = inputs
         bs, q_length, dim = shape_list(query)
         k_length = shape_list(key)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
@@ -263,7 +270,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             return (context, weights)
         else:
             return (context,)
@@ -303,7 +310,6 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.hidden_dim = config.hidden_dim
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation = config.activation
-        self.output_attentions = config.output_attentions
 
         assert config.dim % config.n_heads == 0
 
@@ -327,11 +333,11 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ffn_output: tf.Tensor(bs, seq_length, dim)
             The output of the transformer block contextualization.
         """
-        x, attn_mask, head_mask = inputs
+        x, attn_mask, head_mask, output_attentions = inputs
 
         # Self-Attention
-        sa_output = self.attention([x, x, x, attn_mask, head_mask], training=training)
-        if self.output_attentions:
+        sa_output = self.attention([x, x, x, attn_mask, head_mask, output_attentions], training=training)
+        if cast_bool_to_primitive(output_attentions) is True:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attention` or `output_hidden_states` cases returning tuples
             # assert type(sa_output) == tuple
@@ -343,7 +349,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ffn_output = self.output_layer_norm(ffn_output + sa_output)  # (bs, seq_length, dim)
 
         output = (ffn_output,)
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             output = (sa_weights,) + output
         return output
 
@@ -352,8 +358,6 @@ class TFTransformer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.n_layers = config.n_layers
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
 
@@ -377,20 +381,20 @@ class TFTransformer(tf.keras.layers.Layer):
             Tuple of length n_layers with the attention weights from each layer
             Optional: only if output_attentions=True
         """
-        x, attn_mask, head_mask = inputs
+        x, attn_mask, head_mask, output_attentions, output_hidden_states = inputs
 
         all_hidden_states = ()
         all_attentions = ()
 
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i]], training=training)
+            layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i], output_attentions], training=training)
             hidden_state = layer_outputs[-1]
 
-            if self.output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 assert len(layer_outputs) == 2
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
@@ -398,13 +402,13 @@ class TFTransformer(tf.keras.layers.Layer):
                 assert len(layer_outputs) == 1
 
         # Add last layer
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_state,)
 
         outputs = (hidden_state,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
@@ -416,6 +420,8 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
 
         self.embeddings = TFEmbeddings(config, name="embeddings")  # Embeddings
         self.transformer = TFTransformer(config, name="transformer")  # Encoder
@@ -423,27 +429,44 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def call(self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, training=False):
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        training=False,
+    ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -469,7 +492,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_hidden_layers
 
         embedding_output = self.embeddings(input_ids, inputs_embeds=inputs_embeds)  # (bs, seq_length, dim)
-        tfmr_output = self.transformer([embedding_output, attention_mask, head_mask], training=training)
+        tfmr_output = self.transformer(
+            [embedding_output, attention_mask, head_mask, output_attentions, output_hidden_states], training=training
+        )
 
         return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)
 
@@ -504,9 +529,9 @@ DISTILBERT_START_DOCSTRING = r"""
 
         - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+          :obj:`model([input_ids, attention_mask])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+          :obj:`model({'input_ids': input_ids})`
 
     Parameters:
         config (:class:`~transformers.DistilBertConfig`): Model configuration class with all the parameters of the model.
@@ -521,7 +546,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -542,6 +567,8 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
 
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -555,33 +582,24 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(self, inputs, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertModel
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertModel.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
         outputs = self.distilbert(inputs, **kwargs)
         return outputs
@@ -609,11 +627,9 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 @add_start_docstrings(
     """DistilBert Model with a `masked language modeling` head on top. """, DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
+class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.vocab_size = config.vocab_size
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
@@ -628,37 +644,57 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         return self.vocab_projector.input_embeddings
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
 
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForMaskedLM
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForMaskedLM.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores = outputs[0]
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
-        distilbert_output = self.distilbert(inputs, **kwargs)
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[6] if len(inputs) > 6 else labels
+            if len(inputs) > 6:
+                inputs = inputs[:6]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
+        distilbert_output = self.distilbert(
+            inputs,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
 
         hidden_states = distilbert_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
@@ -667,6 +703,11 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         prediction_logits = self.vocab_projector(prediction_logits)
 
         outputs = (prediction_logits,) + distilbert_output[1:]
+
+        if labels is not None:
+            loss = self.compute_loss(labels, prediction_logits)
+            outputs = (loss,) + outputs
+
         return outputs  # logits, (hidden_states), (attentions)
 
 
@@ -693,8 +734,17 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
-        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -707,35 +757,32 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForSequenceClassification
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForSequenceClassification.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[6] if len(inputs) > 6 else labels
+            if len(inputs) > 6:
+                inputs = inputs[:6]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         distilbert_output = self.distilbert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
 
@@ -771,8 +818,17 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         )
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
-        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+        self,
+        inputs=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -783,35 +839,32 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForTokenClassification
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForTokenClassification.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[6] if len(inputs) > 6 else labels
+            if len(inputs) > 6:
+                inputs = inputs[:6]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
         outputs = self.distilbert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
 
@@ -820,7 +873,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
 
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+        outputs = (logits,) + outputs[1:]  # add hidden states and attention if they are here
 
         if labels is not None:
             loss = self.compute_loss(labels, logits)
@@ -839,7 +892,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         super().__init__(config, *inputs, **kwargs)
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
         self.pre_classifier = tf.keras.layers.Dense(
             config.dim,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -860,8 +913,17 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
-        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+        self,
+        inputs,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -875,45 +937,36 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForMultipleChoice
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = TFDistilBertForMultipleChoice.from_pretrained('distilbert-base-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-
-        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
-        labels = tf.reshape(tf.constant(1), (-1, 1))
-        outputs = model(input_ids, labels=labels)
-
-        loss, classification_scores = outputs[:2]
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
+            labels = inputs[6] if len(inputs) > 6 else labels
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -926,12 +979,19 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        flat_inputs_embeds = (
+            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            if inputs_embeds is not None
+            else None
+        )
 
         flat_inputs = [
             flat_input_ids,
             flat_attention_mask,
             head_mask,
-            inputs_embeds,
+            flat_inputs_embeds,
+            output_attentions,
+            output_hidden_states,
         ]
 
         distilbert_output = self.distilbert(flat_inputs, training=training)
@@ -968,17 +1028,17 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
         start_positions=None,
         end_positions=None,
-        cls_index=None,
-        p_mask=None,
-        is_impossible=None,
         training=False,
     ):
         r"""
@@ -997,37 +1057,34 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        import tensorflow as tf
-        from transformers import DistilBertTokenizer, TFDistilBertForQuestionAnswering
-
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-cased')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
-        start_scores, end_scores = model(input_dict)
-
-        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
-        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
-
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
         """
+        if isinstance(inputs, (tuple, list)):
+            start_positions = inputs[6] if len(inputs) > 6 else start_positions
+            end_positions = inputs[7] if len(inputs) > 7 else end_positions
+            if len(inputs) > 6:
+                inputs = inputs[:6]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
+
         distilbert_output = self.distilbert(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
 

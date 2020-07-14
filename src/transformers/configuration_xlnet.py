@@ -15,8 +15,8 @@
 # limitations under the License.
 """ XLNet configuration """
 
-
 import logging
+import warnings
 
 from .configuration_utils import PretrainedConfig
 
@@ -84,11 +84,12 @@ class XLNetConfig(PretrainedConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
                 Is one of the following options:
-                    - 'last' => take the last token hidden state (like XLNet)
-                    - 'first' => take the first token hidden state (like Bert)
-                    - 'mean' => take the mean of all tokens hidden states
-                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
-                    - 'attn' => Not implemented now, use multi-head attention
+
+                - 'last' => take the last token hidden state (like XLNet)
+                - 'first' => take the first token hidden state (like Bert)
+                - 'mean' => take the mean of all tokens hidden states
+                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                - 'attn' => Not implemented now, use multi-head attention
             summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
@@ -112,16 +113,16 @@ class XLNetConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import XLNetConfig, XLNetModel
+            >>> from transformers import XLNetConfig, XLNetModel
 
-            # Initializing a XLNet configuration
-            configuration = XLNetConfig()
+            >>> # Initializing a XLNet configuration
+            >>> configuration = XLNetConfig()
 
-            # Initializing a model from the configuration
-            model = XLNetModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = XLNetModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
     model_type = "xlnet"
@@ -193,6 +194,17 @@ class XLNetConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+
+        if mem_len is None or mem_len == 0:
+            warnings.warn(
+                "This config doesn't use attention memories, a core feature of XLNet."
+                " Consider setting `men_len` to a non-zero value, for example "
+                "`xlnet = XLNetLMHeadModel.from_pretrained('xlnet-base-cased'', mem_len=1024)`,"
+                " for accurate training performance as well as an order of magnitude faster inference."
+                " Starting from version 3.5.0, the default parameter will be 1024, following"
+                " the implementation in https://arxiv.org/abs/1906.08237",
+                FutureWarning,
+            )
 
     @property
     def max_position_embeddings(self):

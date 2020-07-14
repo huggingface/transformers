@@ -77,7 +77,7 @@ exact_match = 86.91
 ```
 
 This fine-tuned model is available as a checkpoint under the reference
-`bert-large-uncased-whole-word-masking-finetuned-squad`.
+[`bert-large-uncased-whole-word-masking-finetuned-squad`](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
 
 #### Fine-tuning XLNet on SQuAD
 
@@ -165,17 +165,16 @@ Larger batch size may improve the performance while costing more memory.
 python run_tf_squad.py \
     --model_name_or_path bert-base-uncased \
     --output_dir model \
-    --max-seq-length 384 \
+    --max_seq_length 384 \
     --num_train_epochs 2 \
     --per_gpu_train_batch_size 8 \
     --per_gpu_eval_batch_size 16 \
     --do_train \
-    --logging_dir logs \
-    --mode question-answering \
+    --logging_dir logs \    
     --logging_steps 10 \
     --learning_rate 3e-5 \
-    --doc_stride 128 \
-    --optimizer_name adamw
+    --doc_stride 128    
 ```
 
-For the moment the evaluation is not available in the Tensorflow Trainer only the training.
+
+For the moment evaluation is not available in the Tensorflow Trainer only the training.

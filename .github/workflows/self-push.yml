@@ -51,4 +51,4 @@ jobs:
         USE_CUDA: yes
       run: |
         source .env/bin/activate
-        python -m pytest -n 2 --dist=loadfile -s -v ./tests/
+        python -m pytest -n 2 --dist=loadfile -s ./tests/

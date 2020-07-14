@@ -47,6 +47,13 @@ AlbertTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+Albert specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_albert.AlbertForPretrainingOutput
+    :members:
+
+
 AlbertModel
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -65,6 +72,20 @@ AlbertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AlbertForSequenceClassification
+    :members:
+
+
+AlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForMultipleChoice
+    :members:
+
+
+AlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForTokenClassification
     :members:
 
 
@@ -100,6 +121,13 @@ TFAlbertForMultipleChoice
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFAlbertForMultipleChoice
+    :members:
+
+
+TFAlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForTokenClassification
     :members:
 
 

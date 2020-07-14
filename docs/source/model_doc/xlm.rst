@@ -46,6 +46,14 @@ XLMTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
+
+XLM specific outputs
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_xlm.XLMForQuestionAnsweringOutput
+    :members:
+
+
 XLMModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -100,6 +108,21 @@ TFXLMForSequenceClassification
 
 .. autoclass:: transformers.TFXLMForSequenceClassification
     :members:
+
+
+TFXLMForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMForMultipleChoice
+    :members:
+
+
+TFXLMForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFXLMForTokenClassification
+    :members:
+
 
 
 TFXLMForQuestionAnsweringSimple

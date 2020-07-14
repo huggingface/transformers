@@ -17,15 +17,205 @@
 import unittest
 
 from transformers import T5Config, is_tf_available
+from transformers.file_utils import cached_property
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf, slow
 
 
 if is_tf_available():
     import tensorflow as tf
     from transformers import TFT5Model, TFT5ForConditionalGeneration, T5Tokenizer
+
+
+class TFT5ModelTester:
+    def __init__(
+        self, parent,
+    ):
+        self.parent = parent
+        self.batch_size = 13
+        self.seq_length = 7
+        self.is_training = True
+        self.use_input_mask = True
+        self.use_labels = True
+        self.vocab_size = 99
+        self.n_positions = 14
+        self.hidden_size = 32
+        self.num_hidden_layers = 5
+        self.num_attention_heads = 4
+        self.d_ff = 37
+        self.relative_attention_num_buckets = 8
+        self.dropout_rate = 0.1
+        self.initializer_factor = 0.002
+        self.eos_token_id = 1
+        self.pad_token_id = 0
+        self.scope = None
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        token_labels = None
+        if self.use_labels:
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        config = T5Config(
+            vocab_size=self.vocab_size,
+            n_positions=self.n_positions,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.pad_token_id,
+        )
+
+        return (config, input_ids, input_mask, token_labels)
+
+    def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
+        model = TFT5Model(config=config)
+        inputs = {
+            "input_ids": input_ids,
+            "decoder_input_ids": input_ids,
+            "decoder_attention_mask": input_mask,
+        }
+        decoder_output, decoder_past, encoder_output = model(inputs)
+
+        decoder_output, decoder_past, encoder_output = model(
+            input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids
+        )
+        result = {
+            "encoder_output": encoder_output.numpy(),
+            "decoder_past": decoder_past,
+            "decoder_output": decoder_output.numpy(),
+        }
+        self.parent.assertListEqual(
+            list(result["encoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        self.parent.assertListEqual(
+            list(result["decoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+        )
+        self.parent.assertEqual(len(decoder_past), 2)
+        # decoder_past[0] should correspond to encoder output
+        self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
+        # There should be `num_layers` key value embeddings stored in decoder_past[1]
+        self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
+        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
+        self.parent.assertEqual(len(decoder_past[1][0]), 4)
+
+    def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
+        model = TFT5ForConditionalGeneration(config=config)
+        inputs_dict = {
+            "input_ids": input_ids,
+            "decoder_input_ids": input_ids,
+            "decoder_attention_mask": input_mask,
+        }
+
+        prediction_scores, _, _ = model(inputs_dict)
+
+        result = {
+            "prediction_scores": prediction_scores.numpy(),
+        }
+        self.parent.assertListEqual(
+            list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+        )
+
+    def create_and_check_t5_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):
+        model = TFT5Model(config=config).get_decoder()
+
+        input_ids = input_ids[:1, :]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past_key_value_states = outputs
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+
+        output_from_no_past = model(next_input_ids)[0]
+        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)[0]
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+
+    def create_and_check_t5_decoder_model_attention_mask_past(
+        self, config, input_ids, decoder_input_ids, attention_mask
+    ):
+        model = TFT5Model(config=config).get_decoder()
+
+        # create attention mask
+        half_seq_length = self.seq_length // 2
+        attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
+        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
+        attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
+
+        # first forward pass
+        _, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True)
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # change a random masked slice from input_ids
+        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).numpy() + 1
+        random_other_next_tokens = ids_tensor((self.batch_size, self.seq_length), config.vocab_size)
+        vector_condition = tf.range(self.seq_length) == (self.seq_length - random_seq_idx_to_change)
+        condition = tf.transpose(
+            tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
+        )
+        input_ids = tf.where(condition, random_other_next_tokens, input_ids)
+
+        # append to next input_ids and attn_mask
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        attn_mask = tf.concat([attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,)
+
+        # get two different outputs
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
+        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask)[0]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).numpy().item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (config, input_ids, input_mask, token_labels) = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "decoder_input_ids": input_ids,
+            "decoder_attention_mask": input_mask,
+            "use_cache": tf.convert_to_tensor([False]),
+        }
+        return config, inputs_dict
 
 
 @require_tf
@@ -35,207 +225,8 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
 
-    class TFT5ModelTester(object):
-        def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_labels=True,
-            vocab_size=99,
-            n_positions=14,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            d_ff=37,
-            relative_attention_num_buckets=8,
-            dropout_rate=0.1,
-            initializer_factor=0.002,
-            eos_token_id=1,
-            pad_token_id=0,
-            scope=None,
-        ):
-            self.parent = parent
-            self.batch_size = batch_size
-            self.seq_length = seq_length
-            self.is_training = is_training
-            self.use_input_mask = use_input_mask
-            self.use_labels = use_labels
-            self.vocab_size = vocab_size
-            self.n_positions = n_positions
-            self.hidden_size = hidden_size
-            self.num_hidden_layers = num_hidden_layers
-            self.num_attention_heads = num_attention_heads
-            self.d_ff = d_ff
-            self.relative_attention_num_buckets = relative_attention_num_buckets
-            self.dropout_rate = dropout_rate
-            self.initializer_factor = initializer_factor
-            self.eos_token_id = eos_token_id
-            self.pad_token_id = pad_token_id
-            self.scope = scope
-
-        def prepare_config_and_inputs(self):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-            input_mask = None
-            if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-            token_labels = None
-            if self.use_labels:
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-            config = T5Config(
-                vocab_size=self.vocab_size,
-                n_positions=self.n_positions,
-                d_model=self.hidden_size,
-                d_ff=self.d_ff,
-                d_kv=self.hidden_size // self.num_attention_heads,
-                num_layers=self.num_hidden_layers,
-                num_heads=self.num_attention_heads,
-                relative_attention_num_buckets=self.relative_attention_num_buckets,
-                dropout_rate=self.dropout_rate,
-                initializer_factor=self.initializer_factor,
-                eos_token_id=self.eos_token_id,
-                bos_token_id=self.pad_token_id,
-                pad_token_id=self.pad_token_id,
-            )
-
-            return (config, input_ids, input_mask, token_labels)
-
-        def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
-            model = TFT5Model(config=config)
-            inputs = {
-                "inputs": input_ids,
-                "decoder_input_ids": input_ids,
-                "decoder_attention_mask": input_mask,
-            }
-            decoder_output, decoder_past, encoder_output = model(inputs)
-
-            decoder_output, decoder_past, encoder_output = model(
-                input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids
-            )
-            result = {
-                "encoder_output": encoder_output.numpy(),
-                "decoder_past": decoder_past,
-                "decoder_output": decoder_output.numpy(),
-            }
-            self.parent.assertListEqual(
-                list(result["encoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-            )
-            self.parent.assertListEqual(
-                list(result["decoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-            )
-            self.parent.assertEqual(len(decoder_past), 2)
-            # decoder_past[0] should correspond to encoder output
-            self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
-            # There should be `num_layers` key value embeddings stored in decoder_past[1]
-            self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
-            # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
-            self.parent.assertEqual(len(decoder_past[1][0]), 4)
-
-        def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
-            model = TFT5ForConditionalGeneration(config=config)
-            inputs_dict = {
-                "inputs": input_ids,
-                "decoder_input_ids": input_ids,
-                "decoder_attention_mask": input_mask,
-            }
-
-            prediction_scores, _, _ = model(inputs_dict)
-
-            result = {
-                "prediction_scores": prediction_scores.numpy(),
-            }
-            self.parent.assertListEqual(
-                list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-            )
-
-        def create_and_check_t5_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):
-            model = TFT5Model(config=config).get_decoder()
-
-            input_ids = input_ids[:1, :]
-            self.batch_size = 1
-
-            # first forward pass
-            _, past_key_value_states = model(input_ids, use_cache=True)
-
-            # create hypothetical next token and extent to next_input_ids
-            next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-            # append to next input_ids and
-            next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-
-            output_from_no_past = model(next_input_ids)[0]
-            output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)[0]
-
-            # select random slice
-            random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
-            output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
-            output_from_past_slice = output_from_past[:, 0, random_slice_idx]
-
-            # test that outputs are equal for slice
-            tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
-
-        def create_and_check_t5_decoder_model_attention_mask_past(
-            self, config, input_ids, decoder_input_ids, attention_mask
-        ):
-            model = TFT5Model(config=config).get_decoder()
-
-            # create attention mask
-            half_seq_length = self.seq_length // 2
-            attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
-            attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
-            attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
-
-            # first forward pass
-            _, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True)
-
-            # create hypothetical next token and extent to next_input_ids
-            next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-            # change a random masked slice from input_ids
-            random_seq_idx_to_change = ids_tensor((1,), half_seq_length).numpy() + 1
-            random_other_next_tokens = ids_tensor((self.batch_size, self.seq_length), config.vocab_size)
-            vector_condition = tf.range(self.seq_length) == (self.seq_length - random_seq_idx_to_change)
-            condition = tf.transpose(
-                tf.broadcast_to(tf.expand_dims(vector_condition, -1), (self.seq_length, self.batch_size))
-            )
-            input_ids = tf.where(condition, random_other_next_tokens, input_ids)
-
-            # append to next input_ids and attn_mask
-            next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-            attn_mask = tf.concat([attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,)
-
-            # get two different outputs
-            output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
-            output_from_past = model(
-                next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask
-            )[0]
-
-            # select random slice
-            random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).numpy().item()
-            output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx]
-            output_from_past_slice = output_from_past[:, 0, random_slice_idx]
-
-            # test that outputs are equal for slice
-            tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
-
-        def prepare_config_and_inputs_for_common(self):
-            config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids, input_mask, token_labels) = config_and_inputs
-            inputs_dict = {
-                "inputs": input_ids,
-                "decoder_input_ids": input_ids,
-                "decoder_attention_mask": input_mask,
-                "use_cache": tf.convert_to_tensor([False]),
-            }
-            return config, inputs_dict
-
     def setUp(self):
-        self.model_tester = TFT5ModelTest.TFT5ModelTester(self)
+        self.model_tester = TFT5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
 
     def test_config(self):
@@ -266,9 +257,13 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFT5ModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def model(self):
+        return TFT5ForConditionalGeneration.from_pretrained("t5-base")
+
     @slow
     def test_summarization(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-base")
+        model = self.model
         tok = T5Tokenizer.from_pretrained("t5-base")
 
         FRANCE_ARTICLE = 'Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col. Jean-Marc Menichini, a French Gendarmerie spokesman in charge of communications on rescue efforts around the Germanwings crash site, told CNN that the reports were "completely wrong" and "unwarranted." Cell phones have been collected at the site, he said, but that they "hadn\'t been exploited yet." Menichini said he believed the cell phones would need to be sent to the Criminal Research Institute in Rosny sous-Bois, near Paris, in order to be analyzed by specialized technicians working hand-in-hand with investigators. But none of the cell phones found so far have been sent to the institute, Menichini said. Asked whether staff involved in the search could have leaked a memory card to the media, Menichini answered with a categorical "no." Reichelt told "Erin Burnett: Outfront" that he had watched the video and stood by the report, saying Bild and Paris Match are "very confident" that the clip is real. He noted that investigators only revealed they\'d recovered cell phones from the crash site after Bild and Paris Match published their reports. "That is something we did not know before. ... Overall we can say many things of the investigation weren\'t revealed by the investigation at the beginning," he said. What was mental state of Germanwings co-pilot? German airline Lufthansa confirmed Tuesday that co-pilot Andreas Lubitz had battled depression years before he took the controls of Germanwings Flight 9525, which he\'s accused of deliberately crashing last week in the French Alps. Lubitz told his Lufthansa flight training school in 2009 that he had a "previous episode of severe depression," the airline said Tuesday. Email correspondence between Lubitz and the school discovered in an internal investigation, Lufthansa said, included medical documents he submitted in connection with resuming his flight training. The announcement indicates that Lufthansa, the parent company of Germanwings, knew of Lubitz\'s battle with depression, allowed him to continue training and ultimately put him in the cockpit. Lufthansa, whose CEO Carsten Spohr previously said Lubitz was 100% fit to fly, described its statement Tuesday as a "swift and seamless clarification" and said it was sharing the information and documents -- including training and medical records -- with public prosecutors. Spohr traveled to the crash site Wednesday, where recovery teams have been working for the past week to recover human remains and plane debris scattered across a steep mountainside. He saw the crisis center set up in Seyne-les-Alpes, laid a wreath in the village of Le Vernet, closer to the crash site, where grieving families have left flowers at a simple stone memorial. Menichini told CNN late Tuesday that no visible human remains were left at the site but recovery teams would keep searching. French President Francois Hollande, speaking Tuesday, said that it should be possible to identify all the victims using DNA analysis by the end of the week, sooner than authorities had previously suggested. In the meantime, the recovery of the victims\' personal belongings will start Wednesday, Menichini said. Among those personal belongings could be more cell phones belonging to the 144 passengers and six crew on board. Check out the latest from our correspondents . The details about Lubitz\'s correspondence with the flight school during his training were among several developments as investigators continued to delve into what caused the crash and Lubitz\'s possible motive for downing the jet. A Lufthansa spokesperson told CNN on Tuesday that Lubitz had a valid medical certificate, had passed all his examinations and "held all the licenses required." Earlier, a spokesman for the prosecutor\'s office in Dusseldorf, Christoph Kumpa, said medical records reveal Lubitz suffered from suicidal tendencies at some point before his aviation career and underwent psychotherapy before he got his pilot\'s license. Kumpa emphasized there\'s no evidence suggesting Lubitz was suicidal or acting aggressively before the crash. Investigators are looking into whether Lubitz feared his medical condition would cause him to lose his pilot\'s license, a European government official briefed on the investigation told CNN on Tuesday. While flying was "a big part of his life," the source said, it\'s only one theory being considered. Another source, a law enforcement official briefed on the investigation, also told CNN that authorities believe the primary motive for Lubitz to bring down the plane was that he feared he would not be allowed to fly because of his medical problems. Lubitz\'s girlfriend told investigators he had seen an eye doctor and a neuropsychologist, both of whom deemed him unfit to work recently and concluded he had psychological issues, the European government official said. But no matter what details emerge about his previous mental health struggles, there\'s more to the story, said Brian Russell, a forensic psychologist. "Psychology can explain why somebody would turn rage inward on themselves about the fact that maybe they weren\'t going to keep doing their job and they\'re upset about that and so they\'re suicidal," he said. "But there is no mental illness that explains why somebody then feels entitled to also take that rage and turn it outward on 149 other people who had nothing to do with the person\'s problems." Germanwings crash compensation: What we know . Who was the captain of Germanwings Flight 9525? CNN\'s Margot Haddad reported from Marseille and Pamela Brown from Dusseldorf, while Laura Smith-Spark wrote from London. CNN\'s Frederik Pleitgen, Pamela Boykoff, Antonia Mortensen, Sandrine Amiel and Anna-Maja Rappard contributed to this report.'  # @noqa
@@ -287,10 +282,11 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         summarization_config = task_specific_config.get("summarization", {})
         model.config.update(summarization_config)
 
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [model.config.prefix + x for x in [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY]],
             max_length=512,
-            pad_to_max_length=True,
+            padding="max_length",
+            truncation=True,
             return_tensors="tf",
         )
         self.assertEqual(512, dct["input_ids"].shape[1])
@@ -318,12 +314,12 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_translation_en_to_de(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-base")
         tok = T5Tokenizer.from_pretrained("t5-base")
+        model = self.model
 
         task_specific_config = getattr(model.config, "task_specific_params", {})
         translation_config = task_specific_config.get("translation_en_to_de", {})
-        model.config.update(translation_config)
+        self.model.config.update(translation_config)
 
         original_input = '"Luigi often said to me that he never wanted the brothers to end up in court", she wrote.'
         expected_translation = (
@@ -347,7 +343,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_translation_en_to_fr(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-base")
+        model = self.model
         tok = T5Tokenizer.from_pretrained("t5-base")
 
         task_specific_config = getattr(model.config, "task_specific_params", {})
@@ -374,7 +370,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_translation_en_to_ro(self):
-        model = TFT5ForConditionalGeneration.from_pretrained("t5-base")
+        model = self.model
         tok = T5Tokenizer.from_pretrained("t5-base")
 
         task_specific_config = getattr(model.config, "task_specific_params", {})
