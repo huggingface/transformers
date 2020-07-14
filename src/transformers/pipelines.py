@@ -168,6 +168,23 @@ class DefaultArgumentHandler(ArgumentHandler):
         else:
             return DefaultArgumentHandler.handle_args(args)
 
+class NLIForZeroShotArgumentHandler(ArgumentHandler):
+    """
+    Handles arguments for zero-shot for text classification
+    """
+
+    def __call__(self, sequences, labels, hypothesis_template):
+        if isinstance(sequences, str):
+            sequences = [sequences]
+        if isinstance(labels, str):
+            labels = [labels]
+        
+        sequence_pairs = []
+        for sequence in sequences:
+            sequence_pairs += [[sequence, hypothesis_template.format(label)] for label in labels]
+        
+        return sequence_pairs
+
 
 class PipelineDataFormat:
     """
@@ -813,6 +830,39 @@ class TextClassificationPipeline(Pipeline):
             return [
                 {"label": self.model.config.id2label[item.argmax()], "score": item.max().item()} for item in scores
             ]
+
+
+class NLIForZeroShotPipeline(Pipeline):
+
+    def __init__(self, args_parser=NLIForZeroShotArgumentHandler(), *args, **kwargs):
+        super().__init__(*args, args_parser=args_parser, **kwargs)
+
+    def __call__(self, sequences, candidate_labels, hypothesis_template="This text is about {}.", single_class=False):
+        outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
+        num_sequences = 1 if isinstance(sequences, str) else len(sequences)
+        num_labels = 1 if isinstance(candidate_labels, str) else len(candidate_labels)
+        reshaped_outputs = outputs.reshape((num_sequences, num_labels, -1))
+        
+        if single_class:
+            # softmax the "entailment" logits over all candidate labels
+            entail_logits = reshaped_outputs[...,2]
+            scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
+        else:
+            # softmax over the entailment vs. contradiction dim for each label independently
+            entail_contr_logits = reshaped_outputs[...,[0,2]]
+            scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
+            scores = scores[...,1]
+
+        result = []
+        for iseq in range(num_sequences):
+            top_inds = list(reversed(scores[iseq].argsort()))
+            result.append({
+                'sequence': sequences if num_sequences == 1 else sequences[iseq],
+                'labels': [candidate_labels[i] for i in top_inds],
+                'scores': scores[iseq][top_inds].tolist()
+            })
+
+        return result
 
 
 class FillMaskPipeline(Pipeline):
@@ -1811,6 +1861,19 @@ SUPPORTED_TASKS = {
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
+    "nli-for-zero-shot": {
+        "impl": NLIForZeroShotPipeline,
+        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
+        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "default": {
+            "model": {
+                "pt": "bart-large-mnli",
+                "tf": "bart-large-mnli",
+            },
+            "config": "bart-large-mnli",
+            "tokenizer": "bart-large-mnli",
+        },
+    }
 }
 
 
