@@ -323,10 +323,10 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    lm_loss: Optional[torch.FloatTensor]
-    mc_loss: Optional[torch.FloatTensor]
-    lm_logits: torch.FloatTensor
-    mc_logits: torch.FloatTensor
+    lm_loss: torch.FloatTensor = None
+    mc_loss: torch.FloatTensor = None
+    lm_logits: torch.FloatTensor = None
+    mc_logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None

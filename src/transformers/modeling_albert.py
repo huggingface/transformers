@@ -430,9 +430,9 @@ class AlbertForPretrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    prediction_logits: torch.FloatTensor
-    sop_logits: torch.FloatTensor
+    loss: torch.FloatTensor = None
+    prediction_logits: torch.FloatTensor = None
+    sop_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 

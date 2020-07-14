@@ -618,7 +618,7 @@ class TransfoXLModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    mems: List[torch.FloatTensor]
+    mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -653,8 +653,8 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     """
 
     losses: Optional[torch.FloatTensor]
-    prediction_scores: torch.FloatTensor
-    mems: List[torch.FloatTensor]
+    prediction_scores: torch.FloatTensor = None
+    mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 

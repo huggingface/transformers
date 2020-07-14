@@ -705,9 +705,9 @@ class MobileBertForPretrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    prediction_logits: torch.FloatTensor
-    seq_relationship_logits: torch.FloatTensor
+    loss: torch.FloatTensor = None
+    prediction_logits: torch.FloatTensor = None
+    seq_relationship_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 

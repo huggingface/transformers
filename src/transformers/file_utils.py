@@ -14,6 +14,7 @@ import sys
 import tarfile
 import tempfile
 from contextlib import contextmanager
+from dataclasses import fields
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
@@ -856,11 +857,82 @@ def tf_required(func):
     return wrapper
 
 
-class ModelOutput:
+class ModelOutput(dict):
+    """ Base class for all model outputs as dataclass.
+
+        The sub-classes of ``ModelOutput`` must have **at most one** required field (the first field)
+            (see ``__post_init__``docstring for details)
+
+        ``ModelOutput`` has a ``__getitem__`` method that allows indexing by:
+            - integer and slice (like a tuple) or
+            - strings (like a dictionnary).
+
+            ``__getitem__`` will ignore attributes containing ``None`` values when indexing with integers.
+
+        Apart from accepting integers as key, ``ModelOutput``mostly behaves like a dictionnary for compatiblity with torch.DataParallel:
+            - Sub-class of ``dict``
+            - providing an iterator of (keys, values) to the first argument without any other argument will set the associated attributes
+            - ``__setitem__``, ``__delitem__``, ``setdefault``, ``pop``, `ùpdate`` will raise errors
+            - ``__iter__`` iterate over the keys
+
     """
-    Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionnary) that will ignore the ``None`` attributes.
-    """
+
+    def __post_init__(self):
+        """ Does a few safety checks.
+
+            If the first field is a list/tuple, spread its values in the other fields.
+            This is currently necessary for compatibility with torch.DataParallel which only handles dict/list/tuples
+            cf. https://github.com/huggingface/transformers/issues/5693
+            and https://github.com/pytorch/pytorch/issues/41327
+        """
+        class_fields = fields(self)
+
+        # Safety and consistency checks
+        assert len(class_fields), f"{self.__class__.__name__} has no fields."
+        assert all(
+            field.default is None for field in class_fields[1:]
+        ), f"{self.__class__.__name__} should not have more than one required field."
+
+        # Check if we should spread the first field on the other fields in a dict-mapping fashion
+        first_field = getattr(self, class_fields[0].name)
+        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+
+        if other_fields_are_none:
+            try:
+                iterator = iter(first_field)
+                first_field_iterator = True
+            except TypeError:
+                first_field_iterator = False
+
+            # if we provided an iterator as first field and the iterator is a (key, value) iterator
+            # set the associated fields
+            if first_field_iterator:
+                for element in iterator:
+                    if (
+                        not isinstance(element, (list, tuple))
+                        or not len(element) == 2
+                        or not isinstance(element[0], str)
+                    ):
+                        break
+                    setattr(self, element[0], element[1])
+
+    def __delitem__(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``__delitem__`` on a {self.__class__.__name__} instance.")
+
+    def setdefault(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``setdefault`` on a {self.__class__.__name__} instance.")
+
+    def pop(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``pop`` on a {self.__class__.__name__} instance.")
+
+    def update(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``update`` on a {self.__class__.__name__} instance.")
+
+    def __iter__(self):
+        """ Will return the attributes names (dictionnary-like) """
+        for f in self.__dataclass_fields__.keys():
+            if getattr(self, f, None) is not None:
+                yield f
 
     def to_tuple(self):
         """
@@ -880,6 +952,12 @@ class ModelOutput:
 
     def __getitem__(self, i):
         return self.to_dict()[i] if isinstance(i, str) else self.to_tuple()[i]
+
+    def __setitem__(self, key, value):
+        if isinstance(key, str):
+            setattr(self, key, value)
+        else:
+            raise Exception(f"Key {key} must be a string but was given a {type(key)}.")
 
     def __len__(self):
         return len(self.to_tuple())

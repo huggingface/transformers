@@ -627,8 +627,8 @@ class XLNetLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -661,8 +661,8 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -695,8 +695,8 @@ class XLNetForTokenClassificationOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -731,8 +731,8 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -767,9 +767,9 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    start_logits: torch.FloatTensor
-    end_logits: torch.FloatTensor
+    loss: torch.FloatTensor = None
+    start_logits: torch.FloatTensor = None
+    end_logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None

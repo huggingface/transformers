@@ -73,7 +73,7 @@ class DPRContextEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: torch.FloatTensor
+    pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -102,7 +102,7 @@ class DPRQuestionEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: torch.FloatTensor
+    pooler_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -133,9 +133,9 @@ class DPRReaderOutput(ModelOutput):
             heads.
     """
 
-    start_logits: torch.FloatTensor
-    end_logits: torch.FloatTensor
-    relevance_logits: torch.FloatTensor
+    start_logits: torch.FloatTensor = None
+    end_logits: torch.FloatTensor = None
+    relevance_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
