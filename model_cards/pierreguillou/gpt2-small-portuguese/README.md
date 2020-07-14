@@ -2,6 +2,26 @@
 language: Portuguese
 ---
 
+---
+language: portuguese
+tags:
+- transfert-learning
+- fine-tuning
+- fastai
+- hugging-face
+- nlp
+- deep-learning
+- pierre-guillou
+widget:
+- text: "Quem era Jim Henson? Jim Henson era um"
+- text: "Em um achado chocante, o cientista descobriu um"
+- text: "Barack Hussein Obama II, nascido em 4 de agosto de 1961, é"
+- text: "Corrida por vacina contra Covid-19 já tem"
+license: mit
+datasets: 
+- wikipedia
+---
+
 # GPorTuguese-2: a Language Model for Portuguese text generation (and more NLP tasks...)
 
 ## Introduction
