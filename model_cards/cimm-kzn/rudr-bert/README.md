@@ -1,11 +1,11 @@
-RuDR-BERT
----
+## RuDR-BERT
+
 RuDR-BERT - Multilingual, Cased, which pretrained on the raw part of the RuDReC corpus (1.4M reviews). Pre-training was based on the [original BERT code](https://github.com/google-research/bert) provided by Google. In particular, Multi-BERT was for used for initialization; vocabulary of Russian subtokens and parameters are the same as in Multi-BERT. Training details are described in our paper. \
    link: https://yadi.sk/d/-PTn0xhk1PqvgQ
    
 
-Citing & Authors
----
+## Citing & Authors
+
 If you find this repository helpful, feel free to cite our publication:
 
 [1] https://arxiv.org/abs/2004.03659
