@@ -240,6 +240,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False) -> List[str]:
         return self._tokenizer.encode(text, pair, add_special_tokens=add_special_tokens).tokens
 
+    def tokenize_batch(
+        self, text_batch: List[str], pair: Optional[str] = None, add_special_tokens: bool = False
+    ) -> List[List[str]]:
+        return [
+            result.tokens
+            for result in self._tokenizer.encode_batch(text_batch, pair, add_special_tokens=add_special_tokens)
+        ]
+
     def set_truncation_and_padding(
         self,
         padding_strategy: PaddingStrategy,
