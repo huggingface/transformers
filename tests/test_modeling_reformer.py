@@ -181,8 +181,8 @@ class ReformerModelTester:
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        (sequence_output,) = model(input_ids, attention_mask=input_mask)
-        (sequence_output,) = model(input_ids)
+        sequence_output, _ = model(input_ids, attention_mask=input_mask)
+        sequence_output, _ = model(input_ids)
 
         result = {
             "sequence_output": sequence_output,
@@ -203,7 +203,7 @@ class ReformerModelTester:
         model = ReformerModelWithLMHead(config=config)
         model.to(torch_device)
         model.eval()
-        loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=input_ids)
+        loss, prediction_scores, _ = model(input_ids, attention_mask=input_mask, labels=input_ids)
         result = {
             "loss": loss,
             "prediction_scores": prediction_scores,
@@ -424,7 +424,7 @@ class ReformerModelTester:
         output_logits = model(input_ids, attention_mask=input_mask)[0]
         self.parent.assertTrue(output_logits.shape[1] == input_ids.shape[-1])
 
-    def create_and_check_longformer_for_question_answering(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_reformer_for_question_answering(self, config, input_ids, input_mask, choice_labels):
         model = ReformerForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
@@ -439,6 +439,33 @@ class ReformerModelTester:
         self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
         self.check_loss_output(result)
+
+    def create_and_check_cached_hidden_states_and_buckets(self, config, input_ids, input_mask, choice_labels):
+        config.is_decoder = True
+        model = ReformerModelWithLMHead(config=config)
+        model.to(torch_device)
+        model.eval()
+        input_ids_first = input_ids[:, :-1]
+        input_ids_second = input_ids[:, -1:]
+
+        # return saved cache
+        _, cached_hidden_states_and_buckets = model(input_ids_first, use_cache=True)
+
+        # calculate last output with and without cache
+        outputs_with_cache, _ = model(
+            input_ids_second, cached_hidden_states_and_buckets=cached_hidden_states_and_buckets, use_cache=True
+        )
+        outputs_without_cache = model(input_ids)[0][:, -1]
+
+        # select random slice idx
+        random_slice_idx = torch.randint(outputs_without_cache.shape[-1], (1, 1), device=torch_device).item()
+
+        # outputs should be similar within range
+        self.parent.assertTrue(
+            torch.allclose(
+                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-3
+            )
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -508,6 +535,14 @@ class ReformerTesterMixin:
     def test_reformer_no_chunking(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_no_chunking(*config_and_inputs)
+
+    def test_reformer_qa_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_for_question_answering(*config_and_inputs)
+
+    def test_reformer_cached_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_cached_hidden_states_and_buckets(*config_and_inputs)
 
     @slow
     def test_dropout_random_seed_is_changing(self):
