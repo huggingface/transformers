@@ -22,7 +22,16 @@ Instead of training the Multi-dialect Arabic BERT model from scratch, we initial
 
 ### To cite this work
 
-We will update the BibTeX once the paper published.
+```
+@misc{talafha2020multidialect,
+    title={Multi-Dialect Arabic BERT for Country-Level Dialect Identification},
+    author={Bashar Talafha and Mohammad Ali and Muhy Eddin Za'ter and Haitham Seelawi and Ibraheem Tuffaha and Mostafa Samir and Wael Farhan and Hussein T. Al-Natsheh},
+    year={2020},
+    eprint={2007.05612},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL}
+}
+```
 
 ### Usage
 The model weights can be loaded using `transformers` library by HuggingFace.
