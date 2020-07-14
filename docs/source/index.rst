@@ -173,6 +173,7 @@ conversion utilities for the following models:
     :caption: Package Reference
 
     main_classes/configuration
+    main_classes/output
     main_classes/model
     main_classes/tokenizer
     main_classes/pipelines

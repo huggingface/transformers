@@ -59,6 +59,13 @@ BertTokenizerFast
     :members:
 
 
+Bert specific outputs
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_bert.BertForPretrainingOutput
+    :members:
+
+
 BertModel
 ~~~~~~~~~~~~~~~~~~~~
 

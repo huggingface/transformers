@@ -52,7 +52,7 @@ size of 267,735!
 
 A huge vocabulary size means a huge embedding matrix at the start of the model, which will cause memory problems.
 TransformerXL deals with it by using a special kind of embeddings called adaptive embeddings, but in general,
-transformers model rarely have a vocabulary size greater than 50,000, especially if they are trained on a single
+transformers models rarely have a vocabulary size greater than 50,000, especially if they are trained on a single
 language.
 
 So if tokenizing on words is unsatisfactory, we could go on the opposite direction and simply tokenize on characters.
@@ -69,7 +69,7 @@ decomposed as "annoying" and "ly". This is especially useful in agglutinative la
 form (almost) arbitrarily long complex words by stringing together some subwords.
 
 This allows the model to keep a reasonable vocabulary while still learning useful representations for common words or
-subwords. This also gives the ability to the model to process words it has never seen before, by decomposing them into
+subwords. This also enables the model to process words it has never seen before, by decomposing them into
 subwords it knows. For instance, the base :class:`~transformers.BertTokenizer` will tokenize "I have a new GPU!" like
 this:
 
@@ -110,7 +110,7 @@ splitting the training data into words, which can be a simple space tokenization
 (:doc:`GPT-2 <model_doc/gpt2>` and :doc:`Roberta <model_doc/roberta>` uses this for instance) or a rule-based tokenizer
 (:doc:`XLM <model_doc/xlm>` use Moses for most languages, as does :doc:`FlauBERT <model_doc/flaubert>`),
 
-:doc:`GPT <model_doc/gpt>` uses Spacy and ftfy) and, counts the frequency of each word in the training corpus.
+:doc:`GPT <model_doc/gpt>` uses Spacy and ftfy, and counts the frequency of each word in the training corpus.
 
 It then begins from the list of all characters, and will learn merge rules to form a new token from two symbols in the
 vocabulary until it has learned a vocabulary of the desired size (this is a hyperparameter to pick).
@@ -178,7 +178,7 @@ WordPiece is the subword tokenization algorithm used for :doc:`BERT <model_doc/b
 `this paper <https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf>`__. It relies
 on the same base as BPE, which is to initialize the vocabulary to every character present in the corpus and
 progressively learn a given number of merge rules, the difference is that it doesn't choose the pair that is the most
-frequent but the one that will maximize the likelihood on the corpus once merged. 
+frequent but the one that will maximize the likelihood on the corpus once merged.
 
 What does this mean? Well, in the previous example, it means we would only merge 'u' and 'g' if the probability of
 having 'ug' divided by the probability of having 'u' then 'g' is greater than for any other pair of symbols. It's
@@ -217,7 +217,7 @@ training corpus. You can then give a probability to each tokenization (which is 
 tokens forming it) and pick the most likely one (or if you want to apply some data augmentation, you could sample one
 of the tokenization according to their probabilities).
 
-Those probabilities are what are used to define the loss that trains the tokenizer: if our corpus consists of the
+Those probabilities define the loss that trains the tokenizer: if our corpus consists of the
 words :math:`x_{1}, \dots, x_{N}` and if for the word :math:`x_{i}` we note :math:`S(x_{i})` the set of all possible
 tokenizations of :math:`x_{i}` (with the current vocabulary), then the loss is defined as
 
@@ -229,15 +229,15 @@ tokenizations of :math:`x_{i}` (with the current vocabulary), then the loss is d
 SentencePiece
 =============
 
-All the methods we have been looking at so far required some from of pretrokenization, which has a central problem: not
+All the methods we have been looking at so far required some form of pretokenization, which has a central problem: not
 all languages use spaces to separate words. This is a problem :doc:`XLM <model_doc/xlm>` solves by using specific
 pretokenizers for each of those languages (in this case, Chinese, Japanese and Thai). To solve this problem,
 SentencePiece (introduced in `this paper <https://arxiv.org/pdf/1808.06226.pdf>`__) treats the input as a raw stream,
 includes the space in the set of characters to use, then uses BPE or unigram to construct the appropriate vocabulary.
 
 That's why in the example we saw before using :class:`~transformers.XLNetTokenizer` (which uses SentencePiece), we had
-some '▁' characters, that represent spaces. Decoding a tokenized text is then super easy: we just have to concatenate
-all of them together and replace those '▁' by spaces.
+the '▁' character, that represents space. Decoding a tokenized text is then super easy: we just have to concatenate
+all of them together and replace '▁' with space.
 
 All transformers models in the library that use SentencePiece use it with unigram. Examples of models using it are
 :doc:`ALBERT <model_doc/albert>`, :doc:`XLNet <model_doc/xlnet>` or the :doc:`Marian framework <model_doc/marian>`.

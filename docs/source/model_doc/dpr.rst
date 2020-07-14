@@ -69,6 +69,19 @@ DPRReaderTokenizerFast
     :members:
 
 
+DPR specific outputs
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_dpr.DPRContextEncoderOutput
+    :members:
+
+.. autoclass:: transformers.modeling_dpr.DPRQuestionEncoderOutput
+    :members:
+
+.. autoclass:: transformers.modeling_dpr.DPRReaderOutput
+    :members:
+
+
 DPRContextEncoder
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

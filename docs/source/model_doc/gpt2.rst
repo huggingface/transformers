@@ -58,6 +58,13 @@ GPT2TokenizerFast
     :members:
 
 
+GPT2 specific outputs
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_gpt2.GPT2DoubleHeadsModelOutput
+    :members:
+
+
 GPT2Model
 ~~~~~~~~~~~~~~~~~~~~~
 

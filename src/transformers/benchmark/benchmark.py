@@ -157,7 +157,7 @@ class PyTorchBenchmark(Benchmark):
         else:
             train_model = model
 
-        model.eval()
+        model.train()
         model.to(self.args.device)
 
         # encoder-decoder has vocab size saved differently
@@ -175,12 +175,12 @@ class PyTorchBenchmark(Benchmark):
         def compute_loss_and_backprob_encoder():
             loss = train_model(input_ids, labels=input_ids)[0]
             loss.backward()
-            train_model.zero_grad()
+            return loss
 
         def compute_loss_and_backprob_encoder_decoder():
             loss = train_model(input_ids, decoder_input_ids=input_ids, labels=input_ids)[0]
             loss.backward()
-            train_model.zero_grad()
+            return loss
 
         _train = (
             compute_loss_and_backprob_encoder_decoder
