@@ -149,6 +149,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_length: bool = False,
+        return_tokens: bool = False,
         verbose: bool = True,
     ) -> Dict[str, Any]:
         """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
@@ -182,6 +183,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 encoding_dict["offset_mapping"].append(e.offsets)
             if return_length:
                 encoding_dict["length"].append(len(e.ids))
+            if return_tokens:
+                encoding_dict["tokens"].append(e.tokens)
 
         return encoding_dict
 
@@ -239,14 +242,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False) -> List[str]:
         return self._tokenizer.encode(text, pair, add_special_tokens=add_special_tokens).tokens
-
-    def tokenize_batch(
-        self, text_batch: List[str], pair: Optional[str] = None, add_special_tokens: bool = False
-    ) -> List[List[str]]:
-        return [
-            result.tokens
-            for result in self._tokenizer.encode_batch(text_batch, pair, add_special_tokens=add_special_tokens)
-        ]
 
     def set_truncation_and_padding(
         self,
@@ -308,6 +303,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_length: bool = False,
+        return_tokens: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -363,6 +359,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
+                return_tokens=return_tokens,
                 verbose=verbose,
             )
             for encoding in encodings
