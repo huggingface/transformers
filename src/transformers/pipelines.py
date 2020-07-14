@@ -170,7 +170,8 @@ class DefaultArgumentHandler(ArgumentHandler):
 
 class NLIForZeroShotArgumentHandler(ArgumentHandler):
     """
-    Handles arguments for zero-shot for text classification
+    Handles arguments for zero-shot for text classification by turning each possible label into an NLI
+    premise/hypothesis pair.
     """
 
     def __call__(self, sequences, labels, hypothesis_template):
@@ -837,13 +838,16 @@ class NLIForZeroShotPipeline(Pipeline):
     def __init__(self, args_parser=NLIForZeroShotArgumentHandler(), *args, **kwargs):
         super().__init__(*args, args_parser=args_parser, **kwargs)
 
-    def __call__(self, sequences, candidate_labels, hypothesis_template="This text is about {}.", single_class=False):
+    def __call__(self, sequences, candidate_labels, hypothesis_template="This text is about {}.", multi_class=False):
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
         num_sequences = 1 if isinstance(sequences, str) else len(sequences)
         num_labels = 1 if isinstance(candidate_labels, str) else len(candidate_labels)
         reshaped_outputs = outputs.reshape((num_sequences, num_labels, -1))
+
+        if num_labels == 1:
+            multi_class = True
         
-        if single_class:
+        if not multi_class:
             # softmax the "entailment" logits over all candidate labels
             entail_logits = reshaped_outputs[...,2]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
@@ -1861,17 +1865,17 @@ SUPPORTED_TASKS = {
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
-    "nli-for-zero-shot": {
+    "nli-for-zero-shot-classification": {
         "impl": NLIForZeroShotPipeline,
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
         "default": {
             "model": {
-                "pt": "bart-large-mnli",
-                "tf": "bart-large-mnli",
+                "pt": "facebook/bart-large-mnli",
+                "tf": "facebook/bart-large-mnli",
             },
-            "config": "bart-large-mnli",
-            "tokenizer": "bart-large-mnli",
+            "config": "facebook/bart-large-mnli",
+            "tokenizer": "facebook/bart-large-mnli",
         },
     }
 }
