@@ -196,7 +196,6 @@ class ReformerModelTester:
         config.is_decoder = False
         config.lsh_num_chunks_after = 1
         model = ReformerForMaskedLM(config=config)
-
         model.to(torch_device)
         model.eval()
         loss = model(input_ids, attention_mask=input_mask, labels=input_ids)[0]
@@ -341,9 +340,7 @@ class ReformerModelTester:
         config.is_decoder = False
 
         torch.manual_seed(0)
-
         model = ReformerForMaskedLM(config=config)
-
         model.to(torch_device)
         model.train()
         model.zero_grad()
@@ -357,9 +354,7 @@ class ReformerModelTester:
         config.chunk_size_feed_forward = 1
 
         torch.manual_seed(0)
-
         model = ReformerForMaskedLM(config=config)
-
         model.to(torch_device)
         model.train()
         model.zero_grad()

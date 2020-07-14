@@ -484,7 +484,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         do_standard_self_attention = (sequence_length <= self.chunk_length) or (
             use_cache and cached_hidden_states_and_buckets[1] is not None
         )
-
         # LSH attention only makes sense if chunked attention should be performed
         if not do_standard_self_attention:
             # set `num_buckets` on the fly, recommended way to do it
