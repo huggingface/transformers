@@ -18,8 +18,10 @@
 import logging
 import sys
 from collections import namedtuple
+from dataclasses import dataclass
 from functools import reduce
 from operator import mul
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -32,6 +34,7 @@ from .configuration_reformer import ReformerConfig
 from .file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
@@ -1742,6 +1745,85 @@ class ReformerPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
+@dataclass
+class ReformerModelOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.ReformerModel`.
+
+    Args:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_predict, hidden_size)`):
+            Sequence of hidden-states at the last layer of the model.
+
+            ``num_predict`` corresponds to ``target_mapping.shape[1]``. If ``target_mapping`` is ``None``, then
+            ``num_predict`` corresponds to ``sequence_length``.
+        cached_hidden_states_and_buckets (:obj:`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tuple(torch.LongTensor, torch.FloatTensor` of length :obj:`config.n_layers`,  with :obj:`tuple(0)` being the previous `buckets` of shape
+            :obj:`(batch_size, num_heads, num_hashes, sequence_length)`)
+            and :obj:`tuple(1)` being the previous `hidden_states` of shape
+            :obj:`(batch_size, sequence_length, hidden_size)`).
+
+            Contains pre-computed buckets and hidden-states that can be used (see
+            ``past_key_values`` input) to speed up sequential decoding.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: torch.FloatTensor
+    cached_hidden_states_and_buckets: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class ReformerModelWithLMHeadOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.ReformerModelWithLMHead`.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
+            Language modeling loss (for next-token prediction).
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_predict, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+
+            ``num_predict`` corresponds to ``target_mapping.shape[1]``. If ``target_mapping`` is ``None``, then
+            ``num_predict`` corresponds to ``sequence_length``.
+        cached_hidden_states_and_buckets (:obj:`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tuple(torch.LongTensor, torch.FloatTensor` of length :obj:`config.n_layers`,  with :obj:`tuple(0)` being the previous `buckets` of shape
+            :obj:`(batch_size, num_heads, num_hashes, sequence_length)`)
+            and :obj:`tuple(1)` being the previous `hidden_states` of shape
+            :obj:`(batch_size, sequence_length, hidden_size)`).
+
+            Contains pre-computed buckets and hidden-states that can be used (see
+            ``past_key_values`` input) to speed up sequential decoding.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor]
+    logits: torch.FloatTensor
+    cached_hidden_states_and_buckets: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 REFORMER_START_DOCSTRING = r"""
     Reformer was proposed in `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.0445>`__
     by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
@@ -1969,8 +2051,17 @@ class ReformerModel(ReformerPreTrainedModel):
         attentions = encoder_outputs.all_attentions if output_attentions else None
 
         if return_tuple:
-            return tuple(v for v in [sequence_output, hidden_states, attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=sequence_output, hidden_states=hidden_states, attentions=attentions)
+            return tuple(
+                v
+                for v in [sequence_output, cached_hidden_states_and_buckets, hidden_states, attentions]
+                if v is not None
+            )
+        return ReformerModelOutput(
+            last_hidden_state=sequence_output,
+            cached_hidden_states_and_buckets=cached_hidden_states_and_buckets,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
 
     def _pad_to_mult_of_chunk_length(
         self,
@@ -2030,7 +2121,7 @@ class ReformerModel(ReformerPreTrainedModel):
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert config.is_decoder, "If you want to use `ReformerLMHeadModel` make sure that `is_decoder=True`."
+        assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
         assert (
             "local" not in self.config.attn_layers or config.local_num_chunks_after == 0
         ), f"If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not {config.local_num_chunks_after}."
@@ -2111,9 +2202,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             output = (logits,) + reformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutput(
+        return ReformerModelWithLMHeadOutput(
             loss=loss,
             logits=logits,
+            cached_hidden_states_and_buckets=reformer_outputs.cached_hidden_states_and_buckets,
             hidden_states=reformer_outputs.hidden_states,
             attentions=reformer_outputs.attentions,
         )
