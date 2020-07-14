@@ -79,11 +79,11 @@ python examples/xla_spawn.py --num_cores 8 \
 
 Feedback and more use cases and benchmarks involving TPUs are welcome, please share with the community.
 
-## Logging experiments with Weights & Biases
+## Logging & Experiment tracking
 
-You can easily log and monitor your runs code with [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface).
+You can easily log and monitor your runs code. [TensorBoard](https://www.tensorflow.org/tensorboard) and [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface) are currently supported.
 
-Install wandb with:
+To use Weights & Biases, install the wandb package with:
 
 ```bash
 pip install wandb
