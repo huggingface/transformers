@@ -399,15 +399,15 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                     increase_num_buckets = False
 
                 # if pad bucket was cached => need to increase num buckets for caching
-                query_buckets = self._hash_vectors(
+                buckets = self._hash_vectors(
                     query_vectors, num_hashes, attention_mask, increase_num_buckets=increase_num_buckets
                 )
 
                 # concat buckets
-                buckets = torch.cat([cached_buckets, query_buckets.unsqueeze(-1)], dim=-1)
+                concat_buckets = torch.cat([cached_buckets, buckets.unsqueeze(-1)], dim=-1)
 
                 # hash-based sort
-                sorted_bucket_idx = _stable_argsort(buckets, dim=-1)
+                sorted_bucket_idx = _stable_argsort(concat_buckets, dim=-1)
 
                 # concat hidden states
                 concat_hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
