@@ -383,16 +383,16 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             cached_buckets = cached_hidden_states_and_buckets[0]
             cached_hidden_states = cached_hidden_states_and_buckets[1]
 
+            # get query vector
             query_vectors = self.query_key(hidden_states)
+            query_vectors = self._split_hidden_size_dim(
+                query_vectors, self.num_attention_heads, self.attention_head_size
+            )
 
             if cached_buckets is not None:
-                # split query vectors and calculate hashes
-                query_vectors = self._split_hidden_size_dim(
-                    query_vectors, self.num_attention_heads, self.attention_head_size
-                )
-
                 # check if cached buckets include pad bucket
                 max_bucket = self.num_buckets if isinstance(self.num_buckets, int) else reduce(mul, self.num_buckets)
+
                 if cached_buckets.max() > num_hashes * max_bucket - 1:
                     increase_num_buckets = True
                 else:
@@ -434,27 +434,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 query_key_vectors = self.query_key(key_value_hidden_states)
                 value_vectors = self.value(key_value_hidden_states)
 
-            if cached_buckets is None and key_value_hidden_states.shape[1] >= sequence_length:
-                # split query key vectors and calculate buckets for next prediction
-                query_key_vectors = self._split_hidden_size_dim(
-                    query_key_vectors, self.num_attention_heads, self.attention_head_size
-                )
-                buckets = self._hash_vectors(query_key_vectors, num_hashes, attention_mask)
-
-            # free memory
-            del key_value_hidden_states, hidden_states
         else:
             # project hidden_states to query_key and value
             query_vectors = None
             query_key_vectors = self.query_key(hidden_states)
             value_vectors = self.value(hidden_states)
-
-            # free memory
-            del hidden_states
-
-        do_standard_self_attention = (sequence_length <= self.chunk_length) or (
-            use_cache and cached_hidden_states_and_buckets[1] is not None
-        )
 
         # if query key is not already split
         if do_cached_attention and cached_buckets is not None:
@@ -476,6 +460,13 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 value_vectors, self.num_attention_heads, self.attention_head_size
             )
 
+        # cache buckets for next incremental decoding
+        if do_cached_attention and cached_buckets is None and key_value_hidden_states.shape[1] >= self.chunk_length:
+            buckets = self._hash_vectors(query_key_vectors, num_hashes, attention_mask)
+
+        # free memory
+        del hidden_states
+
         assert (
             query_key_vectors.shape[-1] == self.attention_head_size
         ), "last dim of query_key_vectors is {} but should be {}.".format(
@@ -485,6 +476,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             value_vectors.shape[-1] == self.attention_head_size
         ), "last dim of value_vectors is {} but should be {}.".format(
             value_vectors.shape[-1], self.attention_head_size
+        )
+
+        do_standard_self_attention = (sequence_length <= self.chunk_length) or (
+            use_cache and cached_hidden_states_and_buckets[1] is not None
         )
 
         # LSH attention only makes sense if chunked attention should be performed
@@ -722,7 +717,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         do_standard_self_attention,
         do_cached_attention,
     ):
-
         # look at previous and following chunks if chunked attention
         if not do_standard_self_attention:
             key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
@@ -746,6 +740,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             query_bucket_idx = (
                 key_value_bucket_idx.new_ones(key_value_bucket_idx.shape[:-1] + (1,)) * key_value_bucket_idx.max()
             )
+        elif do_cached_attention and query_key_dots.ndim <= 4:
+            query_bucket_idx = (query_key_dots.shape[-1] - 1) * torch.ones_like(query_key_dots)[:, :, :, -1]
+            key_value_bucket_idx = torch.arange(
+                query_key_dots.shape[-1], dtype=torch.long, device=query_key_dots.device
+            )[None, None, :].expand(query_bucket_idx.shape[:2] + (-1,))
         else:
             query_bucket_idx = key_value_bucket_idx = sorted_bucket_idx_per_hash
 
@@ -1270,7 +1269,11 @@ class ReformerAttention(nn.Module):
         if use_cache:
             if cached_hidden_states_and_buckets[self.layer_id][0] is None:
                 # padded input should not be cached
-                cached_buckets = buckets[:, :, :, :orig_sequence_length] if buckets is not None else None
+                cached_buckets = (
+                    buckets[:, :, :, :orig_sequence_length]
+                    if (buckets is not None and orig_sequence_length > 1)
+                    else buckets
+                )
             else:
                 cached_buckets = torch.cat([cached_hidden_states_and_buckets[self.layer_id][0], buckets], dim=-1)
 
@@ -1281,6 +1284,7 @@ class ReformerAttention(nn.Module):
                 cached_hidden_states = torch.cat(
                     [cached_hidden_states_and_buckets[self.layer_id][1], hidden_states], dim=1
                 )
+
             cached_hidden_states_and_buckets[self.layer_id] = (cached_buckets, cached_hidden_states)
         # compute attention feed forward output
         attention_output = self.output(self_attention_outputs.hidden_states)
@@ -2116,7 +2120,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past is not None:
             input_ids = input_ids[:, -1:]
 
         inputs_dict = {

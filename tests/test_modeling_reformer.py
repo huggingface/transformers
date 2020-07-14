@@ -416,6 +416,19 @@ class ReformerModelTester:
         output = model(input_ids, attention_mask=input_mask)[0]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
+    def create_and_check_reformer_model_generate(self, config, input_ids, input_mask, choice_labels):
+        config.is_decoder = True
+        config.lsh_num_chunks_after = 0
+        config.bos_token_id = 0
+        config.eos_token_id = None
+        config.max_length = 20
+
+        model = ReformerModelWithLMHead(config=config)
+        model.to(torch_device)
+        model.eval()
+        output = model.generate()
+        self.parent.assertIsNotNone(output)
+
     def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = True
         config.lsh_num_chunks_after = 0
@@ -478,12 +491,11 @@ class ReformerModelTester:
         random_slice_idx = torch.randint(outputs_without_cache.shape[-1], (1, 1), device=torch_device).item()
 
         # outputs should be similar within range
-        #        self.parent.assertTrue(
-        #            torch.allclose(
-        #                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-2
-        #            )
-
-        self.parent.assertTrue(torch.allclose(outputs_with_cache[:, 0], outputs_without_cache, atol=1e-2))
+        self.parent.assertTrue(
+            torch.allclose(
+                outputs_with_cache[:, 0, random_slice_idx], outputs_without_cache[:, random_slice_idx], atol=1e-2
+            )
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -561,6 +573,10 @@ class ReformerTesterMixin:
     def test_reformer_cached_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_cached_hidden_states_and_buckets(*config_and_inputs)
+
+    def test_reformer_cached_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_generate(*config_and_inputs)
 
     @slow
     def test_dropout_random_seed_is_changing(self):
@@ -1104,8 +1120,23 @@ class ReformerIntegrationTests(unittest.TestCase):
         output_ids = model.generate(
             input_ids, max_length=50, num_beams=4, early_stopping=True, do_sample=False, num_hashes=8
         )
-        output_text = tokenizer.decode(output_ids[0])
+        output = tokenizer.decode(output_ids[0])
+
         self.assertEqual(
-            output_text,
+            output,
             "A few months later state expression in his ideas, at the first entrance. He was positively for an inst",
         )
+
+    @slow
+    def test_pretrained_generate_use_cache_equality(self):
+        model = ReformerModelWithLMHead.from_pretrained("google/reformer-crime-and-punishment").to(torch_device)
+        tokenizer = ReformerTokenizer.from_pretrained("google/reformer-crime-and-punishment")
+        model.eval()
+        input_ids = tokenizer.encode("A few months later", return_tensors="pt").to(torch_device)
+        output_ids_with_cache = model.generate(input_ids, max_length=130, num_hashes=8, use_cache=False)
+        output_ids_without_cache = model.generate(input_ids, max_length=130, num_hashes=8, use_cache=True)
+
+        output_with_cache = tokenizer.decode(output_ids_with_cache[0])
+        output_without_cache = tokenizer.decode(output_ids_without_cache[0])
+
+        self.assertEqual(output_with_cache, output_without_cache)
