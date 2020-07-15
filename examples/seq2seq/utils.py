@@ -182,7 +182,6 @@ class SortishSampler(Sampler):
         return iter(sort_idx)
 
 
-
 logger = getLogger(__name__)
 
 
