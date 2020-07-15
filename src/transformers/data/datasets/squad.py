@@ -102,6 +102,7 @@ class SquadDataset(Dataset):
         mode: Union[str, Split] = Split.train,
         is_language_sensitive: Optional[bool] = False,
         cache_dir: Optional[str] = None,
+        dataset_format: Optional[str] = "pt"
     ):
         self.args = args
         self.is_language_sensitive = is_language_sensitive
@@ -127,28 +128,37 @@ class SquadDataset(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                self.features = torch.load(cached_features_file)
+                cache_dict = torch.load(cached_features_file)
+                self.features = cache_dict['features']
+                self.dataset = cache_dict['dataset']
+                self.examples = cache_dict['examples']
                 logger.info(
                     f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
                 )
             else:
                 if mode == Split.dev:
-                    examples = self.processor.get_dev_examples(args.data_dir)
+                    self.examples = self.processor.get_dev_examples(args.data_dir)
                 else:
-                    examples = self.processor.get_train_examples(args.data_dir)
+                    self.examples = self.processor.get_train_examples(args.data_dir)
 
-                self.features = squad_convert_examples_to_features(
-                    examples=examples,
+                self.features, self.dataset = squad_convert_examples_to_features(
+                    examples=self.examples,
                     tokenizer=tokenizer,
                     max_seq_length=args.max_seq_length,
                     doc_stride=args.doc_stride,
                     max_query_length=args.max_query_length,
                     is_training=mode == Split.train,
                     threads=args.threads,
+                    return_dataset=dataset_format
                 )
 
                 start = time.time()
-                torch.save(self.features, cached_features_file)
+                torch.save(
+                    {'features': self.features,
+                     'dataset': self.dataset,
+                     'examples': self.examples},
+                    cached_features_file
+                )
                 # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
                 logger.info(
                     "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
