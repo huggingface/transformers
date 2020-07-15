@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.modeling_tf_longformer import TFLongformerSelfAttention
+from transformers.modeling_tf_longformer import TFLongformerModel, TFLongformerSelfAttention
 from transformers.modeling_tf_utils import shape_list
 from transformers.testing_utils import require_tf, slow
 
@@ -423,27 +423,23 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3)
         tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3)
 
-    def _test_layer_local_attn(self):
+    def test_layer_local_attn(self):
         model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
-        layer = model.encoder.layer[0].attention.self.to(torch_device)
+        layer = model.longformer.encoder.layer[0].attention.self_attention
         hidden_states = self._get_hidden_states()
-        batch_size, seq_length, hidden_size = hidden_states.size()
-        attention_mask = torch.zeros((batch_size, 1, 1, seq_length), dtype=torch.float32, device=torch_device)
-        attention_mask[:, :, :, -2:] = -10000
-        output_hidden_states = layer(hidden_states, attention_mask)[0]
+        batch_size, seq_length, hidden_size = hidden_states.shape
+
+        attention_mask = tf.zeros((batch_size, 1, 1, seq_length), dtype=tf.dtypes.float32)
+        attention_mask = tf.where(tf.range(4)[None, None, None, :] > 1, -10000.0, attention_mask)
+
+        output_hidden_states = layer([hidden_states, attention_mask, None])[0]
+
+        expected_slice = tf.convert_to_tensor(
+            [0.0019, 0.0122, -0.0171, -0.0256, -0.0300, 0.0173, -0.0115, 0.0048], dtype=tf.dtypes.float32
+        )
 
         self.assertTrue(output_hidden_states.shape, (1, 4, 8))
-        self.assertTrue(
-            torch.allclose(
-                output_hidden_states[0, 1],
-                torch.tensor(
-                    [0.0019, 0.0122, -0.0171, -0.0256, -0.0300, 0.0173, -0.0115, 0.0048],
-                    dtype=torch.float32,
-                    device=torch_device,
-                ),
-                atol=1e-3,
-            )
-        )
+        tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)
 
     def _test_layer_global_attn(self):
         model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")

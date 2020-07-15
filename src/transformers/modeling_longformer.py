@@ -163,7 +163,9 @@ class LongformerSelfAttention(nn.Module):
         ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
 
         # normalize query
-        query_vectors /= torch.sqrt(self.head_dim)
+        query_vectors /= torch.sqrt(
+            torch.tensor(self.head_dim, device=query_vectors.device, dtype=query_vectors.dtype)
+        )
 
         query_vectors = query_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         key_vectors = key_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
@@ -418,6 +420,7 @@ class LongformerSelfAttention(nn.Module):
         diagonal_attention_scores[:, 1:, :, :window_overlap] = diagonal_chunked_attention_scores[
             :, :, -(window_overlap + 1) : -1, window_overlap + 1 :
         ]
+
         diagonal_attention_scores[:, 0, 1:window_overlap, 1:window_overlap] = diagonal_chunked_attention_scores[
             :, 0, : window_overlap - 1, 1 - window_overlap :
         ]
@@ -441,6 +444,7 @@ class LongformerSelfAttention(nn.Module):
         assert attn_probs.size(3) == 2 * window_overlap + 1
         chunks_count = seq_len // window_overlap - 1
         # group batch_size and num_heads dimensions into one, then chunk seq_len into chunks of size 2 window overlap
+
         chunked_attn_probs = attn_probs.transpose(1, 2).reshape(
             batch_size * num_heads, seq_len // window_overlap, window_overlap, 2 * window_overlap + 1
         )
@@ -461,6 +465,10 @@ class LongformerSelfAttention(nn.Module):
             chunked_value_stride[2],
         )
         chunked_value = padded_value.as_strided(size=chunked_value_size, stride=chunked_value_stride)
+
+        import ipdb
+
+        ipdb.set_trace()
 
         chunked_attn_probs = self._pad_and_diagonalize(chunked_attn_probs)
 
@@ -578,7 +586,13 @@ class LongformerSelfAttention(nn.Module):
         global_value_vectors = self.value_global(hidden_states)
 
         # normalize
-        global_query_vectors_only_global /= torch.sqrt(self.head_dim)
+        global_query_vectors_only_global /= torch.sqrt(
+            torch.tensor(
+                self.head_dim,
+                device=global_query_vectors_only_global.device,
+                dtype=global_query_vectors_only_global.dtype,
+            )
+        )
 
         # reshape
         global_query_vectors_only_global = (
