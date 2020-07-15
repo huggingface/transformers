@@ -25,6 +25,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
+    "label_smoothing_eps": 0.2,
     "logger": "default",
     "length_penalty": 0.5,
     "cache_dir": "",

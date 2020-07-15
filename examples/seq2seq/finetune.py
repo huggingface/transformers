@@ -32,7 +32,8 @@ try:
         get_git_info,
         ROUGE_KEYS,
         calculate_bleu_score,
-        ce_loss, label_smoothed_nll_loss
+        ce_loss,
+        label_smoothed_nll_loss,
     )
     from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 except ImportError:
@@ -50,7 +51,8 @@ except ImportError:
         ROUGE_KEYS,
         calculate_bleu_score,
         assert_all_frozen,
-        ce_loss, label_smoothed_nll_loss
+        ce_loss,
+        label_smoothed_nll_loss,
     )
     from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 
@@ -127,16 +129,19 @@ class SummarizationModule(BaseTransformer):
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        y_ids = y[:, :-1].contiguous()
+        y_ids = y[:, :-1].contiguous()  # Why this line?
         lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs_old = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=lm_labels, )
-        outputs_new = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids)
-        assert outputs_old.logits.shape == outputs_new.logits.shape
-        logits = outputs_old.logits
-        if logits.shape != (lm_labels.shape[0], lm_labels.shape[1], self.model.config.vocab_size):
-            import ipdb; ipdb.set_trace()
-        loss = ce_loss(logits, lm_labels)
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, use_cache=False)
+
+        if self.hparams.label_smoothing_eps == 0:
+            loss = ce_loss(outputs[0], lm_labels, ignore_index=pad_token_id)
+        else:
+            lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
+            loss, nll_loss = label_smoothed_nll_loss(
+                lprobs, lm_labels, self.hparams.label_smoothing_eps, ignore_index=pad_token_id
+            )
+            # TODO(SS): below fails, understand math better!
+            # assert nll_loss == = ce_loss(outputs[0], lm_labels, ignore_index=pad_token_id)
         return (loss,)
 
     def training_step(self, batch, batch_idx) -> Dict:
@@ -295,6 +300,7 @@ class SummarizationModule(BaseTransformer):
         )
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
+        parser.add_argument("--label_smoothing_eps", type=float, default=0.0, required=False)
 
         return parser
 

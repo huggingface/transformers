@@ -12,6 +12,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForSeq2SeqLM,
         BartConfig,
+        MBartConfig,
         BartForConditionalGeneration,
         BatchEncoding,
         AutoTokenizer,
@@ -55,6 +56,7 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
     ]
     expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
 
+    @torch.no_grad()
     @slow
     @unittest.skip("This has been failing since June 20th at least.")
     def test_enro_forward(self):
@@ -74,8 +76,12 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
             ),
         }
         net_input["attention_mask"] = net_input["input_ids"].ne(self.pad_token_id)
-        with torch.no_grad():
-            logits, *other_stuff = model(**net_input)
+
+        outputs_no_labels = model(**net_input)
+        net_input["labels"] = net_input["decoder_input_ids"]
+        outputs_with_labels = model(**net_input)
+        assert outputs_no_labels.logits.shape == outputs_with_labels.logits.shape
+        logits = outputs_no_labels.logits
 
         expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=logits.device, dtype=logits.dtype)
         result_slice = logits[0, 0, :3]
@@ -103,7 +109,7 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
                     raise
 
     def test_mbart_fast_forward(self):
-        config = BartConfig(
+        config = MBartConfig(
             vocab_size=99,
             d_model=24,
             encoder_layers=2,
@@ -118,9 +124,13 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
+        outputs1 = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
+
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
+
+        self.assertEqual(outputs1.logits.shape, expected_shape)  # passes
+        outputs2 = lm_model(input_ids=context, decoder_input_ids=summary, use_cache=False)
+        self.assertEqual(outputs2.logits.shape, expected_shape)
 
 
 class MBartCC25IntegrationTest(AbstractMBartIntegrationTest):

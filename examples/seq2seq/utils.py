@@ -38,6 +38,7 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100, reduce=T
     loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
     return loss, nll_loss
 
+
 """
         masked_lm_loss = None
         if labels is not None:
@@ -45,11 +46,13 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100, reduce=T
             # TODO(SS): do we need to ignore pad tokens in labels?
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 """
-def ce_loss(lm_logits, labels):
+
+
+def ce_loss(lm_logits, labels, **kwargs):
     loss_fct = nn.CrossEntropyLoss()
-    #import ipdb; ipdb.set_trace()
+    # import ipdb; ipdb.set_trace()
     # TODO(SS): do we need to ignore pad tokens in labels?
-    masked_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
+    masked_lm_loss = F.cross_entropy(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1), **kwargs)
     return masked_lm_loss
 
 
