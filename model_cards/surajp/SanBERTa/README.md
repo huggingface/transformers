@@ -1,5 +1,5 @@
 ---
-language: sanskrit
+language: sa
 ---
 
 # RoBERTa trained on Sanskrit (SanBERTa)

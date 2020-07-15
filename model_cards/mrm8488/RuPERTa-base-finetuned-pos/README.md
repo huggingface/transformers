@@ -1,5 +1,5 @@
 ---
-language: spanish
+language: es
 thumbnail:
 ---
 

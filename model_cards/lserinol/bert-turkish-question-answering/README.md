@@ -1,5 +1,5 @@
 ---
-language: turkish
+language: tr
 ---
 
 # bert-turkish-question-answering
