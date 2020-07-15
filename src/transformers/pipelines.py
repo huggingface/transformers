@@ -1717,11 +1717,11 @@ class DialoguePipeline(Pipeline):
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
 
-        conversation_pipeline([conversation_1, conversation_2])
+        dialogue_pipeline([conversation_1, conversation_2])
 
         conversation_1.add_user_input("Is it an action movie?")
 
-        conversation_pipeline([conversation_1, conversation_2])
+        dialogue_pipeline([conversation_1, conversation_2])
 
     The models that this pipeline can use are models that have been fine-tuned on a multi-turn dialogue task,
     currently: "microsoft/DialoGPT-small", "microsoft/DialoGPT-medium", "microsoft/DialoGPT-large"
@@ -1754,19 +1754,19 @@ class DialoguePipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, min_length_for_response=32, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert self.tokenizer.eos_token_id is not None, "DialoguePipeline tokenizer should have an EOS token set"
         if self.tokenizer.pad_token_id is not None:
             self.pad_token_id = self.tokenizer.pad_token_id
         else:
             self.pad_token_id = self.tokenizer.eos_token_id
-        self.min_response_allowed_length = kwargs.get("min_response_allowed_length", 32)
+        self.min_length_for_response = min_length_for_response
 
-    def __call__(self, *args, clean_up_tokenization_spaces=True, **generate_kwargs):
+    def __call__(self, conversations, clean_up_tokenization_spaces=True, **generate_kwargs):
         r"""
         Args:
-            *args: (list of `:class:Conversation`) Conversations to generate responses for
+            *conversations: (list of `:class:Conversation`) Conversations to generate responses for
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
 
         Returns:
@@ -1775,10 +1775,10 @@ class DialoguePipeline(Pipeline):
 
         active_conversations = []
         # Input validation
-        if isinstance(args[0], list):
+        if isinstance(conversations, list):
             active_conversations_indices = dict()
             active_index = 0
-            for conversation_index, conversation in enumerate(args[0]):
+            for conversation_index, conversation in enumerate(conversations):
                 assert isinstance(
                     conversation, Conversation
                 ), "DialoguePipeline expects a Conversation or list of Conversations as an input"
@@ -1795,8 +1795,8 @@ class DialoguePipeline(Pipeline):
             assert (
                 self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
-        elif isinstance(args[0], Conversation):
-            active_conversations.append(args[0])
+        elif isinstance(conversations, Conversation):
+            active_conversations.append(conversations)
         else:
             raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
         if len(active_conversations) > 0:
@@ -1829,20 +1829,20 @@ class DialoguePipeline(Pipeline):
                 )
 
                 cleaned_history = self._clean_padding_history(generated_responses)
-                if isinstance(args[0], Conversation):
-                    args[0].mark_processed()
-                    args[0].generated_responses.append(
+                if isinstance(conversations, Conversation):
+                    conversations.mark_processed()
+                    conversations.generated_responses.append(
                         self.tokenizer.decode(
                             cleaned_history[0][input_length:],
                             skip_special_tokens=True,
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )
-                    args[0].history = cleaned_history[0]
-                    output = args[0]
+                    conversations.history = cleaned_history[0]
+                    output = conversations
                 else:
                     output = []
-                    for conversation_index, conversation in enumerate(args[0]):
+                    for conversation_index, conversation in enumerate(conversations):
                         if conversation_index in active_conversations_indices:
                             conversation.mark_processed()
                             active_index = active_conversations_indices[conversation_index]
@@ -1861,7 +1861,7 @@ class DialoguePipeline(Pipeline):
                 "No active conversation provided for generating response. "
                 "Add user input to the conversations by calling `conversation.add_user_input(...)`"
             )
-            return args[0]
+            return conversations[0]
 
     def _parse_and_tokenize(self, *args, **kwargs):
         """
@@ -1911,16 +1911,16 @@ class DialoguePipeline(Pipeline):
         outputs = []
         for input, history in zip(inputs, histories):
             if history is not None:
-                concatenated_input = history + input
-                if len(concatenated_input) > max_length - self.min_response_allowed_length:
-                    concatenated_input = concatenated_input[
-                        len(concatenated_input) - max_length + self.min_response_allowed_length :
-                    ]
-                outputs.append(concatenated_input)
-            else:
-                if len(input) > max_length - self.min_response_allowed_length:
-                    input = input[len(input) - max_length + self.min_response_allowed_length :]
-                outputs.append(input)
+                input = history + input
+            if len(input) > max_length - self.min_length_for_response:
+                cutoff_eos_index = 0
+                while len(input) - cutoff_eos_index > max_length - self.min_length_for_response:
+                    cutoff_eos_index = input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
+                    if cutoff_eos_index == 0 or cutoff_eos_index == len(input):
+                        break
+                    else:
+                        input = input[cutoff_eos_index + 1 :]
+            outputs.append(input)
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
         outputs = self.tokenizer.batch_encode_plus(
