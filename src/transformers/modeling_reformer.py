@@ -410,44 +410,17 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             )
 
             if cached_buckets is not None:
-                # check if cached buckets include pad bucket
-                max_bucket = self.num_buckets if isinstance(self.num_buckets, int) else reduce(mul, self.num_buckets)
-
-                if cached_buckets.max() > num_hashes * max_bucket - 1:
-                    increase_num_buckets = True
-                else:
-                    increase_num_buckets = False
-
-                # if pad bucket was cached => need to increase num buckets for caching
-                buckets = self._hash_vectors(
-                    query_vectors, num_hashes, attention_mask, increase_num_buckets=increase_num_buckets
+                key_value_hidden_states, sorted_bucket_idx, buckets = self._get_relevant_hid_states_and_buckets(
+                    query_vectors=query_vectors,
+                    attention_mask=attention_mask,
+                    num_hashes=num_hashes,
+                    hidden_states=hidden_states,
+                    cached_hidden_states=cached_hidden_states,
+                    cached_buckets=cached_buckets,
                 )
 
-                # concat buckets
-                concat_buckets = torch.cat([cached_buckets, buckets.unsqueeze(-1)], dim=-1)
-
-                # hash-based sort
-                sorted_bucket_idx = _stable_argsort(concat_buckets, dim=-1)
-
-                # concat hidden states
-                concat_hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
-
-                key_value_hidden_states, sorted_bucket_idx = self._retrieve_relevant_hidden_states(
-                    bucket_idx=sorted_bucket_idx, num_hashes=num_hashes, hidden_states=concat_hidden_states,
-                )
-                # TODO: reshape for num hashes here
-
-                per_head_query_key = self.query_key.weight.reshape(
-                    self.num_attention_heads, self.attention_head_size, self.hidden_size
-                ).transpose(-2, -1)
-                per_head_value = self.value.weight.reshape(
-                    self.num_attention_heads, self.attention_head_size, self.hidden_size
-                ).transpose(-2, -1)
-
-                # only relevant for inference and no bias => we can use einsum here
-                query_key_vectors = torch.einsum("balh,ahr->balr", key_value_hidden_states, per_head_query_key)
-                value_vectors = torch.einsum("balh,ahr->balr", key_value_hidden_states, per_head_value)
-
+                query_key_vectors = self._query_per_attn_head(key_value_hidden_states)
+                value_vectors = self._value_per_attn_head(key_value_hidden_states)
             else:
                 key_value_hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
 
@@ -610,6 +583,22 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes, -1)
 
         return LSHSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs, buckets=buckets)
+
+    def _query_per_attn_head(self, hidden_states):
+        per_head_query_key = self.query_key.weight.reshape(
+            self.num_attention_heads, self.attention_head_size, self.hidden_size
+        ).transpose(-2, -1)
+        # only relevant for inference and no bias => we can use einsum here
+        query_key_vectors = torch.einsum("balh,ahr->balr", hidden_states, per_head_query_key)
+        return query_key_vectors
+
+    def _value_per_attn_head(self, hidden_states):
+        per_head_value = self.value.weight.reshape(
+            self.num_attention_heads, self.attention_head_size, self.hidden_size
+        ).transpose(-2, -1)
+        # only relevant for inference and no bias => we can use einsum here
+        value_vectors = torch.einsum("balh,ahr->balr", hidden_states, per_head_value)
+        return value_vectors
 
     def _hash_vectors(self, vectors, num_hashes, attention_mask, increase_num_buckets=False):
         batch_size = vectors.shape[0]
@@ -864,9 +853,32 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         return attention_mask
 
-    def _retrieve_relevant_hidden_states(self, bucket_idx, num_hashes, hidden_states):
+    def _get_relevant_hid_states_and_buckets(
+        self, query_vectors, attention_mask, num_hashes, hidden_states, cached_hidden_states, cached_buckets
+    ):
+        # concat hidden states
+        hidden_states = torch.cat([cached_hidden_states, hidden_states], dim=1)
+
+        # batch_size hidden
         batch_size = hidden_states.shape[0]
         sequence_length = hidden_states.shape[1]
+
+        # check if cached buckets include pad bucket
+        max_bucket = self.num_buckets if isinstance(self.num_buckets, int) else reduce(mul, self.num_buckets)
+
+        # if pad bucket was cached => need to increase num buckets for caching
+        increase_num_buckets = cached_buckets.max() > num_hashes * max_bucket - 1
+
+        # retrieve query buckets
+        query_buckets = self._hash_vectors(
+            query_vectors, num_hashes, attention_mask, increase_num_buckets=increase_num_buckets
+        )
+
+        # concat buckets
+        concat_buckets = torch.cat([cached_buckets, query_buckets.unsqueeze(-1)], dim=-1)
+
+        # hash-based sort
+        bucket_idx = _stable_argsort(concat_buckets, dim=-1)
 
         # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
         assert bucket_idx.shape == (
@@ -876,20 +888,26 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             sequence_length,
         ), f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {bucket_idx.shape}."
 
-        # find indices of new bucket_idx
+        # find indices of new bucket indices
         relevant_bucket_idx = (bucket_idx == (bucket_idx.shape[-1] - 1)).nonzero()
 
+        # expand relevant bucket indices to its chunks
         relevant_bucket_idx_chunk = self._expand_to_indices_in_relevant_chunk(relevant_bucket_idx, sequence_length)
         relevant_bucket_idx_chunk = bucket_idx[tuple(relevant_bucket_idx_chunk.transpose(0, 1))]
 
         # adapt bucket_idx for batch and hidden states for index select
         bucket_idx_batch_offset = sequence_length * (
-            batch_size * torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long) // relevant_bucket_idx_chunk.shape[-1]
+            batch_size
+            * torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long)
+            // relevant_bucket_idx_chunk.shape[-1]
         )
-        relevant_bucket_idx_chunk_flat_batch = relevant_bucket_idx_chunk + bucket_idx_batch_offset
+
+        # add batch offset
+        relevant_bucket_idx_chunk_all_batch = relevant_bucket_idx_chunk + bucket_idx_batch_offset
         hidden_states = hidden_states.reshape((-1, self.hidden_size))
 
-        relevant_hidden_states = hidden_states.index_select(0, relevant_bucket_idx_chunk_flat_batch)
+        # select all relevant hidden states
+        relevant_hidden_states = hidden_states.index_select(0, relevant_bucket_idx_chunk_all_batch)
 
         # reshape hidden states and bucket_idx to correct output
         relevant_hidden_states = relevant_hidden_states.reshape(
@@ -909,21 +927,23 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
         ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
 
-        return relevant_hidden_states, relevant_bucket_idx_chunk
+        return relevant_hidden_states, relevant_bucket_idx_chunk, query_buckets
 
     def _expand_to_indices_in_relevant_chunk(self, indices, sequence_length):
-        # get relevant indices of where chunk starts and ends
+        # get relevant indices of where chunk starts and its size
         start_indices_chunk = ((indices[:, -1] // self.chunk_length) - self.num_chunks_before) * self.chunk_length
         total_chunk_size = self.chunk_length * (1 + self.num_chunks_before + self.num_chunks_after)
 
-        # expand start indices and add torch arange
+        # expand start indices and add correct chunk offset via arange
         expanded_start_indices = start_indices_chunk.unsqueeze(-1).expand(indices.shape[0], total_chunk_size)
         chunk_sequence_indices = expanded_start_indices + torch.arange(
             total_chunk_size, device=indices.device, dtype=torch.long
         ).unsqueeze(0).expand(indices.shape[0], total_chunk_size)
+
+        # make sure that circular logic holds via % seq len
         chunk_sequence_indices = chunk_sequence_indices.flatten() % sequence_length
 
-        # expand indices and set correct sequence indices
+        # expand indices and set indices correctly
         indices = indices.unsqueeze(1).expand((indices.shape[0], total_chunk_size, -1)).flatten(0, 1).clone()
         indices[:, -1] = chunk_sequence_indices
 
