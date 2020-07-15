@@ -100,6 +100,10 @@ class TFTrainingArguments(TrainingArguments):
     tpu_name: str = field(
         default=None, metadata={"help": "Name of TPU"},
     )
+        
+    poly_power: float = field(
+        default=1.0, metadata={"help": "Power for the Polynomial decay LR scheduler."},
+    )
 
     @cached_property
     @tf_required
