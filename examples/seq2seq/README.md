@@ -78,7 +78,7 @@ The following command should work on a 16GB GPU:
     --model_name_or_path facebook/bart-large
 ```
 
-*Note*: The following tips mostly apply to summarization finetuning.
+
 
 ### Translation Finetuning
 
