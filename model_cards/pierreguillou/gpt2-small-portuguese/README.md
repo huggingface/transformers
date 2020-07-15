@@ -2,16 +2,6 @@
 language: Portuguese
 ---
 
----
-language: portuguese
-tags:
-- transfert-learning
-- fine-tuning
-- fastai
-- hugging-face
-- nlp
-- deep-learning
-- pierre-guillou
 widget:
 - text: "Quem era Jim Henson? Jim Henson era um"
 - text: "Em um achado chocante, o cientista descobriu um"
