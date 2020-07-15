@@ -173,6 +173,7 @@ class TFTrainer:
             self.args.warmup_steps,
             adam_epsilon=self.args.adam_epsilon,
             weight_decay_rate=self.args.weight_decay,
+            power=self.args.poly_power,
         )
 
         return optimizer, scheduler
