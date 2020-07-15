@@ -1,5 +1,5 @@
 ---
-language: galician
+language: gl
 widget:
 - text: "Galicia é unha <mask> autónoma española."
 - text: "A lingua oficial de Galicia é o <mask>."
