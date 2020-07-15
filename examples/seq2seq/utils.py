@@ -14,6 +14,8 @@ from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
+import linecache
+
 
 from transformers import BartTokenizer
 
@@ -58,6 +60,21 @@ def encode_file(
     torch.save(lmap(dict, examples), cache_path.open("wb"))
     return examples
 
+def encode_line(
+    tokenizer,
+    line,
+    max_length,
+    pad_to_max_length=True,
+    return_tensors="pt"):
+    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
+    return tokenizer(
+            [line],
+            max_length=max_length,
+            padding="max_length" if pad_to_max_length else None,
+            truncation=True,
+            return_tensors=return_tensors,
+            **extra_kw,
+        )
 
 def lmap(f: Callable, x: Iterable) -> List:
     """list(map(f, x))"""
@@ -99,34 +116,45 @@ class SummarizationDataset(Dataset):
         tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
         if hasattr(tokenizer, "set_lang") and src_lang is not None:
             tokenizer.set_lang(src_lang)  # HACK: only applies to mbart
-        self.source = encode_file(
-            tokenizer,
-            os.path.join(data_dir, type_path + ".source"),
-            max_source_length,
-            overwrite_cache=overwrite_cache,
-            prefix=prefix,
-            tok_name=tok_name,
-        )
-        tgt_path = os.path.join(data_dir, type_path + ".target")
+        self.max_source_length = max_source_length
+        self.max_target_length = max_target_length
+        self.source_file = os.path.join(data_dir, type_path + ".source"),
+        self.len = self._get_examples(os.path.join(data_dir, type_path + ".source"))
+        self.tgt_file = os.path.join(data_dir, type_path + ".target")
+        
         if hasattr(tokenizer, "set_lang"):
             assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
             tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
-        self.target = encode_file(
-            tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
-        )
+        
         if n_obs is not None:
-            self.source = self.source[:n_obs]
-            self.target = self.target[:n_obs]
+            self.len = n_obs
         self.pad_token_id = tokenizer.pad_token_id
 
     def __len__(self):
-        return len(self.source)
+        return self.len
 
     def __getitem__(self, index):
-        source_ids = self.source[index]["input_ids"].squeeze()
-        target_ids = self.target[index]["input_ids"].squeeze()
-        src_mask = self.source[index]["attention_mask"].squeeze()
+        source_line = linecache.getline(self.source_file, idx).rstrip("\n")
+        tgt_line = linecache.getline(self.tgt_file, idx).rstrip("\n")
+        source_inputs = encode_line(tokenizer,
+            source_line,
+            self.max_source_length)
+        
+        target_inputs = encode_line(tokenizer,
+            tgt_line,
+            self.max_target_length)
+
+        source_ids = source_inputs['input_ids'].squeeze()
+        target_ids = target_inputs['input_ids'].squeeze()
+        src_mask =source_inputs["attention_mask"].squeeze()
         return {"input_ids": source_ids, "attention_mask": src_mask, "decoder_input_ids": target_ids}
+
+    @staticmethod
+    def _get_examples(data_file):
+        with open(data_file) as f:
+        for i, l in enumerate(f):
+            pass
+        return i + 1
 
     @staticmethod
     def trim_seq2seq_batch(batch, pad_token_id):
@@ -143,10 +171,6 @@ class SummarizationDataset(Dataset):
         source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
         batch = {"input_ids": source_ids, "attention_mask": source_mask, "decoder_input_ids": y}
         return batch
-
-    @property
-    def src_lens(self):  # Can delete?
-        return lmap(len, self.source)
 
     @property
     def tgt_lens(self):
