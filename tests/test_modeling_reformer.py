@@ -28,6 +28,7 @@ if is_torch_available():
         ReformerForMaskedLM,
         ReformerModel,
         ReformerModelWithLMHead,
+        ReformerForSequenceClassification,
         ReformerTokenizer,
         ReformerLayer,
         ReformerForQuestionAnswering,
@@ -77,6 +78,7 @@ class ReformerModelTester:
         eos_token_id=None,
         scope=None,
         hash_seed=None,
+        num_labels=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -124,6 +126,7 @@ class ReformerModelTester:
         self.encoder_seq_length = seq_length // attn_chunk_length + (self.seq_length % attn_chunk_length != 0)
         self.key_length = (num_chunks_before + num_chunks_after + 1) * attn_chunk_length
         self.chunk_length = attn_chunk_length
+        self.num_labels = num_labels
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -407,7 +410,8 @@ class ReformerModelTester:
         model.to(torch_device)
         model.half()
         model.eval()
-        output = model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+        # only use last 10 inputs for generation
+        output = model.generate(input_ids[:, -10:], attention_mask=input_mask, do_sample=False)
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_reformer_no_chunking(self, config, input_ids, input_mask, choice_labels):
@@ -441,6 +445,22 @@ class ReformerModelTester:
         (config, input_ids, input_mask, choice_labels) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
+
+    def create_and_check_reformer_for_sequence_classification(
+        self, config, input_ids, input_mask, choice_labels, is_decoder
+    ):
+        config.is_decoder = is_decoder
+        sequence_labels = ids_tensor([self.batch_size], config.num_labels)
+        model = ReformerForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
+        result = {
+            "loss": loss,
+            "logits": logits,
+        }
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
+        self.check_loss_output(result)
 
 
 class ReformerTesterMixin:
@@ -509,11 +529,17 @@ class ReformerTesterMixin:
         # Opt-out of this test.
         pass
 
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, is_decoder=False)
+
 
 @require_torch
 class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (ReformerModel, ReformerModelWithLMHead, ReformerForQuestionAnswering) if is_torch_available() else ()
+        (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification, ReformerForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
@@ -553,6 +579,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
             "eos_token_id": 2,
             "scope": None,
             "hash_seed": 0,
+            "num_labels": 2,
         }
 
     def setUp(self):
@@ -570,7 +597,9 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
 @require_torch
 class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (ReformerModel, ReformerModelWithLMHead, ReformerForQuestionAnswering) if is_torch_available() else ()
+        (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification, ReformerForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
@@ -612,6 +641,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
             "eos_token_id": 2,
             "scope": None,
             "hash_seed": 0,
+            "num_labels": 2,
         }
 
     def setUp(self):
@@ -623,7 +653,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
     """
-    These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/04/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "local" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `branch_to_save_trax_integration_tests`.
+    These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "local" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
     """
 
     def _get_basic_config_and_input(self):
@@ -940,7 +970,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
         output_slice = hidden_states[1, -1, :5]
         expected_output_slice = torch.tensor(
-            [0.0324, -0.0121, 0.0615, 0.0031, -0.0297], dtype=torch.float, device=torch_device,
+            [0.0256, -0.0121, 0.0636, 0.0024, -0.0393], dtype=torch.float, device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
 

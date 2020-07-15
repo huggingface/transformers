@@ -2,6 +2,7 @@ import itertools
 import json
 import os
 import pickle
+from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List
 
@@ -14,6 +15,9 @@ from torch import nn
 from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 
+from transformers import BartTokenizer
+
+
 def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=True):
     if target.dim() == lprobs.dim() - 1:
         target = target.unsqueeze(-1)
@@ -21,8 +25,8 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=T
     smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
     if ignore_index is not None:
         pad_mask = target.eq(ignore_index)
-        nll_loss.masked_fill_(pad_mask, 0.)
-        smooth_loss.masked_fill_(pad_mask, 0.)
+        nll_loss.masked_fill_(pad_mask, 0.0)
+        smooth_loss.masked_fill_(pad_mask, 0.0)
     else:
         nll_loss = nll_loss.squeeze(-1)
         smooth_loss = smooth_loss.squeeze(-1)
@@ -30,25 +34,23 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=T
         nll_loss = nll_loss.sum()
         smooth_loss = smooth_loss.sum()
     eps_i = epsilon / lprobs.size(-1)
-    loss = (1. - epsilon) * nll_loss + eps_i * smooth_loss
+    loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
     return loss, nll_loss
 
+import torch.nn.functional as F
 def ce_loss(lm_logits, labels):
     loss_fct = nn.CrossEntropyLoss()
     # TODO(SS): do we need to ignore pad tokens in labels?
-    masked_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
+    masked_lm_loss = F.cross_entropy(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
     return masked_lm_loss
 
 
+
+
 def encode_file(
-    tokenizer,
-    data_path,
-    max_length,
-    return_tensors="pt",
-    overwrite_cache=False,
-    prefix="",
-    tok_name="",
+    tokenizer, data_path, max_length, return_tensors="pt", overwrite_cache=False, prefix="", tok_name="",
 ):
+    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
     cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
     if not overwrite_cache and cache_path.exists():
         try:
@@ -66,12 +68,7 @@ def encode_file(
     examples = []
     for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer(
-            [text],
-            max_length=max_length,
-            padding=True,
-            truncation=True,
-            add_prefix_space=True,
-            return_tensors=return_tensors,
+            [text], max_length=max_length, padding=True, truncation=True, return_tensors=return_tensors, **extra_kw,
         )
         assert tokenized.input_ids.shape[1] == max_length
         examples.append(tokenized)
@@ -111,9 +108,14 @@ class SummarizationDataset(Dataset):
         n_obs=None,
         overwrite_cache=False,
         prefix="",
+        src_lang=None,
+        tgt_lang=None,
     ):
         super().__init__()
+        # FIXME: the rstrip logic strips all the chars, it seems.
         tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
+        if hasattr(tokenizer, "set_lang") and src_lang is not None:
+            tokenizer.set_lang(src_lang)  # HACK: only applies to mbart
         self.source = encode_file(
             tokenizer,
             os.path.join(data_dir, type_path + ".source"),
@@ -124,7 +126,8 @@ class SummarizationDataset(Dataset):
         )
         tgt_path = os.path.join(data_dir, type_path + ".target")
         if hasattr(tokenizer, "set_lang"):
-            tokenizer.set_lang("ro_RO")  # HACK: only applies to mbart
+            assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
+            tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
         self.target = encode_file(
             tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
         )
@@ -196,11 +199,17 @@ class SortishSampler(Sampler):
         return iter(sort_idx)
 
 
+logger = getLogger(__name__)
+
+
 def use_task_specific_params(model, task):
-    # update config with summarization specific params
+    """Update config with summarization specific params."""
     task_specific_params = model.config.task_specific_params
+
     if task_specific_params is not None:
-        model.config.update(task_specific_params.get(task, {}))
+        pars = task_specific_params.get(task, {})
+        logger.info(f"using task specific params for {task}: {pars}")
+        model.config.update(pars)
 
 
 def pickle_load(path):
@@ -248,8 +257,8 @@ def get_git_info():
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
 
-def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
-    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
+def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
+    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
 
     for reference_ln, output_ln in zip(reference_lns, output_lns):
