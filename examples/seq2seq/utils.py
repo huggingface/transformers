@@ -32,11 +32,11 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100, reduce=T
         nll_loss = nll_loss.squeeze(-1)
         smooth_loss = smooth_loss.squeeze(-1)
     if reduce:
-        nll_loss = nll_loss.sum()
+        nll_loss = nll_loss.sum()  #mean()? Scared to break other math.
         smooth_loss = smooth_loss.sum()
     eps_i = epsilon / lprobs.size(-1)
     loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
-    return loss, nll_loss
+    return loss/lprobs.shape[0], nll_loss/lprobs.shape[0]
 
 
 """
