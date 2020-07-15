@@ -1,6 +1,6 @@
 ---
 language:
-- ukrainian
+- uk
 ---
 
 # ukr-roberta-base

@@ -1,5 +1,5 @@
 ---
-language: turkish
+language: tr
 ---
 # Bert-base Turkish Sentiment Model
 
