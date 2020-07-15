@@ -1,6 +1,5 @@
 ---
 language: pt
----
 
 widget:
 - text: "Quem era Jim Henson? Jim Henson era um"
