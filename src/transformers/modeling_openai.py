@@ -444,8 +444,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
         if position_ids is None:
             # Code is different from when we had a single embedding matrice from position and token embeddings
-            # position_ids = torch.arange(input_shape[-1], dtype=torch.long, device=device)
-            position_ids = self.position_ids[None, input_shape[-1]]
+            position_ids = self.position_ids[None, :input_shape[-1]]
 
         # Attention mask.
         if attention_mask is not None:
