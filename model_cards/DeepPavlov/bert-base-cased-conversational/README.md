@@ -1,6 +1,5 @@
 ---
-language:
-- english
+language: en
 ---
 
 # bert-base-cased-conversational
