@@ -463,7 +463,7 @@ class ReformerModelTester:
         self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
         self.check_loss_output(result)
 
-    def create_and_check_cached_hidden_states_and_buckets(self, config, input_ids, input_mask, choice_labels):
+    def create_and_check_past_buckets_states(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = True
         config.lsh_num_chunks_before = 1
         config.lsh_num_chunks_after = 0
@@ -474,12 +474,10 @@ class ReformerModelTester:
         input_ids_second = input_ids[:, -1:]
 
         # return saved cache
-        _, cached_hidden_states_and_buckets = model(input_ids_first, use_cache=True)
+        _, past_buckets_states = model(input_ids_first, use_cache=True)
 
         # calculate last output with and without cache
-        outputs_with_cache, _ = model(
-            input_ids_second, cached_hidden_states_and_buckets=cached_hidden_states_and_buckets, use_cache=True
-        )
+        outputs_with_cache, _ = model(input_ids_second, past_buckets_states=past_buckets_states, use_cache=True)
         outputs_without_cache = model(input_ids)[0][:, -1]
 
         # select random slice idx
@@ -567,7 +565,7 @@ class ReformerTesterMixin:
 
     def test_reformer_cached_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_cached_hidden_states_and_buckets(*config_and_inputs)
+        self.model_tester.create_and_check_past_buckets_states(*config_and_inputs)
 
     def test_reformer_cached_generate(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
