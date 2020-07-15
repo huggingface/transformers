@@ -9,6 +9,7 @@ from typing import Callable, Dict, Iterable, List
 import git
 import numpy as np
 import torch
+import torch.nn.functional as F
 from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
@@ -18,7 +19,7 @@ from tqdm import tqdm
 from transformers import BartTokenizer
 
 
-def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=True):
+def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100, reduce=True):
     if target.dim() == lprobs.dim() - 1:
         target = target.unsqueeze(-1)
     nll_loss = -lprobs.gather(dim=-1, index=target)
@@ -37,18 +38,30 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=T
     loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
     return loss, nll_loss
 
-import torch.nn.functional as F
+"""
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            # TODO(SS): do we need to ignore pad tokens in labels?
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+"""
 def ce_loss(lm_logits, labels):
     loss_fct = nn.CrossEntropyLoss()
+    #import ipdb; ipdb.set_trace()
     # TODO(SS): do we need to ignore pad tokens in labels?
-    masked_lm_loss = F.cross_entropy(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
+    masked_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), labels.view(-1))
     return masked_lm_loss
 
 
-
-
 def encode_file(
-    tokenizer, data_path, max_length, return_tensors="pt", overwrite_cache=False, prefix="", tok_name="",
+    tokenizer,
+    data_path,
+    max_length,
+    pad_to_max_length=True,
+    return_tensors="pt",
+    overwrite_cache=False,
+    prefix="",
+    tok_name="",
 ):
     extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
     cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
@@ -68,7 +81,12 @@ def encode_file(
     examples = []
     for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer(
-            [text], max_length=max_length, padding=True, truncation=True, return_tensors=return_tensors, **extra_kw,
+            [text],
+            max_length=max_length,
+            padding="max_length" if pad_to_max_length else None,
+            truncation=True,
+            return_tensors=return_tensors,
+            **extra_kw,
         )
         assert tokenized.input_ids.shape[1] == max_length
         examples.append(tokenized)

@@ -32,7 +32,7 @@ try:
         get_git_info,
         ROUGE_KEYS,
         calculate_bleu_score,
-        ce_loss,label_smoothed_nll_loss
+        ce_loss, label_smoothed_nll_loss
     )
     from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 except ImportError:
@@ -130,8 +130,12 @@ class SummarizationModule(BaseTransformer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids,)
-        logits = outputs[0]
+        outputs_old = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=lm_labels, )
+        outputs_new = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids)
+        assert outputs_old.logits.shape == outputs_new.logits.shape
+        logits = outputs_old.logits
+        if logits.shape != (lm_labels.shape[0], lm_labels.shape[1], self.model.config.vocab_size):
+            import ipdb; ipdb.set_trace()
         loss = ce_loss(logits, lm_labels)
         return (loss,)
 
