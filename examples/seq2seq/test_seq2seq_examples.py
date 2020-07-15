@@ -118,6 +118,10 @@ class TestSummarizationDistiller(unittest.TestCase):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, no_teacher=True)
         self._test_distiller_cli(updates)
 
+    def test_pack_dataset(self):
+        tokenizer = AutoTokenizer.from_pretrained('facebook/bart-large')
+
+
     def test_distill_checkpointing_with_teacher(self):
         updates = dict(
             student_encoder_layers=2,
