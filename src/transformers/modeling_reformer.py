@@ -918,9 +918,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # expand start indices and add torch arange
         expanded_start_indices = start_indices_chunk.unsqueeze(-1).expand(indices.shape[0], total_chunk_size)
-        chunk_sequence_indices = expanded_start_indices + torch.arange(total_chunk_size).unsqueeze(0).expand(
-            indices.shape[0], total_chunk_size
-        )
+        chunk_sequence_indices = expanded_start_indices + torch.arange(
+            total_chunk_size, device=indices.device, dtype=torch.long
+        ).unsqueeze(0).expand(indices.shape[0], total_chunk_size)
         chunk_sequence_indices = chunk_sequence_indices.flatten() % sequence_length
 
         # expand indices and set correct sequence indices
