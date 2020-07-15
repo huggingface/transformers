@@ -17,6 +17,7 @@
 
 import logging
 import os
+import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -109,9 +110,9 @@ def main():
         level=logging.INFO,
     )
     logger.info(
-        "n_gpu: %s, distributed training: %s, 16-bits training: %s",
-        training_args.n_gpu,
-        bool(training_args.n_gpu > 1),
+        "n_replicas: %s, distributed training: %s, 16-bits training: %s",
+        training_args.n_replicas,
+        bool(training_args.n_replicas > 1),
         training_args.fp16,
     )
     logger.info("Training/evaluation parameters %s", training_args)
@@ -184,7 +185,12 @@ def main():
 
         for i in range(batch_size):
             for j in range(seq_len):
-                if label_ids[i, j] != -1:
+                if label_ids[i, j] == -1:
+                    label_ids[i, j] = -100
+                    warnings.warn(
+                        "Using `-1` to mask the loss for the token is depreciated. Please use `-100` instead."
+                    )
+                if label_ids[i, j] != -100:
                     out_label_list[i].append(label_map[label_ids[i][j]])
                     preds_list[i].append(label_map[preds[i][j]])
 

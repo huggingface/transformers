@@ -1,4 +1,4 @@
-## Examples
+# Examples
 
 Version 2.9 of 🤗 Transformers introduces a new [`Trainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) class for PyTorch, and its equivalent [`TFTrainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer_tf.py) for TF 2.
 Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.1+.
@@ -13,7 +13,7 @@ Here is the list of all our examples:
 This is still a work-in-progress – in particular documentation is still sparse – so please **contribute improvements/pull requests.**
 
 
-# The Big Table of Tasks
+## The Big Table of Tasks
 
 | Task | Example datasets | Trainer support | TFTrainer support | pytorch-lightning | Colab
 |---|---|:---:|:---:|:---:|:---:|
@@ -21,11 +21,11 @@ This is still a work-in-progress – in particular documentation is still sparse
 | [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE, XNLI      | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/trainer/01_text_classification.ipynb)
 | [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | -
 | [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG, RACE, ARC | ✅ | ✅ | -  | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | -  | ✅ | -  | -
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | -  | -
 | [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | n/a | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
 | [**`distillation`**](https://github.com/huggingface/transformers/tree/master/examples/distillation)       | All               | -  | -  | -  | -
-| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/summarization)     | CNN/Daily Mail    | -  | -  | -  | -
-| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/translation)         | WMT               | -  | -  | -  | -
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)     | CNN/Daily Mail    | -  | -  | ✅  | -
+| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)         | WMT               | -  | -  | ✅  | -
 | [**`bertology`**](https://github.com/huggingface/transformers/tree/master/examples/bertology)             | -                 | -  | -  | -  | -
 | [**`adversarial`**](https://github.com/huggingface/transformers/tree/master/examples/adversarial)         | HANS              | ✅ | -  | -  | -
 
@@ -78,3 +78,32 @@ python examples/xla_spawn.py --num_cores 8 \
 ```
 
 Feedback and more use cases and benchmarks involving TPUs are welcome, please share with the community.
+
+## Logging & Experiment tracking
+
+You can easily log and monitor your runs code. [TensorBoard](https://www.tensorflow.org/tensorboard) and [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface) are currently supported.
+
+To use Weights & Biases, install the wandb package with:
+
+```bash
+pip install wandb
+```
+
+Then log in the command line:
+
+```bash
+wandb login
+```
+
+If you are in Jupyter or Colab, you should login with:
+
+```python
+import wandb
+wandb.login()
+```
+
+Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
+
+For advanced configuration and examples, refer to the [W&B documentation](https://docs.wandb.com/library/integrations/huggingface).
+
+When using 🤗 Transformers with PyTorch Lightning, runs can be tracked through `WandbLogger`. Refer to related [documentation & examples](https://docs.wandb.com/library/frameworks/pytorch/lightning).

@@ -3,9 +3,9 @@ from os.path import dirname, exists
 from shutil import rmtree
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from tests.utils import require_tf, require_torch, slow
 from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
 from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes
+from transformers.testing_utils import require_tf, require_torch, slow
 
 
 class FuncContiguousArgs:

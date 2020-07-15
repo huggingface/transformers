@@ -17,16 +17,17 @@
 import unittest
 
 from transformers import BertConfig, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import require_tf, slow
 
 
 if is_tf_available():
     import tensorflow as tf
     from transformers.modeling_tf_bert import (
         TFBertModel,
+        TFBertLMHeadModel,
         TFBertForMaskedLM,
         TFBertForNextSentencePrediction,
         TFBertForPreTraining,
@@ -142,11 +143,30 @@ class TFBertModelTester:
         )
         self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
 
+    def create_and_check_bert_lm_head(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.is_decoder = True
+        model = TFBertLMHeadModel(config=config)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
+        (prediction_scores,) = model(inputs)
+        self.parent.assertListEqual(
+            list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
+        )
+
     def create_and_check_bert_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFBertForMaskedLM(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         (prediction_scores,) = model(inputs)
         result = {
             "prediction_scores": prediction_scores.numpy(),
@@ -186,11 +206,14 @@ class TFBertModelTester:
     ):
         config.num_labels = self.num_labels
         model = TFBertForSequenceClassification(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
         }
+
+        (logits,) = model(inputs)
+        result = {"logits": logits.numpy()}
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
     def create_and_check_bert_for_multiple_choice(
@@ -207,9 +230,7 @@ class TFBertModelTester:
             "token_type_ids": multiple_choice_token_type_ids,
         }
         (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = {"logits": logits.numpy()}
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
 
     def create_and_check_bert_for_token_classification(
@@ -217,7 +238,11 @@ class TFBertModelTester:
     ):
         config.num_labels = self.num_labels
         model = TFBertForTokenClassification(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
         (logits,) = model(inputs)
         result = {
             "logits": logits.numpy(),
@@ -228,12 +253,14 @@ class TFBertModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFBertForQuestionAnswering(config=config)
-        inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        start_logits, end_logits = model(inputs)
-        result = {
-            "start_logits": start_logits.numpy(),
-            "end_logits": end_logits.numpy(),
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
         }
+
+        start_logits, end_logits = model(inputs)
+        result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()}
         self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
@@ -284,6 +311,10 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_masked_lm(*config_and_inputs)
+
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_lm_head(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

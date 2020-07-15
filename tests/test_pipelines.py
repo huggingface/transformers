@@ -3,8 +3,7 @@ from typing import Iterable, List, Optional
 
 from transformers import pipeline
 from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline
-
-from .utils import require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import require_tf, require_torch, slow, torch_device
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
@@ -31,14 +30,15 @@ TF_TRANSLATION_FINETUNED_MODELS = [("patrickvonplaten/t5-tiny-random", "translat
 
 expected_fill_mask_result = [
     [
-        {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
-        {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
+        {"sequence": "<s>My name is John</s>", "score": 0.00782308354973793, "token": 610, "token_str": "ĠJohn"},
+        {"sequence": "<s>My name is Chris</s>", "score": 0.007475061342120171, "token": 1573, "token_str": "ĠChris"},
     ],
     [
-        {"sequence": "<s> The largest city in France is Paris</s>", "score": 0.3185044229030609, "token": 2201},
-        {"sequence": "<s> The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
+        {"sequence": "<s>The largest city in France is Paris</s>", "score": 0.3185044229030609, "token": 2201},
+        {"sequence": "<s>The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
     ],
 ]
+
 SUMMARIZATION_KWARGS = dict(num_beams=2, min_length=2, max_length=5)
 
 
@@ -158,34 +158,6 @@ class MonoColumnInputTestCase(unittest.TestCase):
         self.assertRaises(Exception, nlp, invalid_inputs)
 
     @require_torch
-    def test_torch_ner(self):
-        mandatory_keys = {"entity", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_torch
-    def test_ner_grouped(self):
-        mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_tf
-    def test_tf_ner(self):
-        mandatory_keys = {"entity", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_tf
-    def test_tf_ner_grouped(self):
-        mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_torch
     def test_torch_sentiment_analysis(self):
         mandatory_keys = {"label", "score"}
         for model_name in TEXT_CLASSIF_FINETUNED_MODELS:
@@ -218,9 +190,15 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
+        invalid_inputs = [
+            "This is <mask> <mask>"  # More than 1 mask_token in the input is not supported
+            "This is"  # No mask_token is not supported
+        ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
             nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
+            )
 
     @require_tf
     def test_tf_fill_mask(self):
@@ -229,9 +207,15 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
+        invalid_inputs = [
+            "This is <mask> <mask>"  # More than 1 mask_token in the input is not supported
+            "This is"  # No mask_token is not supported
+        ]
         for model_name in FILL_MASK_FINETUNED_MODELS:
             nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2,)
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs, expected_check_keys=["sequence"]
+            )
 
     @require_torch
     @slow
@@ -380,6 +364,100 @@ class QAPipelineTests(unittest.TestCase):
         for model_name in QA_FINETUNED_MODELS:
             nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name, framework="tf")
             self._test_qa_pipeline(nlp)
+
+
+class NerPipelineTests(unittest.TestCase):
+    def _test_ner_pipeline(
+        self, nlp: Pipeline, output_keys: Iterable[str],
+    ):
+
+        ungrouped_ner_inputs = [
+            [
+                {"entity": "B-PER", "index": 1, "score": 0.9994944930076599, "word": "Cons"},
+                {"entity": "B-PER", "index": 2, "score": 0.8025449514389038, "word": "##uelo"},
+                {"entity": "I-PER", "index": 3, "score": 0.9993102550506592, "word": "Ara"},
+                {"entity": "I-PER", "index": 4, "score": 0.9993743896484375, "word": "##új"},
+                {"entity": "I-PER", "index": 5, "score": 0.9992871880531311, "word": "##o"},
+                {"entity": "I-PER", "index": 6, "score": 0.9993029236793518, "word": "No"},
+                {"entity": "I-PER", "index": 7, "score": 0.9981776475906372, "word": "##guera"},
+                {"entity": "B-PER", "index": 15, "score": 0.9998136162757874, "word": "Andrés"},
+                {"entity": "I-PER", "index": 16, "score": 0.999740719795227, "word": "Pas"},
+                {"entity": "I-PER", "index": 17, "score": 0.9997414350509644, "word": "##tran"},
+                {"entity": "I-PER", "index": 18, "score": 0.9996136426925659, "word": "##a"},
+                {"entity": "B-ORG", "index": 28, "score": 0.9989739060401917, "word": "Far"},
+                {"entity": "I-ORG", "index": 29, "score": 0.7188422083854675, "word": "##c"},
+            ],
+            [
+                {"entity": "I-PER", "index": 1, "score": 0.9968166351318359, "word": "En"},
+                {"entity": "I-PER", "index": 2, "score": 0.9957635998725891, "word": "##zo"},
+                {"entity": "I-ORG", "index": 7, "score": 0.9986497163772583, "word": "UN"},
+            ],
+        ]
+        expected_grouped_ner_results = [
+            [
+                {"entity_group": "B-PER", "score": 0.9710702640669686, "word": "Consuelo Araújo Noguera"},
+                {"entity_group": "B-PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
+                {"entity_group": "B-ORG", "score": 0.8589080572128296, "word": "Farc"},
+            ],
+            [
+                {"entity_group": "I-PER", "score": 0.9962901175022125, "word": "Enzo"},
+                {"entity_group": "I-ORG", "score": 0.9986497163772583, "word": "UN"},
+            ],
+        ]
+
+        self.assertIsNotNone(nlp)
+
+        mono_result = nlp(VALID_INPUTS[0])
+        self.assertIsInstance(mono_result, list)
+        self.assertIsInstance(mono_result[0], (dict, list))
+
+        if isinstance(mono_result[0], list):
+            mono_result = mono_result[0]
+
+        for key in output_keys:
+            self.assertIn(key, mono_result[0])
+
+        multi_result = [nlp(input) for input in VALID_INPUTS]
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], (dict, list))
+
+        if isinstance(multi_result[0], list):
+            multi_result = multi_result[0]
+
+        for result in multi_result:
+            for key in output_keys:
+                self.assertIn(key, result)
+
+        for ungrouped_input, grouped_result in zip(ungrouped_ner_inputs, expected_grouped_ner_results):
+            self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
+
+    @require_torch
+    def test_torch_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+    @require_torch
+    def test_ner_grouped(self):
+        mandatory_keys = {"entity_group", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+    @require_tf
+    def test_tf_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+    @require_tf
+    def test_tf_ner_grouped(self):
+        mandatory_keys = {"entity_group", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
+            self._test_ner_pipeline(nlp, mandatory_keys)
 
 
 class PipelineCommonTests(unittest.TestCase):

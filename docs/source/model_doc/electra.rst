@@ -71,6 +71,13 @@ ElectraTokenizerFast
     :members:
 
 
+Electra specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_electra.ElectraForPretrainingOutput
+    :members:
+
+
 ElectraModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

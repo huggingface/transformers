@@ -14,10 +14,10 @@
 # limitations under the License.
 
 
+from transformers.testing_utils import slow
 from transformers.tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 
 from .test_tokenization_bert import BertTokenizationTest
-from .utils import slow
 
 
 class DistilBertTokenizationTest(BertTokenizationTest):

@@ -1,10 +1,11 @@
 // These two things need to be updated at each release for the version selector.
 // Last stable version
-const stableVersion = "v2.11.0"
+const stableVersion = "v3.0.2"
 // Dictionary doc folder to label
 const versionMapping = {
     "master": "master",
-    "": "v2.11.0 (stable)",
+    "": "v3.0.0/v3.0.1/v3.0.2 (stable)",
+    "v2.11.0": "v2.11.0",
     "v2.10.0": "v2.10.0",
     "v2.9.1": "v2.9.0/v2.9.1",
     "v2.8.0": "v2.8.0",
@@ -86,7 +87,7 @@ function addVersionControl() {
     const parts = location.toString().split('/');
     let versionIndex = parts.length - 2;
     // Index page may not have a last part with filename.html so we need to go up
-    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html$/)) {
+    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html$|^search.html?/)) {
         versionIndex = parts.length - 1;
     }
     // Main classes and models are nested so we need to go deeper
@@ -148,6 +149,7 @@ function addHfMenu() {
     <div class="menu">
         <a href="/welcome">🔥 Sign in</a>
         <a href="/models">🚀 Models</a>
+        <a href="http://discuss.huggingface.co">💬 Forum</a>
     </div>
     `;
     document.body.insertAdjacentHTML('afterbegin', div);

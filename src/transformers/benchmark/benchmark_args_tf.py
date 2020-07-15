@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class TensorflowBenchmarkArguments(BenchmarkArguments):
+class TensorFlowBenchmarkArguments(BenchmarkArguments):
     tpu_name: str = field(
         default=None, metadata={"help": "Name of TPU"},
     )

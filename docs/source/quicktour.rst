@@ -108,11 +108,11 @@ any other model from the model hub):
     >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
     >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
     >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-    >>> pipe = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
+    >>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
     >>> ## TENSORFLOW CODE
     >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
     >>> # This model only exists in PyTorch, so we use the `from_pt` flag to import that model in TensorFlow.
-    >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True) 
+    >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
     >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
     >>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
 
@@ -146,8 +146,9 @@ Using the tokenizer
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
-that process, which is why we need to instantiate the tokenizer using the name of the model, to make sure we use the
-same rules as when the model was pretrained.
+that process (you can learn more about them in the :doc:`tokenizer_summary <tokenizer_summary>`, which is why we need
+to instantiate the tokenizer using the name of the model, to make sure we use the same rules as when the model was
+pretrained.
 
 The second step is to convert those `tokens` into numbers, to be able to build a tensor out of them and feed them to
 the model. To do this, the tokenizer has a `vocab`, which is the part we download when we instantiate it with the
@@ -190,7 +191,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     return_tensors="tf"
     ... )
 
-The padding is automatically applied on the side the model expect it (in this case, on the right), with the
+The padding is automatically applied on the side expected by the model (in this case, on the right), with the
 padding token the model was pretrained with. The attention mask is also adapted to take the padding into account:
 
 .. code-block::
@@ -211,9 +212,9 @@ You can learn more about tokenizers :doc:`here <preprocessing>`.
 Using the model
 ^^^^^^^^^^^^^^^
 
-Once your input has been preprocessed by the tokenizer, you can directly send it to the model. As we mentioned, it will
-contain all the relevant information the model needs. If you're using a TensorFlow model, you can directly pass the
-dictionary keys to tensor, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
+Once your input has been preprocessed by the tokenizer, you can send it directly to the model. As we mentioned, it will
+contain all the relevant information the model needs. If you're using a TensorFlow model, you can pass the
+dictionary keys directly to tensor, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
 
 .. code-block::
 
@@ -282,9 +283,9 @@ Models are standard `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#to
 `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ so you can use them in your usual
 training loop. 🤗 Transformers also provides a :class:`~transformers.Trainer` (or :class:`~transformers.TFTrainer` if
 you are using TensorFlow) class to help with your training (taking care of things such as distributed training, mixed
-precision, etc.). See the training tutorial (coming soon) for more details.
+precision, etc.). See the :doc:`training tutorial <training>` for more details.
 
-Once your model is fine-tuned, you can save it with its tokenizer the following way:
+Once your model is fine-tuned, you can save it with its tokenizer in the following way:
 
 ::
 
@@ -328,7 +329,9 @@ pretrained model. Behind the scenes, the library has one model class per combina
 code is easy to access and tweak if you need to.
 
 In our previous example, the model was called "distilbert-base-uncased-finetuned-sst-2-english", which means it's
-using the :doc:`DistilBERT </model_doc/distilbert>` architecture. The model automatically created is then a
+using the :doc:`DistilBERT </model_doc/distilbert>` architecture. As
+:class:`~transformers.AutoModelForSequenceClassification` (or  :class:`~transformers.TFAutoModelForSequenceClassification`
+if you are using TensorFlow)` was used, the model automatically created is then a
 :class:`~transformers.DistilBertForSequenceClassification`. You can look at its documentation for all details relevant
 to that specific model, or browse the source code. This is how you would directly instantiate model and tokenizer
 without the auto magic:
@@ -351,7 +354,7 @@ Customizing the model
 
 If you want to change how the model itself is built, you can define your custom configuration class. Each architecture
 comes with its own relevant configuration (in the case of DistilBERT, :class:`~transformers.DistilBertConfig`) which
-allows you to specify any of the hidden dimension, dropout rate etc. If you do core modifications, like changing the
+allows you to specify any of the hidden dimension, dropout rate, etc. If you do core modifications, like changing the
 hidden size, you won't be able to use a pretrained model anymore and will need to train from scratch. You would then
 instantiate the model directly from this configuration.
 

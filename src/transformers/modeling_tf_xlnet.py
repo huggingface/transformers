@@ -30,6 +30,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
 )
 from .modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -871,7 +872,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     (linear layer with weights tied to the input embeddings). """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
+class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
@@ -883,9 +884,18 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
+        # At every pass, the attention values for the new token and the two last generated tokens
+        # are computed, the rest is reloaded from the `past` cache. A purely auto-regressive model would have
+        # offset = 1; offset = 2 seems to have slightly better computation.
+        offset = 2
+
         effective_batch_size = inputs.shape[0]
         dummy_token = tf.zeros((effective_batch_size, 1), dtype=tf.int32)
-        inputs = tf.concat([inputs, dummy_token], axis=1)
+
+        if past:
+            inputs = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
+        else:
+            inputs = tf.concat([inputs, dummy_token], axis=1)
 
         # Build permutation mask so that previous tokens don't see last token
         sequence_length = inputs.shape[1]
@@ -907,13 +917,33 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
-            inputs["mems"] = past
+            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past)
 
         return inputs
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        mems=None,
+        perm_mask=None,
+        target_mapping=None,
+        token_type_ids=None,
+        input_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        use_cache=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the cross entropy classification loss.
+            Indices should be in ``[0, ..., config.vocab_size - 1]``.
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
         prediction_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -957,11 +987,39 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         next_token_logits = outputs[0]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
 
         """
-        transformer_outputs = self.transformer(inputs, **kwargs)
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[12] if len(inputs) > 12 else labels
+            if len(inputs) > 12:
+                inputs = inputs[:12]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
+        transformer_outputs = self.transformer(
+            inputs,
+            attention_mask=None,
+            mems=None,
+            perm_mask=None,
+            target_mapping=None,
+            token_type_ids=None,
+            input_mask=None,
+            head_mask=None,
+            inputs_embeds=None,
+            use_cache=True,
+            output_attentions=None,
+            output_hidden_states=None,
+            training=training,
+        )
         hidden_state = transformer_outputs[0]
-        logits = self.lm_loss(hidden_state)
+        logits = self.lm_loss(hidden_state, training=training)
 
         outputs = (logits,) + transformer_outputs[1:]  # Keep mems, hidden states, attentions if there are in it
+
+        if labels is not None:
+            # shift labels to the left and cut last logit token
+            logits = logits[:, :-1]
+            labels = labels[:, 1:]
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
 
         return outputs  # return logits, (mems), (hidden states), (attentions)
 

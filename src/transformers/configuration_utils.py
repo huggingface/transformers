@@ -20,7 +20,7 @@ import copy
 import json
 import logging
 import os
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 
@@ -30,31 +30,110 @@ logger = logging.getLogger(__name__)
 
 class PretrainedConfig(object):
     r""" Base class for all configuration classes.
-        Handles a few parameters common to all models' configurations as well as methods for loading/downloading/saving configurations.
+        Handles a few parameters common to all models' configurations as well as methods for loading/downloading/saving
+        configurations.
 
         Note:
-            A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to initialize a model does **not** load the model weights.
+            A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
+            initialize a model does **not** load the model weights.
             It only affects the model's configuration.
 
-        Class attributes (overridden by derived classes):
-            - ``model_type``: a string that identifies the model type, that we serialize into the JSON file, and that we use to recreate the correct object in :class:`~transformers.AutoConfig`.
+        Class attributes (overridden by derived classes)
+            - **model_type** (:obj:`str`): An identifier for the model type, serialized into the JSON file, and used to
+              recreate the correct object in :class:`~transformers.AutoConfig`.
 
         Args:
-            finetuning_task (:obj:`string` or :obj:`None`, `optional`, defaults to :obj:`None`):
-                Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow or PyTorch) checkpoint.
-            num_labels (:obj:`int`, `optional`, defaults to `2`):
-                Number of classes to use when the model is a classification model (sequences/tokens)
             output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Should the model returns all hidden-states.
+                Whether or not the model should return all hidden-states.
             output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Should the model returns all attentions.
-            torchscript (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Is the model used with Torchscript (for PyTorch models).
+                Whether or not the model should returns all attentions.
+            use_cache (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the model should return the last key/values attentions (not used by all models).
+            return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the model should return tuples instead of :obj:`ModelOutput` objects.
+            is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether the model is used as an encoder/decoder or not.
+            is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether the model is used as decoder or not (in which case it's used as an encoder).
+            prune_heads (:obj:`Dict[int, List[int]]`, `optional`, defaults to :obj:`{}`):
+                Pruned heads of the model. The keys are the selected layer indices and the associated values, the list
+                of heads to prune in said layer.
+
+                For instance ``{1: [0, 2], 2: [2, 3]}`` will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer
+                2.
+            xla_device (:obj:`bool`, `optional`):
+                A flag to indicate if TPU are available or not.
+
+        Parameters for sequence generation
+            - **max_length** (:obj:`int`, `optional`, defaults to 20) -- Maximum length that will be used by
+              default in the :obj:`generate` method of the model.
+            - **min_length** (:obj:`int`, `optional`, defaults to 10) -- Minimum length that will be used by
+              default in the :obj:`generate` method of the model.
+            - **do_sample** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Flag that will be used by default in
+              the :obj:`generate` method of the model. Whether or not to use sampling ; use greedy decoding otherwise.
+            - **early_stopping** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Flag that will be used by
+              default in the :obj:`generate` method of the model. Whether to stop the beam search when at least
+              ``num_beams`` sentences are finished per batch or not.
+            - **num_beams** (:obj:`int`, `optional`, defaults to 1) -- Number of beams for beam search that will be
+              used by default in the :obj:`generate` method of the model. 1 means no beam search.
+            - **temperature** (:obj:`float`, `optional`, defaults to 1) -- The value used to module the next token
+              probabilities that will be used by default in the :obj:`generate` method of the model. Must be strictly
+              positive.
+            - **top_k** (:obj:`int`, `optional`, defaults to 50) -- Number of highest probability vocabulary tokens to
+              keep for top-k-filtering that will be used by default in the :obj:`generate` method of the model.
+            - **top_p** (:obj:`float`, `optional`, defaults to 1) --  Value that will be used by default in the
+              :obj:`generate` method of the model for ``top_p``. If set to float < 1, only the most probable tokens
+              with probabilities that add up to ``top_p`` or highest are kept for generation.
+            - **repetition_penalty** (:obj:`float`, `optional`, defaults to 1) -- Parameter for repetition penalty
+              that will be used by default in the :obj:`generate` method of the model. 1.0 means no penalty.
+            - **length_penalty** (:obj:`float`, `optional`, defaults to 1) -- Exponential penalty to the length that
+              will be used by default in the :obj:`generate` method of the model.
+            - **no_repeat_ngram_size** (:obj:`int`, `optional`, defaults to 0) -- Value that will be used by default
+              in the :obj:`generate` method of the model for ``no_repeat_ngram_size``. If set to int > 0, all ngrams of
+              that size can only occur once.
+            - **bad_words_ids** (:obj:`List[int]`, `optional`) -- List of token ids that are not allowed to be
+              generated that will be used by default in the :obj:`generate` method of the model. In order to get the
+              tokens of the words that should not appear in the generated text, use
+              :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
+            - **num_return_sequences** (:obj:`int`, `optional`, defaults to 1) -- Number of independently computed
+              returned sequences for each element in the batch that will be used by default in the :obj:`generate`
+              method of the model.
+
+        Parameters for fine-tuning tasks
+            - **architectures** (:obj:List[`str`], `optional`) -- Model architectures that can be used with the
+              model pretrained weights.
+            - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
+              used when converting from an original (TensorFlow or PyTorch) checkpoint.
+            - **id2label** (:obj:`List[str]`, `optional`) -- A map from index (for instance prediction index, or target
+              index) to label.
+            - **label2id** (:obj:`Dict[str, int]`, `optional`) -- A map from label to index for the model.
+            - **num_labels** (:obj:`int`, `optional`) -- Number of labels to use in the last layer added to the model,
+              typically for a classification task.
+            - **task_specific_params** (:obj:`Dict[str, Any]`, `optional`) -- Additional keyword arguments to store for
+              the current task.
+
+        Parameters linked to the tokenizer
+            - **prefix** (:obj:`str`, `optional`) -- A specific prompt that should be added at the beginning of each
+              text before calling the model.
+            - **bos_token_id** (:obj:`int`, `optional`)) -- The id of the `beginning-of-stream` token.
+            - **pad_token_id** (:obj:`int`, `optional`)) -- The id of the `padding` token.
+            - **eos_token_id** (:obj:`int`, `optional`)) -- The id of the `end-of-stream` token.
+            - **decoder_start_token_id** (:obj:`int`, `optional`)) -- If an encoder-decoder model starts decoding with
+              a different token than `bos`, the id of that token.
+
+        PyTorch specific parameters
+            - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
+              used with Torchscript.
+
+        TensorFlow specific parameters
+            - **use_bfloat16** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should
+              use BFloat16 scalars (only used by some TensorFlow models).
     """
     model_type: str = ""
 
     def __init__(self, **kwargs):
         # Attributes with defaults
+        self.return_tuple = kwargs.pop("return_tuple", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
@@ -115,27 +194,31 @@ class PretrainedConfig(object):
                 raise err
 
     @property
-    def num_labels(self):
+    def use_return_tuple(self):
+        # If torchscript is set, force return_tuple to avoid jit errors
+        return self.return_tuple or self.torchscript
+
+    @property
+    def num_labels(self) -> int:
         return len(self.id2label)
 
     @num_labels.setter
-    def num_labels(self, num_labels):
+    def num_labels(self, num_labels: int):
         self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory: str):
         """
-        Save a configuration object to the directory `save_directory`, so that it
-        can be re-loaded using the :func:`~transformers.PretrainedConfig.from_pretrained` class method.
+        Save a configuration object to the directory ``save_directory``, so that it can be re-loaded using the
+        :func:`~transformers.PretrainedConfig.from_pretrained` class method.
 
         Args:
-            save_directory (:obj:`string`):
-                Directory where the configuration JSON file will be saved.
+            save_directory (:obj:`str`):
+                Directory where the configuration JSON file will be saved (will be created if it does not exist).
         """
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
-
+        if os.path.isfile(save_directory):
+            raise AssertionError("Provided path ({}) should be a directory, not a file".format(save_directory))
+        os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
@@ -143,45 +226,49 @@ class PretrainedConfig(object):
         logger.info("Configuration saved in {}".format(output_config_file))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs) -> "PretrainedConfig":
         r"""
-
-        Instantiate a :class:`~transformers.PretrainedConfig` (or a derived class) from a pre-trained model configuration.
+        Instantiate a :class:`~transformers.PretrainedConfig` (or a derived class) from a pretrained model
+        configuration.
 
         Args:
-            pretrained_model_name_or_path (:obj:`string`):
-                either:
-                  - a string with the `shortcut name` of a pre-trained model configuration to load from cache or
-                    download, e.g.: ``bert-base-uncased``.
-                  - a string with the `identifier name` of a pre-trained model configuration that was user-uploaded to
-                    our S3, e.g.: ``dbmdz/bert-base-german-cased``.
-                  - a path to a `directory` containing a configuration file saved using the
-                    :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g.: ``./my_model_directory/``.
-                  - a path or url to a saved configuration JSON `file`, e.g.:
-                    ``./my_model_directory/configuration.json``.
-            cache_dir (:obj:`string`, `optional`):
-                Path to a directory in which a downloaded pre-trained model
-                configuration should be cached if the standard cache should not be used.
-            kwargs (:obj:`Dict[str, any]`, `optional`):
-                The values in kwargs of any keys which are configuration attributes will be used to override the loaded
-                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is
-                controlled by the `return_unused_kwargs` keyword parameter.
+            pretrained_model_name_or_path (:obj:`str`):
+                This can be either:
+
+                - the `shortcut name` of a pretrained model configuration to load from cache or download, e.g.,
+                  ``bert-base-uncased``.
+                - the `identifier name` of a pretrained model configuration that was uploaded to our S3 by any user,
+                  e.g., ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing a configuration file saved using the
+                  :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g., ``./my_model_directory/``.
+                - a path or url to a saved configuration JSON `file`, e.g.,
+                  ``./my_model_directory/configuration.json``.
+            cache_dir (:obj:`str`, `optional`):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Force to (re-)download the model weights and configuration files and override the cached versions if they exist.
+                Wheter or not to force to (re-)download the configuration files and override the cached versions if they
+                exist.
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
-            proxies (:obj:`Dict`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.:
+                Whether or not to delete incompletely received file. Attempts to resume the download if such a file
+                exists.
+            proxies (:obj:`Dict[str, str]`, `optional`):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
                 :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.`
                 The proxies are used on each request.
-            return_unused_kwargs: (`optional`) bool:
-                If False, then this function returns just the final configuration object.
-                If True, then this functions returns a :obj:`Tuple(config, unused_kwargs)` where `unused_kwargs` is a
-                dictionary consisting of the key/value pairs whose keys are not configuration attributes: ie the part
-                of kwargs which has not been used to update `config` and is otherwise ignored.
+            return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                If :obj:`False`, then this function returns just the final configuration object.
+
+                If :obj:`True`, then this functions returns a :obj:`Tuple(config, unused_kwargs)` where `unused_kwargs`
+                is a dictionary consisting of the key/value pairs whose keys are not configuration attributes: i.e.,
+                the part of ``kwargs`` which has not been used to update ``config`` and is otherwise ignored.
+            kwargs (:obj:`Dict[str, Any]`, `optional`):
+                The values in kwargs of any keys which are configuration attributes will be used to override the loaded
+                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is
+                controlled by the ``return_unused_kwargs`` keyword parameter.
 
         Returns:
-            :class:`PretrainedConfig`: An instance of a configuration object
+            :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
 
         Examples::
 
@@ -202,17 +289,17 @@ class PretrainedConfig(object):
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
-    def get_config_dict(cls, pretrained_model_name_or_path: str, **kwargs) -> Tuple[Dict, Dict]:
+    def get_config_dict(cls, pretrained_model_name_or_path: str, **kwargs) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
-        From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used
-        for instantiating a Config using `from_dict`.
+        From a ``pretrained_model_name_or_path``, resolve to a dictionary of parameters, to be used
+        for instantiating a :class:`~transformers.PretrainedConfig` using ``from_dict``.
 
         Parameters:
-            pretrained_model_name_or_path (:obj:`string`):
+            pretrained_model_name_or_path (:obj:`str`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
 
         Returns:
-            :obj:`Tuple[Dict, Dict]`: The dictionary that will be used to instantiate the configuration object.
+            :obj:`Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
         cache_dir = kwargs.pop("cache_dir", None)
@@ -267,20 +354,20 @@ class PretrainedConfig(object):
         return config_dict, kwargs
 
     @classmethod
-    def from_dict(cls, config_dict: Dict, **kwargs) -> "PretrainedConfig":
+    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "PretrainedConfig":
         """
-        Constructs a `Config` from a Python dictionary of parameters.
+        Instantiates a :class:`~transformers.PretrainedConfig` from a Python dictionary of parameters.
 
         Args:
-            config_dict (:obj:`Dict[str, any]`):
-                Dictionary that will be used to instantiate the configuration object. Such a dictionary can be retrieved
-                from a pre-trained checkpoint by leveraging the :func:`~transformers.PretrainedConfig.get_config_dict`
-                method.
-            kwargs (:obj:`Dict[str, any]`):
+            config_dict (:obj:`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
+                :func:`~transformers.PretrainedConfig.get_config_dict` method.
+            kwargs (:obj:`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            :class:`PretrainedConfig`: An instance of a configuration object
+            :class:`PretrainedConfig`: The configuration object instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
@@ -307,14 +394,14 @@ class PretrainedConfig(object):
     @classmethod
     def from_json_file(cls, json_file: str) -> "PretrainedConfig":
         """
-        Constructs a `Config` from the path to a json file of parameters.
+        Instantiates a :class:`~transformers.PretrainedConfig` from the path to a JSON file of parameters.
 
         Args:
-            json_file (:obj:`string`):
+            json_file (:obj:`str`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            :class:`PretrainedConfig`: An instance of a configuration object
+            :class:`PretrainedConfig`: The configuration object instantiated from that JSON file.
 
         """
         config_dict = cls._dict_from_json_file(json_file)
@@ -332,14 +419,14 @@ class PretrainedConfig(object):
     def __repr__(self):
         return "{} {}".format(self.__class__.__name__, self.to_json_string())
 
-    def to_diff_dict(self):
+    def to_diff_dict(self) -> Dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default
         config attributes for better readability and serializes to a Python
         dictionary.
 
         Returns:
-            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         config_dict = self.to_dict()
 
@@ -355,28 +442,29 @@ class PretrainedConfig(object):
 
         return serializable_config_dict
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
         return output
 
-    def to_json_string(self, use_diff=True):
+    def to_json_string(self, use_diff: bool = True) -> str:
         """
         Serializes this instance to a JSON string.
 
         Args:
-            use_diff (:obj:`bool`):
-                If set to True, only the difference between the config instance and the default PretrainedConfig() is serialized to JSON string.
+            use_diff (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                If set to ``True``, only the difference between the config instance and the default
+                ``PretrainedConfig()`` is serialized to JSON string.
 
         Returns:
-            :obj:`string`: String containing all the attributes that make up this configuration instance in JSON format.
+            :obj:`str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         if use_diff is True:
             config_dict = self.to_diff_dict()
@@ -384,26 +472,26 @@ class PretrainedConfig(object):
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path, use_diff=True):
+    def to_json_file(self, json_file_path: str, use_diff: bool = True):
         """
-        Save this instance to a json file.
+        Save this instance to a JSON file.
 
         Args:
-            json_file_path (:obj:`string`):
+            json_file_path (:obj:`str`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (:obj:`bool`):
-                If set to True, only the difference between the config instance and the default PretrainedConfig() is serialized to JSON file.
+            use_diff (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                If set to ``True``, only the difference between the config instance and the default
+                ``PretrainedConfig()`` is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
 
-    def update(self, config_dict: Dict):
+    def update(self, config_dict: Dict[str, Any]):
         """
-        Updates attributes of this class
-        with attributes from `config_dict`.
+        Updates attributes of this class with attributes from ``config_dict``.
 
         Args:
-            :obj:`Dict[str, any]`: Dictionary of attributes that shall be updated for this class.
+            config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that shall be updated for this class.
         """
         for key, value in config_dict.items():
             setattr(self, key, value)

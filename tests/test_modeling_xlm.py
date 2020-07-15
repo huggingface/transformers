@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -297,7 +297,7 @@ class XLMModelTester:
         self.parent.assertListEqual(list(result["loss"].size()), [])
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size])
 
-    def create_and_check_xlm_for_token_classification(
+    def create_and_check_xlm_token_classif(
         self,
         config,
         input_ids,
@@ -347,6 +347,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             XLMForQuestionAnswering,
             XLMForSequenceClassification,
             XLMForQuestionAnsweringSimple,
+            XLMForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -382,9 +383,9 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_sequence_classif(*config_and_inputs)
 
-    def test_xlm_for_token_classification(self):
+    def test_xlm_token_classif(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlm_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_xlm_token_classif(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -350,6 +350,17 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = T5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_export_to_onnx(self):
+        import tempfile
+
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs[0].return_tuple = True
+        model = T5Model(config_and_inputs[0])
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            torch.onnx.export(
+                model, config_and_inputs[1], f"{tmpdirname}/t5_test.onnx", export_params=True, opset_version=9,
+            )
 
 
 @require_torch

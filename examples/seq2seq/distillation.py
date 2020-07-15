@@ -92,8 +92,6 @@ class BartSummarizationDistiller(SummarizationModule):
         student = BartForConditionalGeneration(student_cfg)
         student, _ = init_student(student, teacher)
         save_dir = self.output_dir.joinpath("student")
-        save_dir.mkdir(exist_ok=True)
-
         self.copy_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
         student.save_pretrained(save_dir)
         hparams.model_name_or_path = str(save_dir)

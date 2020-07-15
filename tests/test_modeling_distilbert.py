@@ -17,10 +17,10 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, torch_device
 
 
 if is_torch_available():
@@ -32,6 +32,7 @@ if is_torch_available():
         DistilBertForTokenClassification,
         DistilBertForQuestionAnswering,
         DistilBertForSequenceClassification,
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     class DistilBertModelTester(object):
@@ -276,8 +277,8 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_multiple_choice(*config_and_inputs)
 
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     for model_name in DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-    #         model = DistilBertModel.from_pretrained(model_name)
-    #         self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = DistilBertModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)

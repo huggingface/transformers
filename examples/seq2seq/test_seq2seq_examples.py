@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from transformers import AutoTokenizer
+from transformers.testing_utils import require_multigpu
 
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
@@ -107,7 +108,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
         return cls
 
-    @unittest.skipUnless(torch.cuda.device_count() > 1, "skipping multiGPU test")
+    @require_multigpu
     def test_multigpu(self):
         updates = dict(no_teacher=True, freeze_encoder=True, gpus=2, sortish_sampler=False,)
         self._test_distiller_cli(updates)
@@ -198,7 +199,7 @@ def test_run_eval_bart(model):
     assert not output_file_name.exists()
     articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
     _dump_articles(input_file_name, articles)
-    testargs = ["run_eval.py", str(input_file_name), str(output_file_name), model]  # TODO: test score_path
+    testargs = ["run_eval.py", model, str(input_file_name), str(output_file_name)]  # TODO: test score_path
     with patch.object(sys, "argv", testargs):
         run_generate()
         assert Path(output_file_name).exists()
@@ -222,10 +223,30 @@ def test_finetune(model):
         output_dir=output_dir,
         do_predict=True,
         task=task,
+        src_lang="en_XX",
+        tgt_lang="ro_RO",
+        freeze_encoder=True,
+        freeze_embeds=True,
     )
     assert "n_train" in args_d
     args = argparse.Namespace(**args_d)
-    main(args)
+    module = main(args)
+
+    input_embeds = module.model.get_input_embeddings()
+    assert not input_embeds.weight.requires_grad
+    if model == T5_TINY:
+        lm_head = module.model.lm_head
+        assert not lm_head.weight.requires_grad
+        assert (lm_head.weight == input_embeds.weight).all().item()
+
+    else:
+        bart = module.model.model
+        embed_pos = bart.decoder.embed_positions
+        assert not embed_pos.weight.requires_grad
+        assert not bart.shared.weight.requires_grad
+        # check that embeds are the same
+        assert bart.decoder.embed_tokens == bart.encoder.embed_tokens
+        assert bart.decoder.embed_tokens == bart.shared
 
 
 @pytest.mark.parametrize(
@@ -238,7 +259,12 @@ def test_dataset(tok):
     max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
     trunc_target = 4
     train_dataset = SummarizationDataset(
-        tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
+        tokenizer,
+        data_dir=tmp_dir,
+        type_path="train",
+        max_source_length=20,
+        max_target_length=trunc_target,
+        tgt_lang="ro_RO",
     )
     dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
     for batch in dataloader:
