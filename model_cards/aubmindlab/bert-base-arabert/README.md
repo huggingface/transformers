@@ -1,5 +1,5 @@
 ---
-language: arabic
+language: ar
 ---
 
 # AraBERT : Pre-training BERT for Arabic Language Understanding

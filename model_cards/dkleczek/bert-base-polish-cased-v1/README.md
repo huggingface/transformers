@@ -1,5 +1,5 @@
 ---
-language: polish
+language: pl
 thumbnail: https://raw.githubusercontent.com/kldarek/polbert/master/img/polbert.png
 ---
 
