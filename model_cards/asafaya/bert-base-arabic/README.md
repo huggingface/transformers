@@ -1,5 +1,5 @@
 ---
-language: arabic
+language: ar
 ---
 
 # Arabic BERT Model

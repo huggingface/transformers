@@ -1,12 +1,5 @@
 ---
-language: hebrew
-tags:
-- pytorch 
-- tf 
-- gpt2 
-- lm-head 
-- causal-lm 
-- pipeline:text-generation 
+language: he
 
 thumbnail: https://avatars1.githubusercontent.com/u/3617152?norod.jpg
 widget:
