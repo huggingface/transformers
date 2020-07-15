@@ -1,5 +1,5 @@
 ---
-language: chinese
+language: zh
 ---
 
 ## roberta_chinese_large

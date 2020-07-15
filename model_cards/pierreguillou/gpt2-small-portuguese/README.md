@@ -1,5 +1,5 @@
 ---
-language: Portuguese
+language: pt
 ---
 
 # GPorTuguese-2: a Language Model for Portuguese text generation (and more NLP tasks...)
