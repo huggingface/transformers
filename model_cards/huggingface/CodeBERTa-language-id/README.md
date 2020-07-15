@@ -5,23 +5,9 @@ tags:
 - test
 datasets:
 - aeslc
+metrics:
 - bertscore
 ---
-
----
-language: "ISO 639-1 code for your language, or `multilingual`"
-thumbnail: "url to a thumbnail used in social sharing"
-tags:
-- array
-- of
-- tags
-license: "any valid license identifier"
-datasets:
-- array of dataset identifiers
-metrics:
-- array of metric identifiers
----
-
 
 # CodeBERTa-language-id: The World’s fanciest programming language identification algo 🤯
 
