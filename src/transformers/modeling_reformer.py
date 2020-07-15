@@ -884,7 +884,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # adapt bucket_idx for batch and hidden states for index select
         bucket_idx_batch_offset = sequence_length * (
-            batch_size * torch.arange(relevant_bucket_idx_chunk.shape[-1]) // relevant_bucket_idx_chunk.shape[-1]
+            batch_size * torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long) // relevant_bucket_idx_chunk.shape[-1]
         )
         relevant_bucket_idx_chunk_flat_batch = relevant_bucket_idx_chunk + bucket_idx_batch_offset
         hidden_states = hidden_states.reshape((-1, self.hidden_size))
