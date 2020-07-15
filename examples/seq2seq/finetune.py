@@ -130,7 +130,7 @@ class SummarizationModule(BaseTransformer):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
         y_ids = y[:, :-1].contiguous()  # Why this line?
-        lm_labels = y[:, 1:].clone()
+        lm_labels = y[:, 1:].clone()  # why clone?
         outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, use_cache=False)
 
         if self.hparams.label_smoothing_eps == 0:
