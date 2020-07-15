@@ -969,7 +969,7 @@ class XLNetModel(XLNetPreTrainedModel):
             # and returns all of the past and current hidden states.
             cutoff = 0
         else:
-            # If `use_cache` is active but no `mem_len` is defined, the model returns the last `mem_len` hidden
+            # If `use_cache` is active and `mem_len` is defined, the model returns the last `mem_len` hidden
             # states. This is the preferred setting for training and long-form generation.
             cutoff = -self.mem_len
         if prev_mem is None:
