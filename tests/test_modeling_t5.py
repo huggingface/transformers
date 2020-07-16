@@ -143,12 +143,6 @@ class T5ModelTester:
             decoder_attention_mask=decoder_attention_mask,
         )
         decoder_output, decoder_past, encoder_output = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-
-        result = {
-            "encoder_output": encoder_output,
-            "decoder_output": decoder_output,
-            "decoder_past": decoder_past,
-        }
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
         self.parent.assertEqual(len(decoder_past), 2)
