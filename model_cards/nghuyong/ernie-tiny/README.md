@@ -17,7 +17,7 @@ More details: https://github.com/PaddlePaddle/ERNIE/blob/develop/distill/README.
 |:---:|:---:|:---:|
 |ernie-tiny| English |Layer:3, Hidden:1024, Heads:16|
 
-This released pytorch model is converted from the official released PaddlePaddle ERNIE model and 
+This released pytorch model is converted from the officially released PaddlePaddle ERNIE model and 
 a series of experiments have been conducted to check the accuracy of the conversion.
 
 - Official PaddlePaddle ERNIE repo: https://github.com/PaddlePaddle/ERNIE
