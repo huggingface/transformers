@@ -345,16 +345,16 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @slow
     @require_torch
-    def test_integration_torch_dialogue(self):
+    def test_integration_torch_conversation(self):
         # When
-        nlp = pipeline(task="dialogue", device=DEFAULT_DEVICE_NUM)
+        nlp = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
         # Then
         self.assertEqual(len(conversation_1.past_user_inputs), 0)
         self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
-        result = nlp([conversation_1, conversation_2], do_sample=False)
+        result = nlp([conversation_1, conversation_2], do_sample=False, max_length=1000)
         # Then
         self.assertEqual(result, [conversation_1, conversation_2])
         self.assertEqual(len(result[0].past_user_inputs), 1)
@@ -367,19 +367,17 @@ class MonoColumnInputTestCase(unittest.TestCase):
         self.assertEqual(result[1].generated_responses[0], "The Last Question")
         # When
         conversation_2.add_user_input("Why do you recommend it?")
-        result = nlp([conversation_1, conversation_2], do_sample=False)
+        result = nlp(conversation_2, do_sample=False, max_length=1000)
         # Then
-        self.assertEqual(result, [conversation_1, conversation_2])
-        self.assertEqual(len(result[0].past_user_inputs), 1)
-        self.assertEqual(len(result[1].past_user_inputs), 2)
-        self.assertEqual(len(result[0].generated_responses), 1)
-        self.assertEqual(len(result[1].generated_responses), 2)
-        self.assertEqual(result[1].past_user_inputs[1], "Why do you recommend it?")
-        self.assertEqual(result[1].generated_responses[1], "It's a good book.")
+        self.assertEqual(result, conversation_2)
+        self.assertEqual(len(result.past_user_inputs), 2)
+        self.assertEqual(len(result.generated_responses), 2)
+        self.assertEqual(result.past_user_inputs[1], "Why do you recommend it?")
+        self.assertEqual(result.generated_responses[1], "It's a good book.")
 
     @slow
     @require_torch
-    def test_integration_torch_dialogue_truncated_history(self):
+    def test_integration_torch_conversation_truncated_history(self):
         # When
         nlp = pipeline(task="conversational", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
@@ -408,7 +406,7 @@ QA_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]
 
 
 class DialoguePipelineTests(unittest.TestCase):
-    def _test_dialogue_pipeline(self, nlp):
+    def _test_conversation_pipeline(self, nlp):
         valid_inputs = [Conversation("Hi there!"), [Conversation("Hi there!"), Conversation("How are you?")]]
         invalid_inputs = ["Hi there!", Conversation()]
         self.assertIsNotNone(nlp)
@@ -427,16 +425,16 @@ class DialoguePipelineTests(unittest.TestCase):
         self.assertRaises(Exception, nlp, invalid_inputs)
 
     @require_torch
-    def test_torch_dialogue(self):
+    def test_torch_conversation(self):
         for model_name in DIALOGUE_FINETUNED_MODELS:
             nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name)
-            self._test_dialogue_pipeline(nlp)
+            self._test_conversation_pipeline(nlp)
 
     @require_tf
-    def test_tf_dialogue(self):
+    def test_tf_conversation(self):
         for model_name in DIALOGUE_FINETUNED_MODELS:
             nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name, framework="tf")
-            self._test_dialogue_pipeline(nlp)
+            self._test_conversation_pipeline(nlp)
 
 
 class QAPipelineTests(unittest.TestCase):
