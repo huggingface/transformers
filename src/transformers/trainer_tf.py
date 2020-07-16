@@ -335,7 +335,7 @@ class TFTrainer:
             def test_step(features, labels):
                 per_example_loss, logits = self._run_model(features, labels, False)
 
-                self.valid_loss.update_state(per_example_loss)
+                self.eval_loss.update_state(per_example_loss)
 
                 return logits
 
