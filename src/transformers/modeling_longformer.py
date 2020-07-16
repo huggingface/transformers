@@ -417,6 +417,10 @@ class LongformerSelfAttention(nn.Module):
             :, -1, window_overlap:, : window_overlap + 1
         ]
         # - copying the lower triangle
+
+        import ipdb
+        ipdb.set_trace()
+
         diagonal_attention_scores[:, 1:, :, :window_overlap] = diagonal_chunked_attention_scores[
             :, :, -(window_overlap + 1) : -1, window_overlap + 1 :
         ]
@@ -465,10 +469,6 @@ class LongformerSelfAttention(nn.Module):
             chunked_value_stride[2],
         )
         chunked_value = padded_value.as_strided(size=chunked_value_size, stride=chunked_value_stride)
-
-        import ipdb
-
-        ipdb.set_trace()
 
         chunked_attn_probs = self._pad_and_diagonalize(chunked_attn_probs)
 

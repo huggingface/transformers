@@ -293,6 +293,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # - copying the lower triangle
+
+        import ipdb
+        ipdb.set_trace()
+
         diagonal_attn_scores_low_triang = tf.concat(
             [
                 tf.zeros((batch_size * num_heads, 1, window_overlap, window_overlap)),
