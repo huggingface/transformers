@@ -331,7 +331,7 @@ class TFTrainer:
         return output.metrics
 
     def _create_test_routines(self):
-        with self.args.strategy:
+        with self.args.strategy.scope():
             def test_step(features, labels):
                 per_example_loss, logits = self._run_model(features, labels, False)
 
@@ -398,32 +398,30 @@ class TFTrainer:
             else:
                 epochs_trained = 1
 
-        tf.summary.experimental.set_step(iterations)
+            tf.summary.experimental.set_step(iterations)
 
-        epochs = 1 if self.args.max_steps > 0 else self.args.num_train_epochs
+            epochs = 1 if self.args.max_steps > 0 else self.args.num_train_epochs
 
-        if self.args.fp16:
-            policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-            tf.keras.mixed_precision.experimental.set_policy(policy)
+            if self.args.fp16:
+                policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
+                tf.keras.mixed_precision.experimental.set_policy(policy)
 
-        with self.tb_writer.as_default():
-            tf.summary.text("args", self.args.to_json_string())
+            with self.tb_writer.as_default():
+                tf.summary.text("args", self.args.to_json_string())
 
-        self.tb_writer.flush()
+            self.tb_writer.flush()
 
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", self.num_train_examples)
-        logger.info("  Num Epochs = %d", epochs)
-        logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
-        logger.info(
-            "  Total train batch size (w. parallel, distributed & accumulation) = %d", self.total_train_batch_size
-        )
-        logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-        logger.info("  Total optimization steps = %d", t_total)
+            logger.info("***** Running training *****")
+            logger.info("  Num examples = %d", self.num_train_examples)
+            logger.info("  Num Epochs = %d", epochs)
+            logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
+            logger.info(
+                "  Total train batch size (w. parallel, distributed & accumulation) = %d", self.total_train_batch_size
+            )
+            logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
+            logger.info("  Total optimization steps = %d", t_total)
 
-        self.train_loss = tf.keras.metrics.Sum()
-
-        with self.args.strategy:
+            self.train_loss = tf.keras.metrics.Sum()
             distributed_training_steps = self._create_routines()
             start_time = datetime.datetime.now()
 
@@ -486,7 +484,7 @@ class TFTrainer:
             delattr(self, "_past")
 
     def _create_training_routines(self):
-        with self.args.strategy:
+        with self.args.strategy.scope():
             def training_step(features, labels):
                 per_example_loss, _ = self._run_model(features, labels, True)
                 scaled_loss = per_example_loss / self.total_train_batch_size
