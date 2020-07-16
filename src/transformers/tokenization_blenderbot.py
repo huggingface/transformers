@@ -194,15 +194,9 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         token = re.sub('\s{2,}', ' ', token)
         if "\n" in token:
             token = token.replace("\n", " __newln__")
-            # token = " ".join(token.split(' '))
-        # print(token + '==')
-        # print('=='*100)
-        # if token.split(' ')[0] in self.encoder:
-        #     return token
         
         tokens = token.split(' ')
         words = []
-        #print(tokens)
         for token in tokens:
             token = token.lower()
             word = tuple(token)
@@ -224,7 +218,6 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
                 
                 while i < len(word):
                     try:
-                        #j = word.index(first, i)
                         j = word.index(first, i)
                         new_word.extend(word[i:j])
                         i = j
@@ -249,8 +242,6 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             
             self.cache[token] = word
             words.append(word)
-        # print(words)
-        # print('**'*50)
         return ' '.join(words)
 
     def _tokenize(self, text):
