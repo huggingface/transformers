@@ -2,12 +2,13 @@
 # the original blenderbot is also using byte-level bpe tokenization based on subword-nmt
 import json
 import logging
+from typing import List
 import os
 
 import regex as re
 
 from .tokenization_roberta import RobertaTokenizer
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import AddedToken, PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,67 @@ class BlenderbotTokenizer(RobertaTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    def __init__(
+        self,
+        vocab_file,
+        merges_file,
+        errors="replace",
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        add_prefix_space=True,
+        **kwargs
+    ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
+        super().__init__(
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+
+    
+    
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: List[int] = None
+    ):
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A RoBERTa sequence has the following format:
+
+        - single sequence: `` X </s>``
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        return token_ids_0 + [self.sep_token_id]
+        
 
 
 BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
@@ -127,47 +189,69 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
-        word = tuple(token)
-        word = tuple(list(word[:-1]) + [word[-1] + "</w>"])
-        pairs = get_pairs(word)
+        token = re.sub('([.,!?()])', r' \1', token)
+        token = re.sub('(\')', r' \1 ', token)
+        token = re.sub('\s{2,}', ' ', token)
+        if "\n" in token:
+            token = token.replace("\n", " __newln__")
+            # token = " ".join(token.split(' '))
+        # print(token + '==')
+        # print('=='*100)
+        # if token.split(' ')[0] in self.encoder:
+        #     return token
+        
+        tokens = token.split(' ')
+        words = []
+        #print(tokens)
+        for token in tokens:
+            token = token.lower()
+            word = tuple(token)
+            word = tuple(list(word[:-1]) + [word[-1] + "</w>"])
+            pairs = get_pairs(word)
 
-        if not pairs:
-            return token
+            if not pairs:
+                words.append(token)
+                continue
+            
 
-        while True:
-            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
-            if bigram not in self.bpe_ranks:
-                break
-            first, second = bigram
-            new_word = []
-            i = 0
-            while i < len(word):
-                try:
-                    j = word.index(first, i)
-                except ValueError:
-                    new_word.extend(word[i:])
+            while True:
+                bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
+                if bigram not in self.bpe_ranks:
+                    break
+                first, second = bigram
+                new_word = []
+                i = 0
+                
+                while i < len(word):
+                    try:
+                        #j = word.index(first, i)
+                        j = word.index(first, i)
+                        new_word.extend(word[i:j])
+                        i = j
+                    except ValueError:
+                        new_word.extend(word[i:])
+                        break
+                    
+                    if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
+                        new_word.append(first + second)
+                        i += 2
+                    else:
+                        new_word.append(word[i])
+                        i += 1
+                new_word = tuple(new_word)
+                word = new_word
+                if len(word) == 1:
                     break
                 else:
-                    new_word.extend(word[i:j])
-                    i = j
-
-                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
-                    new_word.append(first + second)
-                    i += 2
-                else:
-                    new_word.append(word[i])
-                    i += 1
-            new_word = tuple(new_word)
-            word = new_word
-            if len(word) == 1:
-                break
-            else:
-                pairs = get_pairs(word)
-        print(pairs)
-        word = "@@ ".join(word)
-        word = word[:-4]
-        self.cache[token] = word
-        return word
+                    pairs = get_pairs(word)
+            word = "@@ ".join(word)
+            word = word[:-4]
+            
+            self.cache[token] = word
+            words.append(word)
+        # print(words)
+        # print('**'*50)
+        return ' '.join(words)
 
     def _tokenize(self, text):
         """ Tokenize a string.
@@ -182,6 +266,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
+        token = token.lower()
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
