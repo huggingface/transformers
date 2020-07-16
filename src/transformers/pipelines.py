@@ -182,7 +182,7 @@ class NLIForZeroShotArgumentHandler(ArgumentHandler):
         
         sequence_pairs = []
         for sequence in sequences:
-            sequence_pairs += [[sequence, hypothesis_template.format(label)] for label in labels]
+            sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
         
         return sequence_pairs
 
@@ -838,7 +838,7 @@ class NLIForZeroShotPipeline(Pipeline):
     def __init__(self, args_parser=NLIForZeroShotArgumentHandler(), *args, **kwargs):
         super().__init__(*args, args_parser=args_parser, **kwargs)
 
-    def __call__(self, sequences, candidate_labels, hypothesis_template="This text is about {}.", multi_class=False):
+    def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
         num_sequences = 1 if isinstance(sequences, str) else len(sequences)
         num_labels = 1 if isinstance(candidate_labels, str) else len(candidate_labels)
