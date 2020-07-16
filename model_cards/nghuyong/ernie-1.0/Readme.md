@@ -1,3 +1,7 @@
+---
+language: zh
+---
+
 # ERNIE-1.0
 
 ## Introduction
