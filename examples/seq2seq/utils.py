@@ -19,12 +19,8 @@ import linecache
 from transformers import BartTokenizer
 
 
-def encode_line(
-    tokenizer, line, max_length, pad_to_max_length=True, return_tensors="pt"
-):
-    extra_kw = (
-        {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
-    )
+def encode_line(tokenizer, line, max_length, pad_to_max_length=True, return_tensors="pt"):
+    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
     return tokenizer(
         [line],
         max_length=max_length,
@@ -83,9 +79,7 @@ class SummarizationDataset(Dataset):
         self.tokenizer = tokenizer
 
         if hasattr(self.tokenizer, "set_lang"):
-            assert (
-                tgt_lang is not None
-            ), "--tgt_lang must be passed to build a translation"
+            assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
             self.tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
 
         if n_obs is not None:
@@ -121,9 +115,7 @@ class SummarizationDataset(Dataset):
     @staticmethod
     def trim_seq2seq_batch(batch, pad_token_id):
         y = trim_batch(batch["decoder_input_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(
-            batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"]
-        )
+        source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
         return source_ids, source_mask, y
 
     def collate_fn(self, batch) -> dict:
@@ -132,9 +124,7 @@ class SummarizationDataset(Dataset):
         target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
         pad_token_id = self.pad_token_id
         y = trim_batch(target_ids, pad_token_id)
-        source_ids, source_mask = trim_batch(
-            input_ids, pad_token_id, attention_mask=masks
-        )
+        source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
         batch = {
             "input_ids": source_ids,
             "attention_mask": source_mask,
@@ -166,23 +156,15 @@ class SortishSampler(Sampler):
         idxs = np.random.permutation(len(self.data))
         sz = self.bs * 50
         ck_idx = [idxs[i : i + sz] for i in range(0, len(idxs), sz)]
-        sort_idx = np.concatenate(
-            [sorted(s, key=self.key, reverse=True) for s in ck_idx]
-        )
+        sort_idx = np.concatenate([sorted(s, key=self.key, reverse=True) for s in ck_idx])
         sz = self.bs
         ck_idx = [sort_idx[i : i + sz] for i in range(0, len(sort_idx), sz)]
-        max_ck = np.argmax(
-            [self.key(ck[0]) for ck in ck_idx]
-        )  # find the chunk with the largest key,
+        max_ck = np.argmax([self.key(ck[0]) for ck in ck_idx])  # find the chunk with the largest key,
         ck_idx[0], ck_idx[max_ck] = (
             ck_idx[max_ck],
             ck_idx[0],
         )  # then make sure it goes first.
-        sort_idx = (
-            np.concatenate(np.random.permutation(ck_idx[1:]))
-            if len(ck_idx) > 1
-            else np.array([], dtype=np.int)
-        )
+        sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
         sort_idx = np.concatenate((ck_idx[0], sort_idx))
         return iter(sort_idx)
 
@@ -245,9 +227,7 @@ def get_git_info():
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
 
-def calculate_rouge(
-    output_lns: List[str], reference_lns: List[str], use_stemmer=True
-) -> Dict:
+def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
     scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
 
@@ -276,9 +256,7 @@ def assert_all_frozen(model):
     model_grads: List[bool] = list(grad_status(model))
     n_require_grad = sum(lmap(int, model_grads))
     npars = len(model_grads)
-    assert not any(
-        model_grads
-    ), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
+    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
 
 
 def assert_not_all_frozen(model):

@@ -81,21 +81,15 @@ class SummarizationModule(BaseTransformer):
             "val": self.hparams.n_val,
             "test": self.hparams.n_test,
         }
-        self.n_obs = {
-            k: v if v >= 0 else None for k, v in n_observations_per_split.items()
-        }
+        self.n_obs = {k: v if v >= 0 else None for k, v in n_observations_per_split.items()}
 
         self.target_lens = {
             "train": self.hparams.max_target_length,
             "val": self.hparams.val_max_target_length,
             "test": self.hparams.test_max_target_length,
         }
-        assert (
-            self.target_lens["train"] <= self.target_lens["val"]
-        ), f"target_lens: {self.target_lens}"
-        assert (
-            self.target_lens["train"] <= self.target_lens["test"]
-        ), f"target_lens: {self.target_lens}"
+        assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
+        assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
 
         if self.hparams.freeze_embeds:
             self.freeze_embeds()
@@ -138,12 +132,7 @@ class SummarizationModule(BaseTransformer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(
-            source_ids,
-            attention_mask=source_mask,
-            decoder_input_ids=y_ids,
-            labels=lm_labels,
-        )
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=lm_labels,)
         loss = outputs[0]
         return (loss,)
 
@@ -157,17 +146,10 @@ class SummarizationModule(BaseTransformer):
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
         self.step_count += 1
-        losses = {
-            k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names
-        }
+        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        rouges = {
-            k: np.array([x[k] for x in outputs]).mean()
-            for k in self.metric_names + ["gen_time", "summ_len"]
-        }
-        rouge_tensor: torch.FloatTensor = torch.tensor(rouges[self.val_metric]).type_as(
-            loss
-        )
+        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "summ_len"]}
+        rouge_tensor: torch.FloatTensor = torch.tensor(rouges[self.val_metric]).type_as(loss)
         rouges.update({k: v.item() for k, v in losses.items()})
         losses.update(rouges)
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
@@ -190,9 +172,7 @@ class SummarizationModule(BaseTransformer):
 
     def _generative_step(self, batch: dict) -> dict:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(
-            batch, pad_token_id
-        )
+        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         t0 = time.time()
         generated_ids = self.model.generate(
             input_ids=source_ids,
@@ -207,9 +187,7 @@ class SummarizationModule(BaseTransformer):
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         rouge: Dict = self.calc_generative_metrics(preds, target)
         summ_len = np.mean(lmap(len, generated_ids))
-        base_metrics.update(
-            gen_time=gen_time, summ_len=summ_len, preds=preds, target=target, **rouge
-        )
+        base_metrics.update(gen_time=gen_time, summ_len=summ_len, preds=preds, target=target, **rouge)
         return base_metrics
 
     def test_step(self, batch, batch_idx):
@@ -230,9 +208,7 @@ class SummarizationModule(BaseTransformer):
         )
         return dataset
 
-    def get_dataloader(
-        self, type_path: str, batch_size: int, shuffle: bool = False
-    ) -> DataLoader:
+    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
         sampler = None
         # if self.hparams.sortish_sampler and type_path == "train":
@@ -251,21 +227,14 @@ class SummarizationModule(BaseTransformer):
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
-        dataloader = self.get_dataloader(
-            "train", batch_size=self.hparams.train_batch_size, shuffle=True
-        )
+        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
-            (
-                len(dataloader.dataset)
-                // (self.hparams.train_batch_size * max(1, self.hparams.gpus))
-            )
+            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.gpus)))
             // self.hparams.gradient_accumulation_steps
             * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
-            self.opt,
-            num_warmup_steps=self.hparams.warmup_steps,
-            num_training_steps=t_total,
+            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total,
         )
         if max(scheduler.get_last_lr()) > 0:
             warnings.warn("All learning rates are 0")
@@ -320,38 +289,19 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
         parser.add_argument(
-            "--logger",
-            type=str,
-            choices=["default", "wandb", "wandb_shared"],
-            default="default",
+            "--logger", type=str, choices=["default", "wandb", "wandb_shared"], default="default",
         )
         parser.add_argument(
-            "--n_train",
-            type=int,
-            default=-1,
-            required=False,
-            help="# examples. -1 means use all.",
+            "--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.",
         )
         parser.add_argument(
-            "--n_val",
-            type=int,
-            default=500,
-            required=False,
-            help="# examples. -1 means use all.",
+            "--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.",
         )
         parser.add_argument(
-            "--n_test",
-            type=int,
-            default=-1,
-            required=False,
-            help="# examples. -1 means use all.",
+            "--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.",
         )
         parser.add_argument(
-            "--task",
-            type=str,
-            default="summarization",
-            required=False,
-            help="# examples. -1 means use all.",
+            "--task", type=str, default="summarization", required=False, help="# examples. -1 means use all.",
         )
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
@@ -369,12 +319,8 @@ class TranslationModule(SummarizationModule):
         super().__init__(hparams, **kwargs)
         self.dataset_kwargs["src_lang"] = hparams.src_lang
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
-        if self.model.config.decoder_start_token_id is None and isinstance(
-            self.tokenizer, MBartTokenizer
-        ):
-            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[
-                hparams.tgt_lang
-            ]
+        if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
+            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
 
     def calc_generative_metrics(self, preds, target) -> dict:
         return calculate_bleu_score(preds, target)
@@ -383,11 +329,7 @@ class TranslationModule(SummarizationModule):
 def main(args, model=None) -> SummarizationModule:
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
-        raise ValueError(
-            "Output directory ({}) already exists and is not empty.".format(
-                args.output_dir
-            )
-        )
+        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
         if args.task == "summarization":
             model: SummarizationModule = SummarizationModule(args)
@@ -422,16 +364,12 @@ def main(args, model=None) -> SummarizationModule:
         return model
 
     model.hparams.test_checkpoint = ""
-    checkpoints = list(
-        sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True))
-    )
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
     if checkpoints:
         model.hparams.test_checkpoint = checkpoints[-1]
         trainer.resume_from_checkpoint = checkpoints[-1]
     trainer.logger.log_hyperparams(model.hparams)
-    trainer.test(
-        model
-    )  # this breaks in DDP, known lightning issue. See evaluate_checkpoint to recover metrics.
+    trainer.test(model)  # this breaks in DDP, known lightning issue. See evaluate_checkpoint to recover metrics.
     return model
 
 
