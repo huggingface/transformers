@@ -431,7 +431,7 @@ class TFTrainer:
                     self._past = None
 
                 for step, batch in enumerate(train_ds, 1):
-                    if self.global_step > 0 and self.global_step % self.args.steps_per_epoch == 0:
+                    if self.global_step > 0 and self.global_step % self.steps_per_epoch == 0:
                         break
 
                     self.global_step = iterations.numpy()
@@ -454,14 +454,12 @@ class TFTrainer:
                                 name="training", step=self.global_step, profiler_outdir=self.args.logging_dir
                             )
 
-                    if self.args.evaluate_during_training and self.global_step > 0 and self.global_step % self.args.eval_steps == 0:
+                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                         self.evaluate()
 
                     if (
-                        (self.global_step > 0
-                            and self.global_step % self.args.logging_steps == 0)
-                        or (self.global_step == 1
-                            and self.args.logging_first_step)
+                        self.global_step % self.args.logging_steps == 0
+                        or (self.global_step == 1 and self.args.logging_first_step)
                     ):
                         logs = {}
                         logs["loss"] = training_loss.numpy()
@@ -472,6 +470,7 @@ class TFTrainer:
 
                     if self.global_step % self.args.save_steps == 0:
                         ckpt_save_path = self.model.ckpt_manager.save()
+
                         logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
 
                 self.train_loss.reset_states()
