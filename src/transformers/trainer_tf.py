@@ -374,10 +374,10 @@ class TFTrainer:
 
         with self.args.strategy.scope():
             self.get_optimizers(num_training_steps=t_total)
-            iterations = self.optimizer[0].iterations
+            iterations = self.optimizers[0].iterations
             self.global_step = iterations.numpy()
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
-            ckpt = tf.train.Checkpoint(optimizer=self.optimizer[0], model=self.model)
+            ckpt = tf.train.Checkpoint(optimizer=self.optimizers[0], model=self.model)
             self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=self.args.save_total_limit)
 
             if self.model.ckpt_manager.latest_checkpoint:
