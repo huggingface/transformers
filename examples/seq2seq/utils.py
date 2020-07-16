@@ -65,7 +65,8 @@ def encode_line(
     line,
     max_length,
     pad_to_max_length=True,
-    return_tensors="pt"):
+    return_tensors="pt"
+):
     extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
     return tokenizer(
             [line],
@@ -73,8 +74,7 @@ def encode_line(
             padding="max_length" if pad_to_max_length else None,
             truncation=True,
             return_tensors=return_tensors,
-            **extra_kw,
-        )
+            **extra_kw)
 
 def lmap(f: Callable, x: Iterable) -> List:
     """list(map(f, x))"""
@@ -118,29 +118,30 @@ class SummarizationDataset(Dataset):
             tokenizer.set_lang(src_lang)  # HACK: only applies to mbart
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
-        self.source_file = os.path.join(data_dir, type_path + ".source"),
         self.len = self._get_examples(os.path.join(data_dir, type_path + ".source"))
+        self.source_file = os.path.join(data_dir, type_path + ".source")
         self.tgt_file = os.path.join(data_dir, type_path + ".target")
+        self.tokenizer = tokenizer
         
-        if hasattr(tokenizer, "set_lang"):
+        if hasattr(self.tokenizer, "set_lang"):
             assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
-            tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
+            self.tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
         
         if n_obs is not None:
             self.len = n_obs
-        self.pad_token_id = tokenizer.pad_token_id
+        self.pad_token_id = self.tokenizer.pad_token_id
 
     def __len__(self):
         return self.len
 
     def __getitem__(self, index):
-        source_line = linecache.getline(self.source_file, idx).rstrip("\n")
-        tgt_line = linecache.getline(self.tgt_file, idx).rstrip("\n")
-        source_inputs = encode_line(tokenizer,
+        source_line = linecache.getline(self.source_file, index).rstrip("\n")
+        tgt_line = linecache.getline(self.tgt_file, index).rstrip("\n")
+        source_inputs = encode_line(self.tokenizer,
             source_line,
             self.max_source_length)
         
-        target_inputs = encode_line(tokenizer,
+        target_inputs = encode_line(self.tokenizer,
             tgt_line,
             self.max_target_length)
 
@@ -152,8 +153,8 @@ class SummarizationDataset(Dataset):
     @staticmethod
     def _get_examples(data_file):
         with open(data_file) as f:
-        for i, l in enumerate(f):
-            pass
+            for i, l in enumerate(f):
+                pass
         return i + 1
 
     @staticmethod
@@ -176,8 +177,8 @@ class SummarizationDataset(Dataset):
     def tgt_lens(self):
         return lmap(len, self.target)
 
-    def make_sortish_sampler(self, batch_size):
-        return SortishSampler(self.source, batch_size)
+    #def make_sortish_sampler(self, batch_size):
+    #    return SortishSampler(self.source, batch_size)
 
 
 class SortishSampler(Sampler):
