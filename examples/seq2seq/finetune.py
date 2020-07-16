@@ -212,10 +212,10 @@ class SummarizationModule(BaseTransformer):
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
         sampler = None
-        # if self.hparams.sortish_sampler and type_path == "train":
-        #    assert self.hparams.gpus <= 1  # TODO: assert earlier
-        #    sampler = dataset.make_sortish_sampler(batch_size)
-        #    shuffle = False
+        if self.hparams.sortish_sampler and type_path == "train":
+            assert self.hparams.gpus <= 1  # TODO: assert earlier
+            sampler = dataset.make_sortish_sampler(batch_size)
+            shuffle = False
 
         dataloader = DataLoader(
             dataset,

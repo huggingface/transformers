@@ -73,7 +73,7 @@ class SummarizationDataset(Dataset):
             tokenizer.set_lang(src_lang)  # HACK: only applies to mbart
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
-        self.len = self._get_examples(os.path.join(data_dir, type_path + ".source"))
+        self.len, self.seq_lens = self._get_examples(os.path.join(data_dir, type_path + ".source"))
         self.source_file = os.path.join(data_dir, type_path + ".source")
         self.tgt_file = os.path.join(data_dir, type_path + ".target")
         self.tokenizer = tokenizer
@@ -107,10 +107,11 @@ class SummarizationDataset(Dataset):
 
     @staticmethod
     def _get_examples(data_file):
+        seq_lens = []
         with open(data_file) as f:
             for i, l in enumerate(f):
-                pass
-        return i + 1
+                seq_lens.append(len(l.split(' ')))
+        return i + 1, seq_lens
 
     @staticmethod
     def trim_seq2seq_batch(batch, pad_token_id):
@@ -132,12 +133,8 @@ class SummarizationDataset(Dataset):
         }
         return batch
 
-    @property
-    def tgt_lens(self):
-        return lmap(len, self.target)
-
-    # def make_sortish_sampler(self, batch_size):
-    #    return SortishSampler(self.source, batch_size)
+    def make_sortish_sampler(self, batch_size):
+        return SortishSampler(self.seq_lens, batch_size)
 
 
 class SortishSampler(Sampler):
@@ -147,7 +144,7 @@ class SortishSampler(Sampler):
         self.data, self.bs = data, batch_size
 
     def key(self, i):
-        return len(self.data[i])
+        return self.data[i]
 
     def __len__(self) -> int:
         return len(self.data)
