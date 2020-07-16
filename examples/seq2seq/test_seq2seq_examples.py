@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -215,6 +216,7 @@ def test_finetune(model):
     task = "translation" if model in [MBART_TINY, MARIAN_TINY] else "summarization"
     tmp_dir = make_test_data_dir()
     output_dir = tempfile.mkdtemp(prefix="output_")
+    max_num_seconds = 7  # if args_d['gpus'] == 1 else 3
     args_d.update(
         data_dir=tmp_dir,
         model_name_or_path=model,
@@ -231,7 +233,10 @@ def test_finetune(model):
     )
     assert "n_train" in args_d
     args = argparse.Namespace(**args_d)
+    tstart = time.time()
     module = main(args)
+    total_seconds = time.time() - tstart
+    assert total_seconds <= max_num_seconds
 
     input_embeds = module.model.get_input_embeddings()
     assert not input_embeds.weight.requires_grad
