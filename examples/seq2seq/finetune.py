@@ -334,7 +334,7 @@ def main(args, model=None) -> SummarizationModule:
         model.hparams.test_checkpoint = checkpoints[-1]
         trainer.resume_from_checkpoint = checkpoints[-1]
     trainer.logger.log_hyperparams(model.hparams)
-    
+
     # test() without a model tests using the best checkpoint automatically
     trainer.test()
     return model
