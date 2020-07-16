@@ -240,14 +240,21 @@ class Trainer:
                 if self.args.local_rank == -1
                 else DistributedSampler(self.train_dataset)
             )
-
-        data_loader = DataLoader(
-            self.train_dataset,
-            batch_size=self.args.train_batch_size,
-            sampler=train_sampler,
-            collate_fn=self.data_collator,
-            drop_last=self.args.dataloader_drop_last,
-        )
+        if isinstance(self.train_dataset,torch.utils.data.IterableDataset):
+            data_loader = DataLoader(
+                self.train_dataset,
+                batch_size=self.args.train_batch_size,
+                collate_fn=self.data_collator,
+                drop_last=self.args.dataloader_drop_last,
+                )
+        else:    
+            data_loader = DataLoader(
+                self.train_dataset,
+                batch_size=self.args.train_batch_size,
+                sampler=train_sampler,
+                collate_fn=self.data_collator,
+                drop_last=self.args.dataloader_drop_last,
+                )
 
         return data_loader
 
