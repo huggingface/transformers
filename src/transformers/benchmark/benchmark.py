@@ -88,7 +88,7 @@ class PyTorchBenchmark(Benchmark):
         if self.args.torchscript:
             config.torchscript = True
 
-        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        has_model_class_in_config = hasattr(config, "architectures") and len(config.architectures) > 0
         if not self.args.only_pretrain_model and has_model_class_in_config:
             try:
                 model_class = config.architectures[0]
@@ -138,7 +138,7 @@ class PyTorchBenchmark(Benchmark):
     def _prepare_train_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
 
-        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        has_model_class_in_config = hasattr(config, "architectures") and len(config.architectures) > 0
         if not self.args.only_pretrain_model and has_model_class_in_config:
             try:
                 model_class = config.architectures[0]
