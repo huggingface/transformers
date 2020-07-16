@@ -182,14 +182,6 @@ class SummarizationDataset(Dataset):
         batch = {"input_ids": source_ids, "attention_mask": source_mask, "decoder_input_ids": y}
         return batch
 
-    @property
-    def src_lens(self):  # Can delete?
-        return lmap(len, self.source)
-
-    @property
-    def tgt_lens(self):
-        return lmap(len, self.target)
-
     def make_sortish_sampler(self, batch_size):
         return SortishSampler(self.source, batch_size)
 
