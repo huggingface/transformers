@@ -248,6 +248,16 @@ def test_finetune(model):
         assert bart.decoder.embed_tokens == bart.encoder.embed_tokens
         assert bart.decoder.embed_tokens == bart.shared
 
+from .pack_dataset import pack_ds, packer_cli
+def test_pack_dataset():
+    tokenizer = AutoTokenizer.from_pretrained('facebook/mbart-large-cc25')
+    tmp_dir = Path(make_test_data_dir())
+    save_dir = Path(tempfile.mkdtemp(prefix="output_"))
+    pack_ds(tokenizer, tmp_dir, 128, save_dir)
+    orig_paths = set(tmp_dir.listdir())
+    new_paths = set(save_dir.listdir())
+    assert orig_paths == new_paths
+
 
 @pytest.mark.parametrize(
     ["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)]
