@@ -431,7 +431,7 @@ class TFTrainer:
                     self._past = None
 
                 for step, batch in enumerate(train_ds, 1):
-                    if self.global_step > 0 and self.global_step % self.steps_per_epoch == 0:
+                    if step == self.steps_per_epoch:
                         break
 
                     self.global_step = iterations.numpy()
@@ -477,7 +477,7 @@ class TFTrainer:
 
             end_time = datetime.datetime.now()
 
-            logger.info("Training took: {}", str(end_time - start_time))
+            logger.info("Training took: {}".format(str(end_time - start_time)))
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
