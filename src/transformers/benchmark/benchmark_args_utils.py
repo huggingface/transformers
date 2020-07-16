@@ -61,6 +61,7 @@ class BenchmarkArguments:
     no_tpu: bool = field(default=False, metadata={"help": "Whether to run on available tpu devices"})
     fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
     training: bool = field(default=False, metadata={"help": "Benchmark training of model"})
+    generate: bool = field(default=False, metadata={"help": "Benchmark auto-regressive generation of model"})
     verbose: bool = field(default=False, metadata={"help": "Verbose memory tracing"})
     no_speed: bool = field(default=False, metadata={"help": "Don't perform speed measurments"})
     no_memory: bool = field(default=False, metadata={"help": "Don't perform memory measurments"})
@@ -89,6 +90,14 @@ class BenchmarkArguments:
     train_memory_csv_file: str = field(
         default=f"train_memory_{round(time())}.csv",
         metadata={"help": "CSV filename used if saving memory results to csv for training."},
+    )
+    generate_time_csv_file: str = field(
+        default=f"generate_time_{round(time())}.csv",
+        metadata={"help": "CSV filename used if saving time results to csv for generation."},
+    )
+    generate_memory_csv_file: str = field(
+        default=f"generate_memory_{round(time())}.csv",
+        metadata={"help": "CSV filename used if saving memory results to csv for generation."},
     )
     env_info_csv_file: str = field(
         default=f"env_info_{round(time())}.csv",

@@ -82,6 +82,16 @@ class PyTorchBenchmark(Benchmark):
         _train = self._prepare_train_func(model_name, batch_size, sequence_length)
         return self._measure_memory(_train)
 
+    def _generate_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
+        _generate = self._prepare_generate_func(model_name, batch_size, sequence_length)
+        return self._measure_speed(_generate)
+
+    def _generate_memory(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> [Memory, Optional[MemorySummary]]:
+        _generate = self._prepare_generate_func(model_name, batch_size, sequence_length)
+        return self._measure_memory(_generate)
+
     def _prepare_inference_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
 
@@ -133,6 +143,39 @@ class PyTorchBenchmark(Benchmark):
             return outputs
 
         _forward = encoder_decoder_forward if config.is_encoder_decoder else encoder_forward
+        return _forward
+
+    def _prepare_generate_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
+        config = self.config_dict[model_name]
+
+        if self.args.torchscript:
+            raise NotImplementedError("Torchscript is currently not implemented for generation.")
+
+        try:
+            model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
+        except KeyError:
+            raise NotImplementedError(
+                f"{config.__class__} does not have a lm head and thus cannot make use of `generate(...)`. Please use one of the models in {list(MODEL_WITH_LM_HEAD_MAPPING.keys())}."
+            )
+
+        model.eval()
+        model.to(self.args.device)
+
+        # encoder-decoder has vocab size saved differently
+        vocab_size = config.vocab_size if hasattr(config, "vocab_size") else config.encoder.vocab_size
+        input_ids = torch.randint(vocab_size, (batch_size, 1), dtype=torch.long, device=self.args.device)
+
+        if self.args.fp16:
+            logger.info("Running training in Mixed Precision...")
+            assert self.args.is_gpu, "Mixed precision is possible only for GPU."
+            # amp seems to have memory leaks so that memory usage
+            # is measured using .half() for now https://github.com/NVIDIA/apex/issues/439
+            model.half()
+
+        def _forward():
+            outputs = model.generate(input_ids, max_length=sequence_length, eos_token_id=None, pad_token_id=0)
+            return outputs
+
         return _forward
 
     def _prepare_train_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:

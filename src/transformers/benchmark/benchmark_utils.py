@@ -55,8 +55,11 @@ BenchmarkOutput = namedtuple(
         "memory_inference_result",
         "time_train_result",
         "memory_train_result",
+        "time_generate_result",
+        "memory_generate_result",
         "inference_summary",
         "train_summary",
+        "generate_summary",
     ],
 )
 
@@ -613,6 +616,10 @@ class Benchmark(ABC):
         pass
 
     @abstractmethod
+    def _generate_speed(self, model_name: str, batch_size: int, sequence_length: int) -> float:
+        pass
+
+    @abstractmethod
     def _inference_memory(
         self, model_name: str, batch_size: int, sequence_length: int
     ) -> [Memory, Optional[MemorySummary]]:
@@ -624,11 +631,20 @@ class Benchmark(ABC):
     ) -> [Memory, Optional[MemorySummary]]:
         pass
 
+    @abstractmethod
+    def _generate_memory(
+        self, model_name: str, batch_size: int, sequence_length: int
+    ) -> [Memory, Optional[MemorySummary]]:
+        pass
+
     def inference_speed(self, *args, **kwargs) -> float:
         return separate_process_wrapper_fn(self._inference_speed, self.args.do_multi_processing)(*args, **kwargs)
 
     def train_speed(self, *args, **kwargs) -> float:
         return separate_process_wrapper_fn(self._train_speed, self.args.do_multi_processing)(*args, **kwargs)
+
+    def generate_speed(self, *args, **kwargs) -> float:
+        return separate_process_wrapper_fn(self._generate_speed, self.args.do_multi_processing)(*args, **kwargs)
 
     def inference_memory(self, *args, **kwargs) -> [Memory, Optional[MemorySummary]]:
         return separate_process_wrapper_fn(self._inference_memory, self.args.do_multi_processing)(*args, **kwargs)
@@ -636,12 +652,17 @@ class Benchmark(ABC):
     def train_memory(self, *args, **kwargs) -> [Memory, Optional[MemorySummary]]:
         return separate_process_wrapper_fn(self._train_memory, self.args.do_multi_processing)(*args, **kwargs)
 
+    def generate_memory(self, *args, **kwargs) -> [Memory, Optional[MemorySummary]]:
+        return separate_process_wrapper_fn(self._generate_memory, self.args.do_multi_processing)(*args, **kwargs)
+
     def run(self):
         result_dict = {model_name: {} for model_name in self.args.model_names}
         inference_result_time = copy.deepcopy(result_dict)
         inference_result_memory = copy.deepcopy(result_dict)
         train_result_time = copy.deepcopy(result_dict)
         train_result_memory = copy.deepcopy(result_dict)
+        generate_result_time = copy.deepcopy(result_dict)
+        generate_result_memory = copy.deepcopy(result_dict)
 
         for c, model_name in enumerate(self.args.model_names):
             self.print_fn(f"{c + 1} / {len(self.args.model_names)}")
@@ -655,8 +676,10 @@ class Benchmark(ABC):
             inference_result_memory[model_name] = copy.deepcopy(model_dict)
             train_result_time[model_name] = copy.deepcopy(model_dict)
             train_result_memory[model_name] = copy.deepcopy(model_dict)
+            generate_result_time[model_name] = copy.deepcopy(model_dict)
+            generate_result_memory[model_name] = copy.deepcopy(model_dict)
 
-            inference_summary = train_summary = None
+            inference_summary = train_summary = generate_summary = None
 
             for batch_size in self.args.batch_sizes:
                 for sequence_length in self.args.sequence_lengths:
@@ -675,6 +698,14 @@ class Benchmark(ABC):
                         if not self.args.no_speed:
                             time = self.train_speed(model_name, batch_size, sequence_length)
                             train_result_time[model_name]["result"][batch_size][sequence_length] = time
+
+                    if self.args.generate:
+                        if not self.args.no_memory:
+                            memory, generate_summary = self.generate_memory(model_name, batch_size, sequence_length)
+                            generate_result_memory[model_name]["result"][batch_size][sequence_length] = memory
+                        if not self.args.no_speed:
+                            time = self.generate_speed(model_name, batch_size, sequence_length)
+                            generate_result_time[model_name]["result"][batch_size][sequence_length] = time
 
         if not self.args.no_inference:
             if not self.args.no_speed:
@@ -714,6 +745,21 @@ class Benchmark(ABC):
                 self.print_fn("\n" + 20 * "=" + ("TRAIN - MEMOMRY - LINE BY LINE - SUMMARY").center(40) + 20 * "=")
                 self.print_memory_trace_statistics(train_summary)
 
+        if self.args.generate:
+            if not self.args.no_speed:
+                self.print_fn("\n" + 20 * "=" + ("GENERATE - SPEED - RESULTS").center(40) + 20 * "=")
+                self.print_results(generate_result_time, "Time in s")
+                self.save_to_csv(generate_result_time, self.args.generate_time_csv_file)
+
+            if not self.args.no_memory:
+                self.print_fn("\n" + 20 * "=" + ("GENERATE - MEMORY - RESULTS").center(40) + 20 * "=")
+                self.print_results(generate_result_memory, type_label="Memory in MB")
+                self.save_to_csv(generate_result_memory, self.args.train_memory_csv_file)
+
+            if self.args.trace_memory_line_by_line:
+                self.print_fn("\n" + 20 * "=" + ("GENERATE - MEMOMRY - LINE BY LINE - SUMMARY").center(40) + 20 * "=")
+                self.print_memory_trace_statistics(generate_summary)
+
         if not self.args.no_env_print:
             self.print_fn("\n" + 20 * "=" + ("ENVIRONMENT INFORMATION").center(40) + 20 * "=")
             self.print_fn(
@@ -731,8 +777,11 @@ class Benchmark(ABC):
             inference_result_memory,
             train_result_time,
             train_result_memory,
+            generate_result_time,
+            generate_result_memory,
             inference_summary,
             train_summary,
+            generate_summary,
         )
 
     @property

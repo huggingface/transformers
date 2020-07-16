@@ -101,6 +101,21 @@ class BenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.time_train_result)
         self.check_results_dict_not_empty(results.memory_train_result)
 
+    def test_generate_no_configs(self):
+        MODEL_ID = "sshleifer/tiny-gpt2"
+        benchmark_args = PyTorchBenchmarkArguments(
+            models=[MODEL_ID],
+            generate=True,
+            no_inference=True,
+            sequence_lengths=[8],
+            batch_sizes=[1],
+            no_multi_process=True,
+        )
+        benchmark = PyTorchBenchmark(benchmark_args)
+        results = benchmark.run()
+        self.check_results_dict_not_empty(results.time_generate_result)
+        self.check_results_dict_not_empty(results.memory_generate_result)
+
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_train_no_configs_fp16(self):
         MODEL_ID = "sshleifer/tiny-gpt2"
