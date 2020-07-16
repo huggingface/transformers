@@ -5,11 +5,11 @@ language: en
 # ERNIE-tiny
 
 ## Introduction
-ERNIE-tiny is the compressed model from [ERNIE 2.0](../ernie-2.0-en) base model through model structure compression and model distillation.
-Through compression, the performance of the ERNIE-tiny has only decreased by an average of 2.37% relative to ERNIE 2.0 base, 
-but it has increased by 8.35% compared to Google BERT, and the speed has increased by 4.3 times.
+ERNIE-tiny is a compressed model from [ERNIE 2.0](../ernie-2.0-en) base model through model structure compression and model distillation.
+Through compression, the performance of the ERNIE-tiny only decreases by an average of 2.37% compared to ERNIE 2.0 base, 
+but it outperforms Google BERT by 8.35%, and the speed increases by 4.3 times.
 
-More detail: https://github.com/PaddlePaddle/ERNIE/blob/develop/distill/README.md
+More details: https://github.com/PaddlePaddle/ERNIE/blob/develop/distill/README.md
 
 ## Released Model Info
 
@@ -17,11 +17,11 @@ More detail: https://github.com/PaddlePaddle/ERNIE/blob/develop/distill/README.m
 |:---:|:---:|:---:|
 |ernie-tiny| English |Layer:3, Hidden:1024, Heads:16|
 
-This released pytorch model is convert from the official released PaddlePaddle ERNIE model and 
-a serial experiments have been made to check the accuracy of the conversion.
+This released pytorch model is converted from the official released PaddlePaddle ERNIE model and 
+a series of experiments have been conducted to check the accuracy of the conversion.
 
-- Official PaddlePaddle ERNIE rep: https://github.com/PaddlePaddle/ERNIE
-- Pytorch Conversion rep :  https://github.com/nghuyong/ERNIE-Pytorch
+- Official PaddlePaddle ERNIE repo: https://github.com/PaddlePaddle/ERNIE
+- Pytorch Conversion repo:  https://github.com/nghuyong/ERNIE-Pytorch
 
 ## How to use
 ```Python
