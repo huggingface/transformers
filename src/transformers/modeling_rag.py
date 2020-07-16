@@ -26,10 +26,17 @@ logging.basicConfig(
     level=logging.WARNING  # if args.local_rank in [-1, 0] else logging.WARN,
 )
 
-# We may not need a separate encapsulation of a dataset with an index but keeping
-# it here for now as it may be easier to have it separate when implementing
-# multi-node training
+
 class Retriever(torch.nn.Module):
+    """
+    Encapsulation of the retrieval index. We may not need a separate class
+    for it given how Datasets are evolving but keeping
+    it here for now as it may be easier to have it separate when implementing
+    multi-node training.
+
+    TODO(piktus): Implement handling of multi-node training.
+    """
+
     def __init__(
         self,
         dataset,
@@ -50,6 +57,7 @@ class Retriever(torch.nn.Module):
         self.device = torch.device("cpu")
         self.index = self.build_index() if self.doc_encoder is not None else self.load_index()
 
+    # Build an index from scratch given a dataset. Higly inefficien.
     # Keeping this for now for testing - expects title and text columns
     def build_index(self):
         def _embed_ctx(examples):
@@ -71,6 +79,7 @@ class Retriever(torch.nn.Module):
         dataset_with_embeddings.add_faiss_index(column=self.index_name)
         return dataset_with_embeddings
 
+    # Loading a dataset with a pre-computed index.
     def load_index(self):
         # any risk datasets will be silently updated? can I trust it'll remain build by a specific model? add version?
         return load_dataset(self.dataset, self.dataset_name, with_index=True, split=self.dataset_split)
@@ -80,17 +89,18 @@ class Retriever(torch.nn.Module):
 
 
 # Helper functions.
+
+# Reshape from [batch_size, n_docs, dims] to [batch_size * n_docs, dims]
 def _stack_ctxt(tensor):
     return tensor.view(-1, *tensor.shape[2:])
 
 
+# Reshape from [batch_size * n_docs, dims] to [batch_size, n_docs, dims]
 def _unstack_ctxt(tensor, n_docs):
     return tensor.view(-1, n_docs, *tensor.shape[1:])
 
 
 def _cat_and_pad(tensors, pad_token_id):
-    for i, t in enumerate(tensors):
-        logger.info(i, t.shape)
     output = tensors[0].new(sum([t.shape[0] for t in tensors]), max([t.shape[1] for t in tensors])).fill_(pad_token_id)
     ind = 0
     for t in tensors:
@@ -105,7 +115,9 @@ def _shift_tokens_left(input_ids, pad_token_id):
 
 
 class RAGEncoder(torch.nn.Module):
-    """Dummy model needed for running rag seq2seq encoder in transformers generation code"""
+    """RAG is an encoder-decoder model, however, we don't exaplicitly implement an encoder and a decoder layes,
+    like it's done e.g. in BART and T5 implementations - for RAG these are encapsulated inside the generaotr instance.
+    This is a dummy model simulating RAG encode output need in transformers generation code"""
 
     def __init__(self, RagModel):
         super().__init__()
@@ -113,18 +125,22 @@ class RAGEncoder(torch.nn.Module):
 
     def forward(self, input_ids=None, attention_mask=None):
         """
-        return a tuple (encoder embeddings, encoder hidden states, encoder attentions, doc logprobs)
+        returns a tuple (encoder_embeddings, encoder_hidden_states, encoder_attentions, doc_logprobs)
         """
         ctxt_input_ids, ctxt_attention_mask, doc_logprobs = self.rag_model.contextualize(input_ids)
         encoder = self.rag_model.generator.get_encoder()
         encoder_out = encoder(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask)
-        stacked_x = _unstack_ctxt(encoder_out[0], self.rag_model.n_docs)
+        unstacked_x = _unstack_ctxt(encoder_out[0], self.rag_model.n_docs)
 
-        return (stacked_x,) + encoder_out[1:] + (doc_logprobs,)
+        return (unstacked_x,) + encoder_out[1:] + (doc_logprobs,)
 
 
 class RagModel(PreTrainedModel):
-    "RAG model returning raw sequence and document logprobs"
+    """This is a basic RAG model returning raw sequence and document logprobs.
+    The model takes a retriever (with a tokenizer) and a generator (with a tokenizer)
+    as input to the constructor, so it can be a base for various RAG architectures
+    encapsualting different retrievers and generators.
+    """
 
     def __init__(
         self, config, retriever, retriever_tokenizer, generator, generator_tokenizer, question_encoder,
@@ -144,7 +160,7 @@ class RagModel(PreTrainedModel):
         self, input_ids, decoder_input_ids=None, encoder_outputs: Optional[Tuple] = None, **kwargs,
     ):
         """
-        return a tuple ((generator seq logprobs, retriever_doc_logprobs), generator decoder outputs, generator encoder outputs)
+        returns a tuple ((generator seq logprobs, retriever_doc_logprobs), generator decoder outputs, generator encoder outputs)
         """
         if encoder_outputs is not None:
             # encoder_outputs[0] shape (batch_size, num_docs, ...)
@@ -216,6 +232,9 @@ class RagModel(PreTrainedModel):
 
 
 class RagSequenceModel(PreTrainedModel):
+    """ This is a base class for RAG sequence model. It performs RAG-sequence specific marginalization in the forward pass
+    and specialized some of the functions of PreTrainedModel to enable RAG-sequence generation.
+    """
 
     config_class = RagConfig
     base_model_prefix = "rag_sequence"
@@ -304,6 +323,9 @@ class RagSequenceModel(PreTrainedModel):
 
 
 class RagTokenModel(PreTrainedModel):
+    """ This is a base class for RAG-token model. It performs RAG-token specific marginalization in the forward pass
+    and specialized some of the functions of PreTrainedModel to enable RAG-token generation.
+    """
 
     config_class = RagConfig
     base_model_prefix = "rag_token"
@@ -373,7 +395,6 @@ class RagTokenModel(PreTrainedModel):
     def forward(
         self, input_ids, decoder_input_ids=None, encoder_outputs: Optional[Tuple] = None, return_loss=False, **kwargs,
     ):
-        """forward function, if input_ids is none, its called in rag_token generation"""
         outputs = self.model(input_ids, decoder_input_ids, encoder_outputs, **kwargs)
         doc_logprobs, seq_logprobs = outputs[0]
         log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
@@ -415,6 +436,9 @@ class RagTokenModel(PreTrainedModel):
 
 
 class RagDefaultMixin(object):
+    """ A wrapper around an initializer of default RAG components - a DPR retriever and a BART generator.
+    """
+
     def init_default_components(self, config: RagConfig):
         # models eval by default when loading from pretrained https://fburl.com/vvgl3h07
         dpr_tokenizer = DPRContextEncoderTokenizer.from_pretrained(config.pretrained_context_tokenizer_name_or_path)
@@ -435,16 +459,26 @@ class RagDefaultMixin(object):
 
 
 class RagDefaultSequenceModel(RagDefaultMixin, RagSequenceModel):
+    """ The default RAG-sequence architecture as proposed in the paper - with  a DPR retriever and a BART generaotr
+    """
+
     def __init__(self, config):
         super().__init__(config, *self.init_default_components(config))
 
 
 class RagDefaultTokenModel(RagDefaultMixin, RagTokenModel):
+    """ The default RAG-token architecture as proposed in the paper - with  a DPR retriever and a BART generaotr
+    """
+
     def __init__(self, config):
         super().__init__(config, *self.init_default_components(config))
 
 
 class RagTestSequenceModel(RagSequenceModel):
+    """ A specialization of a RagSequence re-calcualting index from scratch for a dataset using a DPR context encoder.
+    For testing purposes.
+    """
+
     def __init__(self, config):
         dpr_context_encoder = DPRContextEncoder.from_pretrained(config.pretrained_context_encoder_name_or_path)
         dpr_tokenizer = DPRContextEncoderTokenizer.from_pretrained(config.pretrained_context_tokenizer_name_or_path)

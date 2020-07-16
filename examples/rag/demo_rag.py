@@ -15,7 +15,6 @@ from transformers import (
     T5ForConditionalGeneration,
     T5Tokenizer,
 )
-from transformers.modeling_rag import RagModel
 
 
 if torch.cuda.is_available():
@@ -35,8 +34,8 @@ class RagWithT5SequenceModel(RagSequenceModel):
             dataset_split=config.dataset_split,
             index_name=config.index_name,
         )
-        t5_tokenizer = T5Tokenizer.from_pretrained("t5-base")
-        t5 = T5ForConditionalGeneration.from_pretrained("t5-base")
+        t5_tokenizer = T5Tokenizer.from_pretrained(config.pretrained_generator_name_or_path)
+        t5 = T5ForConditionalGeneration.from_pretrained(config.pretrained_generator_name_or_path)
         super().__init__(config, dpr_retriever, dpr_tokenizer, t5, t5_tokenizer, dpr_question_encoder)
 
 
@@ -60,39 +59,47 @@ def generate_from_rag(rag_model, questions, inputs, num_beams=4):
 
 
 if __name__ == "__main__":
-    # the question mark seems crucial for the success of retrieval
     questions = [
         "who sings does he love me with reba",
-        "who does eric roberts play in in The Dark Knight",
-        "what is the capital of the United Kingdom",
+        "who were the two mathematicians that invented calculus",
+        "what parts make up the peripheral nervous system",
     ]
+
+    print("\nRAG with T5 MODEL")
+    t5_tokenizer = T5Tokenizer.from_pretrained("t5-base")
+    t5_inputs = t5_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
+        "input_ids"
+    ].to(device)
+    rag_t5_config = RagConfig(pretrained_generator_name_or_path="t5-base")
+    rag_model = RagWithT5SequenceModel(rag_t5_config)
+    generate_from_rag(rag_model, questions, t5_inputs, num_beams=4)
+
     rag_tokenizer = RagDefaultTokenizer.from_pretrained("facebook/bart-large")
     inputs = rag_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
         "input_ids"
     ].to(device)
 
-    print("RAG with T5 MODEL")
-    t5_tokenizer = T5Tokenizer.from_pretrained("t5-base")
-    t5_inputs = t5_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
-        "input_ids"
-    ].to(device)
-    rag_sequence_model_path = "/private/home/piktus/huggingface_rag/data/rag-sequence-nq"
-    rag_sequence_config = RagConfig.from_pretrained(rag_sequence_model_path)
-    rag_model = RagWithT5SequenceModel(rag_sequence_config)
-    generate_from_rag(rag_model, questions, t5_inputs, num_beams=4)
-
-    print("TOKEN MODEL")
+    print("\nTOKEN MODEL")
     rag_token_model_path = "/private/home/piktus/huggingface_rag/data/rag-token-nq"
     rag_token_config = RagConfig.from_pretrained(rag_token_model_path)
     rag_model = RagDefaultTokenModel(rag_token_config)
     generate_from_rag(rag_model, questions, inputs, num_beams=4)
 
-    print("SEQUENCE MODEL")
+    rag_token_config = RagConfig(pretrained_generator_name_or_path="facebook/bart-large")
+    rag_model = RagDefaultTokenModel(rag_token_config).to(device=device)
+    generate_from_rag(rag_model, questions, inputs, num_beams=4)
+
+    print("\nSEQUENCE MODEL")
     rag_sequence_model_path = "/private/home/piktus/huggingface_rag/data/rag-sequence-nq"
     rag_sequence_config = RagConfig.from_pretrained(rag_sequence_model_path)
     rag_model = RagDefaultSequenceModel(rag_sequence_config)
     generate_from_rag(rag_model, questions, inputs, num_beams=4)
 
+    rag_sequence_config = RagConfig(pretrained_generator_name_or_path="facebook/bart-large")
+    rag_model = RagDefaultSequenceModel(rag_sequence_config).to(device=device)
+    generate_from_rag(rag_model, questions, inputs, num_beams=4)
+
+    print("\nSEQUENCE MODEL WITH INDEXING ON THE FLY")
     rag_sequence_model_path = "/private/home/piktus/huggingface_rag/data/rag-sequence-nq"
     rag_sequence_test_config = RagConfig.from_pretrained(
         rag_sequence_model_path, dataset_name="dummy_psgs_w100_no_embeddings"
@@ -100,22 +107,27 @@ if __name__ == "__main__":
     rag_model = RagTestSequenceModel(rag_sequence_test_config)
     generate_from_rag(rag_model, questions, inputs, num_beams=4)
 
-    # Retrieved contexts
+    # Top contexts
     """
-    Fabio Lanzoni / Fabio Lanzoni (born 15 March 1959), known simply as Fabio, is an Italian-American actor, fashion model and spokesperson.
-    He is for known his appearances as spokesman for I Can't Believe It's Not Butter! and the American Cancer Society. He was also a romance novel cover model throughout the 1980s and 1990s.
-    His acting credits include the movies Death Becomes Her (1992),
-    """
-
-    """Hurricane Florence (2006) / Hurricane Florence was the first Atlantic hurricane to produce hurricane force winds
-     on Bermuda since Hurricane Fabian hit the island in September 2003. The seventh tropical storm and second hurricane of the 2006 Atlantic hurricane season,
-      Florence developed from a tropical wave in the tropical Atlantic Ocean on September 3 and followed the track of a Cape Verde-type hurricane.
-      Because of unfavorable conditions, the system failed to organize at first, and as a result the storm grew to an unusually large size.
-      After several days, Florence encountered an area of lesser wind shear and strengthened into a hurricane on September 10.
+    "Linda Davis" / Linda Davis Linda Kaye Davis (born November 26, 1962) is an American country music singer. Before beginning a career
+    as a solo artist, she had three minor country singles in the charts as one half of the duo Skip & Linda. In her solo career, Davis has
+    recorded five studio albums for major record labels and more than 15 singles. Her highest chart entry is "Does He Love You", her 1993 duet
+    with Reba McEntire, which reached number one on the "Billboard" country charts and won both singers the Grammy for Best Country Vocal
+    Collaboration. Her highest solo chart position
     """
 
     """
-    Sal Maroni / Salvatore "The Boss" Maroni is a fictional Batman character who is head leader of the Gotham Mafia after Carmine Falcone
-     was killed or taken to Arkham Asylum. In some cases, he was the man who made Havey Dent turn into Two-Face.
-     He was played by Eric Roberts in The Dark Knight. Category:Batman characters Category:DC Comics characters
+    "Isaac Newton" / author of the manuscript "De analysi per aequationes numero terminorum infinitas", sent by Isaac Barrow to John Collins
+    in June 1669, was identified by Barrow in a letter sent to Collins in August of that year as "[...] of an extraordinary genius and proficiency
+    in these things." Newton later became involved in a dispute with Leibniz over priority in the development of calculus (the Leibniz–Newton
+    calculus controversy). Most modern historians believe that Newton and Leibniz developed calculus independently, although with very different
+    mathematical notations. Occasionally it has been suggested that Newton published almost nothing about it until 1693, and did
+    """
+
+    """
+    "Central nervous system"' / found that more than 95% of the 116 genes involved in the nervous system of planarians, which includes genes
+    related to the CNS, also exist in humans. Like planarians, vertebrates have a distinct CNS and PNS, though more complex than those
+    of planarians. In arthropods, the ventral nerve cord, the subesophageal ganglia and the supraesophageal ganglia are usually seen as making up
+    the CNS. The CNS of chordates differs from that of other animals in being placed dorsally in the body, above the gut and notochord/spine.
+    The basic pattern of the CNS is highly conserved throughout the different species of')
     """
