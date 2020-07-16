@@ -42,9 +42,3 @@ model = AutoModel.from_pretrained("nghuyong/ernie-1.0")
   year={2019}
 }
 ```
-
- 
-
-
-
-
