@@ -381,7 +381,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
     @require_torch
     def test_integration_torch_dialogue_truncated_history(self):
         # When
-        nlp = pipeline(task="dialogue", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
+        nlp = pipeline(task="conversational", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         # Then
         self.assertEqual(len(conversation_1.past_user_inputs), 0)
@@ -427,13 +427,13 @@ class DialoguePipelineTests(unittest.TestCase):
     @require_torch
     def test_torch_dialogue(self):
         for model_name in DIALOGUE_FINETUNED_MODELS:
-            nlp = pipeline(task="dialogue", model=model_name, tokenizer=model_name)
+            nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name)
             self._test_dialogue_pipeline(nlp)
 
     @require_tf
     def test_tf_dialogue(self):
         for model_name in DIALOGUE_FINETUNED_MODELS:
-            nlp = pipeline(task="dialogue", model=model_name, tokenizer=model_name, framework="tf")
+            nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name, framework="tf")
             self._test_dialogue_pipeline(nlp)
 
 

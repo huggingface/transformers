@@ -1697,6 +1697,12 @@ class Conversation:
             self.past_user_inputs.append(self.new_user_input)
         self.new_user_input = None
 
+    def append_response(self, response: str):
+        self.generated_responses.append(response)
+
+    def set_history(self, history: List[int]):
+        self.history = history
+
     def __repr__(self):
         output = "Conversation id: {} \n".format(self.uuid)
         for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
@@ -1707,23 +1713,23 @@ class Conversation:
         return output
 
 
-class DialoguePipeline(Pipeline):
+class ConversationalPipeline(Pipeline):
     """
-    Multi-turn dialogue pipeline.
+    Multi-turn conversational pipeline.
 
     Usage::
-        dialogue_pipeline = pipeline("dialogue")
+        conversational_pipeline = pipeline("conversational")
 
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
 
-        dialogue_pipeline([conversation_1, conversation_2])
+        conversational_pipeline([conversation_1, conversation_2])
 
         conversation_1.add_user_input("Is it an action movie?")
 
-        dialogue_pipeline([conversation_1, conversation_2])
+        conversational_pipeline([conversation_1, conversation_2])
 
-    The models that this pipeline can use are models that have been fine-tuned on a multi-turn dialogue task,
+    The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
     currently: "microsoft/DialoGPT-small", "microsoft/DialoGPT-medium", "microsoft/DialoGPT-large"
     See the up-to-date list of available models on
     `huggingface.co/models <https://huggingface.co/models?filter=conversational>`__.
@@ -1763,7 +1769,12 @@ class DialoguePipeline(Pipeline):
             self.pad_token_id = self.tokenizer.eos_token_id
         self.min_length_for_response = min_length_for_response
 
-    def __call__(self, conversations, clean_up_tokenization_spaces=True, **generate_kwargs):
+    def __call__(
+        self,
+        conversations: Union[Conversation, List[Conversation]],
+        clean_up_tokenization_spaces=True,
+        **generate_kwargs
+    ):
         r"""
         Args:
             *conversations: (list of `:class:Conversation`) Conversations to generate responses for
@@ -1806,7 +1817,7 @@ class DialoguePipeline(Pipeline):
                     [conversation.new_user_input for conversation in active_conversations]
                 )
                 histories = [conversation.history for conversation in active_conversations]
-                max_length = generate_kwargs.get("max_length", 1000)
+                max_length = generate_kwargs.get("max_length", self.model.config.max_length)
                 inputs = self._concat_inputs_history(inputs, histories, max_length)
 
                 if self.framework == "pt":
@@ -1823,7 +1834,6 @@ class DialoguePipeline(Pipeline):
                             input_length, max_length
                         )
                     )
-                generate_kwargs["max_length"] = max_length
                 generated_responses = self.model.generate(
                     inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
                 )
@@ -1831,15 +1841,15 @@ class DialoguePipeline(Pipeline):
                 cleaned_history = self._clean_padding_history(generated_responses)
                 if isinstance(conversations, Conversation):
                     conversations.mark_processed()
-                    conversations.generated_responses.append(
+                    conversations.append_response(
                         self.tokenizer.decode(
                             cleaned_history[0][input_length:],
                             skip_special_tokens=True,
                             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                         )
                     )
-                    conversations.history = cleaned_history[0]
-                    output = conversations
+                    conversations.set_history(cleaned_history[0])
+                    return conversations
                 else:
                     output = []
                     for conversation_index, conversation in enumerate(conversations):
@@ -1853,9 +1863,9 @@ class DialoguePipeline(Pipeline):
                                     clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                                 )
                             )
-                            conversation.history = cleaned_history[active_index]
+                            conversation.set_history(cleaned_history[active_index])
                         output.append(conversation)
-                return output
+                    return output
         else:
             logger.warning(
                 "No active conversation provided for generating response. "
@@ -1916,7 +1926,7 @@ class DialoguePipeline(Pipeline):
                 cutoff_eos_index = 0
                 while len(input) - cutoff_eos_index > max_length - self.min_length_for_response:
                     cutoff_eos_index = input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
-                    if cutoff_eos_index == 0 or cutoff_eos_index == len(input):
+                    if cutoff_eos_index == 0 or cutoff_eos_index == len(input) - 1:
                         break
                     else:
                         input = input[cutoff_eos_index + 1 :]
@@ -2003,8 +2013,8 @@ SUPPORTED_TASKS = {
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
-    "dialogue": {
-        "impl": DialoguePipeline,
+    "conversational": {
+        "impl": ConversationalPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
