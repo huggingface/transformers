@@ -422,7 +422,7 @@ class TFTrainer:
             logger.info("  Total optimization steps = %d", t_total)
 
             self.train_loss = tf.keras.metrics.Sum()
-            distributed_training_steps = self._create_routines()
+            distributed_training_steps = self._create_training_routines()
             start_time = datetime.datetime.now()
 
             for epoch_iter in range(epochs_trained, int(epochs + 1)):
