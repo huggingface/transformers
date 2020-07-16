@@ -431,7 +431,7 @@ class TFTrainer:
                     self._past = None
 
                 for step, batch in enumerate(train_ds, 1):
-                    if step > self.steps_per_epoch:
+                    if self.global_step > 0 and self.global_step % self.args.steps_per_epoch == 0:
                         break
 
                     self.global_step = iterations.numpy()
@@ -458,9 +458,10 @@ class TFTrainer:
                         self.evaluate()
 
                     if (
-                        self.global_step % self.args.logging_steps == 0
-                        or self.global_step == 1
-                        and self.args.logging_first_step
+                        (self.global_step > 0
+                            and self.global_step % self.args.logging_steps == 0)
+                        or (self.global_step == 1
+                            and self.args.logging_first_step)
                     ):
                         logs = {}
                         logs["loss"] = training_loss.numpy()
