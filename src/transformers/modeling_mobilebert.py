@@ -32,7 +32,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.modeling_bert import BertIntermediate
+from .modeling_bert import BertIntermediate
 
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig

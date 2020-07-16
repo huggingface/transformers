@@ -15,7 +15,7 @@
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
 
-from transformers.modeling_bart import BartForConditionalGeneration
+from .modeling_bart import BartForConditionalGeneration
 
 
 MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [

@@ -18,7 +18,7 @@
 import logging
 from collections import OrderedDict
 
-from transformers.configuration_mobilebert import MobileBertConfig
+from .configuration_mobilebert import MobileBertConfig
 
 from .configuration_auto import (
     AlbertConfig,
