@@ -164,7 +164,7 @@ class TFTrainer:
         steps = approx(num_examples / self.args.eval_batch_size)
         ds = (
             test_dataset.repeat()
-            .batch(self.args.eval_batch_size)
+            .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
