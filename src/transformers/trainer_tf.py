@@ -430,7 +430,7 @@ class TFTrainer:
                     self._past = None
 
                 for step, batch in enumerate(train_ds, 1):
-                    if step == self.steps_per_epoch:
+                    if step > self.steps_per_epoch:
                         break
 
                     self.global_step = iterations.numpy()
