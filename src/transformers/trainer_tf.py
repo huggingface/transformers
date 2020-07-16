@@ -331,7 +331,7 @@ class TFTrainer:
         return output.metrics
 
     def _create_test_routines(self):
-        with self.args.strategy():
+        with self.args.strategy:
             def test_step(features, labels):
                 per_example_loss, logits = self._run_model(features, labels, False)
 
@@ -423,7 +423,7 @@ class TFTrainer:
 
         self.train_loss = tf.keras.metrics.Sum()
 
-        with self.args.strategy():
+        with self.args.strategy:
             distributed_training_steps = self._create_routines()
             start_time = datetime.datetime.now()
 
@@ -486,7 +486,7 @@ class TFTrainer:
             delattr(self, "_past")
 
     def _create_training_routines(self):
-        with self.args.strategy():
+        with self.args.strategy:
             def training_step(features, labels):
                 per_example_loss, _ = self._run_model(features, labels, True)
                 scaled_loss = per_example_loss / self.total_train_batch_size
