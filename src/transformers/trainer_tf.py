@@ -278,7 +278,7 @@ class TFTrainer:
         else:
             metrics = {}
 
-        metrics["eval_loss"] = self.eval_loss.result() / (steps * self.args.eval_batch_size)
+        metrics["eval_loss"] = self.eval_loss.result().numpy() / (steps * self.args.eval_batch_size)
 
         for key in list(metrics.keys()):
             if not key.startswith("eval_"):
