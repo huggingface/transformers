@@ -1,5 +1,5 @@
 ---
-language: english
+language: en
 ---
 
 # T5-base fine-tuned for Emotion Recognition 😂😢😡😃😯

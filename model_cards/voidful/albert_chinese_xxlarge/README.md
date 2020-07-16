@@ -1,6 +1,5 @@
 ---
-language:
-- chinese
+language: zh
 ---
 
 # albert_chinese_xxlarge
