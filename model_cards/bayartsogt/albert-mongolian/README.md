@@ -1,3 +1,8 @@
+---
+language: mn
+thumbnail:
+---
+
 # ALBERT-Mongolian
 [pretraining repo link](https://github.com/bayartsogt-ya/albert-mongolian)
 ## Model description
