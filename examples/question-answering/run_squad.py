@@ -240,6 +240,9 @@ def train(args, train_dataset, model, tokenizer):
                 # Save model checkpoint
                 if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
                     output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+                        
                     # Take care of distributed/parallel training
                     model_to_save = model.module if hasattr(model, "module") else model
                     model_to_save.save_pretrained(output_dir)
