@@ -11,46 +11,47 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from lightning_base import BaseTransformer, add_generic_args, generic_train
 from torch.utils.data import DataLoader
 
-from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import MBartTokenizer, get_linear_schedule_with_warmup
 
 
 try:
-    from .utils import (
-        assert_all_frozen,
-        use_task_specific_params,
-        SummarizationDataset,
-        lmap,
-        flatten_list,
-        pickle_save,
-        save_git_info,
-        save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-    )
     from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
-except ImportError:
-    from utils import (
-        use_task_specific_params,
+    from .utils import (
+        ROUGE_KEYS,
         SummarizationDataset,
-        lmap,
+        assert_all_frozen,
+        calculate_bleu_score,
+        calculate_rouge,
         flatten_list,
+        freeze_params,
+        get_git_info,
+        lmap,
         pickle_save,
         save_git_info,
         save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        assert_all_frozen,
+        use_task_specific_params,
     )
+except ImportError:
     from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
+
+    from utils import (
+        ROUGE_KEYS,
+        SummarizationDataset,
+        assert_all_frozen,
+        calculate_bleu_score,
+        calculate_rouge,
+        flatten_list,
+        freeze_params,
+        get_git_info,
+        lmap,
+        pickle_save,
+        save_git_info,
+        save_json,
+        use_task_specific_params,
+    )
 
 logger = logging.getLogger(__name__)
 
