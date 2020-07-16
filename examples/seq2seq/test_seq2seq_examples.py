@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
-    "logger": "default",
+    "logger_name": "default",
     "length_penalty": 0.5,
     "cache_dir": "",
     "task": "summarization",
