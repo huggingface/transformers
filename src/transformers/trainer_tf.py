@@ -373,7 +373,7 @@ class TFTrainer:
             t_total = self.steps_per_epoch * self.args.num_train_epochs
 
         with self.args.strategy.scope():
-            self.get_optimizer(num_training_steps=t_total)
+            self.get_optimizers(num_training_steps=t_total)
             iterations = self.optimizer[0].iterations
             self.global_step = iterations.numpy()
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
