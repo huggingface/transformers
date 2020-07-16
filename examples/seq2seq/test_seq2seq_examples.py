@@ -48,7 +48,7 @@ CHEAP_ARGS = {
     "max_grad_norm": 1.0,
     "do_train": True,
     "do_predict": True,
-    "gradient_accumulation_steps": 1,
+    "accumulate_grad_batches": 1,
     "server_ip": "",
     "server_port": "",
     "seed": 42,
