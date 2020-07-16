@@ -1784,94 +1784,67 @@ class ConversationalPipeline(Pipeline):
             list of conversations with updated generated responses for those containing a new user input
         """
 
-        active_conversations = []
         # Input validation
         if isinstance(conversations, list):
-            active_conversations_indices = dict()
-            active_index = 0
-            for conversation_index, conversation in enumerate(conversations):
+            for conversation in conversations:
                 assert isinstance(
                     conversation, Conversation
                 ), "DialoguePipeline expects a Conversation or list of Conversations as an input"
                 if conversation.new_user_input is None:
-                    logger.warning(
-                        "Conversation with id {} does not contain new user input and will not be updated".format(
-                            conversation.uuid
+                    raise ValueError(
+                        "Conversation with UUID {} does not contain new user input to process. "
+                        "Add user inputs with the conversation's `add_user_input` method".format(
+                            type(conversation.uuid)
                         )
                     )
-                else:
-                    active_conversations_indices[conversation_index] = active_index
-                    active_conversations.append(conversation)
-                    active_index += 1
             assert (
                 self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
         elif isinstance(conversations, Conversation):
-            active_conversations.append(conversations)
+            conversations = [conversations]
         else:
             raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
-        if len(active_conversations) > 0:
-            with self.device_placement():
 
-                inputs = self._parse_and_tokenize(
-                    [conversation.new_user_input for conversation in active_conversations]
+        with self.device_placement():
+
+            inputs = self._parse_and_tokenize([conversation.new_user_input for conversation in conversations])
+            histories = [conversation.history for conversation in conversations]
+            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+            inputs = self._concat_inputs_history(inputs, histories, max_length)
+
+            if self.framework == "pt":
+                inputs = self.ensure_tensor_on_device(**inputs)
+                input_length = inputs["input_ids"].shape[-1]
+
+            elif self.framework == "tf":
+                input_length = tf.shape(inputs["input_ids"])[-1].numpy()
+
+            if input_length > 0.9 * max_length:
+                logger.warning(
+                    "Longest conversation length: {} is bigger than 0.9 * max_length: {}. "
+                    "You might consider trimming the early phase of the conversation".format(input_length, max_length)
                 )
-                histories = [conversation.history for conversation in active_conversations]
-                max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-                inputs = self._concat_inputs_history(inputs, histories, max_length)
-
-                if self.framework == "pt":
-                    inputs = self.ensure_tensor_on_device(**inputs)
-                    input_length = inputs["input_ids"].shape[-1]
-
-                elif self.framework == "tf":
-                    input_length = tf.shape(inputs["input_ids"])[-1].numpy()
-
-                if input_length > 0.9 * max_length:
-                    logger.warning(
-                        "Longest conversation length: {} is bigger than 0.9 * max_length: {}. "
-                        "You might consider trimming the early phase of the conversation".format(
-                            input_length, max_length
-                        )
-                    )
-                generated_responses = self.model.generate(
-                    inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
-                )
-
-                cleaned_history = self._clean_padding_history(generated_responses)
-                if isinstance(conversations, Conversation):
-                    conversations.mark_processed()
-                    conversations.append_response(
-                        self.tokenizer.decode(
-                            cleaned_history[0][input_length:],
-                            skip_special_tokens=True,
-                            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                        )
-                    )
-                    conversations.set_history(cleaned_history[0])
-                    return conversations
-                else:
-                    output = []
-                    for conversation_index, conversation in enumerate(conversations):
-                        if conversation_index in active_conversations_indices:
-                            conversation.mark_processed()
-                            active_index = active_conversations_indices[conversation_index]
-                            conversation.generated_responses.append(
-                                self.tokenizer.decode(
-                                    cleaned_history[active_index][input_length:],
-                                    skip_special_tokens=True,
-                                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                                )
-                            )
-                            conversation.set_history(cleaned_history[active_index])
-                        output.append(conversation)
-                    return output
-        else:
-            logger.warning(
-                "No active conversation provided for generating response. "
-                "Add user input to the conversations by calling `conversation.add_user_input(...)`"
+            generated_responses = self.model.generate(
+                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
             )
-            return conversations[0]
+
+            cleaned_history = self._clean_padding_history(generated_responses)
+            output = []
+            for conversation_index, conversation in enumerate(conversations):
+                conversation.mark_processed()
+                conversation.generated_responses.append(
+                    self.tokenizer.decode(
+                        cleaned_history[conversation_index][input_length:],
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
+                )
+                conversation.set_history(cleaned_history[conversation_index])
+                output.append(conversation)
+            if len(output) == 1:
+                return output[0]
+            else:
+                return output
 
     def _parse_and_tokenize(self, *args, **kwargs):
         """
