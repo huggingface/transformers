@@ -19,11 +19,11 @@ More detail: https://arxiv.org/abs/1904.09223
 |:---:|:---:|:---:|
 |ernie-1.0| Chinese |Layer:12, Hidden:768, Heads:12|
 
-This released pytorch model is convert from the official released PaddlePaddle ERNIE model and 
-a serial experiments have been made to check the accuracy of the conversion.
+This released pytorch model is converted from the officially released PaddlePaddle ERNIE model and 
+a series of experiments have been conducted to check the accuracy of the conversion.
 
-- Official PaddlePaddle ERNIE rep: https://github.com/PaddlePaddle/ERNIE
-- Pytorch Conversion rep :  https://github.com/nghuyong/ERNIE-Pytorch
+- Official PaddlePaddle ERNIE repo: https://github.com/PaddlePaddle/ERNIE
+- Pytorch Conversion repo:  https://github.com/nghuyong/ERNIE-Pytorch
 
 ## How to use
 ```Python
