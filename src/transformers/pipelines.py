@@ -1907,7 +1907,9 @@ class ConversationalPipeline(Pipeline):
             outputs.append(input)
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
-        outputs = BatchEncoding({"input_ids": outputs, "attention_mask": []}, tensor_type=self.framework)
+        outputs = BatchEncoding(
+            {"input_ids": outputs, "attention_mask": [1] * len(outputs)}, tensor_type=self.framework
+        )
         return outputs
 
 
