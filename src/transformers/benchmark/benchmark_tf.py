@@ -132,7 +132,7 @@ class TensorFlowBenchmark(Benchmark):
         if self.args.fp16:
             raise NotImplementedError("Mixed precision is currently not supported.")
 
-        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        has_model_class_in_config = hasattr(config, "architectures") and len(config.architectures) > 0
         if not self.args.only_pretrain_model and has_model_class_in_config:
             try:
                 model_class = "TF" + config.architectures[0]  # prepend 'TF' for tensorflow model
@@ -172,7 +172,7 @@ class TensorFlowBenchmark(Benchmark):
         if self.args.fp16:
             raise NotImplementedError("Mixed precision is currently not supported.")
 
-        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        has_model_class_in_config = hasattr(config, "architectures") and len(config.architectures) > 0
         if not self.args.only_pretrain_model and has_model_class_in_config:
             try:
                 model_class = "TF" + config.architectures[0]  # prepend 'TF' for tensorflow model
