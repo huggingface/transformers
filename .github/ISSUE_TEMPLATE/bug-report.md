@@ -11,11 +11,11 @@ assignees: ''
  If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of who to tag.
  Please tag fewer than 3 people.
  
- albert, bert, GPT2, XLM: @lysandre
+ albert, bert, GPT2, XLM: @LysandreJik 
  tokenizers: @mfuntowicz
- Trainer: @julienc
+ Trainer: @julien-c
  Speed and Memory Benchmarks: @patrickvonplaten
- Model Cards: @julienc
+ Model Cards: @julien-c
  Translation: @sshleifer
  Summarization: @sshleifer
  examples/distillation: @VictorSanh
@@ -69,5 +69,4 @@ Steps to reproduce the behavior:
 ## Expected behavior
 
 <!-- A clear and concise description of what you would expect to happen. -->
-
 
