@@ -1,3 +1,7 @@
+---
+language: en
+---
+
 # ERNIE-tiny
 
 ## Introduction
