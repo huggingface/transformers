@@ -99,10 +99,12 @@ training_args = TrainingArguments(
     evaluate_during_training=True,
     do_train=True,
     do_eval=True,
-    logging_steps=500,
-    save_steps=500,
-    eval_steps=500,
+    logging_steps=1000,
+    save_steps=1000,
+    eval_steps=1000,
     overwrite_output_dir=True,
+    warmup_steps=2000,
+    save_total_limit=10,
 )
 
 trainer = Trainer(
