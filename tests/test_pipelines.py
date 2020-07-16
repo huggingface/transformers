@@ -419,6 +419,8 @@ class DialoguePipelineTests(unittest.TestCase):
         multi_result = nlp(valid_inputs[1])
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], Conversation)
+        # Inactive conversations passed to the pipeline raise a ValueError
+        self.assertRaises(ValueError, nlp, valid_inputs[1])
 
         for bad_input in invalid_inputs:
             self.assertRaises(Exception, nlp, bad_input)

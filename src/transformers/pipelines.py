@@ -38,6 +38,7 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import BatchEncoding
 
 
 if is_tf_available():
@@ -1906,9 +1907,7 @@ class ConversationalPipeline(Pipeline):
             outputs.append(input)
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
-        outputs = self.tokenizer.batch_encode_plus(
-            outputs, add_special_tokens=False, is_pretokenized=True, return_tensors=self.framework, padding=False
-        )
+        outputs = BatchEncoding({"input_ids": outputs, "attention_mask": []}, tensor_type=self.framework)
         return outputs
 
 
