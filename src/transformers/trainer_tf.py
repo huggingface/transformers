@@ -236,8 +236,8 @@ class TFTrainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        for step, batch in enumerate(dataset):
-            if step == steps:
+        for step, batch in enumerate(dataset, 1):
+            if step > steps:
                 break
 
             logits = distributed_test_steps(batch)
@@ -430,16 +430,16 @@ class TFTrainer:
                 if self.args.past_index >= 0:
                     self._past = None
 
-                for step, batch in enumerate(train_ds):
-                    if step == self.steps_per_epoch:
+                for step, batch in enumerate(train_ds, 1):
+                    if step > self.steps_per_epoch:
                         break
 
                     self.global_step = iterations.numpy()
-                    self.epoch_logging = epoch_iter - 1 + (step + 1) / self.steps_per_epoch
+                    self.epoch_logging = epoch_iter - 1 + step / self.steps_per_epoch
 
                     distributed_training_steps(batch)
 
-                    training_loss = self.train_loss.result() / ((step + 1) * self.total_train_batch_size)
+                    training_loss = self.train_loss.result() / (step * self.total_train_batch_size)
 
                     if self.args.debug:
                         logs = {}
@@ -477,7 +477,7 @@ class TFTrainer:
 
             end_time = datetime.datetime.now()
 
-            logger.info("Training took: {}", (end_time - start_time))
+            logger.info("Training took: {}", (end_time - start_time).strftime("%H:%M:%S"))
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
