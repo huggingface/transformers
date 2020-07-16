@@ -16,65 +16,24 @@ from torch.utils.data import Dataset, Sampler
 from tqdm import tqdm
 import linecache
 
-
 from transformers import BartTokenizer
 
 
-def encode_file(
-    tokenizer,
-    data_path,
-    max_length,
-    pad_to_max_length=True,
-    return_tensors="pt",
-    overwrite_cache=False,
-    prefix="",
-    tok_name="",
-):
-    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
-    cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
-    if not overwrite_cache and cache_path.exists():
-        try:
-            examples = torch.load(cache_path)
-            assert isinstance(examples, list)
-            return examples
-
-        except Exception:
-            print(f"failed to load from {cache_path}, retokenizing {data_path}")
-    data_path = Path(data_path)
-
-    lns = lmap(str.strip, data_path.open().readlines())
-    lns = [prefix + text for text in lns]
-    assert lns, f"found empty file at {data_path}"
-    examples = []
-    for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
-        tokenized = tokenizer(
-            [text],
-            max_length=max_length,
-            padding="max_length" if pad_to_max_length else None,
-            truncation=True,
-            return_tensors=return_tensors,
-            **extra_kw,
-        )
-        assert tokenized.input_ids.shape[1] == max_length
-        examples.append(tokenized)
-    torch.save(lmap(dict, examples), cache_path.open("wb"))
-    return examples
-
 def encode_line(
-    tokenizer,
-    line,
-    max_length,
-    pad_to_max_length=True,
-    return_tensors="pt"
+    tokenizer, line, max_length, pad_to_max_length=True, return_tensors="pt"
 ):
-    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
+    extra_kw = (
+        {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
+    )
     return tokenizer(
-            [line],
-            max_length=max_length,
-            padding="max_length" if pad_to_max_length else None,
-            truncation=True,
-            return_tensors=return_tensors,
-            **extra_kw)
+        [line],
+        max_length=max_length,
+        padding="max_length" if pad_to_max_length else None,
+        truncation=True,
+        return_tensors=return_tensors,
+        **extra_kw,
+    )
+
 
 def lmap(f: Callable, x: Iterable) -> List:
     """list(map(f, x))"""
@@ -122,11 +81,13 @@ class SummarizationDataset(Dataset):
         self.source_file = os.path.join(data_dir, type_path + ".source")
         self.tgt_file = os.path.join(data_dir, type_path + ".target")
         self.tokenizer = tokenizer
-        
+
         if hasattr(self.tokenizer, "set_lang"):
-            assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
+            assert (
+                tgt_lang is not None
+            ), "--tgt_lang must be passed to build a translation"
             self.tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
-        
+
         if n_obs is not None:
             self.len = n_obs
         self.pad_token_id = self.tokenizer.pad_token_id
@@ -137,18 +98,18 @@ class SummarizationDataset(Dataset):
     def __getitem__(self, index):
         source_line = linecache.getline(self.source_file, index).rstrip("\n")
         tgt_line = linecache.getline(self.tgt_file, index).rstrip("\n")
-        source_inputs = encode_line(self.tokenizer,
-            source_line,
-            self.max_source_length)
-        
-        target_inputs = encode_line(self.tokenizer,
-            tgt_line,
-            self.max_target_length)
+        source_inputs = encode_line(self.tokenizer, source_line, self.max_source_length)
 
-        source_ids = source_inputs['input_ids'].squeeze()
-        target_ids = target_inputs['input_ids'].squeeze()
-        src_mask =source_inputs["attention_mask"].squeeze()
-        return {"input_ids": source_ids, "attention_mask": src_mask, "decoder_input_ids": target_ids}
+        target_inputs = encode_line(self.tokenizer, tgt_line, self.max_target_length)
+
+        source_ids = source_inputs["input_ids"].squeeze()
+        target_ids = target_inputs["input_ids"].squeeze()
+        src_mask = source_inputs["attention_mask"].squeeze()
+        return {
+            "input_ids": source_ids,
+            "attention_mask": src_mask,
+            "decoder_input_ids": target_ids,
+        }
 
     @staticmethod
     def _get_examples(data_file):
@@ -160,7 +121,9 @@ class SummarizationDataset(Dataset):
     @staticmethod
     def trim_seq2seq_batch(batch, pad_token_id):
         y = trim_batch(batch["decoder_input_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
+        source_ids, source_mask = trim_batch(
+            batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"]
+        )
         return source_ids, source_mask, y
 
     def collate_fn(self, batch) -> dict:
@@ -169,15 +132,21 @@ class SummarizationDataset(Dataset):
         target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
         pad_token_id = self.pad_token_id
         y = trim_batch(target_ids, pad_token_id)
-        source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
-        batch = {"input_ids": source_ids, "attention_mask": source_mask, "decoder_input_ids": y}
+        source_ids, source_mask = trim_batch(
+            input_ids, pad_token_id, attention_mask=masks
+        )
+        batch = {
+            "input_ids": source_ids,
+            "attention_mask": source_mask,
+            "decoder_input_ids": y,
+        }
         return batch
 
     @property
     def tgt_lens(self):
         return lmap(len, self.target)
 
-    #def make_sortish_sampler(self, batch_size):
+    # def make_sortish_sampler(self, batch_size):
     #    return SortishSampler(self.source, batch_size)
 
 
@@ -197,12 +166,23 @@ class SortishSampler(Sampler):
         idxs = np.random.permutation(len(self.data))
         sz = self.bs * 50
         ck_idx = [idxs[i : i + sz] for i in range(0, len(idxs), sz)]
-        sort_idx = np.concatenate([sorted(s, key=self.key, reverse=True) for s in ck_idx])
+        sort_idx = np.concatenate(
+            [sorted(s, key=self.key, reverse=True) for s in ck_idx]
+        )
         sz = self.bs
         ck_idx = [sort_idx[i : i + sz] for i in range(0, len(sort_idx), sz)]
-        max_ck = np.argmax([self.key(ck[0]) for ck in ck_idx])  # find the chunk with the largest key,
-        ck_idx[0], ck_idx[max_ck] = ck_idx[max_ck], ck_idx[0]  # then make sure it goes first.
-        sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
+        max_ck = np.argmax(
+            [self.key(ck[0]) for ck in ck_idx]
+        )  # find the chunk with the largest key,
+        ck_idx[0], ck_idx[max_ck] = (
+            ck_idx[max_ck],
+            ck_idx[0],
+        )  # then make sure it goes first.
+        sort_idx = (
+            np.concatenate(np.random.permutation(ck_idx[1:]))
+            if len(ck_idx) > 1
+            else np.array([], dtype=np.int)
+        )
         sort_idx = np.concatenate((ck_idx[0], sort_idx))
         return iter(sort_idx)
 
@@ -265,7 +245,9 @@ def get_git_info():
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
 
-def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer=True) -> Dict:
+def calculate_rouge(
+    output_lns: List[str], reference_lns: List[str], use_stemmer=True
+) -> Dict:
     scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
 
@@ -294,7 +276,9 @@ def assert_all_frozen(model):
     model_grads: List[bool] = list(grad_status(model))
     n_require_grad = sum(lmap(int, model_grads))
     npars = len(model_grads)
-    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
+    assert not any(
+        model_grads
+    ), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
 
 
 def assert_not_all_frozen(model):
