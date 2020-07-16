@@ -478,7 +478,7 @@ class TFTrainer:
 
             end_time = datetime.datetime.now()
 
-            logger.info("Training took: {}", (end_time - start_time).strftime("%H:%M:%S"))
+            logger.info("Training took: {}", str(end_time - start_time))
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
