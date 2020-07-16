@@ -446,7 +446,7 @@ class TFTrainer:
                         logs["loss"] = training_loss.numpy()
                         logs["epoch"] = self.epoch_logging
 
-                    self._log(logs)
+                        self._log(logs)
 
                     if self.global_step == 1 and self.args.debug:
                         with self.tb_writer.as_default():
