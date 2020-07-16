@@ -12,7 +12,7 @@ import pytest
 import torch
 from torch.utils.data import DataLoader
 
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoModel, AutoTokenizer
 from transformers.testing_utils import require_multigpu
 
 from .distillation import distill_main, evaluate_checkpoint
@@ -217,8 +217,6 @@ def test_finetune(model):
     tmp_dir = make_test_data_dir()
     output_dir = tempfile.mkdtemp(prefix="output_")
 
-
-
     max_num_seconds = 7  # if args_d['gpus'] == 1 else 3
     args_d.update(
         data_dir=tmp_dir,
@@ -235,7 +233,6 @@ def test_finetune(model):
         freeze_embeds=True,
     )
     assert "n_train" in args_d
-
 
     args = argparse.Namespace(**args_d)
     # Warm up cache
