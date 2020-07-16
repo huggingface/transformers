@@ -228,7 +228,6 @@ class TFTrainer:
 
         label_ids: np.ndarray = None
         preds: np.ndarray = None
-        step: int = 1
         self.eval_loss = tf.keras.metrics.Sum()
         distributed_test_steps = self._create_test_routines()
 
@@ -237,7 +236,7 @@ class TFTrainer:
             self._past = None
 
         for step, batch in enumerate(dataset, 1):
-            if step > steps:
+            if step == steps:
                 break
 
             logits = distributed_test_steps(batch)
