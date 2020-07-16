@@ -110,7 +110,7 @@ class SummarizationDataset(Dataset):
         seq_lens = []
         with open(data_file) as f:
             for i, l in enumerate(f):
-                seq_lens.append(len(l.split(' ')))
+                seq_lens.append(len(l.split(" ")))
         return i + 1, seq_lens
 
     @staticmethod
