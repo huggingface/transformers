@@ -27,7 +27,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .activations import gelu, gelu_new, swish
 from .configuration_bert import BertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, prune_linear_layer, create_position_ids_from_input_ids
+from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .modeling_bert import (
     BertEmbeddings, 
     BertPreTrainedModel, 
@@ -39,7 +39,7 @@ from .modeling_bert import (
     BertModel
     
 )
-from .modeling_roberta import RobertaLMHead
+from .modeling_roberta import RobertaLMHead, create_position_ids_from_input_ids
 
 
 logger = logging.getLogger(__name__)
