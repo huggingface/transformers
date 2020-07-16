@@ -3,7 +3,6 @@ import logging
 import tensorflow as tf
 
 from .configuration_electra import ElectraConfig
-
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import (

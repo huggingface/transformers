@@ -32,8 +32,6 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .modeling_bert import BertIntermediate
-
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig
 from .file_utils import (
@@ -43,6 +41,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
+from .modeling_bert import BertIntermediate
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
