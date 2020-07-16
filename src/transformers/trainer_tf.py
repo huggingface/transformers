@@ -505,7 +505,7 @@ class TFTrainer:
                 if self.args.gradient_accumulation_steps == 1:
                     gradients = training_step(features, labels)
 
-                    self.optimizers[1].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+                    self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
                 else:
                     for _ in tf.range(self.args.gradient_accumulation_steps):
                         reduced_features = features[:self.args.train_batch_size / self.args.n_replicas]
