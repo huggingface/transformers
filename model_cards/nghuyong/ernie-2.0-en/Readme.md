@@ -1,3 +1,7 @@
+---
+language: en
+---
+
 # ERNIE-2.0
 
 ## Introduction
