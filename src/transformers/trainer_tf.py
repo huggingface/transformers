@@ -518,7 +518,7 @@ class TFTrainer:
                     gradients = self.gradient_accumulator.gradients
                     gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
 
-                    self.optimizers[1].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+                    self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
                     self.gradient_accumulator.reset()
 
             @tf.function
