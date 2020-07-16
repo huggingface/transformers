@@ -18,14 +18,17 @@ assignees: ''
  Model Cards: @julien-c
  Translation: @sshleifer
  Summarization: @sshleifer
+ TextGeneration: @TevenLeScao 
  examples/distillation: @VictorSanh
- nlp datasets: different repo
- rust tokenizers: different repo
+ nlp datasets: [different repo](https://github.com/huggingface/nlp)
+ rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
  blenderbot: @mariamabarham
  Bart: @sshleifer
  T5: @patrickvonplaten
  Longformer/Reformer: @patrickvonplaten
+ TransfoXL/XLNet: @TevenLeScao 
  examples/seq2seq: @sshleifer
+ tensorflow: @jplu 
  -->
 
 ## Information
