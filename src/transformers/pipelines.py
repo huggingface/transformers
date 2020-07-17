@@ -174,11 +174,15 @@ class NLIForZeroShotArgumentHandler(ArgumentHandler):
     premise/hypothesis pair.
     """
 
+    def _parse_labels(self, labels):
+        if isinstance(labels, str):
+            labels = [label.strip() for label in labels.split(',')]
+        return labels
+
     def __call__(self, sequences, labels, hypothesis_template):
         if isinstance(sequences, str):
             sequences = [sequences]
-        if isinstance(labels, str):
-            labels = [labels]
+        labels = self._parse_labels(labels)
         
         sequence_pairs = []
         for sequence in sequences:
@@ -841,10 +845,10 @@ class NLIForZeroShotPipeline(Pipeline):
     def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
         num_sequences = 1 if isinstance(sequences, str) else len(sequences)
-        num_labels = 1 if isinstance(candidate_labels, str) else len(candidate_labels)
-        reshaped_outputs = outputs.reshape((num_sequences, num_labels, -1))
+        candidate_labels = self._args_parser._parse_labels(candidate_labels)
+        reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
 
-        if num_labels == 1:
+        if len(candidate_labels) == 1:
             multi_class = True
         
         if not multi_class:
