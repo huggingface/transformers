@@ -600,7 +600,7 @@ class XLNetModelOutput(ModelOutput):
 @dataclass
 class XLNetLMHeadModelOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.XLNetModel`.
+    Output type of :class:`~transformers.XLNetLMHeadModel`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
@@ -637,7 +637,7 @@ class XLNetLMHeadModelOutput(ModelOutput):
 @dataclass
 class XLNetForSequenceClassificationOutput(ModelOutput):
     """
-    Base class for outputs of sentence classification models.
+    Output type of :class:`~transformers.XLNetForSequenceClassification`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
@@ -671,7 +671,7 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
 @dataclass
 class XLNetForTokenClassificationOutput(ModelOutput):
     """
-    Base class for outputs of token classification models.
+    Output type of :class:`~transformers.XLNetForTokenClassificationOutput`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
