@@ -3,10 +3,6 @@ language: it
 thumbnail: "https://neuraly.ai/static/assets/images/huggingface/thumbnail.png"  
 tags:  
   
-- pytorch  
-- tf
-- bert
-- text-classification
 - sentiment
 - Italian  
   
