@@ -1,13 +1,12 @@
 import unittest
 
-from torch.utils.data import IterableDataset
-
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
 from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
     import torch
+    from torch.utils.data import IterableDataset
 
     from transformers import (
         AutoModelForSequenceClassification,
