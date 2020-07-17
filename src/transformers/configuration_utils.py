@@ -47,7 +47,7 @@ class PretrainedConfig(object):
                 Whether or not the model should return all hidden-states.
             output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the model should returns all attentions.
-            use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            use_cache (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the model should return the last key/values attentions (not used by all models).
             return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the model should return tuples instead of :obj:`ModelOutput` objects.
