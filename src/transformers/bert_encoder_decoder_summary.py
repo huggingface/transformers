@@ -95,7 +95,6 @@ training_args = TrainingArguments(
     per_device_train_batch_size=batch_size,
     per_device_eval_batch_size=batch_size,
     predict_from_generate=True,
-    fp16=True,
     evaluate_during_training=True,
     do_train=True,
     do_eval=True,
