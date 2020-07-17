@@ -235,10 +235,7 @@ class TFTrainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        for step, batch in enumerate(dataset, 1):
-            if step == steps:
-                break
-
+        for step, batch in enumerate(dataset):
             logits = distributed_test_steps(batch)
             _, labels = batch
 
@@ -271,6 +268,9 @@ class TFTrainer:
                         label_ids = labels.numpy()
                     else:
                         label_ids = np.append(label_ids, labels.numpy(), axis=0)
+
+                if step == steps:
+                    break
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -429,16 +429,13 @@ class TFTrainer:
                 if self.args.past_index >= 0:
                     self._past = None
 
-                for step, batch in enumerate(train_ds, 1):
-                    if step > self.steps_per_epoch:
-                        break
-
+                for step, batch in enumerate(train_ds):
                     self.global_step = iterations.numpy()
-                    self.epoch_logging = epoch_iter - 1 + step / self.steps_per_epoch
+                    self.epoch_logging = epoch_iter - 1 + (step + 1) / self.steps_per_epoch
 
                     distributed_training_steps(batch)
 
-                    training_loss = self.train_loss.result() / (step * self.total_train_batch_size)
+                    training_loss = self.train_loss.result() / ((step + 1) * self.total_train_batch_size)
 
                     if self.args.debug:
                         logs = {}
@@ -453,11 +450,11 @@ class TFTrainer:
                                 name="training", step=self.global_step, profiler_outdir=self.args.logging_dir
                             )
 
-                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                    if self.global_step > 0 and self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                         self.evaluate()
 
                     if (
-                        self.global_step % self.args.logging_steps == 0
+                        (self.global_step > 0 and self.global_step % self.args.logging_steps == 0)
                         or (self.global_step == 1 and self.args.logging_first_step)
                     ):
                         logs = {}
@@ -467,10 +464,13 @@ class TFTrainer:
 
                         self._log(logs)
 
-                    if self.global_step % self.args.save_steps == 0:
+                    if self.global_step > 0 and self.global_step % self.args.save_steps == 0:
                         ckpt_save_path = self.model.ckpt_manager.save()
 
                         logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
+
+                    if self.global_step > 0 and self.global_step % self.steps_per_epoch == 0:
+                        break
 
                 self.train_loss.reset_states()
 
