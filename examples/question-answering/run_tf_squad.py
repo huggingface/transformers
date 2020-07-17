@@ -21,6 +21,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+import tensorflow as tf
+
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -209,6 +211,8 @@ def main():
         else None
     )
 
+    train_dataset = train_dataset.apply(tf.data.experimental.assert_cardinality(len(train_examples)))
+
     eval_dataset = (
         squad_convert_examples_to_features(
             examples=eval_examples,
@@ -222,6 +226,8 @@ def main():
         if training_args.do_eval
         else None
     )
+
+    eval_dataset = eval_dataset.apply(tf.data.experimental.assert_cardinality(len(eval_examples)))
 
     # Initialize our Trainer
     trainer = TFTrainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=eval_dataset,)

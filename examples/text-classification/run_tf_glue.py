@@ -10,6 +10,7 @@ from typing import Dict, Optional
 
 import numpy as np
 import tensorflow_datasets as tfds
+import tensorflow as tf
 
 from transformers import (
     AutoConfig,
@@ -50,9 +51,11 @@ def get_tfds(
     else:
         tfds_name = task_name
 
-    ds = tfds.load("glue/" + tfds_name, split=mode.value)
+    ds, info = tfds.load("glue/" + tfds_name, split=mode.value, with_info=True)
+    ds = glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
+    ds = ds.apply(tf.data.experimental.assert_cardinality(info.splits[mode.value].num_examples))
 
-    return glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
+    return ds
 
 
 logger = logging.getLogger(__name__)

@@ -114,7 +114,10 @@ class TFTrainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         self.total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps
-        self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+        self.num_train_examples = tf.data.experimental.cardinality(self.train_dataset).numpy()
+
+        if self.num_train_examples < 0:
+            raise ValueError("The training dataset must have an asserted cardinality")
 
         ds = (
             self.train_dataset.repeat()
@@ -137,7 +140,10 @@ class TFTrainer:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        num_examples = eval_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+        num_examples = tf.data.experimental.cardinality(eval_dataset).numpy()
+
+        if num_examples < 0:
+            raise ValueError("The training dataset must have an asserted cardinality")
 
         if self.args.dataloader_drop_last:
             approx = math.floor
@@ -161,7 +167,10 @@ class TFTrainer:
             test_dataset (:class:`~tf.data.Dataset`): The dataset to use.
         """
 
-        num_examples = test_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+        num_examples = tf.data.experimental.cardinality(test_dataset).numpy()
+
+        if num_examples < 0:
+            raise ValueError("The training dataset must have an asserted cardinality")
 
         if self.args.dataloader_drop_last:
             approx = math.floor
