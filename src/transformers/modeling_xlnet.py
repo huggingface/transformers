@@ -1058,7 +1058,7 @@ class XLNetModel(XLNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -1370,7 +1370,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1457,7 +1457,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1548,7 +1548,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             of the input tensors. (see `input_ids` above)
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         outputs = self.transformer(
             input_ids,
@@ -1643,7 +1643,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             of the input tensors. (see `input_ids` above)
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1747,7 +1747,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         outputs = self.transformer(
             input_ids,
@@ -1879,7 +1879,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         >>> loss = outputs[0]
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
             input_ids,
