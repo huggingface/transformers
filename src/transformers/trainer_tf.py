@@ -434,6 +434,7 @@ class TFTrainer:
                 "  Total train batch size (w. parallel, distributed & accumulation) = %d", self.total_train_batch_size
             )
             logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
+            logger.info("  Steps per epoch = %d", self.steps_per_epoch)
             logger.info("  Total optimization steps = %d", t_total)
 
             self.train_loss = tf.keras.metrics.Sum()
