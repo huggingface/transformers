@@ -73,7 +73,7 @@ class GlueDataTrainingArguments:
 
     task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(glue_processors.keys())})
     data_dir: Optional[str] = field(
-        default="None", metadata={"help": "The input/output data dir for TFDS."}
+        default=None, metadata={"help": "The input/output data dir for TFDS."}
     )
     max_seq_length: int = field(
         default=128,
