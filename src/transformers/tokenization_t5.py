@@ -150,7 +150,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
+        A sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``
@@ -164,7 +164,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         Returns:
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
-        bos = []
+        bos = []#DELETE IF NOT NEEDED
         eos = [self.eos_token_id]
         if token_ids_1 is None:
             return bos + token_ids_0 + eos
