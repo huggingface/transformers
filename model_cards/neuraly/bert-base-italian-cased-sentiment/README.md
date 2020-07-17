@@ -1,16 +1,14 @@
----  
+---
 language: it
-thumbnail: "https://neuraly.ai/static/assets/images/huggingface/thumbnail.png"  
-tags:  
-  
+thumbnail: https://neuraly.ai/static/assets/images/huggingface/thumbnail.png
+tags:
 - sentiment
-- Italian  
-  
-license: MIT  
-widget:  
+- Italian
+license: MIT
+widget:
 - text: "Huggingface è un team fantastico!"
----  
-  
+---
+
 # 🤗 + neuraly - Italian BERT Sentiment model
   
 ## Model description  
