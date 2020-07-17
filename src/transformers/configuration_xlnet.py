@@ -110,6 +110,8 @@ class XLNetConfig(PretrainedConfig):
                 Used in the SQuAD evaluation script for XLM and XLNet.
             end_n_top (:obj:`int`, optional, defaults to 5):
                 Used in the SQuAD evaluation script for XLM and XLNet.
+            use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Differs slightly from other models as it is always turned on at training time.
 
         Example::
 
