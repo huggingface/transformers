@@ -230,7 +230,7 @@ class Trainer:
         """
         Returns the training :class:`~torch.utils.data.DataLoader`.
         """
-        if not isinstance(self.train_dataset,torch.utils.data.IterableDataset):
+        if not isinstance(self.train_dataset, torch.utils.data.IterableDataset):
             if self.train_dataset is None:
                 raise ValueError("Trainer: training requires a train_dataset.")
             if is_torch_tpu_available():
@@ -242,19 +242,19 @@ class Trainer:
                     else DistributedSampler(self.train_dataset)
                 )
             data_loader = DataLoader(
-                    self.train_dataset,
-                    batch_size=self.args.train_batch_size,
-                    sampler=train_sampler,
-                    collate_fn=self.data_collator,
-                    drop_last=self.args.dataloader_drop_last,
-                    )
+                self.train_dataset,
+                batch_size=self.args.train_batch_size,
+                sampler=train_sampler,
+                collate_fn=self.data_collator,
+                drop_last=self.args.dataloader_drop_last,
+            )
         else:
             data_loader = DataLoader(
                 self.train_dataset,
                 batch_size=self.args.train_batch_size,
                 collate_fn=self.data_collator,
                 drop_last=self.args.dataloader_drop_last,
-                )
+            )
 
         return data_loader
 
@@ -271,7 +271,7 @@ class Trainer:
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
 
-        if not isinstance(eval_dataset,torch.utils.data.IterableDataset):
+        if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
             if is_torch_tpu_available():
                 sampler = SequentialDistributedSampler(
                     eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
@@ -306,7 +306,7 @@ class Trainer:
             test_dataset (obj:`Dataset`): The test dataset to use.
         """
         # We use the same batch_size as for eval.
-        if not isinstance(self.test_dataset,torch.utils.data.IterableDataset):
+        if not isinstance(self.test_dataset, torch.utils.data.IterableDataset):
             if is_torch_tpu_available():
                 sampler = SequentialDistributedSampler(
                     test_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
