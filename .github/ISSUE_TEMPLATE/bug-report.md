@@ -11,21 +11,24 @@ assignees: ''
  If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of who to tag.
  Please tag fewer than 3 people.
  
- albert, bert, GPT2, XLM: @lysandre
+ albert, bert, GPT2, XLM: @LysandreJik 
  tokenizers: @mfuntowicz
- Trainer: @julienc
+ Trainer: @julien-c
  Speed and Memory Benchmarks: @patrickvonplaten
- Model Cards: @julienc
+ Model Cards: @julien-c
  Translation: @sshleifer
  Summarization: @sshleifer
+ TextGeneration: @TevenLeScao 
  examples/distillation: @VictorSanh
- nlp datasets: different repo
- rust tokenizers: different repo
+ nlp datasets: [different repo](https://github.com/huggingface/nlp)
+ rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
  blenderbot: @mariamabarham
  Bart: @sshleifer
  T5: @patrickvonplaten
  Longformer/Reformer: @patrickvonplaten
+ TransfoXL/XLNet: @TevenLeScao 
  examples/seq2seq: @sshleifer
+ tensorflow: @jplu 
  -->
 
 ## Information
@@ -69,5 +72,4 @@ Steps to reproduce the behavior:
 ## Expected behavior
 
 <!-- A clear and concise description of what you would expect to happen. -->
-
 
