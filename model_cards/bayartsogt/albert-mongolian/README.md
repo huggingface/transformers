@@ -1,6 +1,5 @@
 ---
 language: mn
-thumbnail:
 ---
 
 # ALBERT-Mongolian
