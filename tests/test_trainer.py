@@ -155,6 +155,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
             data_collator(example)
 
 
+@require_torch
 class SampleIterableDataset(IterableDataset):
     def __init__(self, file_path):
         self.file_path = file_path
