@@ -189,6 +189,6 @@ trainer = Trainer(
 trainer.train()
 ```
 
-## Evaluation
+## Results
 
 TODO
