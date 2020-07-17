@@ -58,6 +58,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-11b": 512,
 }
 
+from typing import List, Optional
 
 class T5Tokenizer(PreTrainedTokenizer):
     """
@@ -144,6 +145,30 @@ class T5Tokenizer(PreTrainedTokenizer):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
+
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A RoBERTa sequence has the following format:
+
+        - single sequence: ``<s> X </s>``
+        - pair of sequences: ``<s> A </s></s> B </s>``
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        bos = []
+        eos = [self.eos_token_id]
+        if token_ids_1 is None:
+            return bos + token_ids_0 + eos
+        return bos + token_ids_0 + eos + eos + token_ids_1 + eos
 
     def __getstate__(self):
         state = self.__dict__.copy()
