@@ -105,7 +105,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def __init__(self, tokenizer: BaseTokenizerFast, **kwargs):
         if not isinstance(tokenizer, BaseTokenizerFast):
             raise ValueError(
-                "Tokenizer should be an instance of a Tokenizer " "provided by HuggingFace tokenizers library."
+                "Tokenizer should be an instance of a BaseTokenizer " "provided by HuggingFace tokenizers library."
             )
         self._tokenizer: BaseTokenizerFast = tokenizer
 
