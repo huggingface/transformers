@@ -51,7 +51,7 @@ def get_tfds(
     else:
         tfds_name = task_name
 
-    ds, info = tfds.load("glue/" + tfds_name, split=mode.value, with_info=True)
+    ds, info = tfds.load("glue/" + tfds_name, split=mode.value, with_info=True, try_gcs=True)
     ds = glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
     ds = ds.apply(tf.data.experimental.assert_cardinality(info.splits[mode.value].num_examples))
 

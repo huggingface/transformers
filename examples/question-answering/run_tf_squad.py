@@ -181,7 +181,7 @@ def main():
         except ImportError:
             raise ImportError("If not data_dir is specified, tensorflow_datasets needs to be installed.")
 
-        tfds_examples = tfds.load("squad")
+        tfds_examples = tfds.load("squad", try_gcs=True)
         train_examples = (
             SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=False)
             if training_args.do_train
