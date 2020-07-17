@@ -3,11 +3,13 @@
 import logging
 import math
 import os
+import sys
 from typing import Callable, Dict, Optional, Tuple
 import datetime
 
 import numpy as np
 import tensorflow as tf
+
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
@@ -20,6 +22,11 @@ if is_wandb_available():
 
 
 logger = logging.getLogger(__name__)
+
+
+if (*map(int, tf.__version__.split('.')),) < (2, 2, 0):
+    logger.info("You need to run the TensorFlow trainer with at least the version 2.2.0, your version is {}".format(tf.__version__))
+    sys.exit(1)
 
 
 class TFTrainer:
