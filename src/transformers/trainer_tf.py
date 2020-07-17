@@ -120,7 +120,7 @@ class TFTrainer:
             raise ValueError("The training dataset must have an asserted cardinality")
 
         ds = (
-            self.train_dataset.enumerate().repeat()
+            self.train_dataset.repeat()
             .shuffle(self.num_train_examples, seed=self.args.seed)
             .batch(self.total_train_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
@@ -152,7 +152,7 @@ class TFTrainer:
 
         steps = approx(num_examples / self.args.eval_batch_size)
         ds = (
-            eval_dataset.enumerate().repeat()
+            eval_dataset.repeat()
             .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
@@ -179,7 +179,7 @@ class TFTrainer:
 
         steps = approx(num_examples / self.args.eval_batch_size)
         ds = (
-            test_dataset.enumerate().repeat()
+            test_dataset.repeat()
             .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
@@ -251,7 +251,7 @@ class TFTrainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        for step, batch in dataset:
+        for step, batch in enumerate(dataset):
             logits = distributed_test_steps(batch)
             _, labels = batch
 
@@ -446,7 +446,7 @@ class TFTrainer:
                 if self.args.past_index >= 0:
                     self._past = None
 
-                for step, batch in train_ds:
+                for step, batch in enumerate(train_ds):
                     self.global_step = iterations.numpy()
                     self.epoch_logging = epoch_iter - 1 + (step + 1) / self.steps_per_epoch
 
