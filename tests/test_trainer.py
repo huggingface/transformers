@@ -1,22 +1,24 @@
 import unittest
 
+from torch.utils.data import IterableDataset
+
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
 from transformers.testing_utils import require_torch
-from torch.utils.data import IterableDataset
 
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        Trainer,
-        LineByLineTextDataset,
         AutoModelForSequenceClassification,
-        default_data_collator,
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
         GlueDataset,
         GlueDataTrainingArguments,
+        LineByLineTextDataset,
         TextDataset,
+        Trainer,
+        default_data_collator,
     )
 
 
@@ -153,17 +155,18 @@ class DataCollatorIntegrationTest(unittest.TestCase):
             # Expect error due to odd sequence length
             data_collator(example)
 
+
 class SampleIterableDataset(IterableDataset):
     def __init__(self, file_path):
         self.file_path = file_path
 
     def parse_file(self):
-        f = open(self.file_path, 'r') 
+        f = open(self.file_path, "r")
         return f.readlines()
 
     def __iter__(self):
         return iter(self.parse_file())
-            
+
 
 @require_torch
 class TrainerIntegrationTest(unittest.TestCase):
