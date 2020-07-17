@@ -2,6 +2,7 @@ import unittest
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
 from transformers.testing_utils import require_torch
+from torch.utils.data import IterableDataset
 
 
 if is_torch_available():
@@ -152,6 +153,17 @@ class DataCollatorIntegrationTest(unittest.TestCase):
             # Expect error due to odd sequence length
             data_collator(example)
 
+class SampleIterableDataset(IterableDataset):
+    def __init__(self, file_path):
+        self.file_path = file_path
+
+    def parse_file(self):
+        f = open(self.file_path, 'r') 
+        return f.readlines()
+
+    def __iter__(self):
+        return iter(self.parse_file())
+            
 
 @require_torch
 class TrainerIntegrationTest(unittest.TestCase):
@@ -176,3 +188,12 @@ class TrainerIntegrationTest(unittest.TestCase):
             tokenizer=tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=tokenizer.max_len_single_sentence,
         )
         self.assertEqual(len(dataset), 31)
+
+    def test_trainer_iterable_dataset(self):
+        MODEL_ID = "bert-base-cased-finetuned-mrpc"
+        model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
+        train_dataset = SampleIterableDataset(PATH_SAMPLE_TEXT)
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset)
+        loader = trainer.get_train_dataloader()
+        self.assertIsInstance(loader, torch.utils.data.DataLoader)
