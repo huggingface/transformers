@@ -2,7 +2,8 @@ import unittest
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
 from transformers.testing_utils import require_torch
-
+from transformers.trainer import is_wandb_available
+from unittest.mock import MagicMock
 
 if is_torch_available():
     import torch
@@ -165,6 +166,9 @@ class TrainerIntegrationTest(unittest.TestCase):
         eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
 
         training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+        if is_wandb_available:
+            import wandb
+            wandb.run = MagicMock() # prevent Illegal seek in wandb teardown
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
         self.assertLess(result["eval_loss"], 0.2)
