@@ -166,7 +166,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
 
         training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
-        if is_wandb_available:
+        if is_wandb_available():
             import wandb
             wandb.run = MagicMock() # prevent Illegal seek in wandb teardown
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
