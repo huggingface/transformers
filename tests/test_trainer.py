@@ -156,20 +156,18 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-class SampleIterableDataset(IterableDataset):
-    def __init__(self, file_path):
-        self.file_path = file_path
-
-    def parse_file(self):
-        f = open(self.file_path, "r")
-        return f.readlines()
-
-    def __iter__(self):
-        return iter(self.parse_file())
-
-
-@require_torch
 class TrainerIntegrationTest(unittest.TestCase):
+    class SampleIterableDataset(IterableDataset):
+        def __init__(self, file_path):
+            self.file_path = file_path
+
+        def parse_file(self):
+            f = open(self.file_path, "r")
+            return f.readlines()
+
+        def __iter__(self):
+            return iter(self.parse_file())
+
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
@@ -195,7 +193,7 @@ class TrainerIntegrationTest(unittest.TestCase):
     def test_trainer_iterable_dataset(self):
         MODEL_ID = "bert-base-cased-finetuned-mrpc"
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-        train_dataset = SampleIterableDataset(PATH_SAMPLE_TEXT)
+        train_dataset = self.SampleIterableDataset(PATH_SAMPLE_TEXT)
         training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
         trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset)
         loader = trainer.get_train_dataloader()
