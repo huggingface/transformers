@@ -5,7 +5,7 @@ export PYTHONPATH="../":"${PYTHONPATH}"
 python finetune.py \
     --learning_rate=3e-5 \
     --fp16 \
-    --gpus 2 \
+    --gpus 1 \
     --do_train \
     --do_predict \
     --n_val 1000 \
