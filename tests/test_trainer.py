@@ -2,7 +2,7 @@ import unittest
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
 from transformers.testing_utils import require_torch
-from transformers.trainer import is_wandb_available
+from transformers.trainer_utils import is_wandb_available
 from unittest.mock import MagicMock
 
 if is_torch_available():
