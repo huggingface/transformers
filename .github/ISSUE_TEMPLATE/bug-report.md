@@ -7,8 +7,22 @@ assignees: ''
 
 ---
 
+
+## Environment info
+<!-- You can run the command `transformers-cli env` and copy-and-paste its output below.
+     Don't forget to fill out the missing fields in that output! -->
+     
+- `transformers` version:
+- Platform:
+- Python version:
+- PyTorch version (GPU?):
+- Tensorflow version (GPU?):
+- Using GPU in script?:
+- Using distributed or parallel set-up in script?:
+
+### Who can help
 <!-- Your issue will be replied to more quickly if you can figure out the right person to tag with @
- If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of who to tag.
+ If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of **who to tag**.
  Please tag fewer than 3 people.
  
  albert, bert, GPT2, XLM: @LysandreJik 
@@ -22,8 +36,11 @@ assignees: ''
  examples/distillation: @VictorSanh
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
  rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
+ TransfoXL/XLNet: @TevenLeScao
+ Text Generation: @TevenLeScao
  blenderbot: @mariamabarham
  Bart: @sshleifer
+ Marian: @sshleifer
  T5: @patrickvonplaten
  Longformer/Reformer: @patrickvonplaten
  TransfoXL/XLNet: @TevenLeScao 
@@ -35,8 +52,6 @@ assignees: ''
 
 Model I am using (Bert, XLNet ...):
 
-Language I am using the model on (English, Chinese ...):
-
 The problem arises when using:
 * [ ] the official example scripts: (give details below)
 * [ ] my own modified scripts: (give details below)
@@ -44,18 +59,6 @@ The problem arises when using:
 The tasks I am working on is:
 * [ ] an official GLUE/SQUaD task: (give the name)
 * [ ] my own task or dataset: (give details below)
-
-## Environment info
-<!-- You can run the command `transformers-cli env` and copy-and-paste its output below.
-     Don't forget to fill out the missing fields in that output! -->
-     
-- `transformers` version:
-- Platform:
-- Python version:
-- PyTorch version (GPU?):
-- Tensorflow version (GPU?):
-- Using GPU in script?:
-- Using distributed or parallel set-up in script?:
 
 ## To reproduce
 
