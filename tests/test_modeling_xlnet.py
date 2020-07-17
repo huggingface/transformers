@@ -23,7 +23,6 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
-
 if is_torch_available():
     import torch
 
@@ -42,32 +41,32 @@ if is_torch_available():
 
 class XLNetModelTester:
     def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        mem_len=10,
-        clamp_len=-1,
-        reuse_len=15,
-        is_training=True,
-        use_labels=True,
-        vocab_size=99,
-        cutoffs=[10, 50, 80],
-        hidden_size=32,
-        num_attention_heads=4,
-        d_inner=128,
-        num_hidden_layers=5,
-        type_sequence_label_size=2,
-        untie_r=True,
-        bi_data=False,
-        same_length=False,
-        initializer_range=0.05,
-        seed=1,
-        type_vocab_size=2,
-        bos_token_id=1,
-        eos_token_id=2,
-        pad_token_id=5,
-        num_choices=4,
+            self,
+            parent,
+            batch_size=14,
+            seq_length=7,
+            mem_len=10,
+            clamp_len=-1,
+            reuse_len=15,
+            is_training=True,
+            use_labels=True,
+            vocab_size=99,
+            cutoffs=[10, 50, 80],
+            hidden_size=32,
+            num_attention_heads=4,
+            d_inner=128,
+            num_hidden_layers=5,
+            type_sequence_label_size=2,
+            untie_r=True,
+            bi_data=False,
+            same_length=False,
+            initializer_range=0.05,
+            seed=1,
+            type_vocab_size=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=5,
+            num_choices=4,
     ):
         self.parent = parent
         self.batch_size = 14
@@ -107,7 +106,7 @@ class XLNetModelTester:
             self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device,
         )
         perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-        target_mapping = torch.zeros(self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device,)
+        target_mapping = torch.zeros(self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device, )
         target_mapping[:, 0, -1] = 1.0  # predict last token
 
         sequence_labels = None
@@ -159,19 +158,19 @@ class XLNetModelTester:
         torch.manual_seed(self.seed)
 
     def create_and_check_xlnet_base_model(
-        self,
-        config,
-        input_ids_1,
-        input_ids_2,
-        input_ids_q,
-        perm_mask,
-        input_mask,
-        target_mapping,
-        segment_ids,
-        lm_labels,
-        sequence_labels,
-        is_impossible_labels,
-        token_labels,
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
     ):
         model = XLNetModel(config)
         model.to(torch_device)
@@ -202,20 +201,75 @@ class XLNetModelTester:
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
+    def create_and_check_xlnet_model_use_cache(
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels):
+        model = XLNetModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        causal_mask = torch.ones(input_ids_1.shape[0], input_ids_1.shape[1], input_ids_1.shape[1],
+                                 dtype=torch.float, device=input_ids_1.device)
+        causal_mask = torch.triu(causal_mask, diagonal=0)
+        outputs_cache = model(input_ids_1, use_cache=True, perm_mask=causal_mask)
+        outputs_no_cache = model(input_ids_1, use_cache=False, perm_mask=causal_mask)
+        outputs_conf = model(input_ids_1)
+
+        self.parent.assertTrue(len(outputs_cache) == len(outputs_conf))
+        self.parent.assertTrue(len(outputs_cache) == len(outputs_no_cache) + 1)
+
+        output, mems = outputs_cache
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and token_type_ids
+        next_input_ids = torch.cat([input_ids_1, next_tokens], dim=-1)
+
+        # causal mask
+        causal_mask = torch.ones(input_ids_1.shape[0], input_ids_1.shape[1] + 1, input_ids_1.shape[1] + 1,
+                                 dtype=torch.float, device=input_ids_1.device)
+        causal_mask = torch.triu(causal_mask, diagonal=0)
+        single_mask = torch.ones(input_ids_1.shape[0], 1, 1)
+
+        # second forward pass
+        output_from_no_past, _ = model(next_input_ids, perm_mask=causal_mask)
+        output_from_past, _ = model(next_tokens, mems=mems, perm_mask=single_mask)
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
     def create_and_check_xlnet_base_model_with_att_output(
-        self,
-        config,
-        input_ids_1,
-        input_ids_2,
-        input_ids_q,
-        perm_mask,
-        input_mask,
-        target_mapping,
-        segment_ids,
-        lm_labels,
-        sequence_labels,
-        is_impossible_labels,
-        token_labels,
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
     ):
         model = XLNetModel(config)
         model.to(torch_device)
@@ -229,19 +283,19 @@ class XLNetModelTester:
         self.parent.assertTrue(attentions[0][0].shape, attentions[0][0].shape)
 
     def create_and_check_xlnet_lm_head(
-        self,
-        config,
-        input_ids_1,
-        input_ids_2,
-        input_ids_q,
-        perm_mask,
-        input_mask,
-        target_mapping,
-        segment_ids,
-        lm_labels,
-        sequence_labels,
-        is_impossible_labels,
-        token_labels,
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
     ):
         model = XLNetLMHeadModel(config)
         model.to(torch_device)
@@ -281,19 +335,19 @@ class XLNetModelTester:
         )
 
     def create_and_check_xlnet_qa(
-        self,
-        config,
-        input_ids_1,
-        input_ids_2,
-        input_ids_q,
-        perm_mask,
-        input_mask,
-        target_mapping,
-        segment_ids,
-        lm_labels,
-        sequence_labels,
-        is_impossible_labels,
-        token_labels,
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
     ):
         model = XLNetForQuestionAnswering(config)
         model.to(torch_device)
@@ -321,7 +375,7 @@ class XLNetModelTester:
 
         total_loss, mems = outputs
 
-        outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels,)
+        outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels, )
 
         total_loss, mems = outputs
 
@@ -356,19 +410,19 @@ class XLNetModelTester:
         )
 
     def create_and_check_xlnet_token_classif(
-        self,
-        config,
-        input_ids_1,
-        input_ids_2,
-        input_ids_q,
-        perm_mask,
-        input_mask,
-        target_mapping,
-        segment_ids,
-        lm_labels,
-        sequence_labels,
-        is_impossible_labels,
-        token_labels,
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
     ):
         model = XLNetForTokenClassification(config)
         model.to(torch_device)
@@ -393,19 +447,19 @@ class XLNetModelTester:
         )
 
     def create_and_check_xlnet_sequence_classif(
-        self,
-        config,
-        input_ids_1,
-        input_ids_2,
-        input_ids_q,
-        perm_mask,
-        input_mask,
-        target_mapping,
-        segment_ids,
-        lm_labels,
-        sequence_labels,
-        is_impossible_labels,
-        token_labels,
+            self,
+            config,
+            input_ids_1,
+            input_ids_2,
+            input_ids_q,
+            perm_mask,
+            input_mask,
+            target_mapping,
+            segment_ids,
+            lm_labels,
+            sequence_labels,
+            is_impossible_labels,
+            token_labels,
     ):
         model = XLNetForSequenceClassification(config)
         model.to(torch_device)
@@ -480,6 +534,12 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
+
+    def test_xlnet_base_model_use_cache(self):
+        # checking that in auto-regressive mode, `use_cache` gives the same results
+        self.model_tester.set_seed()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlnet_model_use_cache(*config_and_inputs)
 
     def test_xlnet_base_model_with_att_output(self):
         self.model_tester.set_seed()
