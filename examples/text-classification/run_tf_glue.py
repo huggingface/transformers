@@ -36,7 +36,7 @@ class Split(Enum):
 
 
 def get_tfds(
-    task_name: str, tokenizer: PreTrainedTokenizer, max_seq_length: Optional[int] = None, mode: Split = Split.train
+    task_name: str, tokenizer: PreTrainedTokenizer, max_seq_length: Optional[int] = None, mode: Split = Split.train, data_dir: str = None
 ):
     if task_name == "mnli-mm" and mode == Split.dev:
         tfds_name = "mnli_mismatched"
@@ -51,7 +51,7 @@ def get_tfds(
     else:
         tfds_name = task_name
 
-    ds, info = tfds.load("glue/" + tfds_name, split=mode.value, with_info=True, try_gcs=True)
+    ds, info = tfds.load("glue/" + tfds_name, split=mode.value, with_info=True, data_dir=data_dir)
     ds = glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
     ds = ds.apply(tf.data.experimental.assert_cardinality(info.splits[mode.value].num_examples))
 
@@ -72,6 +72,9 @@ class GlueDataTrainingArguments:
     """
 
     task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(glue_processors.keys())})
+    data_dir: Optional[str] = field(
+        default="None", metadata={"help": "The input/output data dir for TFDS."}
+    )
     max_seq_length: int = field(
         default=128,
         metadata={
@@ -174,13 +177,13 @@ def main():
 
     # Get datasets
     train_dataset = (
-        get_tfds(task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length)
+        get_tfds(task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length, data_dir=data_args.data_dir)
         if training_args.do_train
         else None
     )
     eval_dataset = (
         get_tfds(
-            task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length, mode=Split.dev
+            task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length, mode=Split.dev, data_dir=data_args.data_dir
         )
         if training_args.do_eval
         else None
