@@ -53,7 +53,7 @@ print(tokenizer.decode(output_ids[0], skip_special_tokens=True))
 
 ## Training script:
 
-**IMPORTANT** In order for this code to work, make sure you checkout to the branch 
+**IMPORTANT**: In order for this code to work, make sure you checkout to the branch 
 [more_general_trainer_metric](https://github.com/huggingface/transformers/tree/more_general_trainer_metric), which slightly adapts 
 the `Trainer` for `EncoderDecoderModels` according to this PR: https://github.com/huggingface/transformers/pull/5840. 
 
