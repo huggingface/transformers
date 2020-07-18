@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 export PYTHONPATH="../":"${PYTHONPATH}"
-
+# Need to export N_GPUS=
 python finetune.py \
     --learning_rate=3e-5 \
     --fp16 \
