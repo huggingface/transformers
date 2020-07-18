@@ -746,8 +746,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 model_to_load = getattr(model, cls.base_model_prefix)
 
             load(model_to_load, prefix=start_prefix)
-
-            if model.__class__.__name__ != model_to_load.__class__.__name__:
+            model_class_name = model.__class__.__name__
+            if model_class_name != model_to_load.__class__.__name__:
                 base_model_state_dict = model_to_load.state_dict().keys()
                 head_model_state_dict_without_base_prefix = [
                     key.split(cls.base_model_prefix + ".")[-1] for key in model.state_dict().keys()
@@ -758,31 +758,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             if len(unexpected_keys) > 0:
                 logger.warning(
                     f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                    f"initializing {model_class_name}: {unexpected_keys}\n"
+                    f"- This IS expected if you are initializing {model_class_name} from the checkpoint of a model trained on another task,"
                     f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
-                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
                 )
             else:
-                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+                logger.info(f"All model checkpoint weights were used when initializing {model_class_name}.\n")
             if len(missing_keys) > 0:
-                logger.warning(
-                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                    f"and are newly initialized: {missing_keys}\n"
-                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
-                )
+                if 'ConditionalGeneration' in model_class_name or model_class_name =='BartModel':
+                    # Many conditional generation models make lm_head on the fly.
+                    pass
+                else:
+                    logger.warning(
+                        f"Some weights of {model_class_name} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                        f"and are newly initialized: {missing_keys}. They may require further training. \n"
+                    )
             else:
-                logger.info(
-                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                    f"If your task is similar to the task the model of the ckeckpoint was trained on, "
-                    f"you can already use {model.__class__.__name__} for predictions without further training."
-                )
+                logger.info(f"All weights initialized from the checkpoint at {pretrained_model_name_or_path}.\n")
             if len(error_msgs) > 0:
                 raise RuntimeError(
-                    "Error(s) in loading state_dict for {}:\n\t{}".format(
-                        model.__class__.__name__, "\n\t".join(error_msgs)
-                    )
+                    "Error(s) in loading state_dict for {}:\n\t{}".format(model_class_name, "\n\t".join(error_msgs))
                 )
         model.tie_weights()  # make sure token embedding weights are still tied if needed
 
