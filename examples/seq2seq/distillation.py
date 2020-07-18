@@ -446,6 +446,7 @@ def distill_main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
     parser = BartSummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
