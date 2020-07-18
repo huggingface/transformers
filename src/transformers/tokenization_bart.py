@@ -118,12 +118,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
-        self.reset_special_tokens()
-
-    def reset_special_tokens(self) -> None:
-        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -183,12 +178,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
-    def set_lang(self, lang: str) -> None:
-        """Set the current language code in order to call tokenizer properly."""
-        self.cur_lang_code = self.lang_code_to_id[lang]
-        self.prefix_tokens = [self.cur_lang_code]
-        self.suffix_tokens = [self.eos_token_id]
-
     def prepare_translation_batch(
         self,
         src_texts: List[str],
@@ -215,7 +204,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         """
         if max_length is None:
             max_length = self.max_len
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.set_src_lang_special_tokens(src_lang)
         model_inputs: BatchEncoding = self(
             src_texts,
             add_special_tokens=True,
@@ -227,7 +216,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         if tgt_texts is None:
             return model_inputs
-        self.set_lang(tgt_lang)
+        self.set_tgt_lang_special_tokens(tgt_lang)
         decoder_inputs: BatchEncoding = self(
             tgt_texts,
             add_special_tokens=True,
@@ -239,6 +228,18 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
-        self.reset_special_tokens()  # sets to src_lang
+
+        self.set_src_lang_special_tokens(src_lang)  # sets to src_lang
         return model_inputs
+
+    def set_src_lang_special_tokens(self, src_lang) -> None:
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
+        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+
+    def set_tgt_lang_special_tokens(self, lang: str) -> None:
+        """Reset the special tokens to the target language setting. Prefix [tgt_lang_code], suffix =[eos]."""
+        self.cur_lang_code = self.lang_code_to_id[lang]
+        self.prefix_tokens = [self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]
