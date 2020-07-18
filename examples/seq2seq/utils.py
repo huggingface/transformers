@@ -3,6 +3,7 @@ import json
 import linecache
 import os
 import pickle
+import warnings
 from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List
@@ -14,7 +15,6 @@ from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
-from tqdm import tqdm
 
 from transformers import BartTokenizer
 
@@ -52,48 +52,44 @@ def trim_batch(
         return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
 
 
-class SummarizationDataset(Dataset):
+class Seq2SeqDataset(Dataset):
     def __init__(
         self,
         tokenizer,
         data_dir,
+        max_source_length,
+        max_target_length,
         type_path="train",
-        max_source_length=1024,
-        max_target_length=56,
         n_obs=None,
-        overwrite_cache=False,
-        prefix="",
         src_lang=None,
         tgt_lang=None,
+        prefix="",
     ):
         super().__init__()
-        # FIXME: the rstrip logic strips all the chars, it seems.
-        tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
-        if hasattr(tokenizer, "set_lang") and src_lang is not None:
-            tokenizer.set_lang(src_lang)  # HACK: only applies to mbart
+        self.src_file = Path(data_dir).joinpath(type_path + ".source")
+        self.tgt_file = Path(data_dir).joinpath(type_path + ".target")
+        self.src_lens = self.get_char_lens(self.src_file)
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
-        self.len, self.seq_lens = self._get_examples(os.path.join(data_dir, type_path + ".source"))
-        self.source_file = os.path.join(data_dir, type_path + ".source")
-        self.tgt_file = os.path.join(data_dir, type_path + ".target")
+        assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
         self.tokenizer = tokenizer
-
-        if hasattr(self.tokenizer, "set_lang"):
-            assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
-            self.tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
-
+        self.prefix = prefix
         if n_obs is not None:
-            self.len = n_obs
+            self.src_lens = self.src_lens[:n_obs]
         self.pad_token_id = self.tokenizer.pad_token_id
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
 
     def __len__(self):
-        return self.len
+        return len(self.src_lens)
 
-    def __getitem__(self, index):
-        source_line = linecache.getline(self.source_file, index).rstrip("\n")
-        tgt_line = linecache.getline(self.tgt_file, index).rstrip("\n")
+    def __getitem__(self, index) -> Dict[str, torch.Tensor]:
+        index = index + 1  # linecache starts at 1
+        source_line = self.prefix + linecache.getline(str(self.src_file), index).rstrip("\n")
+        tgt_line = linecache.getline(str(self.tgt_file), index).rstrip("\n")
+        assert source_line, f"empty source line for index {index}"
+        assert tgt_line, f"empty tgt line for index {index}"
         source_inputs = encode_line(self.tokenizer, source_line, self.max_source_length)
-
         target_inputs = encode_line(self.tokenizer, tgt_line, self.max_target_length)
 
         source_ids = source_inputs["input_ids"].squeeze()
@@ -106,12 +102,8 @@ class SummarizationDataset(Dataset):
         }
 
     @staticmethod
-    def _get_examples(data_file):
-        seq_lens = []
-        with open(data_file) as f:
-            for i, l in enumerate(f):
-                seq_lens.append(len(l.split(" ")))
-        return i + 1, seq_lens
+    def get_char_lens(data_file):
+        return [len(x) for x in Path(data_file).open().readlines()]
 
     @staticmethod
     def trim_seq2seq_batch(batch, pad_token_id):
@@ -134,7 +126,35 @@ class SummarizationDataset(Dataset):
         return batch
 
     def make_sortish_sampler(self, batch_size):
-        return SortishSampler(self.seq_lens, batch_size)
+        return SortishSampler(self.src_lens, batch_size)
+
+
+class MBartDataset(Seq2SeqDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.max_source_length != self.max_target_length:
+            warnings.warn(f"Mbart will ignore max_target_length = {self.max_target_length}")
+
+    def __getitem__(self, index) -> Dict[str, str]:
+        index = index + 1  # linecache starts at 1
+        source_line = self.prefix + linecache.getline(str(self.src_file), index).rstrip("\n")
+        tgt_line = linecache.getline(str(self.tgt_file), index).rstrip("\n")
+        assert source_line, f"empty source line for index {index}"
+        assert tgt_line, f"empty tgt line for index {index}"
+        return {
+            "tgt_texts": source_line,
+            "src_texts": tgt_line,
+        }
+
+    def collate_fn(self, batch) -> dict:
+        batch_encoding = self.tokenizer.prepare_translation_batch(
+            [x["src_texts"] for x in batch],
+            src_lang=self.src_lang,
+            tgt_texts=[x["tgt_texts"] for x in batch],
+            tgt_lang=self.tgt_lang,
+            max_length=self.max_source_length,
+        )
+        return batch_encoding.data
 
 
 class SortishSampler(Sampler):
@@ -157,10 +177,7 @@ class SortishSampler(Sampler):
         sz = self.bs
         ck_idx = [sort_idx[i : i + sz] for i in range(0, len(sort_idx), sz)]
         max_ck = np.argmax([self.key(ck[0]) for ck in ck_idx])  # find the chunk with the largest key,
-        ck_idx[0], ck_idx[max_ck] = (
-            ck_idx[max_ck],
-            ck_idx[0],
-        )  # then make sure it goes first.
+        ck_idx[0], ck_idx[max_ck] = ck_idx[max_ck], ck_idx[0]  # then make sure it goes first.
         sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
         sort_idx = np.concatenate((ck_idx[0], sort_idx))
         return iter(sort_idx)

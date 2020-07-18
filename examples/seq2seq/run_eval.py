@@ -11,7 +11,9 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 try:
     from .utils import calculate_rouge, use_task_specific_params, calculate_bleu_score, trim_batch
 except ImportError:
-    from utils import calculate_rouge, use_task_specific_params, calculate_bleu_score, trim_batch
+    from utils import calculate_rouge, use_task_specific_params, calculate_bleu_score
+    from utils import trim_batch
+
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
