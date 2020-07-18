@@ -765,7 +765,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             else:
                 logger.info(f"All model checkpoint weights were used when initializing {model_class_name}.\n")
             if len(missing_keys) > 0:
-                if 'ConditionalGeneration' in model_class_name or model_class_name =='BartModel':
+                if "ConditionalGeneration" in model_class_name or model_class_name == "BartModel":
                     # Many conditional generation models make lm_head on the fly.
                     pass
                 else:
