@@ -227,7 +227,7 @@ class XLNetModelTester:
             input_ids_1.shape[1],
             input_ids_1.shape[1],
             dtype=torch.float,
-            device=input_ids_1.device,
+            device=torch_device,
         )
         causal_mask = torch.triu(causal_mask, diagonal=0)
         outputs_cache = model(input_ids_1, use_cache=True, perm_mask=causal_mask)
@@ -251,10 +251,10 @@ class XLNetModelTester:
             input_ids_1.shape[1] + 1,
             input_ids_1.shape[1] + 1,
             dtype=torch.float,
-            device=input_ids_1.device,
+            device=torch_device,
         )
         causal_mask = torch.triu(causal_mask, diagonal=0)
-        single_mask = torch.ones(input_ids_1.shape[0], 1, 1)
+        single_mask = torch.ones(input_ids_1.shape[0], 1, 1, dtype=torch.float, device=torch_device)
 
         # second forward pass
         output_from_no_past, _ = model(next_input_ids, perm_mask=causal_mask)
