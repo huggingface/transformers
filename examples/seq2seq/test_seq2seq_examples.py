@@ -210,12 +210,7 @@ def test_run_eval_bart(model):
 
 
 @pytest.mark.parametrize(
-    ["model"],
-    [
-        # pytest.param(T5_TINY), pytest.param(BART_TINY),
-        pytest.param(MBART_TINY),
-        pytest.param(MARIAN_TINY),
-    ],
+    ["model"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)],
 )
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
@@ -302,7 +297,7 @@ def test_mbart_dataset_truncation():
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize(["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), param(T5_TINY), param(MARIAN_TINY)])
+@pytest.mark.parametrize(["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), param(MARIAN_TINY)])
 def test_summarization_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()

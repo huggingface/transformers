@@ -106,12 +106,12 @@ class Seq2SeqDataset(Dataset):
         return [len(x) for x in Path(data_file).open().readlines()]
 
     @staticmethod
-    def trim_seq2seq_batch(batch, pad_token_id):
+    def trim_seq2seq_batch(batch, pad_token_id) -> tuple:
         y = trim_batch(batch["decoder_input_ids"], pad_token_id)
         source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
         return source_ids, source_mask, y
 
-    def collate_fn(self, batch) -> dict:
+    def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
         target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
@@ -133,7 +133,9 @@ class MBartDataset(Seq2SeqDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.max_source_length != self.max_target_length:
-            warnings.warn(f"Mbart will ignore max_target_length = {self.max_target_length}")
+            warnings.warn(
+                f"Mbart will ignore max_target_length = {self.max_target_length} and use {self.max_source_length} for both sides."
+            )
 
     def __getitem__(self, index) -> Dict[str, str]:
         index = index + 1  # linecache starts at 1
@@ -146,7 +148,7 @@ class MBartDataset(Seq2SeqDataset):
             "src_texts": tgt_line,
         }
 
-    def collate_fn(self, batch) -> dict:
+    def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         batch_encoding = self.tokenizer.prepare_translation_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
