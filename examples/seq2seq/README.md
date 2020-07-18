@@ -79,7 +79,6 @@ The following command should work on a 16GB GPU:
     --model_name_or_path facebook/bart-large
 ```
 
-
 ### Translation Finetuning
 
 First, follow the wmt_en_ro download instructions.
