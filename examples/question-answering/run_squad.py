@@ -308,8 +308,8 @@ def evaluate(args, model, tokenizer, prefix=""):
 
             feature_indices = batch[3]
 
-            # XLNet and XLM use more arguments for their predictions
-            if args.model_type in ["xlnet", "xlm"]:
+            # XLM uses more arguments for its predictions
+            if args.model_type in ["xlm"]:
                 inputs.update({"cls_index": batch[4], "p_mask": batch[5]})
                 # for lang_id-sensitive xlm models
                 if hasattr(model, "config") and hasattr(model.config, "lang2id"):
@@ -325,7 +325,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 
             output = [to_list(output[i]) for output in outputs]
 
-            # Some models (XLNet, XLM) use 5 arguments for their predictions, while the other "simpler"
+            # Some models (XLM) use 5 arguments for their predictions, while the other "simpler"
             # models only use two.
             if len(output) >= 5:
                 start_logits = output[0]
@@ -361,8 +361,8 @@ def evaluate(args, model, tokenizer, prefix=""):
     else:
         output_null_log_odds_file = None
 
-    # XLNet and XLM use a more complex post-processing procedure
-    if args.model_type in ["xlnet", "xlm"]:
+    # XLM uses a more complex post-processing procedure
+    if args.model_type in ["xlm"]:
         start_n_top = model.config.start_n_top if hasattr(model, "config") else model.module.config.start_n_top
         end_n_top = model.config.end_n_top if hasattr(model, "config") else model.module.config.end_n_top
 
