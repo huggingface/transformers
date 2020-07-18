@@ -137,7 +137,7 @@ class BaseTransformer(pl.LightningModule):
         dataloader = self.load_dataset("train", train_batch_size)
 
         t_total = (
-            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
+            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.gpus)))
             // self.hparams.gradient_accumulation_steps
             * float(self.hparams.num_train_epochs)
         )
