@@ -190,6 +190,9 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--num_train_epochs", dest="max_epochs", default=3, type=int)
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
+        parser.add_argument("--val_check_interval", default=1.0, type=float)
+        parser.add_argument("--gpus", default=1, type=int)
+        parser.add_argument("--fast_dev_run", action="store_true")
 
 
 class LoggingCallback(pl.Callback):
