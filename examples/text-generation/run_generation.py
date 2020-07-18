@@ -182,7 +182,7 @@ def main():
     parser.add_argument("--k", type=int, default=0)
     parser.add_argument("--p", type=float, default=0.9)
 
-    parser.add_argument("--padding_text", type=str, default="", help="Padding text for Transfo-XL and XLNet.")
+    parser.add_argument("--padding_text", type=str, default="", help="Padding text.")
     parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
@@ -241,7 +241,9 @@ def main():
             preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", **tokenizer_kwargs
         )
     else:
-        encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
+        encoded_prompt = tokenizer.encode(
+            args.padding_text + prompt_text, add_special_tokens=False, return_tensors="pt"
+        )
     encoded_prompt = encoded_prompt.to(args.device)
 
     if encoded_prompt.size()[-1] == 0:

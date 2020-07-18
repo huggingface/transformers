@@ -763,7 +763,7 @@ class TextGenerationPipeline(Pipeline):
     father initially slaps him for making such an accusation, Rasputin watches as the
     man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
-    with people, even a bishop, begging for his blessing. """
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
     ALLOWED_MODELS = [
         "XLNetLMHeadModel",
@@ -839,27 +839,26 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
+                padding_text = generate_kwargs.get("padding_text", getattr(self.model.config, "padding_text", ""))
                 if self.model.__class__.__name__ in [
                     "XLNetLMHeadModel",
                     "TransfoXLLMHeadModel",
                     "TFXLNetLMHeadModel",
                     "TFTransfoXLLMHeadModel",
                 ]:
-                    # For XLNet and TransformerXL we had an article to the prompt to give more state to the model.
-                    padding_text = self.PADDING_TEXT + self.tokenizer.eos_token
-                    padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
-                    # This impacts max_length and min_length argument that need adjusting.
-                    padding_length = padding["input_ids"].shape[-1]
-                    if "max_length" in generate_kwargs and generate_kwargs["max_length"] is not None:
-                        generate_kwargs["max_length"] += padding_length
-                    if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
-                        generate_kwargs["min_length"] += padding_length
+                    if padding_text == "":
+                        # For XLNet and TransformerXL we had an article to the prompt to give more state to the model.
+                        padding_text = self.PADDING_TEXT
 
-                    inputs = self._parse_and_tokenize(
-                        padding_text + prompt_text, padding=False, add_special_tokens=False
-                    )
-                else:
-                    inputs = self._parse_and_tokenize(prompt_text, padding=False, add_special_tokens=False)
+                padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
+                # This impacts max_length and min_length argument that need adjusting.
+                padding_length = padding["input_ids"].shape[-1]
+                if "max_length" in generate_kwargs and generate_kwargs["max_length"] is not None:
+                    generate_kwargs["max_length"] += padding_length
+                if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
+                    generate_kwargs["min_length"] += padding_length
+
+                inputs = self._parse_and_tokenize(padding_text + prompt_text, padding=False, add_special_tokens=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
