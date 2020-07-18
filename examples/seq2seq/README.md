@@ -60,7 +60,7 @@ Summarization Tips:
 - If you want to run experiments on improving the summarization finetuning process, try the XSUM Shared Task (below). It's faster to train than CNNDM because the summaries are shorter.
 - For CNN/DailyMail, the default `val_max_target_length` and `test_max_target_length` will truncate the ground truth labels, resulting in slightly higher rouge scores. To get accurate rouge scores, you should rerun calculate_rouge on the `{output_dir}/test_generations.txt` file saved by `trainer.test()`
 - `--max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 ` is a reasonable setting for XSUM.
-- `wandb` can be used by specifying `--logger wandb`. It is useful for reproducibility. Specify the environment variable `WANDB_PROJECT='hf_xsum'` to do the XSUM shared task.
+- `wandb` can be used by specifying `--logger_name wandb`. It is useful for reproducibility. Specify the environment variable `WANDB_PROJECT='hf_xsum'` to do the XSUM shared task.
 - If you are finetuning on your own dataset, start from `distilbart-cnn-12-6` if you want long summaries and `distilbart-xsum-12-6` if you want short summaries.
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods). 
 
@@ -124,7 +124,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ```
 
 #### XSUM Shared Task
-Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
+Compare XSUM results with others by using `--logger_name wandb_shared`. This requires `wandb` registration.
 
 Here is an example command, but you can do whatever you want. Hopefully this will make debugging and collaboration easier!
 ```bash
@@ -135,7 +135,7 @@ WANDB_PROJECT='hf_xsum' ./finetune.sh \
     --train_batch_size 16 --eval_batch_size 16 --freeze_embeds --freeze_encoder \
     --num_train_epochs 6 \
     --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 \
-    --logger wandb
+    --logger_name wandb
 ```
 
 You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
