@@ -191,7 +191,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertEqual(len(dataset), 31)
 
     def test_trainer_iterable_dataset(self):
-        MODEL_ID = "bert-base-cased-finetuned-mrpc"
+        MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
         train_dataset = self.SampleIterableDataset(PATH_SAMPLE_TEXT)
         training_args = TrainingArguments(output_dir="./examples", no_cuda=True)

@@ -232,17 +232,16 @@ class Trainer:
         """
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
             train_sampler = None
+        elif self.train_dataset is None:
+            raise ValueError("Trainer: training requires a train_dataset.")
+        elif is_torch_tpu_available():
+            train_sampler = get_tpu_sampler(self.train_dataset)
         else:
-            if self.train_dataset is None:
-                raise ValueError("Trainer: training requires a train_dataset.")
-            if is_torch_tpu_available():
-                train_sampler = get_tpu_sampler(self.train_dataset)
-            else:
-                train_sampler = (
-                    RandomSampler(self.train_dataset)
-                    if self.args.local_rank == -1
-                    else DistributedSampler(self.train_dataset)
-                )
+            train_sampler = (
+                RandomSampler(self.train_dataset)
+                if self.args.local_rank == -1
+                else DistributedSampler(self.train_dataset)
+            )
         data_loader = DataLoader(
             self.train_dataset,
             batch_size=self.args.train_batch_size,
@@ -268,15 +267,14 @@ class Trainer:
 
         if isinstance(eval_dataset, torch.utils.data.IterableDataset):
             sampler = None
+        elif is_torch_tpu_available():
+            sampler = SequentialDistributedSampler(
+                eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+            )
+        elif self.args.local_rank != -1:
+            sampler = SequentialDistributedSampler(eval_dataset)
         else:
-            if is_torch_tpu_available():
-                sampler = SequentialDistributedSampler(
-                    eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
-                )
-            elif self.args.local_rank != -1:
-                sampler = SequentialDistributedSampler(eval_dataset)
-            else:
-                sampler = SequentialSampler(eval_dataset)
+            sampler = SequentialSampler(eval_dataset)
 
         data_loader = DataLoader(
             eval_dataset,
@@ -298,15 +296,14 @@ class Trainer:
         # We use the same batch_size as for eval.
         if isinstance(self.test_dataset, torch.utils.data.IterableDataset):
             sampler = None
+        elif is_torch_tpu_available():
+            sampler = SequentialDistributedSampler(
+                test_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+            )
+        elif self.args.local_rank != -1:
+            sampler = SequentialDistributedSampler(test_dataset)
         else:
-            if is_torch_tpu_available():
-                sampler = SequentialDistributedSampler(
-                    test_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
-                )
-            elif self.args.local_rank != -1:
-                sampler = SequentialDistributedSampler(test_dataset)
-            else:
-                sampler = SequentialSampler(test_dataset)
+            sampler = SequentialSampler(test_dataset)
 
         data_loader = DataLoader(
             test_dataset,
