@@ -187,14 +187,7 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
         parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
         parser.add_argument("--num_workers", default=4, type=int, help="kwarg passed to DataLoader")
-        parser.add_argument(
-            "--num_train_epochs",
-            dest="max_epochs",
-            default=3,
-            type=int,
-            help="Total number of training epochs to perform.",
-        )
-
+        parser.add_argument("--num_train_epochs", dest="max_epochs", default=3, type=int)
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
 
@@ -248,9 +241,7 @@ def add_generic_args(parser, root_dir) -> None:
         "See details at https://nvidia.github.io/apex/amp.html",
     )
     parser.add_argument("--n_tpu_cores", dest="tpu_cores", type=int, default=0)
-    parser.add_argument(
-        "--max_grad_norm", dest="gradient_clip_val", default=1.0, type=float, help="Max gradient norm."
-    )
+    parser.add_argument("--max_grad_norm", dest="gradient_clip_val", default=1.0, type=float, help="Max gradient norm")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
     parser.add_argument(
