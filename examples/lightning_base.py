@@ -311,7 +311,4 @@ def generic_train(
     if args.do_train:
         trainer.fit(model)
 
-    # TODO: why are these needed? since that's the first thing the trainer does (and the last)
-    trainer.logger.log_hyperparams(args)
-    trainer.logger.save()
     return trainer
