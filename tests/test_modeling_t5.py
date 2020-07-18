@@ -370,7 +370,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
         expected_summaries = [
             'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video of the final seconds . "one can hear cries of \'My God\' in several languages," the magazine says .',
-            'the Palestinians become the 123rd member of the international criminal court . the accession was marked by a ceremony at the Hague, where the court is based . as members of the court, Palestinians may be subject to counter-charges as well .',
+            "the Palestinians become the 123rd member of the international criminal court . the accession was marked by a ceremony at the Hague, where the court is based . as members of the court, Palestinians may be subject to counter-charges as well .",
             "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller: the debate that has already begun since the announcement of the new framework will likely result in more heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut centrifuges and implement a rigorous inspection regime .",
             'prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, with nine of her marriages occurring between 1999 and 2002 .',
         ]
@@ -397,8 +397,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         )
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertListEqual(
-            expected_summaries,
-            decoded,
+            expected_summaries, decoded,
         )
 
     @slow
@@ -425,14 +424,14 @@ class T5ModelIntegrationTests(unittest.TestCase):
         use_task_specific_params(model, "translation_en_to_fr")
 
         en_text = 'This image section from an infrared recording by the Spitzer telescope shows a "family portrait" of countless generations of stars: the oldest stars are seen as blue dots, while more difficult to identify are the pink-coloured "new-borns" in the star delivery room.'
-        "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre un " \
-        "« portrait familial » de générations innombrables d’étoiles : les plus anciennes sont observées sous forme " \
-        "de points bleus, tandis que les « nouveau-nés » de couleur rose dans la salle de célibataire doivent être plus"
-        expected_translation = "Cette section d'images provenant de l'enregistrement infrarouge effectué par le " \
-                               "télescope Spitzer montre un « portrait familial » de générations innombrables de " \
-                               "étoiles : les plus anciennes sont observées sous forme de pointes bleues, " \
-                               "alors que les « nouveau-nés » de couleur rose dans la salle des accouchements doivent " \
-                               "être plus difficiles "
+        "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre un " "« portrait familial » de générations innombrables d’étoiles : les plus anciennes sont observées sous forme " "de points bleus, tandis que les « nouveau-nés » de couleur rose dans la salle de célibataire doivent être plus"
+        expected_translation = (
+            "Cette section d'images provenant de l'enregistrement infrarouge effectué par le "
+            "télescope Spitzer montre un « portrait familial » de générations innombrables de "
+            "étoiles : les plus anciennes sont observées sous forme de pointes bleues, "
+            "alors que les « nouveau-nés » de couleur rose dans la salle des accouchements doivent "
+            "être plus difficiles "
+        )
 
         input_ids = tok.encode(model.config.prefix + en_text, return_tensors="pt")
         input_ids = input_ids.to(torch_device)
