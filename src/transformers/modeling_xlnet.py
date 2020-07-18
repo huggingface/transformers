@@ -575,7 +575,7 @@ class XLNetModelOutput(ModelOutput):
             ``num_predict`` corresponds to ``target_mapping.shape[1]``. If ``target_mapping`` is ``None``, then
             ``num_predict`` corresponds to ``sequence_length``.
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states.
+            Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -611,7 +611,7 @@ class XLNetLMHeadModelOutput(ModelOutput):
             ``num_predict`` corresponds to ``target_mapping.shape[1]``. If ``target_mapping`` is ``None``, then
             ``num_predict`` corresponds to ``sequence_length``.
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states.
+            Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -645,7 +645,7 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states.
+            Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -679,7 +679,7 @@ class XLNetForTokenClassificationOutput(ModelOutput):
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states.
+            Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -715,7 +715,7 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
 
             Classification scores (before SoftMax).
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states.
+            Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -751,7 +751,7 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
         end_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states.
+            Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -794,7 +794,7 @@ class XLNetForQuestionAnsweringOutput(ModelOutput):
         cls_logits (``torch.FloatTensor`` of shape ``(batch_size,)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Log probabilities for the ``is_impossible`` label of the answers.
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states.
+            Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -850,7 +850,7 @@ XLNET_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         mems (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states as computed by the model
+            Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
             given to this model should not be passed as input ids as they have already been computed.
             `use_cache` has to be set to `True` to make use of `mems`.
@@ -964,19 +964,10 @@ class XLNetModel(XLNetPreTrainedModel):
         if self.reuse_len is not None and self.reuse_len > 0:
             curr_out = curr_out[: self.reuse_len]
 
-        if self.mem_len is None or self.mem_len == 0:
-            # If `use_cache` is active but no `mem_len` is defined, the model behaves like GPT-2 at inference time
-            # and returns all of the past and current hidden states.
-            cutoff = 0
-        else:
-            # If `use_cache` is active and `mem_len` is defined, the model returns the last `mem_len` hidden
-            # states. This is the preferred setting for training and long-form generation.
-            cutoff = -self.mem_len
         if prev_mem is None:
-            # if `use_cache` is active and `mem_len` is defined, the model
-            new_mem = curr_out[cutoff:]
+            new_mem = curr_out[-self.mem_len :]
         else:
-            new_mem = torch.cat([prev_mem, curr_out], dim=0)[cutoff:]
+            new_mem = torch.cat([prev_mem, curr_out], dim=0)[-self.mem_len :]
 
         return new_mem.detach()
 
@@ -1048,7 +1039,7 @@ class XLNetModel(XLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=None,
+        use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,
@@ -1058,7 +1049,6 @@ class XLNetModel(XLNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -1189,7 +1179,7 @@ class XLNetModel(XLNetPreTrainedModel):
         attentions = [] if output_attentions else None
         hidden_states = [] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
-            if use_cache:
+            if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 # cache new mems
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if output_hidden_states:
@@ -1221,7 +1211,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output = output.permute(1, 0, 2).contiguous()
 
         # TODO Teven: fix this test to only use use_cache.
-        if not use_cache:
+        if not (self.mem_len is not None and self.mem_len > 0 and use_cache is True):
             new_mems = None
 
         if output_hidden_states:
@@ -1322,7 +1312,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=None,
+        use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,
@@ -1370,7 +1360,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1444,7 +1433,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=None,
+        use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,
@@ -1457,7 +1446,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1536,7 +1524,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=None,
+        use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,
@@ -1548,7 +1536,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             of the input tensors. (see `input_ids` above)
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         outputs = self.transformer(
             input_ids,
@@ -1631,7 +1618,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=None,
+        use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,
@@ -1643,7 +1630,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             of the input tensors. (see `input_ids` above)
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1731,7 +1717,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
-        use_cache=None,
+        use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,
@@ -1747,7 +1733,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             Position outside of the sequence are not taken into account for computing the loss.
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         outputs = self.transformer(
             input_ids,
@@ -1839,7 +1824,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         is_impossible=None,
         cls_index=None,
         p_mask=None,
-        use_cache=None,
+        use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,
@@ -1879,7 +1864,6 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         >>> loss = outputs[0]
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
-        use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
             input_ids,
