@@ -69,7 +69,7 @@ class TFTrainingArguments(TrainingArguments):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wherher to not use CUDA even when it is available or not.
+            Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
             Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
