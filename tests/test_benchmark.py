@@ -86,6 +86,24 @@ class BenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.time_inference_result)
         self.check_results_dict_not_empty(results.memory_inference_result)
 
+    def test_inference_no_model_no_architecuters(self):
+        MODEL_ID = "sshleifer/tiny-gpt2"
+        config = AutoConfig.from_pretrained(MODEL_ID)
+        # set architectures equal to `None`
+        config.architectures = None
+        benchmark_args = PyTorchBenchmarkArguments(
+            models=[MODEL_ID],
+            training=True,
+            no_inference=False,
+            sequence_lengths=[8],
+            batch_sizes=[1],
+            no_multi_process=True,
+        )
+        benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
+        results = benchmark.run()
+        self.check_results_dict_not_empty(results.time_inference_result)
+        self.check_results_dict_not_empty(results.memory_inference_result)
+
     def test_train_no_configs(self):
         MODEL_ID = "sshleifer/tiny-gpt2"
         benchmark_args = PyTorchBenchmarkArguments(
