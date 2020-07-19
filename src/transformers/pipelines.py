@@ -847,7 +847,7 @@ class TextGenerationPipeline(Pipeline):
                     "TFTransfoXLLMHeadModel",
                 ]:
                     if padding_text == "":
-                        # For XLNet and TransformerXL we had an article to the prompt to give more state to the model.
+                        # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
                         padding_text = self.PADDING_TEXT
 
                 padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
