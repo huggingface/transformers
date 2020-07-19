@@ -1,0 +1,316 @@
+1 / 1
+
+====================       INFERENCE - SPEED - RESULT       ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length     Time in s   
+--------------------------------------------------------------------------------
+  facebook/mbart-large-cc25          8              4             0.02     
+  facebook/mbart-large-cc25          8              8             0.02     
+--------------------------------------------------------------------------------
+
+====================      INFERENCE - MEMORY - RESULT       ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length    Memory in MB 
+--------------------------------------------------------------------------------
+  facebook/mbart-large-cc25          8              4             3369     
+  facebook/mbart-large-cc25          8              8             3371     
+--------------------------------------------------------------------------------
+
+====================        ENVIRONMENT INFORMATION         ====================
+- transformers_version: 3.0.2
+- framework: PyTorch
+- use_torchscript: False
+- framework_version: 1.5.1
+- python_version: 3.7.4
+- system: Linux
+- cpu: 
+- architecture: 64bit
+- date: 2020-07-19
+- time: 18:55:43.480240
+- fp16: False
+- use_multiprocessing: True
+- only_pretrain_model: False
+- cpu_ram_mb: 30163
+- use_gpu: True
+- num_gpus: 1
+- gpu: Tesla V100-SXM2-16GB
+- gpu_ram_mb: 16130
+- gpu_power_watts: 300.0
+- gpu_performance_state: 0
+- use_tpu: False
+
+1 / 1
+1 / 1
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 1.91 GiB (GPU 0; 15.75 GiB total capacity; 13.31 GiB already allocated; 1.21 GiB free; 13.56 GiB reserved in total by PyTorch) (malloc at /opt/conda/conda-bld/pytorch_1591914880026/work/c10/cuda/CUDACachingAllocator.cpp:289)
+frame #0: c10::Error::Error(c10::SourceLocation, std::string const&) + 0x4e (0x7f0e3f970b5e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1f39d (0x7f0e3fbbc39d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x2058e (0x7f0e3fbbd58e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #3: THCStorage_resize + 0x96 (0x7f0e40c99046 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: THCTensor_resizeNd + 0x441 (0x7f0e40caa201 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: THNN_CudaHalfClassNLLCriterion_updateGradInput + 0x6b (0x7f0e416e69db in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xe7a868 (0x7f0e40c44868 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0xdfe8eb (0x7f0e40bc88eb in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #8: <unknown function> + 0xe21ac3 (0x7f0e67da1ac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: <unknown function> + 0x28a7ac8 (0x7f0e69827ac8 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: <unknown function> + 0xe21ac3 (0x7f0e67da1ac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: torch::autograd::generated::NllLossBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x276 (0x7f0e69583496 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x2ae7df5 (0x7f0e69a67df5 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&) + 0x16f3 (0x7f0e69a650f3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&, bool) + 0x3d2 (0x7f0e69a65ed2 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #15: torch::autograd::Engine::thread_init(int) + 0x39 (0x7f0e69a5e549 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #16: torch::autograd::python::PythonEngine::thread_init(int) + 0x38 (0x7f0e6cfae638 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_python.so)
+frame #17: <unknown function> + 0xc819d (0x7f0e6f81d19d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/../../../.././libstdc++.so.6)
+frame #18: <unknown function> + 0x74a4 (0x7f0e89f214a4 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #19: clone + 0x3f (0x7f0e89c63d0f in /lib/x86_64-linux-gnu/libc.so.6)
+
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 1.91 GiB (GPU 0; 15.75 GiB total capacity; 13.31 GiB already allocated; 1.21 GiB free; 13.56 GiB reserved in total by PyTorch) (malloc at /opt/conda/conda-bld/pytorch_1591914880026/work/c10/cuda/CUDACachingAllocator.cpp:289)
+frame #0: c10::Error::Error(c10::SourceLocation, std::string const&) + 0x4e (0x7f0e3f970b5e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1f39d (0x7f0e3fbbc39d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x2058e (0x7f0e3fbbd58e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #3: THCStorage_resize + 0x96 (0x7f0e40c99046 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: THCTensor_resizeNd + 0x441 (0x7f0e40caa201 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: THNN_CudaHalfClassNLLCriterion_updateGradInput + 0x6b (0x7f0e416e69db in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xe7a868 (0x7f0e40c44868 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0xdfe8eb (0x7f0e40bc88eb in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #8: <unknown function> + 0xe21ac3 (0x7f0e67da1ac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: <unknown function> + 0x28a7ac8 (0x7f0e69827ac8 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: <unknown function> + 0xe21ac3 (0x7f0e67da1ac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: torch::autograd::generated::NllLossBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x276 (0x7f0e69583496 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x2ae7df5 (0x7f0e69a67df5 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&) + 0x16f3 (0x7f0e69a650f3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&, bool) + 0x3d2 (0x7f0e69a65ed2 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #15: torch::autograd::Engine::thread_init(int) + 0x39 (0x7f0e69a5e549 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #16: torch::autograd::python::PythonEngine::thread_init(int) + 0x38 (0x7f0e6cfae638 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_python.so)
+frame #17: <unknown function> + 0xc819d (0x7f0e6f81d19d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/../../../.././libstdc++.so.6)
+frame #18: <unknown function> + 0x74a4 (0x7f0e89f214a4 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #19: clone + 0x3f (0x7f0e89c63d0f in /lib/x86_64-linux-gnu/libc.so.6)
+
+
+====================       INFERENCE - SPEED - RESULT       ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length     Time in s   
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         8              8            0.022     
+  facebook/mbart-large-en-ro         8              32           0.021     
+  facebook/mbart-large-en-ro         8             128           0.021     
+  facebook/mbart-large-en-ro         8             512           0.036     
+--------------------------------------------------------------------------------
+
+====================      INFERENCE - MEMORY - RESULT       ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length    Memory in MB 
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         8              8             3837     
+  facebook/mbart-large-en-ro         8              32            3845     
+  facebook/mbart-large-en-ro         8             128            3833     
+  facebook/mbart-large-en-ro         8             512            3833     
+--------------------------------------------------------------------------------
+
+====================        TRAIN - SPEED - RESULTS         ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length     Time in s   
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         8              8            0.067     
+  facebook/mbart-large-en-ro         8              32           0.084     
+  facebook/mbart-large-en-ro         8             128           0.194     
+  facebook/mbart-large-en-ro         8             512            N/A      
+--------------------------------------------------------------------------------
+
+====================        TRAIN - MEMORY - RESULTS        ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length    Memory in MB 
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         8              8             4877     
+  facebook/mbart-large-en-ro         8              32            4493     
+  facebook/mbart-large-en-ro         8             128            5857     
+  facebook/mbart-large-en-ro         8             512            N/A      
+--------------------------------------------------------------------------------
+
+====================        ENVIRONMENT INFORMATION         ====================
+- transformers_version: 3.0.2
+- framework: PyTorch
+- use_torchscript: False
+- framework_version: 1.5.1
+- python_version: 3.7.4
+- system: Linux
+- cpu: 
+- architecture: 64bit
+- date: 2020-07-19
+- time: 19:03:58.959069
+- fp16: True
+- use_multiprocessing: True
+- only_pretrain_model: False
+- cpu_ram_mb: 30163
+- use_gpu: True
+- num_gpus: 1
+- gpu: Tesla V100-SXM2-16GB
+- gpu_ram_mb: 16130
+- gpu_power_watts: 300.0
+- gpu_performance_state: 0
+- use_tpu: False
+
+1 / 1
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 1.91 GiB (GPU 0; 15.75 GiB total capacity; 13.31 GiB already allocated; 1.21 GiB free; 13.56 GiB reserved in total by PyTorch) (malloc at /opt/conda/conda-bld/pytorch_1591914880026/work/c10/cuda/CUDACachingAllocator.cpp:289)
+frame #0: c10::Error::Error(c10::SourceLocation, std::string const&) + 0x4e (0x7fb134b3ab5e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1f39d (0x7fb134d8639d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x2058e (0x7fb134d8758e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #3: THCStorage_resize + 0x96 (0x7fb135e63046 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: THCTensor_resizeNd + 0x441 (0x7fb135e74201 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: THNN_CudaHalfClassNLLCriterion_updateGradInput + 0x6b (0x7fb1368b09db in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xe7a868 (0x7fb135e0e868 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0xdfe8eb (0x7fb135d928eb in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #8: <unknown function> + 0xe21ac3 (0x7fb15cf6bac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: <unknown function> + 0x28a7ac8 (0x7fb15e9f1ac8 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: <unknown function> + 0xe21ac3 (0x7fb15cf6bac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: torch::autograd::generated::NllLossBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x276 (0x7fb15e74d496 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x2ae7df5 (0x7fb15ec31df5 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&) + 0x16f3 (0x7fb15ec2f0f3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&, bool) + 0x3d2 (0x7fb15ec2fed2 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #15: torch::autograd::Engine::thread_init(int) + 0x39 (0x7fb15ec28549 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #16: torch::autograd::python::PythonEngine::thread_init(int) + 0x38 (0x7fb162178638 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_python.so)
+frame #17: <unknown function> + 0xc819d (0x7fb1649e719d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/../../../.././libstdc++.so.6)
+frame #18: <unknown function> + 0x74a4 (0x7fb17f0eb4a4 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #19: clone + 0x3f (0x7fb17ee2dd0f in /lib/x86_64-linux-gnu/libc.so.6)
+
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 1.91 GiB (GPU 0; 15.75 GiB total capacity; 13.31 GiB already allocated; 1.21 GiB free; 13.56 GiB reserved in total by PyTorch) (malloc at /opt/conda/conda-bld/pytorch_1591914880026/work/c10/cuda/CUDACachingAllocator.cpp:289)
+frame #0: c10::Error::Error(c10::SourceLocation, std::string const&) + 0x4e (0x7fb134b3ab5e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x1f39d (0x7fb134d8639d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0x2058e (0x7fb134d8758e in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libc10_cuda.so)
+frame #3: THCStorage_resize + 0x96 (0x7fb135e63046 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: THCTensor_resizeNd + 0x441 (0x7fb135e74201 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: THNN_CudaHalfClassNLLCriterion_updateGradInput + 0x6b (0x7fb1368b09db in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #6: <unknown function> + 0xe7a868 (0x7fb135e0e868 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #7: <unknown function> + 0xdfe8eb (0x7fb135d928eb in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cuda.so)
+frame #8: <unknown function> + 0xe21ac3 (0x7fb15cf6bac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #9: <unknown function> + 0x28a7ac8 (0x7fb15e9f1ac8 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #10: <unknown function> + 0xe21ac3 (0x7fb15cf6bac3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #11: torch::autograd::generated::NllLossBackward::apply(std::vector<at::Tensor, std::allocator<at::Tensor> >&&) + 0x276 (0x7fb15e74d496 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #12: <unknown function> + 0x2ae7df5 (0x7fb15ec31df5 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #13: torch::autograd::Engine::evaluate_function(std::shared_ptr<torch::autograd::GraphTask>&, torch::autograd::Node*, torch::autograd::InputBuffer&) + 0x16f3 (0x7fb15ec2f0f3 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #14: torch::autograd::Engine::thread_main(std::shared_ptr<torch::autograd::GraphTask> const&, bool) + 0x3d2 (0x7fb15ec2fed2 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #15: torch::autograd::Engine::thread_init(int) + 0x39 (0x7fb15ec28549 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_cpu.so)
+frame #16: torch::autograd::python::PythonEngine::thread_init(int) + 0x38 (0x7fb162178638 in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/libtorch_python.so)
+frame #17: <unknown function> + 0xc819d (0x7fb1649e719d in /home/shleifer/.conda/envs/nb/lib/python3.7/site-packages/torch/lib/../../../.././libstdc++.so.6)
+frame #18: <unknown function> + 0x74a4 (0x7fb17f0eb4a4 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #19: clone + 0x3f (0x7fb17ee2dd0f in /lib/x86_64-linux-gnu/libc.so.6)
+
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 2.86 GiB (GPU 0; 15.75 GiB total capacity; 13.68 GiB already allocated; 884.88 MiB free; 13.91 GiB reserved in total by PyTorch)
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 2.86 GiB (GPU 0; 15.75 GiB total capacity; 13.68 GiB already allocated; 884.88 MiB free; 13.91 GiB reserved in total by PyTorch)
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 128.00 MiB (GPU 0; 15.75 GiB total capacity; 14.56 GiB already allocated; 78.88 MiB free; 14.70 GiB reserved in total by PyTorch)
+Doesn't fit on GPU. CUDA out of memory. Tried to allocate 128.00 MiB (GPU 0; 15.75 GiB total capacity; 14.56 GiB already allocated; 78.88 MiB free; 14.70 GiB reserved in total by PyTorch)
+
+====================       INFERENCE - SPEED - RESULT       ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length     Time in s   
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         4              8            0.021     
+  facebook/mbart-large-en-ro         4              32           0.021     
+  facebook/mbart-large-en-ro         4             128           0.021     
+  facebook/mbart-large-en-ro         4             512            0.02     
+  facebook/mbart-large-en-ro         8              8            0.021     
+  facebook/mbart-large-en-ro         8              32           0.021     
+  facebook/mbart-large-en-ro         8             128           0.023     
+  facebook/mbart-large-en-ro         8             512           0.035     
+  facebook/mbart-large-en-ro         12             8            0.021     
+  facebook/mbart-large-en-ro         12             32           0.021     
+  facebook/mbart-large-en-ro         12            128           0.021     
+  facebook/mbart-large-en-ro         12            512            0.05     
+  facebook/mbart-large-en-ro         16             8            0.021     
+  facebook/mbart-large-en-ro         16             32           0.022     
+  facebook/mbart-large-en-ro         16            128           0.021     
+  facebook/mbart-large-en-ro         16            512           0.065     
+--------------------------------------------------------------------------------
+Saving results to csv.
+
+====================      INFERENCE - MEMORY - RESULT       ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length    Memory in MB 
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         4              8             3835     
+  facebook/mbart-large-en-ro         4              32            3839     
+  facebook/mbart-large-en-ro         4             128            3859     
+  facebook/mbart-large-en-ro         4             512            3833     
+  facebook/mbart-large-en-ro         8              8             3837     
+  facebook/mbart-large-en-ro         8              32            3845     
+  facebook/mbart-large-en-ro         8             128            3833     
+  facebook/mbart-large-en-ro         8             512            3833     
+  facebook/mbart-large-en-ro         12             8             3839     
+  facebook/mbart-large-en-ro         12             32            3857     
+  facebook/mbart-large-en-ro         12            128            3833     
+  facebook/mbart-large-en-ro         12            512            3833     
+  facebook/mbart-large-en-ro         16             8             3841     
+  facebook/mbart-large-en-ro         16             32            3859     
+  facebook/mbart-large-en-ro         16            128            3833     
+  facebook/mbart-large-en-ro         16            512            3835     
+--------------------------------------------------------------------------------
+Saving results to csv.
+
+====================        TRAIN - SPEED - RESULTS         ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length     Time in s   
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         4              8            0.067     
+  facebook/mbart-large-en-ro         4              32            0.07     
+  facebook/mbart-large-en-ro         4             128           0.138     
+  facebook/mbart-large-en-ro         4             512           0.353     
+  facebook/mbart-large-en-ro         8              8            0.067     
+  facebook/mbart-large-en-ro         8              32           0.083     
+  facebook/mbart-large-en-ro         8             128           0.193     
+  facebook/mbart-large-en-ro         8             512            N/A      
+  facebook/mbart-large-en-ro         12             8            0.069     
+  facebook/mbart-large-en-ro         12             32           0.116     
+  facebook/mbart-large-en-ro         12            128           0.263     
+  facebook/mbart-large-en-ro         12            512            N/A      
+  facebook/mbart-large-en-ro         16             8             0.07     
+  facebook/mbart-large-en-ro         16             32           0.139     
+  facebook/mbart-large-en-ro         16            128           0.333     
+  facebook/mbart-large-en-ro         16            512            N/A      
+--------------------------------------------------------------------------------
+Saving results to csv.
+
+====================        TRAIN - MEMORY - RESULTS        ====================
+--------------------------------------------------------------------------------
+          Model Name             Batch Size     Seq Length    Memory in MB 
+--------------------------------------------------------------------------------
+  facebook/mbart-large-en-ro         4              8             4355     
+  facebook/mbart-large-en-ro         4              32            4947     
+  facebook/mbart-large-en-ro         4             128            5117     
+  facebook/mbart-large-en-ro         4             512           10383     
+  facebook/mbart-large-en-ro         8              8             4877     
+  facebook/mbart-large-en-ro         8              32            4493     
+  facebook/mbart-large-en-ro         8             128            5857     
+  facebook/mbart-large-en-ro         8             512            N/A      
+  facebook/mbart-large-en-ro         12             8             4909     
+  facebook/mbart-large-en-ro         12             32            5085     
+  facebook/mbart-large-en-ro         12            128            7079     
+  facebook/mbart-large-en-ro         12            512            N/A      
+  facebook/mbart-large-en-ro         16             8             4941     
+  facebook/mbart-large-en-ro         16             32            4663     
+  facebook/mbart-large-en-ro         16            128            8655     
+  facebook/mbart-large-en-ro         16            512            N/A      
+--------------------------------------------------------------------------------
+Saving results to csv.
+
+====================        ENVIRONMENT INFORMATION         ====================
+- transformers_version: 3.0.2
+- framework: PyTorch
+- use_torchscript: False
+- framework_version: 1.5.1
+- python_version: 3.7.4
+- system: Linux
+- cpu: 
+- architecture: 64bit
+- date: 2020-07-19
+- time: 19:32:47.871467
+- fp16: True
+- use_multiprocessing: True
+- only_pretrain_model: False
+- cpu_ram_mb: 30163
+- use_gpu: True
+- num_gpus: 1
+- gpu: Tesla V100-SXM2-16GB
+- gpu_ram_mb: 16130
+- gpu_power_watts: 300.0
+- gpu_performance_state: 0
+- use_tpu: False
+
