@@ -20,6 +20,7 @@ import itertools
 import logging
 import re
 import unicodedata
+from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple, Union
 
 from .file_utils import add_end_docstrings
@@ -160,7 +161,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # until the serialization of Fast tokenizers is updated
         self.added_tokens_encoder: Dict[str, int] = {}
         self.added_tokens_decoder: Dict[int, str] = {}
-        self.unique_no_split_tokens: List[str] = []
+        self.unique_no_split_tokens: OrderedDict[str, None] = OrderedDict()
 
     @property
     def is_fast(self) -> bool:
@@ -227,10 +228,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
         if special_tokens:
-            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(new_tokens)))
+            self.unique_no_split_tokens = OrderedDict.fromkeys(list(self.unique_no_split_tokens.keys()) + new_tokens)
         else:
             # Or on the newly added tokens
-            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+            self.unique_no_split_tokens = OrderedDict.fromkeys(list(self.unique_no_split_tokens.keys()) + tokens_to_add)
 
         return len(tokens_to_add)
 
