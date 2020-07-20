@@ -61,6 +61,13 @@ AlbertModel
     :members:
 
 
+AlbertForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForPreTraining
+    :members:
+
+
 AlbertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -100,6 +107,13 @@ TFAlbertModel
 ~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFAlbertModel
+    :members:
+
+
+TFAlbertForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForPreTraining
     :members:
 
 
