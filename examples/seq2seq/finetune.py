@@ -36,7 +36,7 @@ try:
         label_smoothed_nll_loss,
     )
 
-    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
+    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 except ImportError:
     from utils import (
         Seq2SeqDataset,
@@ -55,7 +55,7 @@ except ImportError:
         calculate_bleu_score,
         label_smoothed_nll_loss,
     )
-    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
+    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 
 logger = logging.getLogger(__name__)
 
@@ -307,6 +307,13 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
+        parser.add_argument(
+            "--early_stopping_patience",
+            type=int,
+            default=-1,
+            required=False,
+            help="-1 means never early stop. early_stopping_patience is measured in validation checks, not epochs. So val_check_interval will effect it.",
+        )
         return parser
 
 
@@ -357,11 +364,17 @@ def main(args, model=None) -> SummarizationModule:
         from pytorch_lightning.loggers import WandbLogger
 
         logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
+
+    if args.early_stopping_patience >= 0:
+        es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
+    else:
+        es_callback = False
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
+        early_stopping_callback=es_callback,
         logger=logger,
         # TODO: early stopping callback seems messed up
     )
