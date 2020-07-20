@@ -23,7 +23,6 @@ class Seq2SeqLoggingCallback(pl.Callback):
     def _write_logs(
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
     ) -> None:
-        import ipdb; ipdb.set_trace()
         logger.info(f"***** {type_path} results at step {trainer.global_step:05d} *****")
         metrics = trainer.callback_metrics
         trainer.logger.log_metrics({k: v for k, v in metrics.items() if k not in ["log", "progress_bar", "preds"]})

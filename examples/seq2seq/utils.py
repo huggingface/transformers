@@ -167,8 +167,8 @@ class MBartDataset(Seq2SeqDataset):
         assert source_line, f"empty source line for index {index}"
         assert tgt_line, f"empty tgt line for index {index}"
         return {
-            "tgt_texts": source_line,
-            "src_texts": tgt_line,
+            "tgt_texts": tgt_line,
+            "src_texts": source_line,
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
