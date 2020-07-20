@@ -16,5 +16,5 @@ python finetune.py \
     --model_name_or_path facebook/mbart-large-cc25 \
     --task translation \
     --warmup_steps 500 \
-    --logger_name wandb --sortish_sampler \
+    --sortish_sampler \
     $@

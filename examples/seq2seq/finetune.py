@@ -349,7 +349,8 @@ def main(args, model=None) -> SummarizationModule:
         logger = True  # don't pollute wandb logs unnecessarily
     elif args.logger_name == "wandb":
         from pytorch_lightning.loggers import WandbLogger
-        project = os.environ.get('WANDB_PROJECT', dataset)
+
+        project = os.environ.get("WANDB_PROJECT", dataset)
         logger = WandbLogger(name=model.output_dir.name, project=project)
 
     elif args.logger_name == "wandb_shared":

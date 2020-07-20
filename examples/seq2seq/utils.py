@@ -11,7 +11,6 @@ from typing import Callable, Dict, Iterable, List
 import git
 import numpy as np
 import torch
-import torch.nn.functional as F
 from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
