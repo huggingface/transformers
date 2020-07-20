@@ -423,8 +423,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
         model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids)[0]  # the embeddings of the given context.
-
+        embeddings = model(input_ids).pooler_output
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -502,7 +501,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
         model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
-        embeddings = model(input_ids)[0]  # the embeddings of the given question.
+        embeddings = model(input_ids).pooler_output
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -583,9 +582,9 @@ class DPRReader(DPRPretrainedReader):
                 return_tensors='pt'
             )
         outputs = model(**encoded_inputs)
-        start_logits = outputs[0]  # The logits of the start of the spans
-        end_logits = outputs[1]  # The logits of the end of the spans
-        relevance_logits = outputs[2]  # The relevance scores of the passages
+        start_logits = outputs.stat_logits
+        end_logits = outputs.end_logits
+        relevance_logits = outputs.relevance_logits
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
