@@ -656,13 +656,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 )
                 if resolved_archive_file is None:
                     raise EnvironmentError
-            except EnvironmentError:
-                msg = (
-                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
-                )
-                raise EnvironmentError(msg)
+            except EnvironmentError as e:
+                if not str(e):
+                    msg = (
+                        f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                        f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                        f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                    )
+                    raise EnvironmentError(msg)
+                raise e
 
             if resolved_archive_file == archive_file:
                 logger.info("loading weights file {}".format(archive_file))

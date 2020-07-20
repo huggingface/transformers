@@ -721,14 +721,18 @@ def get_from_cache(
     os.makedirs(cache_dir, exist_ok=True)
 
     etag = None
+    download_exception = None
     if not local_files_only:
         try:
             response = requests.head(url, allow_redirects=True, proxies=proxies, timeout=etag_timeout)
             if response.status_code == 200:
                 etag = response.headers.get("ETag")
-        except (EnvironmentError, requests.exceptions.Timeout):
-            # etag is already None
-            pass
+        except (EnvironmentError, requests.exceptions.Timeout) as e:
+            if force_download:
+                # we won't be able to download this file
+                raise e
+            download_exception = e
+            logger.warning(f"Unable to retrieve file from {url}. Will search locally.")
 
     filename = url_to_filename(url, etag)
 
@@ -758,6 +762,8 @@ def get_from_cache(
                         " disabled. To enable model look-ups and downloads online, set 'local_files_only'"
                         " to False."
                     )
+                if download_exception is not None:
+                    raise download_exception
                 return None
 
     # From now on, etag is not None.
