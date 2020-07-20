@@ -33,6 +33,7 @@ try:
         calculate_bleu_score,
         Seq2SeqDataset,
         MBartDataset,
+        label_smoothed_nll_loss,
     )
 
     from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
@@ -52,6 +53,7 @@ except ImportError:
         get_git_info,
         ROUGE_KEYS,
         calculate_bleu_score,
+        label_smoothed_nll_loss,
     )
     from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
 
@@ -129,11 +131,23 @@ class SummarizationModule(BaseTransformer):
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        y_ids = y[:, :-1].contiguous()
-        lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=lm_labels,)
-        loss = outputs[0]
+        y_ids = y[:, :-1].contiguous()  # Why this line?
+        lm_labels = y[:, 1:].clone()  # why clone?
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, use_cache=False)
+
+        if self.hparams.label_smoothing == 0:
+            # Same behavior as modeling_bart.py
+            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            lm_logits = outputs[0]
+            assert lm_logits.shape[-1] == self.model.config.vocab_size
+            loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
+        else:
+            lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
+            loss, nll_loss = label_smoothed_nll_loss(
+                lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
+            )
+            # TODO(SS): below fails, understand math better!
+            # assert nll_loss == = ce_loss(outputs[0], lm_labels, ignore_index=pad_token_id)
         return (loss,)
 
     def training_step(self, batch, batch_idx) -> Dict:
@@ -290,6 +304,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument(
             "--task", type=str, default="summarization", required=False, help="# examples. -1 means use all."
         )
+        parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
         return parser

@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
-    "label_smoothing_eps": 0.2,
+    "label_smoothing": 0.2,
     "logger_name": "default",
     "length_penalty": 0.5,
     "cache_dir": "",
@@ -215,6 +215,8 @@ def test_run_eval_bart(model):
 def test_finetune(model):
     args_d: dict = CHEAP_ARGS.copy()
     task = "translation" if model in [MBART_TINY, MARIAN_TINY] else "summarization"
+    args_d["label_smoothing"] = 0.1 if task == "translation" else 0
+
     tmp_dir = make_test_data_dir()
     output_dir = tempfile.mkdtemp(prefix="output_")
     args_d.update(
