@@ -1,8 +1,6 @@
-import typing
-
 import torch
 
-from theseus import TheseusModule
+from .theseus_module import TheseusModule
 
 
 def _unpack_module(packed_module):

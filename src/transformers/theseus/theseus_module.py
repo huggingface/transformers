@@ -1,5 +1,3 @@
-import typing
-
 import torch
 from torch.distributions.bernoulli import Bernoulli
 
