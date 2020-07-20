@@ -1,5 +1,6 @@
-import torch
 import typing
+
+import torch
 
 from theseus import TheseusModule
 

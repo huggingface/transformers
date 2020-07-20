@@ -1,6 +1,8 @@
-import torch
 import typing
+
+import torch
 from torch.distributions.bernoulli import Bernoulli
+
 from .theseus_errors import NoSuccessorError
 
 
@@ -18,7 +20,9 @@ class TheseusModule(torch.nn.Module):
 
     def forward(self, *args, **kwargs):
         if self.successor is None:
-            raise NoSuccessorError("The successor is not specified. In this case, do not call `TheseusModule` directly.")
+            raise NoSuccessorError(
+                "The successor is not specified. In this case, do not call `TheseusModule` directly."
+            )
         return self.successor(*args, **kwargs)
 
     def sample_and_pass(self):
