@@ -111,7 +111,11 @@ class XLNetConfig(PretrainedConfig):
             end_n_top (:obj:`int`, optional, defaults to 5):
                 Used in the SQuAD evaluation script for XLM and XLNet.
             use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Differs slightly from other models as it is always turned on at training time.
+                Whether or not the model should return the last pre-computed hidden states.
+
+                .. note::
+                    This flag behaves differently from with other models: it just controls the inference behavior, during
+                    training the model always uses ``use_cache=True``.
 
         Example::
 
