@@ -9,7 +9,8 @@ license: mit
 
 # GPT-2
 
-c
+Test the whole generation capabilities here: https://transformer.huggingface.co/doc/gpt2-large
+
 Pretrained model on English language using a causal language modeling (CLM) objective. It was introduced in
 [this paper](https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)
 and first released at [this page](https://openai.com/blog/better-language-models/).
