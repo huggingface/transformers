@@ -228,10 +228,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
         if special_tokens:
-            self.unique_no_split_tokens = OrderedDict.fromkeys(list(self.unique_no_split_tokens.keys()) + new_tokens)
+            self.unique_no_split_tokens = OrderedDict.fromkeys(list(self.unique_no_split_tokens) + new_tokens)
         else:
             # Or on the newly added tokens
-            self.unique_no_split_tokens = OrderedDict.fromkeys(list(self.unique_no_split_tokens.keys()) + tokens_to_add)
+            self.unique_no_split_tokens = OrderedDict.fromkeys(list(self.unique_no_split_tokens) + tokens_to_add)
 
         return len(tokens_to_add)
 
