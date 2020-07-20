@@ -114,8 +114,8 @@ class XLNetConfig(PretrainedConfig):
                 Whether or not the model should return the last pre-computed hidden states.
 
                 .. note::
-                    This flag behaves differently as with other models: it just controls the inference behavior, during
-                    traing the model always uses ``use_cache=True``.
+                    This flag behaves differently from with other models: it just controls the inference behavior, during
+                    training the model always uses ``use_cache=True``.
 
         Example::
 
