@@ -46,75 +46,97 @@ class TFPegasusModelTester(object):
         self.eos_token_id = eos_token_id
         self.scope = scope
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        config = PegasusConfig(
-            vocab_size=self.vocab_size,
-            max_input_len=self.seq_length,
-            max_target_len=self.seq_length,
-            max_decode_len=self.seq_length,
-            hidden_size=self.hidden_size,
-            ffn_dim=self.ffn_dim,
-            num_heads=self.num_heads,
-            num_encoder_layers=self.num_hidden_layers,
-            num_decoder_layers=self.num_hidden_layers,
-            dropout=self.dropout,
-            pad_token_id=self.pad_token_id,
-            eos_token_id=self.eos_token_id,
-        )
-
-        return (config, input_ids)
-
-    def create_and_check_pegasus_model(self, config, input_ids):
-        model = TFPegasusModel(config=config)
-        inputs = {
-            "inputs": input_ids,
-        }
-        decoder_output, decoder_past, encoder_output = model(inputs)
-
-        result = {
-            "encoder_output": encoder_output.numpy(),
-            "decoder_past": decoder_past,
-            "decoder_output": decoder_output.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["encoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(
-            list(result["decoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        # self.parent.assertEqual(len(decoder_past), 2)
-        # # decoder_past[0] should correspond to encoder output
-        # self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
-        # # There should be `num_layers` key value embeddings stored in decoder_past[1]
-        # self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
-        # # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
-        # self.parent.assertEqual(len(decoder_past[1][0]), 4)
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids) = config_and_inputs
-        inputs_dict = {
-            "inputs": input_ids,
-        }
-        return config, inputs_dict
-
 
 @require_tf
-class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFPegasusModelTest(unittest.TestCase):
 
     is_encoder_decoder = True
     all_model_classes = (TFPegasusModel,) if is_tf_available() else ()
 
     def setUp(self):
-        self.model_tester = TFPegasusModelTest.TFPegasusModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PegasusConfig, hidden_size=37)
+        pass
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
+    # TODO: load checkpoint and test
+    # TODO: refactor to follow transformers' standard testing pipeline
+    def test_pegasus_model(self, model_dir, spm_model):
+        self.assertTrue(tf.compat.v1.train.checkpoint_exists(model_dir))
+        vocab_size = 96000 + 103
+        hidden_size = 1024
+        filter_size = 4096
+        num_heads = 16
+        num_encoder_layers = 16
+        num_decoder_layers = 16
+        label_smoothing = 0.0
+        dropout = 0.1
+        beam_size = 1
 
-    def test_pegasus_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_pegasus_model(*config_and_inputs)
+        with tf.Graph().as_default() as graph:
+            with tf.compat.v1.Session() as sess:
+                model = transformer.TransformerEncoderDecoderModel(
+                    vocab_size=vocab_size,
+                    hidden_size=hidden_size,
+                    filter_size=filter_size,
+                    num_heads=num_heads,
+                    num_encoder_layers=num_encoder_layers,
+                    num_decoder_layers=num_decoder_layers,
+                    label_smoothing=label_smoothing,
+                    dropout=dropout
+                )
 
+                # run the model to build all variables (but not initialized yet)
+                loss, outputs = model(
+                    {
+                        "inputs": tf.ones((2, 7), tf.int64),
+                        "targets": tf.ones((2, 5), tf.int64)
+                    }, True)
+                self.assertEqual(loss.shape, [])
+                self.assertEqual(outputs["logits"].shape, [2, 5, vocab_size])
+
+                # create assignment map
+                ignore_name = ["Adafactor", "global_step"]
+                var_list = tf.compat.v1.global_variables(scope=None)
+                ckpt_var_list = tf.train.list_variables(model_dir)
+                ckpt_var_list = [var for var in ckpt_var_list if not any(ign in var[0] for ign in ignore_name)]
+                new_var_name_dict = {var.name: var for var in var_list}
+                assignment_map = {}
+                for var in ckpt_var_list:
+                    old_var_name = var[0]
+                    new_var_name = var[0] + ":0"
+                    assert new_var_name in new_var_name_dict
+                    assignment_map[old_var_name] = new_var_name_dict[new_var_name]
+
+                # define the initialization (but not intialized until global_variables_initializer is called)
+                tf.compat.v1.train.init_from_checkpoint(
+                    model_dir, assignment_map
+                )
+
+                # check running
+                raw_input_str = ("To ensure a smooth flow of bank resolutions to the necessary signatories, "
+                                 "I am requesting that Enron Treasury first route the bank resolutions to Angela Davis "
+                                 "(EWS Legal) to be initialed before being routed to John Lavorato or Louise Kitchen.\n"
+                                 "If you have any questions please call me at 3-6544."
+                                 "Thank you for your attention to this matter.")
+                raw_target_str = ("Treasury Bank Resolutions")
+
+                input_str = tf.compat.v1.placeholder(tf.string, shape=[1, ], name=None)
+                target_str = tf.compat.v1.placeholder(tf.string, shape=[1, ], name=None)
+
+                # tokenization
+                input_ids = public_parsing_ops.encode(input_str, 512, spm_model, encoder_type="sentencepiece")
+                target_ids = public_parsing_ops.encode(target_str, 32, spm_model, encoder_type="sentencepiece")
+
+                input_ids = tf.reshape(input_ids, [1, 512])
+                target_ids = tf.reshape(target_ids, [1, 32])
+
+                output_ids = model.predict(
+                    {
+                        "inputs": input_ids,
+                        "targets": target_ids,
+                    }, 32, beam_size)
+                self.assertEqual(output_ids["outputs"].shape, [1, 32])
+
+                # decode to str
+                output_str = public_parsing_ops.decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
+
+                sess.run(tf.compat.v1.global_variables_initializer())
+                print(sess.run(output_str, feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
