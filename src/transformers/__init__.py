@@ -37,6 +37,7 @@ from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -578,6 +579,12 @@ if is_tf_available():
         TFOpenAIGPTMainLayer,
         TFOpenAIGPTModel,
         TFOpenAIGPTPreTrainedModel,
+    )
+
+    from .modeling_tf_pegasus import (
+        TF_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFPegasusModel,
+        TFPegasusPreTrainedModel,
     )
 
     from .modeling_tf_roberta import (
