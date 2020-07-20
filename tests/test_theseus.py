@@ -1,8 +1,7 @@
 import unittest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, theseus
 from transformers.testing_utils import require_torch
-from transformers import theseus
 
 
 if is_torch_available():
@@ -69,4 +68,3 @@ class TheseusTest(unittest.TestCase):
                 elif prd_module_list[i] == sampled_list[i]:
                     prd_num += 1
         self.assertTrue(0 < scc_num / (prd_num + scc_num) < 1)
-
