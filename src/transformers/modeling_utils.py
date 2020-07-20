@@ -141,8 +141,8 @@ class ModuleUtilsMixin:
             first_tuple = next(gen)
             return first_tuple[1].device
 
-    @property
-    def dtype(self) -> dtype:
+    # TorchScript does not support, so add non-property option
+    def get_dtype(self) -> dtype:
         """
         Get torch.dtype from module, assuming that the whole module has one dtype.
         """
@@ -158,34 +158,40 @@ class ModuleUtilsMixin:
             gen = self._named_members(get_members_fn=find_tensor_attributes)
             first_tuple = next(gen)
             return first_tuple[1].dtype
+    
+    @property
+    def dtype(self):
+        return self.get_dtype()    
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """type: torch.Tensor -> torch.Tensor"""
+        encoder_extended_attention_mask: Optional[Tensor] = None
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.dim() == 2:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
+        assert encoder_extended_attention_mask is not None    
         # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
         # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow
         # /transformer/transformer_layers.py#L270
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.get_dtype())  # fp16 compatibility
 
-        if self.dtype == torch.float16:
+        if self.get_dtype() == torch.float16:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
-        elif self.dtype == torch.float32:
+        elif self.get_dtype() == torch.float32:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             raise ValueError(
                 "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
-                    self.dtype
+                    self.get_dtype()
                 )
             )
 
         return encoder_extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple, device: device) -> Tensor:
+    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple[int, int], device: device) -> Tensor:
         """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
 
         Arguments:
@@ -204,7 +210,7 @@ class ModuleUtilsMixin:
             # Provided a padding mask of dimensions [batch_size, seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if self.config.is_decoder:
+            if self.is_decoder:
                 batch_size, seq_length = input_shape
                 seq_ids = torch.arange(seq_length, device=device)
                 causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
@@ -225,7 +231,7 @@ class ModuleUtilsMixin:
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=self.get_dtype())  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
@@ -241,16 +247,32 @@ class ModuleUtilsMixin:
              Tensor of shape shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
              or list with [None] for each layer
         """
-        if head_mask is not None:
+        if head_mask is None:
+            return [None] * num_hidden_layers
+        else:
+            return self.get_scriptable_head_mask(head_mask, num_hidden_layers, is_attention_chunked)
+
+    def get_scriptable_head_mask(self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False) -> Optional[Tensor]:
+        """
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        attention_probs has shape bsz x n_heads x N x N
+        Arguments:
+            head_mask: torch.Tensor or None: has shape [num_heads] or [num_hidden_layers x num_heads]
+            num_hidden_layers: int
+        Returns:
+             Tensor of shape shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+             or None
+        """
+        if head_mask is None:
+            return None
+        else:    
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
             if is_attention_chunked is True:
                 head_mask = head_mask.unsqueeze(-1)
-        else:
-            head_mask = [None] * num_hidden_layers
-
-        return head_mask
-
-    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+            return head_mask    
+        
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers: int):
         """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
         if head_mask.dim() == 1:
             head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
@@ -258,7 +280,7 @@ class ModuleUtilsMixin:
         elif head_mask.dim() == 2:
             head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
-        head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
+        head_mask = head_mask.to(dtype=self.get_dtype())  # switch to fload if need + fp16 compatibility
         return head_mask
 
 

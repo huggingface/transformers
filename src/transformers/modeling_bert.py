@@ -151,6 +151,8 @@ def act_fn(name: str, input: torch.Tensor) -> torch.Tensor:
 
 BertLayerNorm = torch.nn.LayerNorm
 
+def filter_outputs(module: nn.Module, *args, **kwargs):
+    return tuple(x for x in module.forward(*args, **kwargs) if x is not None)
 
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
@@ -167,7 +169,11 @@ class BertEmbeddings(nn.Module):
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, input_ids: Optional[torch.Tensor] = None, token_type_ids: Optional[torch.Tensor] = None, position_ids: Optional[torch.Tensor] = None, inputs_embeds: Optional[torch.Tensor] = None):
+    def forward(self,
+                input_ids: Optional[torch.Tensor] = None,
+                token_type_ids: Optional[torch.Tensor] = None,
+                position_ids: Optional[torch.Tensor] = None,
+                inputs_embeds: Optional[torch.Tensor] = None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -201,7 +207,7 @@ class BertEmbeddings(nn.Module):
         return embeddings
 
 
-class BertSelfAttention(nn.Module):
+class BertScriptableSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -228,7 +234,7 @@ class BertSelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states,
+        hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -281,6 +287,11 @@ class BertSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer, None)
         return outputs
 
+class BertSelfAttention(BertScriptableSelfAttention):
+    def __init__(self, config):
+        super().__init__(config)
+    def forward(self, *args, **kwargs):
+        return filter_outputs(super(), *args, **kwargs)
 
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
@@ -296,10 +307,10 @@ class BertSelfOutput(nn.Module):
         return hidden_states
 
 
-class BertAttention(nn.Module):
+class BertScriptableAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = BertSelfAttention(config)
+        self.self = BertScriptableSelfAttention(config)
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -337,6 +348,11 @@ class BertAttention(nn.Module):
         outputs = (attention_output, self_outputs[1])  # add attentions if we output them
         return outputs
 
+class BertAttention(BertScriptableAttention):
+    def __init__(self, config):
+        super().__init__(config)
+    def forward(self, *args, **kwargs):
+        return filter_outputs(super(), *args, **kwargs)
 
 class BertIntermediate(nn.Module):
     def __init__(self, config):
@@ -378,14 +394,14 @@ class DummyModule(nn.Module):
                 f: bool):
         return torch.zeros([0])
 
-class BertLayer(nn.Module):
+class BertScriptableLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = BertAttention(config)
+        self.attention = BertScriptableAttention(config)
         self.is_decoder = config.is_decoder
         self.crossattention = DummyModule() # dummy module
         if self.is_decoder:
-            self.crossattention = BertAttention(config)
+            self.crossattention = BertScriptableAttention(config)
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
 
@@ -425,15 +441,21 @@ class BertLayer(nn.Module):
         outputs = (layer_output, self_attention_weights, cross_attention_weights)
         return outputs
 
-class BertEncoder(nn.Module):
+class BertLayer(BertScriptableLayer):
+    def __init__(self, config):
+        super().__init__(config)
+    def forward(self, *args, **kwargs):
+        return filter_outputs(super(), *args, **kwargs)
+
+class BertScriptableEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([BertScriptableLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
-        hidden_states,
+        hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -446,7 +468,7 @@ class BertEncoder(nn.Module):
         i = 0
         for layer_module in self.layer:
             if output_hidden_states:
-                all_hidden_states = all_hidden_states.append(hidden_states)
+                all_hidden_states.append(hidden_states)
             layer_head_mask = None if head_mask is None else head_mask[i]
             
             """    
@@ -492,6 +514,11 @@ class BertEncoder(nn.Module):
                 all_hidden_states if output_hidden_states else None,
                 all_attentions if output_attentions else None)
 
+class BertEncoder(BertScriptableEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+    def forward(self, *args, **kwargs):
+        return filter_outputs(super(), *args, **kwargs)
 
 class BertPooler(nn.Module):
     def __init__(self, config):
@@ -662,7 +689,7 @@ BERT_INPUTS_DOCSTRING = r"""
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
-class BertModel(BertPreTrainedModel):
+class BertScriptableModel(BertPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well
@@ -679,16 +706,25 @@ class BertModel(BertPreTrainedModel):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
-        self.config = config
-
+        
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
+        self.is_decoder = config.is_decoder
+        self.num_hidden_layers = config.num_hidden_layers
+        
         self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
+        self.encoder = BertScriptableEncoder(config)
         self.pooler = BertPooler(config)
-
+        # TorchScript cannot use parameters().next(), so get dtype explicitly.
+        self.mask_dtype = self.embeddings.word_embeddings(torch.LongTensor([0])).dtype
+    
         self.init_weights()
 
+    def get_dtype(self):
+        return self.mask_dtype
+    
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
@@ -707,16 +743,16 @@ class BertModel(BertPreTrainedModel):
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-uncased")
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
     ):
         r"""
     Return:
@@ -744,9 +780,9 @@ class BertModel(BertPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         )
 
         if input_ids is not None and inputs_embeds is not None:
@@ -758,7 +794,11 @@ class BertModel(BertPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
+        if input_ids is not None:
+            device = input_ids.device
+        else:
+            assert inputs_embeds is not None
+            device = inputs_embeds.device
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)
@@ -767,11 +807,11 @@ class BertModel(BertPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, (input_shape[0], input_shape[1]), device)
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
         # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
+        if self.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
@@ -785,7 +825,7 @@ class BertModel(BertPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        head_mask = self.get_scriptable_head_mask(head_mask, self.num_hidden_layers)
 
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -802,11 +842,16 @@ class BertModel(BertPreTrainedModel):
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
+        outputs = (sequence_output, pooled_output, encoder_outputs[1], encoder_outputs[2])
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
+
+class BertModel(BertScriptableModel):
+    def __init__(self, config: BertConfig):
+        super().__init__(config)
+        self.config = config
+    def forward(self, *args, **kwargs):
+        return tuple(x for x in super().forward(*args, **kwargs) if x is not None)
 
 @add_start_docstrings(
     """Bert Model with two heads on top as done during the pre-training: a `masked language modeling` head and
