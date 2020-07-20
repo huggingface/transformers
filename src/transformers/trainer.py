@@ -230,9 +230,11 @@ class Trainer:
         """
         Returns the training :class:`~torch.utils.data.DataLoader`.
         """
-        if self.train_dataset is None:
+        if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
+            train_sampler = None
+        elif self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
-        if is_torch_tpu_available():
+        elif is_torch_tpu_available():
             train_sampler = get_tpu_sampler(self.train_dataset)
         else:
             train_sampler = (
@@ -240,7 +242,6 @@ class Trainer:
                 if self.args.local_rank == -1
                 else DistributedSampler(self.train_dataset)
             )
-
         data_loader = DataLoader(
             self.train_dataset,
             batch_size=self.args.train_batch_size,
@@ -264,7 +265,9 @@ class Trainer:
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
 
-        if is_torch_tpu_available():
+        if isinstance(eval_dataset, torch.utils.data.IterableDataset):
+            sampler = None
+        elif is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
                 eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
             )
@@ -291,7 +294,9 @@ class Trainer:
             test_dataset (obj:`Dataset`): The test dataset to use.
         """
         # We use the same batch_size as for eval.
-        if is_torch_tpu_available():
+        if isinstance(self.test_dataset, torch.utils.data.IterableDataset):
+            sampler = None
+        elif is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
                 test_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
             )
@@ -307,7 +312,6 @@ class Trainer:
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
         )
-
         return data_loader
 
     def get_optimizers(
@@ -619,7 +623,7 @@ class Trainer:
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
         # Our model outputs do not work with DataParallel, so forcing return tuple.
-        if self.args.n_gpu > 1:
+        if isinstance(model, nn.DataParallel):
             inputs["return_tuple"] = True
 
         outputs = model(**inputs)
@@ -822,7 +826,7 @@ class Trainer:
             if self.args.past_index >= 0:
                 inputs["mems"] = past
             # Our model outputs do not work with DataParallel, so forcing return tuple.
-            if self.args.n_gpu > 1:
+            if isinstance(model, nn.DataParallel):
                 inputs["return_tuple"] = True
 
             with torch.no_grad():
