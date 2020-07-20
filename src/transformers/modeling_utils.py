@@ -191,6 +191,10 @@ class ModuleUtilsMixin:
 
         return encoder_extended_attention_mask
 
+    def get_is_decoder(self):
+        if hasattr(self, "is_decoder"): return self.is_decoder
+        else: return self.config.is_decoder
+
     def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple[int, int], device: device) -> Tensor:
         """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
 
@@ -210,7 +214,7 @@ class ModuleUtilsMixin:
             # Provided a padding mask of dimensions [batch_size, seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if self.is_decoder:
+            if self.get_is_decoder():
                 batch_size, seq_length = input_shape
                 seq_ids = torch.arange(seq_length, device=device)
                 causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
