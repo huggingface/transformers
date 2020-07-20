@@ -112,9 +112,7 @@ Make sure there are no garbage files in the directory you'll upload. It should o
 - a `tf_model.h5` file, which is the TensorFlow checkpoint (unless you can't have it for some reason) ;
 - a `special_tokens_map.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save;
 - a `tokenizer_config.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save;
-- files named `vocab.json`, `merges.txt`, `vocab.txt`, or similar, which contain the vocabulary of your tokenizer, part of your :doc:`tokenizer <main_classes/tokenizer>`
-
-  save;
+- files named `vocab.json`, `vocab.txt`, `merges.txt`, or similar, which contain the vocabulary of your tokenizer, part of your :doc:`tokenizer <main_classes/tokenizer>` save;
 - maybe a `added_tokens.json`, which is part of your :doc:`tokenizer <main_classes/tokenizer>` save.
 
 Other files can safely be deleted.
