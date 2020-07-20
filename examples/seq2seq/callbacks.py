@@ -23,6 +23,7 @@ class Seq2SeqLoggingCallback(pl.Callback):
     def _write_logs(
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
     ) -> None:
+        import ipdb; ipdb.set_trace()
         logger.info(f"***** {type_path} results at step {trainer.global_step:05d} *****")
         metrics = trainer.callback_metrics
         trainer.logger.log_metrics({k: v for k, v in metrics.items() if k not in ["log", "progress_bar", "preds"]})
@@ -65,6 +66,10 @@ class Seq2SeqLoggingCallback(pl.Callback):
         n_trainable_pars = count_trainable_parameters(pl_module)
         # mp stands for million parameters
         trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
+
+    @rank_zero_only
+    def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
+        return self._write_logs(trainer, pl_module, "val")
 
     @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):

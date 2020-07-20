@@ -32,9 +32,9 @@ This dataset comes in two formats. The "packed" version merges short training ex
 
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_packed_200.tgz
+https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_packed_train_200.tgz
 tar -xzvf wmt_en_ro_packed_200.tgz
-export ENRO_DIR=${PWD}/wmt_en_ro_packed_200
+export ENRO_DIR=wmt_en_ro_packed_train_200
 ```
  
 The original data can also be downloaded with this command:
@@ -98,16 +98,27 @@ Then you can finetune mbart_cc25 on english-romanian with the following command.
 Best performing command:
 ```bash
 # optionally
-export ENRO_DIR='wmt_en_ro_packed_200' # Download instructions above
-export WANDB_PROJECT="enro_finetune" # optional 
+export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
+#export WANDB_PROJECT="enro_finetune" # optional 
 export MAX_LEN=200
-export BS=4
-export GAS=8
-./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb
+export BS=8
+export GAS=4
+./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline_v2 --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb
 ```
 This should take < 2h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 36. (you can see in wandb or metrics.json).
 
 
+MultiGPU command
+(using 8 GPUS as an example)
+```bash
+export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
+export WANDB_PROJECT="enro_finetune_multigpu" # optional 
+export MAX_LEN=200
+export BS=4
+export GAS=1
+export N_GPUS=8
+./train_mbart_cc25_enro_multigpu.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb  --model_name_or_path facebook/mbart-large-cc25
+```
 ### Finetuning Outputs 
 As you train, `output_dir` will be filled with files, that look kind of like this (comments are mine). 
 Some of them are metrics, some of them are checkpoints, some of them are metadata. Here is a quick tour:
