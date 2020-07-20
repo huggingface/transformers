@@ -442,6 +442,7 @@ class XLMModel(XLMPreTrainedModel):
                     self.prune_heads({int(layer): list(map(int, heads))})
 
         self.init_weights()
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -511,12 +512,9 @@ class XLMModel(XLMPreTrainedModel):
         # if self.is_decoder and src_enc is not None:
         #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         # position_ids
         if position_ids is None:
-            position_ids = torch.arange(slen, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand((bs, slen))
+            position_ids = self.position_ids[:, :slen]
         else:
             assert position_ids.size() == (bs, slen)  # (slen, bs)
             # position_ids = position_ids.transpose(0, 1)
