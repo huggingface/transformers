@@ -46,6 +46,7 @@ assignees: ''
  TransfoXL/XLNet: @TevenLeScao 
  examples/seq2seq: @sshleifer
  tensorflow: @jplu 
+documentation: @sgugger
  -->
 
 ## Information
@@ -75,4 +76,3 @@ Steps to reproduce the behavior:
 ## Expected behavior
 
 <!-- A clear and concise description of what you would expect to happen. -->
-
