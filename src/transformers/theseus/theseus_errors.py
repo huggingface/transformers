@@ -1,0 +1,2 @@
+class NoSuccessorError(Exception):
+    pass
