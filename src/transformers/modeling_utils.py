@@ -17,6 +17,7 @@
 import inspect
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -280,9 +281,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 - ``path``: a path (string) to the TensorFlow checkpoint.
 
             - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
+            - ``keys_to_ignore_at_load``: a list of re pattern of tensor names to ignore when loading the model (and avoid unnecessary warnings).
     """
     config_class = None
     base_model_prefix = ""
+    keys_to_ignore_at_load = None
 
     @property
     def dummy_inputs(self):
@@ -752,8 +755,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 head_model_state_dict_without_base_prefix = [
                     key.split(cls.base_model_prefix + ".")[-1] for key in model.state_dict().keys()
                 ]
-
                 missing_keys.extend(head_model_state_dict_without_base_prefix - base_model_state_dict)
+
+            # Some models may have keys that are not in the state by design, removing them before needlessly warning
+            # the user.
+            if cls.keys_to_ignore_at_load is not None:
+                for pat in cls.keys_to_ignore_at_load:
+                    unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
             if len(unexpected_keys) > 0:
                 logger.warning(

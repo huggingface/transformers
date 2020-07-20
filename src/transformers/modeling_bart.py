@@ -938,6 +938,7 @@ class BartModel(PretrainedBartModel):
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
+    keys_to_ignore_at_load = [r"final_logits_bias"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)

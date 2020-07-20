@@ -1027,6 +1027,16 @@ class T5Model(T5PreTrainedModel):
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class T5ForConditionalGeneration(T5PreTrainedModel):
+    keys_to_ignore_at_load = [
+        r"encoder\.block\.\d+\.layer\.\d+\.layer_norm\.bias",
+        r"encoder\.final_layer_norm\.bias",
+        r"decoder\.block\.\d+\.layer\.\d+\.layer_norm\.bias",
+        r"decoder\.final_layer_norm\.bias",
+        r"encoder\.embed_tokens\.weight",
+        r"decoder\.embed_tokens\.weight",
+        r"lm_head\.weight",
+    ]
+
     def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model
