@@ -620,11 +620,7 @@ class SquadProcessor(DataProcessor):
                     answer_text = None
                     answers = []
 
-                    if "is_impossible" in qa:
-                        is_impossible = qa["is_impossible"]
-                    else:
-                        is_impossible = False
-
+                    is_impossible = qa.get("is_impossible", False)
                     if not is_impossible:
                         if is_training:
                             answer = qa["answers"][0]
@@ -643,7 +639,6 @@ class SquadProcessor(DataProcessor):
                         is_impossible=is_impossible,
                         answers=answers,
                     )
-
                     examples.append(example)
         return examples
 
@@ -658,7 +653,7 @@ class SquadV2Processor(SquadProcessor):
     dev_file = "dev-v2.0.json"
 
 
-class SquadExample(object):
+class SquadExample:
     """
     A single training/test example for the Squad dataset, as loaded from disk.
 
@@ -721,7 +716,7 @@ class SquadExample(object):
             ]
 
 
-class SquadFeatures(object):
+class SquadFeatures:
     """
     Single squad example features to be fed to a model.
     Those features are model-specific and can be crafted from :class:`~transformers.data.processors.squad.SquadExample`
@@ -783,7 +778,7 @@ class SquadFeatures(object):
         self.qas_id = qas_id
 
 
-class SquadResult(object):
+class SquadResult:
     """
     Constructs a SquadResult which can be used to evaluate a model's output on the SQuAD dataset.
 
