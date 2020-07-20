@@ -222,7 +222,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertFalse(_is_punctuation("A"))
         self.assertFalse(_is_punctuation(" "))
 
-    def test_clean_up_text(self):
+    def test_clean_text(self):
         tokenizer = self.get_tokenizer(clean_text=True)
         rust_tokenizer = self.get_rust_tokenizer(clean_text=True)
 
