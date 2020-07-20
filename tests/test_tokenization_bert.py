@@ -229,12 +229,26 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
         self.assertListEqual(
             [tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
-            [['Test'], [], ['test']]
+            [['[UNK]'], [], ['[UNK]']]
         )
 
         self.assertListEqual(
             [rust_tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
-            [['Test'], [], ['test']]
+            [['[UNK]'], [], ['[UNK]']]
+        )
+
+        tokenizer = self.get_tokenizer(clean_text=False)
+        rust_tokenizer = self.get_rust_tokenizer(clean_text=False)
+
+        # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
+        self.assertListEqual(
+            [tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
+            [['[UNK]'], ['[UNK]'], ['[UNK]']]
+        )
+
+        self.assertListEqual(
+            [rust_tokenizer.tokenize(t) for t in ['Test', '\xad', 'test']],
+            [['[UNK]'], ['[UNK]'], ['[UNK]']]
         )
 
     @slow
