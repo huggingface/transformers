@@ -158,7 +158,7 @@ class ModuleUtilsMixin:
             gen = self._named_members(get_members_fn=find_tensor_attributes)
             first_tuple = next(gen)
             return first_tuple[1].dtype
-    
+
     @property
     def dtype(self):
         return self.get_dtype()    
@@ -275,7 +275,7 @@ class ModuleUtilsMixin:
             if is_attention_chunked is True:
                 head_mask = head_mask.unsqueeze(-1)
             return head_mask    
-        
+
     def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers: int):
         """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
         if head_mask.dim() == 1:

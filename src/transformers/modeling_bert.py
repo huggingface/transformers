@@ -470,7 +470,7 @@ class BertScriptableEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states.append(hidden_states)
             layer_head_mask = None if head_mask is None else head_mask[i]
-            
+
             """    
             if getattr(self.config, "gradient_checkpointing", False):
 
@@ -690,23 +690,23 @@ class BertScriptableModel(BertPreTrainedModel):
 
     def __init__(self, config: BertConfig):
         super().__init__(config)
-        
+
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.is_decoder = config.is_decoder
         self.num_hidden_layers = config.num_hidden_layers
-        
+
         self.embeddings = BertEmbeddings(config)
         self.encoder = BertScriptableEncoder(config)
         self.pooler = BertPooler(config)
         # TorchScript cannot use parameters().next(), so get dtype explicitly.
         self.mask_dtype = self.embeddings.word_embeddings(torch.LongTensor([0])).dtype
-    
+
         self.init_weights()
 
     def get_dtype(self):
         return self.mask_dtype
-    
+
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
@@ -823,7 +823,7 @@ class BertModel(BertScriptableModel):
     def __init__(self, config: BertConfig):
         super().__init__(config)
         self.config = config
-    
+
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-uncased")
     def forward(self, *args, **kwargs):
@@ -862,7 +862,7 @@ class BertScriptableForPreTraining(BertPreTrainedModel):
         self.bert = BertScriptableModel(config)
         self.cls = BertPreTrainingHeads(config)
         self.vocab_size = config.vocab_size
-        
+
         self.init_weights()
 
     def get_output_embeddings(self):
@@ -881,7 +881,7 @@ class BertScriptableForPreTraining(BertPreTrainedModel):
         output_attentions: Optional[bool] =None,
         output_hidden_states: Optional[bool] = None,
         ) -> Tuple[Optional[torch.Tensor], torch.Tensor, torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
-    
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -901,7 +901,7 @@ class BertScriptableForPreTraining(BertPreTrainedModel):
             masked_lm_loss = nn.functional.cross_entropy(prediction_scores.view(-1, self.vocab_size), labels.view(-1))
             next_sentence_loss = nn.functional.cross_entropy(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
-            
+
         return (total_loss, prediction_scores, seq_relationship_score, hidden_states, attentions)
 
 @add_start_docstrings(
@@ -1262,7 +1262,7 @@ class BertScriptableForNextSentencePrediction(BertPreTrainedModel):
         next_sentence_loss : Optional[torch.Tensor] = None
         if next_sentence_label is not None:
             next_sentence_loss = nn.functional.cross_entropy(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
-        
+
         return  (next_sentence_loss, seq_relationship_score, hidden_states, attentions)
 
 @add_start_docstrings(
@@ -1272,7 +1272,7 @@ class BertForNextSentencePrediction(BertScriptableForNextSentencePrediction):
     def __init__(self, config: BertConfig):
         super().__init__(config)
         self.config = config
-    
+
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(self, *args, **kwargs):
         r"""
@@ -1340,7 +1340,7 @@ class BertScriptableForSequenceClassification(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) ->  Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
-        
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1364,7 +1364,7 @@ class BertScriptableForSequenceClassification(BertPreTrainedModel):
                 loss = nn.functional.mse_loss(logits.view(-1), labels.view(-1))
             else:
                 loss = nn.functional.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
-        
+
         return (loss, logits, hidden_states, attentions)
 
 @add_start_docstrings(
@@ -1376,7 +1376,7 @@ class BertForSequenceClassification(BertScriptableForSequenceClassification):
     def __init__(self, config: BertConfig):
         super().__init__(config)
         self.config = config
-    
+
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-uncased")
     def forward(self, *args, **kwargs):
@@ -1429,7 +1429,7 @@ class BertScriptableForMultipleChoice(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
-        
+
         if input_ids is not None:
             num_choices = input_ids.shape[1]
         else:
@@ -1466,7 +1466,7 @@ class BertScriptableForMultipleChoice(BertPreTrainedModel):
         loss: Optional[torch.Tensor] = None
         if labels is not None:
             loss = nn.functional.cross_entropy(reshaped_logits, labels)
-        
+
         return  (loss, reshaped_logits, hidden_states, attentions)
 
 @add_start_docstrings(
@@ -1478,7 +1478,7 @@ class BertForMultipleChoice(BertScriptableForMultipleChoice):
     def __init__(self, config: BertConfig):
         super().__init__(config)
         self.config = config
-    
+
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-uncased")
     def forward(self, *args, **kwargs):
@@ -1515,7 +1515,7 @@ class BertScriptableForTokenClassification(BertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.ignore_index = nn.CrossEntropyLoss().ignore_index
-        
+
         self.bert = BertScriptableModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
@@ -1534,7 +1534,7 @@ class BertScriptableForTokenClassification(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
-        
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1576,7 +1576,7 @@ class BertForTokenClassification(BertScriptableForTokenClassification):
     def __init__(self, config: BertConfig):
         super().__init__(config)
         self.config = config
-    
+
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-uncased")
     def forward(self, *args, **kwargs):
@@ -1628,7 +1628,7 @@ class BertScriptableForQuestionAnswering(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     )-> Tuple[Optional[torch.Tensor], torch.Tensor, torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
-        
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1642,7 +1642,7 @@ class BertScriptableForQuestionAnswering(BertPreTrainedModel):
 
         sequence_output = outputs[0]
         hidden_states, attentions = outputs[2], outputs[3]
-        
+
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
@@ -1663,7 +1663,7 @@ class BertScriptableForQuestionAnswering(BertPreTrainedModel):
             start_loss = nn.functional.cross_entropy(start_logits, start_positions, ignore_index=ignored_index)
             end_loss = nn.functional.cross_entropy(end_logits, end_positions, ignore_index=ignored_index)
             total_loss = (start_loss + end_loss) / 2
-        
+
         return (total_loss, start_logits, end_logits, hidden_states, attentions)
 
 @add_start_docstrings(
@@ -1675,7 +1675,7 @@ class BertForQuestionAnswering(BertScriptableForQuestionAnswering):
     def __init__(self, config: BertConfig):
         super().__init__(config)
         self.config = config
-    
+
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-uncased")
     def forward(self, *args, **kwargs):
