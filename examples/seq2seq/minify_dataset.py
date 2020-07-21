@@ -2,7 +2,7 @@ from pathlib import Path
 import fire
 
 def minify(src_dir: Path, dest_dir: Path, n: int):
-    """Write first n lines of each file f in src_dir to dest_dir/f"""
+    """Write first n lines of each file f in src_dir to dest_dir/f """
     src_dir = Path(src_dir)
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
