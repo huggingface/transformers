@@ -20,7 +20,7 @@ from .finetune import main
 from .pack_dataset import pack_data_dir
 from .run_eval import generate_summaries_or_translations, run_generate
 from .utils import MBartDataset, Seq2SeqDataset, lmap, load_json
-
+from .convert_model_to_fp16 import fp16_cli
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -269,6 +269,10 @@ def test_pack_dataset():
     assert len(packed_examples[0]) == sum(len(x) for x in orig_examples)
     assert orig_paths == new_paths
 
+def test_fp16_cli():
+    output_dir = tempfile.mkdtemp(prefix="output_")
+    testargs = ["convert_model_to_fp16.py", model, str(input_file_name), str(output_file_name)]  # TODO: test score_path
+    with patch.object(sys, "argv", testargs):
 
 def test_mbart_dataset_truncation():
     tokenizer = MBartTokenizer.from_pretrained(MBART_TINY)
