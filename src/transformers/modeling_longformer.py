@@ -1090,7 +1090,9 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
         ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
-        >>> loss, prediction_scores = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        >>> loss = outputs.loss
+        >>> prediction_logits = output.logits
         """
 
         if "masked_lm_labels" in kwargs:
@@ -1299,10 +1301,12 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         >>> # the forward method will automatically set global attention on question tokens
         >>> attention_mask = encoding["attention_mask"]
 
-        >>> start_scores, end_scores = model(input_ids, attention_mask=attention_mask)
+        >>> outputs = model(input_ids, attention_mask=attention_mask)
+        >>> start_logits = outputs.start_logits
+        >>> end_logits = outputs.end_logits
         >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
 
-        >>> answer_tokens = all_tokens[torch.argmax(start_scores) :torch.argmax(end_scores)+1]
+        >>> answer_tokens = all_tokens[torch.argmax(start_logits) :torch.argmax(end_logits)+1]
         >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
 
         """

@@ -144,9 +144,9 @@ class Trainer:
         data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
             The function to use to from a batch from a list of elements of :obj:`train_dataset` or
             :obj:`eval_dataset`.
-        train_dataset (:obj:`Dataset`, `optional`):
+        train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training.
-        eval_dataset (:obj:`Dataset`, `optional`):
+        eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for evaluation.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
