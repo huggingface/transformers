@@ -99,11 +99,11 @@ Best performing command:
 ```bash
 # optionally
 export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
-#export WANDB_PROJECT="enro_finetune" # optional 
+# export WANDB_PROJECT="MT" # optional 
 export MAX_LEN=200
-export BS=8
-export GAS=4
-./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline_v2 --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb
+export BS=4
+export GAS=8 # gradient accumulation steps
+./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb --sortish_sampler
 ```
 This should take < 2h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 25. (you can see in wandb or metrics.json).
 To get results in line with fairseq, you need to do some postprocessing.
@@ -112,12 +112,12 @@ MultiGPU command
 (using 8 GPUS as an example)
 ```bash
 export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
-export WANDB_PROJECT="enro_finetune_multigpu" # optional 
+ # export WANDB_PROJECT="MT" # optional
 export MAX_LEN=200
 export BS=4
-export GAS=1
+export GAS=1  # gradient accumulation steps
 export N_GPUS=8
-./train_mbart_cc25_enro_multigpu.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb  --model_name_or_path facebook/mbart-large-cc25
+./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --gpus 8 --logger_name wandb
 ```
 ### Finetuning Outputs 
 As you train, `output_dir` will be filled with files, that look kind of like this (comments are mine). 
