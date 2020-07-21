@@ -199,6 +199,9 @@ def train(args, train_dataset, model, tokenizer):
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
 
+            if isinstance(model, torch.nn.DataParallel):
+                inputs["return_tuple"] = True
+
             outputs = model(**inputs)
             # model outputs are always tuple in transformers (see doc)
             loss = outputs[0]
@@ -313,7 +316,8 @@ def evaluate(args, model, tokenizer, prefix=""):
                     inputs.update(
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
-
+            if isinstance(model, torch.nn.DataParallel):
+                inputs["return_tuple"] = True
             outputs = model(**inputs)
 
         for i, feature_index in enumerate(feature_indices):

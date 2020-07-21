@@ -1,5 +1,5 @@
 ---
-language: arabic
+language: ar
 thumbnail: https://raw.githubusercontent.com/mawdoo3/Multi-dialect-Arabic-BERT/master/multidialct_arabic_bert.png
 datasets:
 - nadi

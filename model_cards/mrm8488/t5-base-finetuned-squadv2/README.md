@@ -1,5 +1,5 @@
 ---
-language: english
+language: en
 datasets:
 - squad_v2
 ---
