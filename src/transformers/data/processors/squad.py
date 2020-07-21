@@ -9,12 +9,11 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-
-# Store the tokenizers which insert 2 separators tokens
 from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from .utils import DataProcessor
 
 
+# Store the tokenizers which insert 2 separators tokens
 MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
 
 
@@ -143,12 +142,20 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
 
+        # Define the side we want to truncate / pad and the text/pair sorting
+        if tokenizer.padding_side == "right":
+            texts = truncated_query
+            pairs = span_doc_tokens
+            truncation = TruncationStrategy.ONLY_SECOND
+        else:
+            texts = span_doc_tokens
+            pairs = truncated_query
+            truncation = TruncationStrategy.ONLY_FIRST
+
         encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
-            truncated_query if tokenizer.padding_side == "right" else span_doc_tokens,
-            span_doc_tokens if tokenizer.padding_side == "right" else truncated_query,
-            truncation=TruncationStrategy.ONLY_SECOND.value
-            if tokenizer.padding_side == "right"
-            else TruncationStrategy.ONLY_FIRST.value,
+            texts,
+            pairs,
+            truncation=truncation,
             padding=PaddingStrategy.LONGEST.value,
             max_length=max_seq_length,
             return_overflowing_tokens=True,
