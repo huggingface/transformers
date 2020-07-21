@@ -10,7 +10,7 @@ class TheseusModule(torch.nn.Module):
     """
 
     # TheseusModule will do nothing unless its replacing_rate is specified
-    def __init__(self, predecessor: torch.nn.Module, successor: torch.nn.Module = None, replacing_rate=0):
+    def __init__(self, predecessor: torch.nn.Module = None, successor: torch.nn.Module = None, replacing_rate=0):
         super().__init__()
         self.predecessor = predecessor
         self.successor = successor

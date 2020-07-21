@@ -104,10 +104,10 @@ class TheseusTest(unittest.TestCase):
         layers = torch.nn.ModuleList([torch.nn.Linear(1, i) for i in range(12)])
         drop_layers = theseus.LayerDropList.from_module_list(layers, 0)
         for _ in range(10):
-            self.assertEqual(len(drop_layers.sample_and_pass()), 12)
+            self.assertEqual(len(drop_layers.sample_and_pass()), 0)
         drop_layers.set_replacing_rate(1)
         for _ in range(10):
-            self.assertEqual(len(drop_layers.sample_and_pass()), 0)
+            self.assertEqual(len(drop_layers.sample_and_pass()), 12)
         drop_layers.set_replacing_rate(0.5)
         total_layers = 0
         for _ in range(100):
