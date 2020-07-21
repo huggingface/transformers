@@ -17,7 +17,7 @@ def pack_examples(tok, src_examples, tgt_examples, max_tokens=1024):
 
     finished_src, finished_tgt = [], []
 
-    sorted_examples = list(sorted(zip(src_examples, tgt_examples), key=lambda x: len(x[0])))
+    sorted_examples = list(zip(src_examples, tgt_examples))
     new_src, new_tgt = sorted_examples[0]
 
     def is_too_big(strang):
@@ -55,7 +55,7 @@ def minify(src_dir: Path, dest_dir: Path, n: int):
 def pack_data_dir(tok, data_dir: Path, max_tokens, save_path):
     save_path = Path(save_path)
     save_path.mkdir(exist_ok=True)
-    for split in ["val", "test", "train"]:
+    for split in ["train"]:
         src_path, tgt_path = data_dir / f"{split}.source", data_dir / f"{split}.target"
         src_docs = [x.rstrip() for x in Path(src_path).open().readlines()]
         tgt_docs = [x.rstrip() for x in Path(tgt_path).open().readlines()]
