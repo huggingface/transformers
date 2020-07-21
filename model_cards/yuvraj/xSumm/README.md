@@ -1,8 +1,6 @@
 ---
 language: "en"
 tags:
-- BartForConditionalGeneration
-- pytorch
 - summarization
 - extreme summarization
 ---
