@@ -13,6 +13,8 @@ from .utils import DataProcessor
 
 
 # Store the tokenizers which insert 2 separators tokens
+from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
+
 MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
 
 
@@ -144,8 +146,8 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
         encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
             truncated_query if tokenizer.padding_side == "right" else span_doc_tokens,
             span_doc_tokens if tokenizer.padding_side == "right" else truncated_query,
-            truncation="only_second" if tokenizer.padding_side == "right" else "only_first",
-            padding="max_length",
+            truncation=TruncationStrategy.ONLY_SECOND.value if tokenizer.padding_side == "right" else TruncationStrategy.ONLY_FIRST.value,
+            padding=PaddingStrategy.LONGEST.value,
             max_length=max_seq_length,
             return_overflowing_tokens=True,
             stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
