@@ -105,8 +105,8 @@ export BS=8
 export GAS=4
 ./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline_v2 --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb
 ```
-This should take < 2h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 36. (you can see in wandb or metrics.json).
-
+This should take < 2h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 25. (you can see in wandb or metrics.json).
+To get results in line with fairseq, you need to do some postprocessing.
 
 MultiGPU command
 (using 8 GPUS as an example)
