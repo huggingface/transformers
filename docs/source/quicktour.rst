@@ -235,8 +235,8 @@ final activations of the model.
     >>> ## TENSORFLOW CODE
     >>> print(tf_outputs)
     (<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
-    array([[-4.0832963 ,  4.3364134 ],
-           [ 0.08181238, -0.04178794]], dtype=float32)>,)
+    array([[-4.0832963 ,  4.336414  ],
+           [ 0.08181786, -0.04179301]], dtype=float32)>,)
 
 The model can return more than just the final activations, which is why the PyTorch output is a special class and the
 TensorFlow output is a tuple. Here we only asked for the final activations, so we get a tuple with one element on the
@@ -267,7 +267,7 @@ We can see we get the numbers from before:
     >>> print(tf_predictions)
     tf.Tensor(
     [[2.2042994e-04 9.9977952e-01]
-     [5.3086078e-01 4.6913919e-01]], shape=(2, 2), dtype=float32)
+     [5.3086340e-01 4.6913657e-01]], shape=(2, 2), dtype=float32)
     >>> ## PYTORCH CODE
     >>> print(pt_predictions)
     tensor([[2.2043e-04, 9.9978e-01],
