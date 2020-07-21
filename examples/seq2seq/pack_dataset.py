@@ -41,15 +41,7 @@ def pack_examples(tok, src_examples, tgt_examples, max_tokens=1024):
         finished_tgt.append(new_tgt)
     return finished_src, finished_tgt
 
-
-def minify(src_dir: Path, dest_dir: Path, n: int):
-    """Write first n lines of each file f in src_dir to dest_dir/f"""
-    dest_dir.mkdir(exist_ok=True)
-    for path in src_dir.iterdir():
-        new = [x.rstrip() for x in list(path.open().readlines())][:n]
-        dest_path = dest_dir.joinpath(path.name)
-        print(dest_path)
-        dest_path.open("w").write("\n".join(new))
+#def avg_checkpoints()
 
 
 def pack_data_dir(tok, data_dir: Path, max_tokens, save_path):
