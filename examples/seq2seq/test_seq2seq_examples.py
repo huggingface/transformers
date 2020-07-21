@@ -277,11 +277,19 @@ def test_finetune(model):
 
 def test_pack_dataset():
     tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
+
     tmp_dir = Path(make_test_data_dir())
+    orig_examples = tmp_dir.joinpath("train.source").open().readlines()
     save_dir = Path(tempfile.mkdtemp(prefix="packed_"))
     pack_data_dir(tokenizer, tmp_dir, 128, save_dir)
     orig_paths = {x.name for x in tmp_dir.iterdir()}
     new_paths = {x.name for x in save_dir.iterdir()}
+    packed_examples = save_dir.joinpath("train.source").open().readlines()
+    # orig: [' Sam ate lunch today.\n', 'Sams lunch ingredients.']
+    # desired_packed: [' Sam ate lunch today.\n Sams lunch ingredients.']
+    assert len(packed_examples) < len(orig_examples)
+    assert len(packed_examples) == 1
+    assert len(packed_examples[0]) == sum(len(x) for x in orig_examples)
     assert orig_paths == new_paths
 
 
