@@ -683,7 +683,8 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         >>> outputs = model(input_ids)
 
-        >>> prediction_scores, sop_scores = outputs[:2]
+        >>> prediction_logits = outputs.prediction_logits
+        >>> sop_logits = outputs.sop_logits
 
         """
 

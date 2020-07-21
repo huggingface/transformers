@@ -1,9 +1,9 @@
 import torch
 import argparse
 from typing import Dict
-
+from tqdm import tqdm
 def convert(dct) -> Dict:
-    for k,v in dct.items():
+    for k,v in tqdm(dct.items()):
         try:
             dct[k] = v.half()
         except Exception:

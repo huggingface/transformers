@@ -989,7 +989,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         >>> end_positions = torch.tensor([3])
 
         >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        >>> loss = outputs[0]
+        >>> loss = outputs.loss
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
