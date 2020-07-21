@@ -19,7 +19,6 @@ from .distillation import distill_main, evaluate_checkpoint
 from .finetune import main
 from .pack_dataset import pack_data_dir
 from .run_eval import generate_summaries_or_translations, run_generate
-from .convert_model_to_fp16 import fp16_cli
 from .utils import MBartDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
 
 
