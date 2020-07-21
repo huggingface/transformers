@@ -146,11 +146,11 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
         if tokenizer.padding_side == "right":
             texts = truncated_query
             pairs = span_doc_tokens
-            truncation = TruncationStrategy.ONLY_SECOND
+            truncation = TruncationStrategy.ONLY_SECOND.value
         else:
             texts = span_doc_tokens
             pairs = truncated_query
-            truncation = TruncationStrategy.ONLY_FIRST
+            truncation = TruncationStrategy.ONLY_FIRST.value
 
         encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
             texts,
