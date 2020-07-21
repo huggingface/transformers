@@ -177,6 +177,8 @@ class TestSummarizationDistiller(unittest.TestCase):
 
     def _test_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
+            label_smoothing_eps=0.0,
+            early_stopping_patience=-1,
             train_batch_size=1,
             eval_batch_size=2,
             max_epochs=2,
