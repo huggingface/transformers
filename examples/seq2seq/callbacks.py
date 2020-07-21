@@ -57,7 +57,6 @@ class Seq2SeqLoggingCallback(pl.Callback):
 
     @rank_zero_only
     def on_train_start(self, trainer, pl_module):
-
         try:
             npars = pl_module.model.model.num_parameters()
         except AttributeError:
@@ -66,10 +65,6 @@ class Seq2SeqLoggingCallback(pl.Callback):
         n_trainable_pars = count_trainable_parameters(pl_module)
         # mp stands for million parameters
         trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
-
-    @rank_zero_only
-    def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        return self._write_logs(trainer, pl_module, "val")
 
     @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
