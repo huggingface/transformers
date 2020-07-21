@@ -67,4 +67,33 @@ class TheseusTest(unittest.TestCase):
                     scc_num += 1
                 elif prd_module_list[i] == sampled_list[i]:
                     prd_num += 1
-        self.assertTrue(0 < scc_num / (prd_num + scc_num) < 1)
+        self.assertLess(scc_num / (prd_num + scc_num), 1)
+        self.assertGreater(scc_num / (prd_num + scc_num), 0)
+
+    def test_layerdrop_list(self):
+        layers = torch.nn.ModuleList([torch.nn.Linear(1, i) for i in range(12)])
+        drop_layers = theseus.LayerDropList.from_module_list(layers, 0)
+        for _ in range(10):
+            self.assertEqual(len(drop_layers.sample_and_pass()), 12)
+        drop_layers.set_replacing_rate(1)
+        for _ in range(10):
+            self.assertEqual(len(drop_layers.sample_and_pass()), 0)
+        drop_layers.set_replacing_rate(0.5)
+        total_layers = 0
+        for _ in range(100):
+            total_layers += len(drop_layers.sample_and_pass())
+        avg_layers = total_layers / 100
+        self.assertLess(avg_layers, 12)
+        self.assertGreater(avg_layers, 0)
+
+    def test_mixout_list(self):
+        layers = torch.nn.ModuleList([torch.nn.Linear(1, i) for i in range(12)])
+        mixout_layers = theseus.MixoutList.from_module_list(layers, 0)
+        for theseus_module in mixout_layers:
+            self.assertNotEqual(theseus_module.predecessor, theseus_module.successor)
+            self.assertEqual(theseus_module.predecessor.__class__, theseus_module.successor.__class__)
+        for _ in range(10):
+            self.assertEqual(len(mixout_layers.sample_and_pass()), 12)
+        mixout_layers.set_replacing_rate(1)
+        for _ in range(10):
+            self.assertEqual(len(mixout_layers.sample_and_pass()), 12)

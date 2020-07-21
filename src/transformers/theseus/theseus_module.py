@@ -21,7 +21,7 @@ class TheseusModule(torch.nn.Module):
             raise NoSuccessorError(
                 "The successor is not specified. In this case, do not call `TheseusModule` directly."
             )
-        return self.successor(*args, **kwargs)
+        return self.sample_and_pass()(*args, **kwargs)
 
     def sample_and_pass(self):
         # Always replace when `self.training == False`
