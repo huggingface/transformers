@@ -395,7 +395,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
@@ -448,7 +448,7 @@ class GPT2Model(GPT2PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs,
     ):
         if "past" in kwargs:
@@ -464,7 +464,7 @@ class GPT2Model(GPT2PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -614,7 +614,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs,
     ):
         r"""
@@ -632,7 +632,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             )
             past_key_values = kwargs.pop("past")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -711,7 +711,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs,
     ):
         r"""
@@ -770,7 +770,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             )
             past_key_values = kwargs.pop("past")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         transformer_outputs = self.transformer(
             input_ids,

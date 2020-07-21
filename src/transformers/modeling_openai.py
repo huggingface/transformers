@@ -373,7 +373,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
@@ -423,13 +423,13 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -538,7 +538,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -548,7 +548,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -622,7 +622,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs
     ):
         r"""
@@ -661,7 +661,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         outputs = model(input_ids, mc_token_ids=mc_token_ids)
         lm_prediction_scores, mc_prediction_scores = outputs[:2]
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
         if "lm_labels" in kwargs:
             warnings.warn(
                 "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",

@@ -279,7 +279,7 @@ class Transformer(nn.Module):
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
 
     def forward(
-        self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=None
+        self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=False
     ):
         """
         Parameters
@@ -396,7 +396,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
@@ -444,13 +444,13 @@ class DistilBertModel(DistilBertPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -516,7 +516,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs
     ):
         r"""
@@ -535,7 +535,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
@@ -601,7 +601,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -610,7 +610,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         distilbert_output = self.distilbert(
             input_ids=input_ids,
@@ -682,7 +682,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -694,7 +694,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         distilbert_output = self.distilbert(
             input_ids=input_ids,
@@ -775,14 +775,14 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         outputs = self.distilbert(
             input_ids,
@@ -849,7 +849,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -879,7 +879,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         >>> loss, logits = outputs[:2]
 
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None

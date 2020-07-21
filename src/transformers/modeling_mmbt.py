@@ -148,7 +148,7 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
@@ -182,7 +182,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         Returns:
@@ -198,7 +198,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")

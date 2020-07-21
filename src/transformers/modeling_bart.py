@@ -124,7 +124,7 @@ BART_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
@@ -850,7 +850,7 @@ class BartModel(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs,
     ):
 
@@ -862,7 +862,7 @@ class BartModel(PretrainedBartModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -975,7 +975,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **unused,
     ):
         r"""
@@ -1017,7 +1017,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
                 FutureWarning,
             )
             decoder_past_key_values = unused.pop("decoder_cached_states")
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         if labels is not None:
             use_cache = False
@@ -1145,7 +1145,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1153,7 +1153,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
         if labels is not None:
             use_cache = False
 
@@ -1231,7 +1231,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1243,7 +1243,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
         if start_positions is not None and end_positions is not None:
             use_cache = False
 

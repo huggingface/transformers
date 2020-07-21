@@ -1922,7 +1922,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
@@ -1977,7 +1977,7 @@ class ReformerModel(ReformerPreTrainedModel):
         use_cache=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
     Return:
@@ -2010,7 +2010,7 @@ class ReformerModel(ReformerPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -2208,7 +2208,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         use_cache=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_tuple=False,
         labels=None,
     ):
         r"""
@@ -2218,7 +2218,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
                 All labels set to ``-100`` are ignored (masked), the loss is only
                 computed for labels in ``[0, ..., config.vocab_size]``
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2326,7 +2326,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         labels=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -2334,7 +2334,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2408,7 +2408,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         labels=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
             labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -2511,7 +2511,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         end_positions=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -2523,7 +2523,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         reformer_outputs = self.reformer(
             input_ids,

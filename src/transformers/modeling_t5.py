@@ -675,7 +675,7 @@ class T5Stack(T5PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
     ):
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -683,7 +683,7 @@ class T5Stack(T5PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -868,7 +868,7 @@ T5_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
@@ -930,7 +930,7 @@ class T5Model(T5PreTrainedModel):
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs,
     ):
         r"""
@@ -957,7 +957,7 @@ class T5Model(T5PreTrainedModel):
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1079,7 +1079,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_tuple=False,
         **kwargs,
     ):
         r"""
@@ -1124,7 +1124,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_tuple = return_tuple if return_tuple else self.config.use_return_tuple
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
