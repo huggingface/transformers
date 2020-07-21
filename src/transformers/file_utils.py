@@ -883,3 +883,51 @@ class ModelOutput:
 
     def __len__(self):
         return len(self.to_tuple())
+
+
+# workaround for outputs being a dataclass that currently isn't supported by nn.DataParallel.gather
+if is_torch_available():
+    from torch.nn.parallel._functions import Gather
+
+    def gather_modeloutput(outputs, target_device, dim=0):
+        r"""
+        Gathers tensors from different GPUs on a specified device
+          (-1 means the CPU).
+        This is a modified torch/nn/parallel/scatter_gather.gather function to support ModelOutput
+        (dataclass) outputs. We override the torch.nn.DataParallel.gather method with this custom method.
+        """
+
+        def gather_map(outputs):
+            out = outputs[0]
+
+            if isinstance(out, ModelOutput):
+                names = out.to_dict().keys()
+                none_names = [n for n in out.__dataclass_fields__.keys() if n not in names]
+                attrs = {k: gather_map([getattr(o, k) for o in outputs]) for k in names}
+                attrs = {**attrs, **{k: None for k in none_names}}
+                return type(out)(**attrs)
+
+            if isinstance(out, torch.Tensor):
+                return Gather.apply(target_device, dim, *outputs)
+            if out is None:
+                return None
+
+            if isinstance(out, dict):
+                if not all((len(out) == len(d) for d in outputs)):
+                    raise ValueError("All dicts must have the same number of keys")
+                return type(out)(((k, gather_map([d[k] for d in outputs])) for k in out))
+
+            return type(out)(map(gather_map, zip(*outputs)))
+
+        # Recursive function calls like this create reference cycles.
+        # Setting the function to None clears the refcycle.
+        try:
+            res = gather_map(outputs)
+        finally:
+            gather_map = None
+        return res
+
+    def gather_method(self, outputs, output_device):
+        return gather_modeloutput(outputs, output_device, dim=self.dim)
+
+    torch.nn.DataParallel.gather = gather_method
