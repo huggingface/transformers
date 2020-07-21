@@ -146,8 +146,6 @@ class SummarizationModule(BaseTransformer):
             loss, nll_loss = label_smoothed_nll_loss(
                 lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
-            # TODO(SS): below fails, understand math better!
-            # assert nll_loss == = ce_loss(outputs[0], lm_labels, ignore_index=pad_token_id)
         return (loss,)
 
     def training_step(self, batch, batch_idx) -> Dict:
