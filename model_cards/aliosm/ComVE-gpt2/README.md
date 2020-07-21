@@ -1,14 +1,13 @@
 ---
 language: "en"
 tags:
-- gpt2
 - exbert
 - commonsense
 - semeval2020
 - comve
 license: "mit"
 datasets:
-- https://github.com/wangcunxiang/SemEval2020-Task4-Commonsense-Validation-and-Explanation
+- ComVE
 metrics:
 - bleu
 widget:
@@ -42,7 +41,7 @@ The model is initialized from the [gpt2](https://github.com/huggingface/transfor
 
 ## Training procedure
 
-Each natural language statement that against commonsense is concatenated with its reference reason with `<|conteniue|>` as a separator, then the model finetuned using CLM objective.
+Each natural language statement that against commonsense is concatenated with its reference reason with `<|continue|>` as a separator, then the model finetuned using CLM objective.
 The model trained on Nvidia Tesla P100 GPU from Google Colab platform with 5e-5 learning rate, 5 epochs, 128 maximum sequence length and 64 batch size.
 
 <center>
