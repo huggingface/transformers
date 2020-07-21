@@ -39,10 +39,9 @@ def generate_summaries_or_translations(
     if fp16:
         model = model.half()
     if decoder_start_token_id is None:
-        decoder_start_token_id = gen_kwargs.pop('decoder_start_token_id', None)
+        decoder_start_token_id = gen_kwargs.pop("decoder_start_token_id", None)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-
 
     # update config with summarization specific params
     use_task_specific_params(model, task)
@@ -52,7 +51,12 @@ def generate_summaries_or_translations(
             batch = [model.config.prefix + text for text in batch]
         batch = tokenizer(batch, return_tensors="pt", truncation=True, padding="max_length").to(device)
         input_ids, attention_mask = trim_batch(**batch, pad_token_id=tokenizer.pad_token_id)
-        summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask, decoder_start_token_id=decoder_start_token_id, **gen_kwargs)
+        summaries = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_start_token_id=decoder_start_token_id,
+            **gen_kwargs,
+        )
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         for hypothesis in dec:
             fout.write(hypothesis + "\n")
@@ -70,7 +74,13 @@ def run_generate():
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument("--task", type=str, default="summarization", help="typically translation or summarization")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
-    parser.add_argument("--decoder_start_token_id", type=int, default=None, required=False, help="decoder_start_token_id (otherwise will look at config)")
+    parser.add_argument(
+        "--decoder_start_token_id",
+        type=int,
+        default=None,
+        required=False,
+        help="decoder_start_token_id (otherwise will look at config)",
+    )
     parser.add_argument(
         "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
     )
