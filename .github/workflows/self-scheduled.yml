@@ -47,3 +47,12 @@ jobs:
       run: |
         source .env/bin/activate
         python -m pytest -n 1 --dist=loadfile -s ./tests/
+    - name: Run examples tests on GPU
+      env:
+        TF_FORCE_GPU_ALLOW_GROWTH: "true"
+        OMP_NUM_THREADS: 1
+        RUN_SLOW: yes
+        USE_CUDA: yes
+      run: |
+        source .env/bin/activate
+        python -m pytest -n 1 --dist=loadfile -s examples
