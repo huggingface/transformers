@@ -116,7 +116,6 @@ export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
 export MAX_LEN=200
 export BS=4
 export GAS=1  # gradient accumulation steps
-export N_GPUS=8
 ./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --gpus 8 --logger_name wandb
 ```
 ### Finetuning Outputs 
