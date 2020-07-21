@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
+from ...tokenization_utils_base import TruncationStrategy
 from .utils import DataProcessor
 
 
