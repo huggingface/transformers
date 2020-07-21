@@ -1,8 +1,13 @@
---
+---
 language: english
 datasets:
 - c4
---
+tags:
+- summarization
+- translation
+
+license: apache-2.0
+---
 
 [Google's T5](https://ai.googleblog.com/2020/02/exploring-transfer-learning-with-t5.html) 
 
