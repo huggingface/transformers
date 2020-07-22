@@ -1934,9 +1934,9 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
         "default": {
-            "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli",},
-            "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli",},
-            "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli",},
+            "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
         },
     },
 }

@@ -385,7 +385,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
             self._test_zero_shot_pipeline(nlp)
 
     @require_tf
-    def test_torch_zero_shot_classification(self):
+    def test_tf_zero_shot_classification(self):
         for model_name in ZERO_SHOT_CLASSIFICATION_FINETUNED_MODELS:
             nlp = pipeline(task="zero-shot-classification", model=model_name, tokenizer=model_name, framework="tf")
             self._test_zero_shot_pipeline(nlp)
