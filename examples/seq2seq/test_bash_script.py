@@ -10,11 +10,15 @@ import torch
 
 from .finetune import SummarizationModule, main
 from .test_seq2seq_examples import make_test_data_dir, MBART_TINY, CUDA_AVAILABLE
+from transformers.testing_utils import slow
 import wget
 import tarfile
-WMT_100_URL = 'asd'
-DATA_URL = 'https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_test_data.tgz'
+
+
 def fetch_and_save_wmt_100():
+    #TODO(SS): DELETEME
+    DATA_URL = 'https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_test_data.tgz'
+
     dest_dir = 'wmt_100_dir'
     if os.path.isdir(dest_dir):
         return dest_dir
@@ -25,9 +29,9 @@ def fetch_and_save_wmt_100():
     return dest_dir
 
 
-
+@slow
 def test_train_mbart_cc25_enro_script():
-    data_dir = fetch_and_save_wmt_100()
+    data_dir = 'examples/seq2seq/test_data/wmt_en_ro'
     env_vars_to_replace = {
         "$MAX_LEN": 200,
         "$BS": 4,
