@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
+from .utils import require_torch, require_torch_and_cuda, slow, torch_device
 
 
 if is_torch_available():
@@ -301,16 +301,20 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
 
     # optional: do more testing! This will save you time later!
     @slow
-    def test_that_it_can_be_used_in_a_pipeline(self):
+    def test_that_XXX_can_be_used_in_a_pipeline(self):
         """We can use self.big_model here without calling __init__ again."""
         pass
 
-    def test_that_loss_doesnt_change_if_you_add_padding(self):
+    def test_XXX_loss_doesnt_change_if_you_add_padding(self):
         pass
 
-    def test_bad_args(self):
+    def test_XXX_bad_args(self):
         pass
 
-    def test_other_stuff(self):
+    def test_XXX_backward_pass_reduces_loss(self):
         """Test loss/gradients same as reference implementation, for example."""
+        pass
+
+    @require_torch_and_cuda
+    def test_large_inputs_in_fp16_dont_cause_overflow(self):
         pass
