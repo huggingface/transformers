@@ -1,7 +1,6 @@
 import argparse
 import os
 import sys
-import tarfile
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -10,39 +9,27 @@ import pytest
 import pytorch_lightning as pl
 import timeout_decorator
 import torch
-import wget
 
-from transformers.testing_utils import slow
 from transformers import BartForConditionalGeneration
+from transformers.testing_utils import slow
 
 from .finetune import SummarizationModule, main
-from .test_seq2seq_examples import CUDA_AVAILABLE
+from .test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
 from .utils import load_json
 
 
-def fetch_and_save_wmt_100():
-    # TODO(SS): DELETEME
-    DATA_URL = "https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_test_data.tgz"
+MODEL_NAME = MBART_TINY
+# TODO(SS): MODEL_NAME = "sshleifer/student_mbart_en_ro_1_1"
 
-    dest_dir = "wmt_100_dir"
-    if os.path.isdir(dest_dir):
-        return dest_dir
-    filename = wget.download(DATA_URL)
-    tarball = tarfile.TarFile(filename)
-    tarball.extractall(path=dest_dir)
-    os.remove(filename)
-    return dest_dir
 
-MODEL_NAME = "sshleifer/student_mbart_en_ro_1_1"
 @slow
 @pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
-def test_student_download():
-    """This warms up the cache so that we can time the next test without including download time."""
+def test_model_download():
+    """This warms up the cache so that we can time the next test without including download time, which varies between machines."""
     BartForConditionalGeneration.from_pretrained(MODEL_NAME)
 
 
-
-@timeout_decorator.timeout(60)
+@timeout_decorator.timeout(120)
 @slow
 @pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
 def test_train_mbart_cc25_enro_script():
@@ -91,22 +78,25 @@ def test_train_mbart_cc25_enro_script():
         args.do_predict = False
         # assert args.gpus == gpus THIS BREAKS for multigpu
         model = main(args)
+
+    # Check metrics
+    metrics = load_json(model.metrics_save_path)
+    first_step_stats = metrics["val"][0]
+    last_step_stats = metrics["val"][-1]
+    assert last_step_stats["val_avg_gen_time"] >= 0.01
+
+    assert first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]  # model learned nothing
+    assert 1.0 >= last_step_stats["val_avg_gen_time"]  # model hanging on generate. Maybe bad config was saved.
+    assert isinstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
+
+    # check lightning ckpt
     contents = os.listdir(output_dir)
 
     ckpt_path = [x for x in contents if x.endswith(".ckpt")][0]
     full_path = os.path.join(args.output_dir, ckpt_path)
     ckpt = torch.load(full_path, map_location="cpu")
-    assert ckpt["global_step"] == (args.max_epochs / args.val_check_interval) + 1  # extra step for sanity check
+    assert ckpt["global_step"] == (args.max_epochs / args.val_check_interval) + 1  # +1 accounts for val_sanity_check
 
-    metrics = load_json(model.metrics_save_path)
-    first_step_stats = metrics["val"][0]
-    last_step_stats = metrics["val"][-1]
-    assert last_step_stats["val_avg_gen_time"] >= 0.01
-    assert 1.0 >= last_step_stats["val_avg_gen_time"]
-    assert first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]
-    # TODO(SS): check that val ran every val_check_interval
-    # test that takes less than 70
-    assert isinstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
     # desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) + 1)
     if args.do_predict:
         contents = {os.path.basename(p) for p in contents}
