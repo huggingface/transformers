@@ -309,7 +309,7 @@ class Trainer:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
                 The test dataset to use.
         """
-        test_sampler = self._get_eval_sampler(eval_dataset)
+        test_sampler = self._get_eval_sampler(test_dataset)
 
         # We use the same batch_size as for eval.
         return DataLoader(
@@ -366,7 +366,7 @@ class Trainer:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
         """
         if hasattr(self, "_setup_wandb"):
-            warning.warn(
+            warnings.warn(
                 "The `_setup_wandb` method is deprecated and won't be called in a future version, define `setup_wandb` in your subclass.",
                 FutureWarning,
             )
@@ -608,7 +608,7 @@ class Trainer:
                 A potential tqdm progress bar to write the logs on.
         """
         if hasattr(self, "_log"):
-            warning.warn(
+            warnings.warn(
                 "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
                 FutureWarning,
             )
@@ -643,7 +643,9 @@ class Trainer:
         else:
             logger.info(output)
 
-    def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]], model: nn.Module) -> Dict[str, Union[torch.Tensor, Any]]:
+    def _prepare_inputs(
+        self, inputs: Dict[str, Union[torch.Tensor, Any]], model: nn.Module
+    ) -> Dict[str, Union[torch.Tensor, Any]]:
         """
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
@@ -683,7 +685,7 @@ class Trainer:
             The training loss on this batch.
         """
         if hasattr(self, "_training_step"):
-            warning.warn(
+            warnings.warn(
                 "The `_training_step` method is deprecated and won't be called in a future version, define `training_step` in your subclass.",
                 FutureWarning,
             )
@@ -860,11 +862,11 @@ class Trainer:
         Works both with or without labels.
         """
         if hasattr(self, "_prediction_loop"):
-            warning.warn(
+            warnings.warn(
                 "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
                 FutureWarning,
             )
-            return self._prediction_loop(model, inputs, optimizer)
+            return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
 
