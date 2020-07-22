@@ -220,6 +220,26 @@ class TrainingArguments:
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
+    patience: int = field(
+        default=-1,
+        metadata={
+            "help": (
+                "If > 0: stops training after evaluating this many times consecutively with non-decreasing loss."
+                "Requires evaluate_during_training."
+            )
+        },
+    )
+
+    use_weighted_random_sampling: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "For classification task, reweight sampling mechanism so classes are evenly sampled.",
+                "Not compatible with distributed sampling or TPU for now."
+            )
+        },
+    )
+
     @property
     def train_batch_size(self) -> int:
         """

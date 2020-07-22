@@ -18,6 +18,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
+from .data.processors.utils import InputFeatures
 from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
@@ -124,6 +125,40 @@ class SequentialDistributedSampler(Sampler):
     def __len__(self):
         return self.num_samples
 
+def make_weights_for_balanced_classes(datapoints, nclasses):
+    count = [0] * nclasses
+    # Get the class counts
+    for item in datapoints:
+        if isinstance(item, InputFeatures):
+            count[item.label] += 1
+        else:
+            count[item[1]] += 1
+
+    weight_per_class = [0.] * nclasses
+    N = float(sum(count))
+    for i in range(nclasses):
+        if count[i] == 0:
+            weight_per_class[i] = 0.0
+        else:
+            weight_per_class[i] = N / float(count[i])
+    weight = [0] * len(datapoints)
+    for idx, val in enumerate(datapoints):
+        if isinstance(item, InputFeatures):
+            weight[idx] = weight_per_class[val.label]
+        else:
+            weight[idx] = weight_per_class[val[1]]
+
+    return weight
+
+def get_weighted_random_sampler(dataset):
+    # to use this method assumes that dataset has a get_labels method, will raise an exception if it does not
+    # which means this needs to be modified to support that type of dataset
+    labels = dataset.get_labels()
+
+    weights = make_weights_for_balanced_classes(dataset, len(labels))
+    weights = torch.DoubleTensor(weights)
+    sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(weights))
+    return sampler
 
 def get_tpu_sampler(dataset: Dataset):
     if xm.xrt_world_size() <= 1:
@@ -187,12 +222,16 @@ class Trainer:
     ):
         self.model = model.to(args.device)
         self.args = args
+
+        if self.args.patience > 0 and not self.args.evaluate_during_training:
+            raise ValueError("Patience requires evaluate_during_training.")
         self.data_collator = data_collator if data_collator is not None else default_data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
         self.optimizers = optimizers
+
         if tb_writer is not None:
             self.tb_writer = tb_writer
         elif is_tensorboard_available() and self.is_world_master():
@@ -235,10 +274,13 @@ class Trainer:
         if is_torch_tpu_available():
             train_sampler = get_tpu_sampler(self.train_dataset)
         else:
-            train_sampler = (
-                RandomSampler(self.train_dataset)
-                if self.args.local_rank == -1
-                else DistributedSampler(self.train_dataset)
+            if self.args.use_weighted_random_sampling:
+                train_sampler = get_weighted_random_sampler(self.train_dataset)
+            else:
+                train_sampler = (
+                    RandomSampler(self.train_dataset)
+                    if self.args.local_rank == -1
+                    else DistributedSampler(self.train_dataset)
             )
 
         data_loader = DataLoader(
@@ -469,6 +511,9 @@ class Trainer:
 
         tr_loss = 0.0
         logging_loss = 0.0
+        patience_best_eval_loss = None
+        patience_evals_without_improvement = 0
+        patience_should_stop = False
         model.zero_grad()
         train_iterator = trange(
             epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_master()
@@ -534,7 +579,21 @@ class Trainer:
                         self._log(logs)
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
-                        self.evaluate()
+                        results = self.evaluate()
+
+                        if self.args.patience > 0:
+                            # Keep track of best loss to determine if we should stop early
+                            eval_loss = results["eval_loss"]
+                            if not patience_best_eval_loss or eval_loss < patience_best_eval_loss:
+                                patience_evals_without_improvement = 0
+                                patience_best_eval_loss = eval_loss
+                            else:
+                                patience_evals_without_improvement += 1
+                                if patience_evals_without_improvement >= self.args.patience:
+                                    patience_should_stop = True
+                                    logger.info(
+                                        f"Patience threshold ({self.args.patience}) exceeded, stopping training"
+                                    )
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -559,10 +618,10 @@ class Trainer:
                             torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+                if (self.args.max_steps > 0 and self.global_step > self.args.max_steps) or patience_should_stop:
                     epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+            if (self.args.max_steps > 0 and self.global_step > self.args.max_steps) or patience_should_stop:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:
