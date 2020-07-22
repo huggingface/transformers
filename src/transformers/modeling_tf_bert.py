@@ -28,6 +28,7 @@ from .file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_callable,
 )
+from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
@@ -389,10 +390,10 @@ class TFBertEncoder(tf.keras.layers.Layer):
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
+        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states, return_tuple = inputs
 
-        all_hidden_states = ()
-        all_attentions = ()
+        all_hidden_states = () if cast_bool_to_primitive(output_hidden_states) is True else None
+        all_attentions = () if cast_bool_to_primitive(output_attentions) is True else None
         for i, layer_module in enumerate(self.layer):
             if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -409,12 +410,11 @@ class TFBertEncoder(tf.keras.layers.Layer):
         if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
-            outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
-            outputs = outputs + (all_attentions,)
-        return outputs  # outputs, (hidden states), (attentions)
+        if cast_bool_to_primitive(return_tuple) is True:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 class TFBertPooler(tf.keras.layers.Layer):
@@ -507,6 +507,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.return_tuple = config.return_tuple
 
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
@@ -536,6 +537,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_tuple=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -547,7 +549,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
             output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            assert len(inputs) <= 8, "Too many inputs."
+            return_tuple = inputs[8] if len(inputs) > 8 else return_tuple
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -557,12 +560,14 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 8, "Too many inputs."
+            return_tuple = inputs.get("return_tuple", return_tuple)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_tuple = return_tuple if return_tuple is not None else self.return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -607,17 +612,29 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
         encoder_outputs = self.encoder(
-            [embedding_output, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            [
+                embedding_output,
+                extended_attention_mask,
+                head_mask,
+                output_attentions,
+                output_hidden_states,
+                return_tuple,
+            ],
             training=training,
         )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
-        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+        if return_tuple:
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class TFBertPreTrainedModel(TFPreTrainedModel):

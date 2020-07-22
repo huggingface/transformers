@@ -183,6 +183,8 @@ class TFModelTesterMixin:
         # Make sure we don't have nans
         if isinstance(after_outputs, tf.Tensor):
             out_1 = after_outputs.numpy()
+        elif isinstance(after_outputs, dict):
+            out_1 = after_outputs[list(after_outputs.keys())[0]].numpy()
         else:
             out_1 = after_outputs[0].numpy()
         out_2 = outputs[0].numpy()

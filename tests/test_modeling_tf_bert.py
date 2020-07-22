@@ -130,9 +130,9 @@ class TFBertModelTester:
         sequence_output, pooled_output = model(inputs)
 
         inputs = [input_ids, input_mask]
-        sequence_output, pooled_output = model(inputs)
+        sequence_output, pooled_output = model(inputs)[:2]
 
-        sequence_output, pooled_output = model(input_ids)
+        sequence_output, pooled_output = model(input_ids)[:2]
 
         result = {
             "sequence_output": sequence_output.numpy(),
