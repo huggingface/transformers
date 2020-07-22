@@ -11,6 +11,7 @@ import pytorch_lightning as pl
 import wget
 
 from transformers.testing_utils import slow
+import torch
 
 from .finetune import SummarizationModule, main
 from .test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
@@ -59,26 +60,29 @@ def test_train_mbart_cc25_enro_script():
     testargs = (
         ["finetune.py"]
         + bash_script.split()
-        + [f"--output_dir={output_dir}", f"--gpus={gpus}", "--learning_rate=3e-1", '--warmup_updates=0',
-           '--do_predict=False']
+        + [f"--output_dir={output_dir}", f"--gpus={gpus}", "--learning_rate=3e-1", '--warmup_steps=0',
+            '--val_check_interval=1.0',
+            ]
     )
     with patch.object(sys, "argv", testargs):
         parser = argparse.ArgumentParser()
         parser = pl.Trainer.add_argparse_args(parser)
         parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
         args = parser.parse_args()
+        args.do_predict = False
+
         # assert args.gpus == gpus THIS BREAKS
         # args.gpus = gpus
         model = main(args)
     contents = os.listdir(output_dir)
     # ckpt_name = "val_avg_rouge2=0.0000-step_count=2.ckpt"  # "val_avg_rouge2=0.0000-epoch=1.ckpt"  #
     # "epoch=1-val_avg_rouge2=0.0000.ckpt"
-    contents = {os.path.basename(p) for p in contents}
 
     # self.assertIn(ckpt_name, contents)
+    ckpt_path = [x for x in contents if x.endswith('.ckpt')][0]
+    full_path = os.path.join(args.output_dir, ckpt_path)
+    ckpt = torch.load(full_path, map_location='cpu')
 
-    assert "test_generations.txt" in contents
-    assert "test_results.txt" in contents
 
     metrics = load_json(model.metrics_save_path)
     first_step_stats = metrics["val"][0]
@@ -86,8 +90,13 @@ def test_train_mbart_cc25_enro_script():
     assert last_step_stats["val_avg_gen_time"] >= 0.01
     assert 1.0 >= last_step_stats["val_avg_gen_time"]
     assert first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]
-
+    # TODO(SS): check that val run the right number of times
+    # test that takes less than 70
     assert isinstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
     # desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) + 1)
-    # assert len(metrics["val"]) ==  desired_n_evals
-    assert len(metrics["test"]) == 1
+    if args.do_predict:
+        contents = {os.path.basename(p) for p in contents}
+        assert "test_generations.txt" in contents
+        assert "test_results.txt" in contents
+# assert len(metrics["val"]) ==  desired_n_evals
+        assert len(metrics["test"]) == 1
