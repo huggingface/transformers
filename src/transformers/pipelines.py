@@ -168,6 +168,7 @@ class DefaultArgumentHandler(ArgumentHandler):
         else:
             return DefaultArgumentHandler.handle_args(args)
 
+
 class PipelineDataFormat:
     """
     Base class for all the pipeline supported data format both for reading and writing.
@@ -822,18 +823,18 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
 
     def _parse_labels(self, labels):
         if isinstance(labels, str):
-            labels = [label.strip() for label in labels.split(',')]
+            labels = [label.strip() for label in labels.split(",")]
         return labels
 
     def __call__(self, sequences, labels, hypothesis_template):
         if isinstance(sequences, str):
             sequences = [sequences]
         labels = self._parse_labels(labels)
-        
+
         sequence_pairs = []
         for sequence in sequences:
             sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
-        
+
         return sequence_pairs
 
 
@@ -895,25 +896,27 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         if len(candidate_labels) == 1:
             multi_class = True
-        
+
         if not multi_class:
             # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[...,-1]
+            entail_logits = reshaped_outputs[..., -1]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
-            entail_contr_logits = reshaped_outputs[...,[0,-1]]
+            entail_contr_logits = reshaped_outputs[..., [0, -1]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
-            scores = scores[...,1]
+            scores = scores[..., 1]
 
         result = []
         for iseq in range(num_sequences):
             top_inds = list(reversed(scores[iseq].argsort()))
-            result.append({
-                'sequence': sequences if num_sequences == 1 else sequences[iseq],
-                'labels': [candidate_labels[i] for i in top_inds],
-                'scores': scores[iseq][top_inds].tolist()
-            })
+            result.append(
+                {
+                    "sequence": sequences if num_sequences == 1 else sequences[iseq],
+                    "labels": [candidate_labels[i] for i in top_inds],
+                    "scores": scores[iseq][top_inds].tolist(),
+                }
+            )
 
         return result
 
@@ -1919,14 +1922,11 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
         "default": {
-            "model": {
-                "pt": "facebook/bart-large-mnli",
-                "tf": "facebook/bart-large-mnli",
-            },
+            "model": {"pt": "facebook/bart-large-mnli", "tf": "facebook/bart-large-mnli",},
             "config": "facebook/bart-large-mnli",
             "tokenizer": "facebook/bart-large-mnli",
         },
-    }
+    },
 }
 
 
