@@ -235,7 +235,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "For classification task, reweight sampling mechanism so classes are evenly sampled.",
-                "Not compatible with distributed sampling or TPU for now."
+                "Not compatible with distributed sampling or TPU for now.",
             )
         },
     )

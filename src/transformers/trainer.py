@@ -125,6 +125,7 @@ class SequentialDistributedSampler(Sampler):
     def __len__(self):
         return self.num_samples
 
+
 def make_weights_for_balanced_classes(datapoints, nclasses):
     count = [0] * nclasses
     # Get the class counts
@@ -134,7 +135,7 @@ def make_weights_for_balanced_classes(datapoints, nclasses):
         else:
             count[item[1]] += 1
 
-    weight_per_class = [0.] * nclasses
+    weight_per_class = [0.0] * nclasses
     N = float(sum(count))
     for i in range(nclasses):
         if count[i] == 0:
@@ -150,6 +151,7 @@ def make_weights_for_balanced_classes(datapoints, nclasses):
 
     return weight
 
+
 def get_weighted_random_sampler(dataset):
     # to use this method assumes that dataset has a get_labels method, will raise an exception if it does not
     # which means this needs to be modified to support that type of dataset
@@ -159,6 +161,7 @@ def get_weighted_random_sampler(dataset):
     weights = torch.DoubleTensor(weights)
     sampler = torch.utils.data.sampler.WeightedRandomSampler(weights, len(weights))
     return sampler
+
 
 def get_tpu_sampler(dataset: Dataset):
     if xm.xrt_world_size() <= 1:
@@ -281,7 +284,7 @@ class Trainer:
                     RandomSampler(self.train_dataset)
                     if self.args.local_rank == -1
                     else DistributedSampler(self.train_dataset)
-            )
+                )
 
         data_loader = DataLoader(
             self.train_dataset,
