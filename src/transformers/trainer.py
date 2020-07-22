@@ -18,8 +18,8 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
-from .data.processors.utils import InputFeatures
 from .data.data_collator import DataCollator, default_data_collator
+from .data.processors.utils import InputFeatures
 from .file_utils import is_apex_available, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
