@@ -13,3 +13,4 @@ streamlit
 elasticsearch
 pandas
 nlp
+wget
