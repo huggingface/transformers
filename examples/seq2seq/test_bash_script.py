@@ -83,21 +83,24 @@ def test_train_mbart_cc25_enro_script():
     metrics = load_json(model.metrics_save_path)
     first_step_stats = metrics["val"][0]
     last_step_stats = metrics["val"][-1]
+    assert len(metrics["val"]) == (args.max_epochs / args.val_check_interval)  # +1 accounts for val_sanity_check
+
     assert last_step_stats["val_avg_gen_time"] >= 0.01
 
     assert first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]  # model learned nothing
     assert 1.0 >= last_step_stats["val_avg_gen_time"]  # model hanging on generate. Maybe bad config was saved.
     assert isinstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
 
-    # check lightning ckpt
+    # check lightning ckpt can be loaded and has a reasonable statedict
     contents = os.listdir(output_dir)
-
     ckpt_path = [x for x in contents if x.endswith(".ckpt")][0]
     full_path = os.path.join(args.output_dir, ckpt_path)
     ckpt = torch.load(full_path, map_location="cpu")
-    assert ckpt["global_step"] == (args.max_epochs / args.val_check_interval) + 1  # +1 accounts for val_sanity_check
+    expected_key = "model.model.decoder.layers.0.encoder_attn_layer_norm.weight"
+    assert expected_key in ckpt["state_dict"]
+    assert ckpt["state_dict"]["model.model.decoder.layers.0.encoder_attn_layer_norm.weight"].dtype == torch.float32
 
-    # desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) + 1)
+    # TODO(SS): turn on args.do_predict when PL bug fixed.
     if args.do_predict:
         contents = {os.path.basename(p) for p in contents}
         assert "test_generations.txt" in contents
