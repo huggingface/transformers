@@ -59,7 +59,8 @@ def test_train_mbart_cc25_enro_script():
     testargs = (
         ["finetune.py"]
         + bash_script.split()
-        + [f"--output_dir={output_dir}", f"--gpus={gpus}", "--learning_rate=3e-1"]
+        + [f"--output_dir={output_dir}", f"--gpus={gpus}", "--learning_rate=3e-1", '--warmup_updates=0',
+           '--do_predict=False']
     )
     with patch.object(sys, "argv", testargs):
         parser = argparse.ArgumentParser()
