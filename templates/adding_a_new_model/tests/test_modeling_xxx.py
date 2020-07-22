@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -31,13 +31,17 @@ if is_torch_available():
         XxxForQuestionAnswering,
         XxxForSequenceClassification,
         XxxForTokenClassification,
-        AutoModelForMaskedLM, AutoTokenizer
+        AutoModelForMaskedLM,
+        AutoTokenizer,
     )
-    from transformers.modeling_xxx import XXX_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.file_utils import cached_property
+
     #
+
 
 class XxxModelTester:
     """You can also import this e.g from .test_modeling_bart import BartModelTester """
+
     def __init__(
         self,
         parent,
@@ -207,16 +211,12 @@ class XxxModelTester:
         model = XxxForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        loss, logits = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
-        )
+        loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         result = {
             "loss": loss,
             "logits": logits,
         }
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels]
-        )
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
         self.check_loss_output(result)
 
     def prepare_config_and_inputs_for_common(self):
@@ -232,6 +232,7 @@ class XxxModelTester:
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
+
 
 @require_torch
 class XxxModelTest(ModelTesterMixin, unittest.TestCase):
@@ -272,27 +273,38 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_lm_outputs_same_as_reference_model(self):
         """Write something that could help someone fixing this here."""
-        checkpoint_path = 'XXX/bart-large'
-        model = AutoModelForMaskedLM.from_pretrained(checkpoint_path).to(torch_device) # test whether AutoModel can determine your model_class from checkpoint name
-        if torch_device == 'cuda':
-            model.half()
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint_path)  # same with AutoTokenizer (see tokenization_auto.py). This is not mandatory
+        checkpoint_path = "XXX/bart-large"
+        model = self.big_model
+        tokenizer = AutoTokenizer.from_pretrained(
+            checkpoint_path
+        )  # same with AutoTokenizer (see tokenization_auto.py). This is not mandatory
         # MODIFY THIS DEPENDING ON YOUR MODELS RELEVANT TASK.
-        batch = tokenizer(['I went to the <mask> yesterday']).to(torch_device)
-        desired_mask_result = tokenizer.decode('store') # update this
+        batch = tokenizer(["I went to the <mask> yesterday"]).to(torch_device)
+        desired_mask_result = tokenizer.decode("store")  # update this
         logits = model(**batch).logits
         masked_index = (batch.input_ids == self.tokenizer.mask_token_id).nonzero()
         assert model.num_parameters() == 175e9  # a joke
-        mask_entry_logits = [0, masked_index.item(), :]
+        mask_entry_logits = logits[0, masked_index.item(), :]
         probs = mask_entry_logits.softmax(dim=0)
         _, predictions = probs.topk(1)
         self.assertEqual(tokenizer.decode(predictions), desired_mask_result)
 
+    @cached_property
+    def big_model(self):
+        """Cached property means this code will only be executed once."""
+        checkpoint_path = "XXX/bart-large"
+        model = AutoModelForMaskedLM.from_pretrained(checkpoint_path).to(
+            torch_device
+        )  # test whether AutoModel can determine your model_class from checkpoint name
+        if torch_device == "cuda":
+            model.half()
 
     # optional: do more testing! This will save you time later!
     @slow
     def test_that_it_can_be_used_in_a_pipeline(self):
+        """We can use self.big_model here without calling __init__ again."""
         pass
+
     def test_that_loss_doesnt_change_if_you_add_padding(self):
         pass
 
@@ -300,3 +312,5 @@ class XxxModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_other_stuff(self):
+        """Test loss/gradients same as reference implementation, for example."""
+        pass
