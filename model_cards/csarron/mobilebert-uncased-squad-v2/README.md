@@ -50,7 +50,7 @@ This model was fine-tuned from the HuggingFace checkpoint `google/mobilebert-unc
   # after install https://github.com/huggingface/transformers
 
   cd examples/question-answering
-  mkdir data
+  mkdir -p data
 
   wget -O data/train-v2.0.json https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json
 
@@ -112,3 +112,7 @@ print(predictions)
 # output:
 # {'score': 0.71434086561203, 'start': 23, 'end': 39, 'answer': 'February 7, 2016'}
 ```
+
+> Created by [Qingqing Cao](https://awk.ai/) | [GitHub](https://github.com/csarron) | [Twitter](https://twitter.com/sysnlp) 
+
+> Made with ❤️ in New York.
