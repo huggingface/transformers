@@ -3,7 +3,7 @@ import logging
 import sys
 import unittest
 from unittest.mock import patch
-
+from transformers.testing_utils import slow
 import run_glue_deebert
 
 
@@ -20,6 +20,8 @@ def get_setup_file():
 
 
 class DeeBertTests(unittest.TestCase):
+
+    @slow
     def test_glue_deebert(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
