@@ -827,6 +827,16 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         return labels
 
     def __call__(self, sequences, labels, hypothesis_template):
+        if len(labels) == 0 or len(sequences) == 0:
+            raise ValueError("You must include at least one label and at least one sequence.")
+        if hypothesis_template.format(labels[0]) == hypothesis_template:
+            raise ValueError(
+                (
+                    'The provided hypothesis_template "{}" was not able to be formatted with the target labels. '
+                    "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
+                ).format(hypothesis_template)
+            )
+
         if isinstance(sequences, str):
             sequences = [sequences]
         labels = self._parse_labels(labels)
@@ -918,6 +928,8 @@ class ZeroShotClassificationPipeline(Pipeline):
                 }
             )
 
+        if len(result) == 1:
+            return result[0]
         return result
 
 
@@ -1922,9 +1934,9 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
         "default": {
-            "model": {"pt": "facebook/bart-large-mnli", "tf": "facebook/bart-large-mnli",},
-            "config": "facebook/bart-large-mnli",
-            "tokenizer": "facebook/bart-large-mnli",
+            "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli",},
+            "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli",},
+            "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli",},
         },
     },
 }
