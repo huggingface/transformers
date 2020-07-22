@@ -41,12 +41,6 @@ def pack_examples(tok, src_examples, tgt_examples, max_tokens=1024):
         finished_tgt.append(new_tgt)
     return finished_src, finished_tgt
 
-import torch
-def avg_checkpoints(sds):
-    new_sd = {}
-    for k in sds[0].keys():
-        new_sd[k] = torch.mean([sd[k] for sd in sds])
-    return new_sd
 
 def pack_data_dir(tok, data_dir: Path, max_tokens, save_path):
     save_path = Path(save_path)
