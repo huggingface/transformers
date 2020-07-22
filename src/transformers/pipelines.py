@@ -898,7 +898,27 @@ class ZeroShotClassificationPipeline(Pipeline):
         NLI-based zero-shot classification. Any combination of sequences and labels can be passed and each
         combination will be posed as a premise/hypothesis pair and passed to the pre-trained model. Then logit for
         `entailment` is then taken as the logit for the candidate label being valid. Any NLI model can be used as
-        long as the first output logit corresponds to `contradiction` and the last to `entailment`. """
+        long as the first output logit corresponds to `contradiction` and the last to `entailment`.
+
+        Args:
+            sequences (:obj:`str` or obj:`List`):
+                The sequence or sequences to classify.
+            candidate_labels (:obj:`str` or obj:`List`):
+                The set of possible class labels to classify each sequence into. Can be a single label, a string of
+                comma-separated labels, or a list of labels.
+            hypothesis_template (obj:`str`, defaults to "This example is {}."):
+                The template used to turn each label into an NLI-style hypothesis. This template must include a {}
+                or similar syntax for the candidate label to be inserted into the template. For example, the default
+                template is "This example is {}." With the candidate label "sports", this would be fed into the model
+                like `<cls> sequence to classify <sep> This example is sports . <sep>`. The default template works
+                well in many cases, but it may be worthwhile to experiment with different templates depending on the
+                task setting.
+            multi_class (obj:`bool`, defaults to False):
+                When False, it is assumed that only one candidate label can be true, and the scores are normalized
+                such that the sum of the label likelihoods for each sequence is 1. When True, the labels are
+                considered independent and probabilities are normalized for each candidate by doing a of softmax of
+                the entailment score vs. the contradiction score.
+        """
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
         num_sequences = 1 if isinstance(sequences, str) else len(sequences)
         candidate_labels = self._args_parser._parse_labels(candidate_labels)
