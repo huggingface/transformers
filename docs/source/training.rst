@@ -99,7 +99,7 @@ backwards pass and update the weights:
 
     labels = torch.tensor([1,0]).unsqueeze(0)
     outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-    loss = outputs[0]
+    loss = outputs.loss
     loss.backward()
     optimizer.step()
 
@@ -111,7 +111,7 @@ The following is equivalent to the previous example:
     from torch.nn import functional as F
     labels = torch.tensor([1,0]).unsqueeze(0)
     outputs = model(input_ids, attention_mask=attention_mask)
-    loss = F.cross_entropy(labels, outputs[0])
+    loss = F.cross_entropy(labels, outputs.logitd)
     loss.backward()
     optimizer.step()
 

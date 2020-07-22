@@ -873,8 +873,8 @@ class BertForPreTraining(BertPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> prediction_scores, seq_relationship_scores = outputs[:2]
-
+        >>> prediction_logits = outptus.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
         """
         if "masked_lm_labels" in kwargs:
             warnings.warn(
@@ -978,7 +978,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> prediction_scores = outputs.prediction_scores
+        >>> prediction_logits = outputs.logits
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
@@ -1181,7 +1181,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
 
         >>> outputs = model(**encoding, next_sentence_label=torch.LongTensor([1]))
-        >>> logits = outputs.seq_relationship_scores
+        >>> logits = outputs.logits
         >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
