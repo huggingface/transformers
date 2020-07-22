@@ -13,6 +13,7 @@ import torch
 import wget
 
 from transformers.testing_utils import slow
+from transformers import BartForConditionalGeneration
 
 from .finetune import SummarizationModule, main
 from .test_seq2seq_examples import CUDA_AVAILABLE
@@ -32,6 +33,14 @@ def fetch_and_save_wmt_100():
     os.remove(filename)
     return dest_dir
 
+MODEL_NAME = "sshleifer/student_mbart_en_ro_1_1"
+@slow
+@pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
+def test_student_download():
+    """This warms up the cache so that we can time the next test without including download time."""
+    BartForConditionalGeneration.from_pretrained(MODEL_NAME)
+
+
 
 @timeout_decorator.timeout(60)
 @slow
@@ -43,8 +52,9 @@ def test_train_mbart_cc25_enro_script():
         "$BS": 4,
         "$GAS": 1,
         "$ENRO_DIR": data_dir,
-        "facebook/mbart-large-cc25": "sshleifer/student_mbart_en_ro_1_1",
+        "facebook/mbart-large-cc25": MODEL_NAME,
         # 1 encoder and 1 decoder layer from finetuned mbart en-ro. Should be able to start >0 and improve quickly.
+        # Download is 600MB in previous test.
         "val_check_interval=0.25": "val_check_interval=1.0",
     }
 
