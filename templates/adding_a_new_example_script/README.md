@@ -8,7 +8,7 @@ These folder can be put in a subdirectory under your example's name, like `examp
 
 
 Best Practices: 
-- use `Trainer`
+- use `Trainer`/`TFTrainer`
 - write an @slow test that checks that your model can train on one batch and get a low loss.
     - this test should use cuda if it's available. (e.g. by checking `transformers.torch_device`)
 - adding an `eval_xxx.py` script that can evaluate a pretrained checkpoint.  
