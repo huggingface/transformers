@@ -8,15 +8,15 @@ from unittest.mock import patch
 
 import pytest
 import pytorch_lightning as pl
+import timeout_decorator
 import torch
 import wget
 
 from transformers.testing_utils import slow
 
 from .finetune import SummarizationModule, main
-from .test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
+from .test_seq2seq_examples import CUDA_AVAILABLE
 from .utils import load_json
-import timeout_decorator
 
 
 def fetch_and_save_wmt_100():
@@ -43,7 +43,9 @@ def test_train_mbart_cc25_enro_script():
         "$BS": 4,
         "$GAS": 1,
         "$ENRO_DIR": data_dir,
-        "facebook/mbart-large-cc25": MBART_TINY,
+        "facebook/mbart-large-cc25": "sshleifer/student_mbart_en_ro_1_1",
+        # 1 encoder and 1 decoder layer from finetuned mbart en-ro. Should be able to start >0 and improve quickly.
+        "val_check_interval=0.25": "val_check_interval=1.0",
     }
 
     # Clean up bash script
@@ -68,6 +70,7 @@ def test_train_mbart_cc25_enro_script():
             "--learning_rate=3e-1",
             "--warmup_steps=0",
             "--val_check_interval=1.0",
+            "--tokenizer_name=facebook/mbart-large-en-ro",
         ]
     )
     with patch.object(sys, "argv", testargs):
@@ -83,7 +86,7 @@ def test_train_mbart_cc25_enro_script():
     ckpt_path = [x for x in contents if x.endswith(".ckpt")][0]
     full_path = os.path.join(args.output_dir, ckpt_path)
     ckpt = torch.load(full_path, map_location="cpu")
-    assert ckpt["global_step"] == (args.max_epochs / args.val_check_interval)
+    assert ckpt["global_step"] == (args.max_epochs / args.val_check_interval) + 1  # extra step for sanity check
 
     metrics = load_json(model.metrics_save_path)
     first_step_stats = metrics["val"][0]
@@ -91,7 +94,7 @@ def test_train_mbart_cc25_enro_script():
     assert last_step_stats["val_avg_gen_time"] >= 0.01
     assert 1.0 >= last_step_stats["val_avg_gen_time"]
     assert first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]
-    # TODO(SS): check that val run the right number of times
+    # TODO(SS): check that val ran every val_check_interval
     # test that takes less than 70
     assert isinstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
     # desired_n_evals = int(args_d["max_epochs"] * (1 / args_d["val_check_interval"]) + 1)

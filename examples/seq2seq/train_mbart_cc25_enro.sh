@@ -6,7 +6,7 @@ python finetune.py \
     --fp16 \
     --do_train \
     --do_predict \
-    --val_check_interval 0.25 \
+    --val_check_interval=0.25 \
     --adam_eps 1e-06 \
     --num_train_epochs 6 --src_lang en_XX --tgt_lang ro_RO \
     --data_dir $ENRO_DIR \
@@ -16,5 +16,5 @@ python finetune.py \
     --warmup_steps 500 \
     --freeze_embeds \
     --early_stopping_patience 4 \
-    --model_name_or_path facebook/mbart-large-cc25 \
+    --model_name_or_path=facebook/mbart-large-cc25 \
     $@
