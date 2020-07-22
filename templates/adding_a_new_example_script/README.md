@@ -12,3 +12,4 @@ Best Practices:
 - write an @slow test that checks that your model can train on one batch and get a low loss.
     - this test should use cuda if it's available. (e.g. by checking `transformers.torch_device`)
 - adding an `eval_xxx.py` script that can evaluate a pretrained checkpoint.  
+- tweet about your new example with a carbon screenshot of how to run it and tag @huggingface
