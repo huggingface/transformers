@@ -168,29 +168,6 @@ class DefaultArgumentHandler(ArgumentHandler):
         else:
             return DefaultArgumentHandler.handle_args(args)
 
-class NLIForZeroShotArgumentHandler(ArgumentHandler):
-    """
-    Handles arguments for zero-shot for text classification by turning each possible label into an NLI
-    premise/hypothesis pair.
-    """
-
-    def _parse_labels(self, labels):
-        if isinstance(labels, str):
-            labels = [label.strip() for label in labels.split(',')]
-        return labels
-
-    def __call__(self, sequences, labels, hypothesis_template):
-        if isinstance(sequences, str):
-            sequences = [sequences]
-        labels = self._parse_labels(labels)
-        
-        sequence_pairs = []
-        for sequence in sequences:
-            sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
-        
-        return sequence_pairs
-
-
 class PipelineDataFormat:
     """
     Base class for all the pipeline supported data format both for reading and writing.
@@ -837,12 +814,80 @@ class TextClassificationPipeline(Pipeline):
             ]
 
 
-class NLIForZeroShotPipeline(Pipeline):
+class ZeroShotClassificationArgumentHandler(ArgumentHandler):
+    """
+    Handles arguments for zero-shot for text classification by turning each possible label into an NLI
+    premise/hypothesis pair.
+    """
 
-    def __init__(self, args_parser=NLIForZeroShotArgumentHandler(), *args, **kwargs):
+    def _parse_labels(self, labels):
+        if isinstance(labels, str):
+            labels = [label.strip() for label in labels.split(',')]
+        return labels
+
+    def __call__(self, sequences, labels, hypothesis_template):
+        if isinstance(sequences, str):
+            sequences = [sequences]
+        labels = self._parse_labels(labels)
+        
+        sequence_pairs = []
+        for sequence in sequences:
+            sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
+        
+        return sequence_pairs
+
+
+class ZeroShotClassificationPipeline(Pipeline):
+    """
+    NLI-based zero-shot classification pipeline using a ModelForSequenceClassification head with models trained on
+    NLI tasks.
+
+    Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
+    pair and passed to the pre-trained model. Then logit for `entailment` is then taken as the logit for the
+    candidate label being valid. Any NLI model can be used as long as the first output logit corresponds to
+    `contradiction` and the last to `entailment`.
+
+    This pipeline can currently be loaded from the :func:`~transformers.pipeline` method using the following task
+    identifier(s):
+
+    - "zero-shot-classification"
+
+    The models that this pipeline can use are models that have been fine-tuned on a Natural Language Inference task.
+    See the up-to-date list of available models on
+    `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
+
+    Arguments:
+        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+            :class:`~transformers.PreTrainedTokenizer`.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
+
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, args_parser=args_parser, **kwargs)
 
     def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
+        """
+        NLI-based zero-shot classification. Any combination of sequences and labels can be passed and each
+        combination will be posed as a premise/hypothesis pair and passed to the pre-trained model. Then logit for
+        `entailment` is then taken as the logit for the candidate label being valid. Any NLI model can be used as
+        long as the first output logit corresponds to `contradiction` and the last to `entailment`. """
         outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
         num_sequences = 1 if isinstance(sequences, str) else len(sequences)
         candidate_labels = self._args_parser._parse_labels(candidate_labels)
@@ -853,11 +898,11 @@ class NLIForZeroShotPipeline(Pipeline):
         
         if not multi_class:
             # softmax the "entailment" logits over all candidate labels
-            entail_logits = reshaped_outputs[...,2]
+            entail_logits = reshaped_outputs[...,-1]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
         else:
             # softmax over the entailment vs. contradiction dim for each label independently
-            entail_contr_logits = reshaped_outputs[...,[0,2]]
+            entail_contr_logits = reshaped_outputs[...,[0,-1]]
             scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
             scores = scores[...,1]
 
@@ -1869,8 +1914,8 @@ SUPPORTED_TASKS = {
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
-    "nli-for-zero-shot-classification": {
-        "impl": NLIForZeroShotPipeline,
+    "zero-shot-classification": {
+        "impl": ZeroShotClassificationPipeline,
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
         "default": {
