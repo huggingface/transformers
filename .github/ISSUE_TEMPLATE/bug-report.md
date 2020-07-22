@@ -27,7 +27,7 @@ assignees: ''
  
  albert, bert, GPT2, XLM: @LysandreJik 
  tokenizers: @mfuntowicz
- Trainer: @julien-c
+ Trainer: @sgugger
  Speed and Memory Benchmarks: @patrickvonplaten
  Model Cards: @julien-c
  Translation: @sshleifer
