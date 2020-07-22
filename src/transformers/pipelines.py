@@ -1114,7 +1114,7 @@ class TokenClassificationPipeline(Pipeline):
             # The split is meant to account for the "B" and "I" suffixes
             if (
                 entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
-                and entity["entity"].split("-")[0] != 'B'
+                and entity["entity"].split("-")[0] != "B"
                 and entity["index"] == entity_group_disagg[-1]["index"] + 1
             ):
                 entity_group_disagg += [entity]
