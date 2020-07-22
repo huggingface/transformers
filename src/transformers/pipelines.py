@@ -36,6 +36,7 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import PaddingStrategy
 
 
 if is_tf_available():
@@ -1318,6 +1319,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 max_seq_length=kwargs["max_seq_len"],
                 doc_stride=kwargs["doc_stride"],
                 max_query_length=kwargs["max_question_len"],
+                padding_strategy=PaddingStrategy.DO_NOT_PAD.value,
                 is_training=False,
                 tqdm_enabled=False,
             )
