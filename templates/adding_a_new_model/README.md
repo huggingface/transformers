@@ -18,6 +18,7 @@ Here an overview of the general workflow:
 - [ ] add model/configuration/tokenization classes
 - [ ] add conversion scripts
 - [ ] add tests
+- [ ] add @slow integration test
 - [ ] finalize
 
 Let's detail what should be done at each step
