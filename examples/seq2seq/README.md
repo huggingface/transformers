@@ -90,6 +90,20 @@ The following command should work on a 16GB GPU:
     --model_name_or_path facebook/bart-large
 ```
 
+The following command should work on for TPUs:
+```bash
+./finetune_tpu.sh \
+    --data_dir $XSUM_DIR \
+    --train_batch_size=8 \
+    --eval_batch_size=4 \
+    --output_dir=xsum_results \
+    --num_train_epochs 1 \
+    --model_name_or_path facebook/bart-large \
+    --n_tpu_cores 1 \
+```
+
+NB If you are using multiple TPU cores, then one needs to adjust the `batch_size` (for training and eval both), `learning rate`, `n_tpu_cores` etc. accordingly in order to find the best possible combination that leverages TPus to their maximal capacity.
+
 ### Translation Finetuning
 
 First, follow the wmt_en_ro download instructions.
