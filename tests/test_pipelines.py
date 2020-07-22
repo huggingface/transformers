@@ -15,6 +15,7 @@ NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03
 FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased"]
 TEXT_CLASSIF_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"]
 TEXT_GENERATION_FINETUNED_MODELS = ["sshleifer/tiny-ctrl"]
+ZERO_SHOT_CLASSIFICATION_FINETUNED_MODELS = ["huggingface/distilbert-base-uncased-finetuned-mnli"]
 
 FILL_MASK_FINETUNED_MODELS = ["sshleifer/tiny-distilroberta-base"]
 LARGE_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]  # @slow
@@ -316,6 +317,78 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
 
 QA_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]
+
+
+class ZeroShotClassificationPipelineTests(unittest.TestCase):
+    def _test_zero_shot_pipeline(self, nlp):
+        output_keys = {"sequence", "labels", "scores"}
+        valid_mono_inputs = [
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics"},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": ["politics"]},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics, public health"},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": ["politics", "public health"]},
+            {"sequences": ["Who are you voting for in 2020?"], "candidate_labels": "politics"},
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": "This text is about {}",
+            },
+        ]
+        valid_multi_input = {
+            "sequences": ["Who are you voting for in 2020?", "What is the capital of Spain?"],
+            "candidate_labels": "politics",
+        }
+        invalid_inputs = [
+            {"sequences": None, "candidate_labels": "politics"},
+            {"sequences": "", "candidate_labels": "politics"},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": None},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": ""},
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": None,
+            },
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": "",
+            },
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": "Template without formatting syntax.",
+            },
+        ]
+        self.assertIsNotNone(nlp)
+
+        for mono_input in valid_mono_inputs:
+            mono_result = nlp(**mono_input)
+            self.assertIsInstance(mono_result, dict)
+
+            for key in output_keys:
+                self.assertIn(key, mono_result)
+
+        multi_result = nlp(**valid_multi_input)
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], dict)
+
+        for result in multi_result:
+            for key in output_keys:
+                self.assertIn(key, result)
+        for bad_input in invalid_inputs:
+            self.assertRaises(Exception, nlp, **bad_input)
+
+    @require_torch
+    def test_torch_zero_shot_classification(self):
+        for model_name in ZERO_SHOT_CLASSIFICATION_FINETUNED_MODELS:
+            nlp = pipeline(task="zero-shot-classification", model=model_name, tokenizer=model_name)
+            self._test_zero_shot_pipeline(nlp)
+
+    @require_tf
+    def test_torch_zero_shot_classification(self):
+        for model_name in ZERO_SHOT_CLASSIFICATION_FINETUNED_MODELS:
+            nlp = pipeline(task="zero-shot-classification", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_zero_shot_pipeline(nlp)
 
 
 class QAPipelineTests(unittest.TestCase):
