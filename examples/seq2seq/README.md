@@ -32,7 +32,7 @@ This dataset comes in two formats. The "packed" version merges short training ex
 
 ```bash
 cd examples/seq2seq
-https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_packed_train_200.tgz
+wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_packed_train_200.tgz
 tar -xzvf wmt_en_ro_packed_200.tgz
 export ENRO_DIR=wmt_en_ro_packed_train_200
 ```
