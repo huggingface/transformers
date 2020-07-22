@@ -525,6 +525,83 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_token_classification(*config_and_inputs)
 
+    # Copied from test_modeling_common.test_torchscript, but using jit.script, not jit.trace
+    def test_full_torchscript(self):
+        import copy
+        import tempfile
+        import os
+
+        if is_torch_available():
+            import torch
+            from transformers.modeling_bert import (
+                    BertScriptableModel,
+                    BertScriptableForMultipleChoice,
+                    BertScriptableForNextSentencePrediction,
+                    BertScriptableForPreTraining,
+                    BertScriptableForQuestionAnswering,
+                    BertScriptableForSequenceClassification,
+                    BertScriptableForTokenClassification,
+            )
+        
+        config, unused_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        configs_no_init = copy.deepcopy(config)
+        for key in configs_no_init.__dict__.keys():
+            if "_range" in key or "_std" in key or "initializer_factor" in key:
+                setattr(configs_no_init, key, 1e-10)
+
+        scriptable_model_classes = (
+            BertScriptableModel,
+            BertScriptableForMultipleChoice,
+            BertScriptableForNextSentencePrediction,
+            BertScriptableForPreTraining,
+            BertScriptableForQuestionAnswering,
+            BertScriptableForSequenceClassification,
+            BertScriptableForTokenClassification,
+        )
+        for model_class in scriptable_model_classes:
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+            
+            try:
+                scripted = torch.jit.script(model)
+            except RuntimeError:
+                self.fail("Couldn't script module.")
+
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "scripted_model.pt")
+
+                try:
+                    torch.jit.save(scripted, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save scripted module.")
+
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load scripted module.")
+
+            model.to(torch_device)
+            model.eval()
+
+            loaded_model.to(torch_device)
+            loaded_model.eval()
+
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
+
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                p2 = loaded_model_state_dict[layer_name]
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
