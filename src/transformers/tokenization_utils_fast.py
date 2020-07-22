@@ -44,12 +44,12 @@ logger = logging.getLogger(__name__)
 class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """ Base class for all fast tokenizers (wrapping HuggingFace tokenizers library).
 
-    Inherit from PreTrainedTokenizer.
+    Inherits from PreTrainedTokenizerBase.
 
-    Handle all the shared methods for tokenization and special tokens as well as methods
-    downloading/caching/loading pretrained tokenizers as well as adding tokens to the vocabulary.
+    Handles all the shared methods for tokenization and special tokens, as well as methods for
+    downloading/caching/loading pretrained tokenizers, as well as adding tokens to the vocabulary.
 
-    This class also contain the added tokens in a unified way on top of all tokenizers so we don't
+    This class also contains the added tokens in a unified way on top of all tokenizers so we don't
     have to handle the specific vocabulary augmentation methods of the various underlying
     dictionary structures (BPE, sentencepiece...).
 
@@ -95,7 +95,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         - ``mask_token``: (`Optional`) string: a masking token (e.g. when training a model with masked-language
             modeling). Will be associated to ``self.mask_token`` and ``self.mask_token_id``
         - ``additional_special_tokens``: (`Optional`) list: a list of additional special tokens.
-            Adding all special tokens here ensure they won't be split by the tokenization process.
+            Adding all special tokens here to ensure they won't be split by the tokenization process.
             Will be associated to ``self.additional_special_tokens`` and ``self.additional_special_tokens_ids``
 
 
@@ -105,7 +105,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def __init__(self, tokenizer: BaseTokenizerFast, **kwargs):
         if not isinstance(tokenizer, BaseTokenizerFast):
             raise ValueError(
-                "Tokenizer should be an instance of a Tokenizer " "provided by HuggingFace tokenizers library."
+                "Tokenizer should be an instance of a BaseTokenizer " "provided by HuggingFace tokenizers library."
             )
         self._tokenizer: BaseTokenizerFast = tokenizer
 
