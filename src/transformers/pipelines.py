@@ -893,6 +893,18 @@ class ZeroShotClassificationPipeline(Pipeline):
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, args_parser=args_parser, **kwargs)
 
+    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+        """
+        Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
+        """
+        inputs = self._args_parser(*args, **kwargs)
+        inputs = self.tokenizer(
+            inputs, add_special_tokens=add_special_tokens, return_tensors=self.framework, padding=padding,
+            truncation='only_first'
+        )
+
+        return inputs
+
     def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
         """
         NLI-based zero-shot classification. Any combination of sequences and labels can be passed and each
@@ -902,7 +914,7 @@ class ZeroShotClassificationPipeline(Pipeline):
 
         Args:
             sequences (:obj:`str` or obj:`List`):
-                The sequence or sequences to classify.
+                The sequence or sequences to classify. Truncated if model input is too large.
             candidate_labels (:obj:`str` or obj:`List`):
                 The set of possible class labels to classify each sequence into. Can be a single label, a string of
                 comma-separated labels, or a list of labels.

@@ -407,12 +407,12 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
             {
                 "sequence": "Who are you voting for in 2020?",
                 "labels": ["politics", "public health", "science"],
-                "scores": [0.9759403467178345, 0.015444041229784489, 0.00861559621989727],
+                "scores": [0.975, 0.015, 0.008]
             },
             {
                 "sequence": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.",
                 "labels": ["translation", "machine learning", "vision", "statistics"],
-                "scores": [0.8173951506614685, 0.7125081419944763, 0.018082918599247932, 0.017706245183944702],
+                "scores": [0.817, 0.712, 0.018, 0.017]
             },
         ]
 
@@ -421,7 +421,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase):
             for key in output:
                 if key == "scores":
                     for output_score, expected_score in zip(output[key], expected_output[key]):
-                        self.assertAlmostEqual(output_score, expected_score, places=4)
+                        self.assertAlmostEqual(output_score, expected_score, places=2)
                 else:
                     self.assertEqual(output[key], expected_output[key])
 
