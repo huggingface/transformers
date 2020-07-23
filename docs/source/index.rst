@@ -162,13 +162,6 @@ conversion utilities for the following models:
 
 .. toctree::
     :maxdepth: 2
-    :caption: Exporting models
-
-    model_export/torchscript
-    model_export/onnx
-
-.. toctree::
-    :maxdepth: 2
     :caption: Research
 
     bertology
