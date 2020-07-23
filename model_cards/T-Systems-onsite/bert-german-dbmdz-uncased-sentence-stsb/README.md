@@ -43,3 +43,5 @@ We did an automatic hyperprameter optimization with [Optuna](https://github.com/
 - eps = 5.0696075038683e-06
 - weight_decay = 0.02817210102940054
 - warmup_steps = 27.342745941760147 % of total steps
+
+The final model was trained on a combination of all three datasets: `sts_de_dev.csv`, `sts_de_test.csv` and `sts_de_train.csv`
