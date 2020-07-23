@@ -238,7 +238,7 @@ class Trainer:
         """
         Returns the training :class:`~torch.utils.data.DataLoader`.
         """
-        if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
+        if isinstance(self.train_dataset, collections.Sized):
             train_sampler = None
         elif self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
@@ -273,7 +273,7 @@ class Trainer:
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
 
-        if isinstance(eval_dataset, torch.utils.data.IterableDataset):
+        if isinstance(eval_dataset, collections.Sized):
             sampler = None
         elif is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
@@ -302,7 +302,7 @@ class Trainer:
             test_dataset (obj:`Dataset`): The test dataset to use.
         """
         # We use the same batch_size as for eval.
-        if isinstance(self.test_dataset, torch.utils.data.IterableDataset):
+        if isinstance(self.test_dataset, collections.Sized):
             sampler = None
         elif is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
