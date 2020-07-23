@@ -55,7 +55,7 @@ class BartTokenizerFast(RobertaTokenizerFast):
     }
 
 
-_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25", "sshleifer/mbart-trimmed-en-ro"]
+_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
 
 FAIRSEQ_LANGUAGE_CODES = [
