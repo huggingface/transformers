@@ -11,11 +11,21 @@ are common among all the models to:
 - resize the input token embeddings when new tokens are added to the vocabulary
 - prune the attention heads of the model.
 
+The other methods that are common to each model are defined in :class:`~transformers.modeling_utils.ModuleUtilsMixin`
+(for the PyTorch models) and :class:`~transformers.modeling_tf_utils.TFModuleUtilsMixin` (for the TensorFlow models).
+
 
 ``PreTrainedModel``
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedModel
+    :members:
+
+
+``ModuleUtilsMixin``
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_utils.ModuleUtilsMixin
     :members:
 
 

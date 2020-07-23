@@ -2,7 +2,31 @@ Custom Layers and Utilities
 ---------------------------
 
 This page lists all the custom layers used by the library, as well as the utility functions it provides for modeling.
+
 Most of those are only useful if you are studying the code of the models in the library.
+
+
+``Pytorch custom modules``
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_utils.Conv1D
+
+.. autoclass:: transformers.modeling_utils.PoolerStartLogits
+    :members: forward
+
+.. autoclass:: transformers.modeling_utils.PoolerEndLogits
+    :members: forward
+
+.. autoclass:: transformers.modeling_utils.PoolerAnswerClass
+    :members: forward
+
+.. autoclass:: transformers.modeling_utils.SquadHeadOutput
+
+.. autoclass:: transformers.modeling_utils.SQuADHead
+    :members: forward
+
+.. autoclass:: transformers.modeling_utils.SequenceSummary
+    :members: forward
 
 
 ``PyTorch Helper Functions``
@@ -10,6 +34,13 @@ Most of those are only useful if you are studying the code of the models in the 
 
 .. autofunction:: transformers.apply_chunking_to_forward
 
+.. autofunction:: transformers.modeling_utils.find_pruneable_heads_and_indices
+
+.. autofunction:: transformers.modeling_utils.prune_layer
+
+.. autofunction:: transformers.modeling_utils.prune_conv1d_layer
+
+.. autofunction:: transformers.modeling_utils.prune_linear_layer
 
 ``TensorFlow custom layers``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -20,6 +51,7 @@ Most of those are only useful if you are studying the code of the models in the 
     :members: call
 
 .. autoclass:: transformers.modeling_tf_utils.TFSequenceSummary
+    :members: call
 
 
 ``TensorFlow loss functions``
