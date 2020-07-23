@@ -190,6 +190,8 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
     --task summarization \
     --n_obs 100 \
     --device cuda \
+    --max_source_length 1024 \
+    --max_target_length 56 \
     --fp16 \
     --bs 32
 ```

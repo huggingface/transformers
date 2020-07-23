@@ -157,7 +157,8 @@ class MBartDataset(Seq2SeqDataset):
         super().__init__(*args, **kwargs)
         if self.max_source_length != self.max_target_length:
             warnings.warn(
-                f"Mbart will ignore max_target_length = {self.max_target_length} and use {self.max_source_length} for both sides."
+                f"Mbart is using sequence lengths {self.max_source_length}, {self.max_target_length}. "
+                f"Imbalanced sequence lengths may be undesired for translation tasks"
             )
 
     def __getitem__(self, index) -> Dict[str, str]:
