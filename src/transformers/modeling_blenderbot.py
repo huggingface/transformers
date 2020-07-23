@@ -63,7 +63,19 @@ class BlenderbotForConditionalGeneration(PretrainedBartModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model, config.pad_token_id)
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
+        self.bos_token_id = config.bos_token_id
         self.init_weights()
+        
+    def output(self, tensor):
+        """
+        Compute output logits.
+        """
+        # project back to vocabulary
+        output = F.linear(tensor, self.shared.weight)
+        # compatibility with fairseq: fairseq sometimes reuses BOS tokens and
+        # we need to force their probability of generation to be 0.
+        output[:, :, self.bos_token_id] = -65504 if output.dtype is torch.float16 else - 1e20
+        return output
 
     @add_start_docstrings_to_callable(BLENDERBOT_INPUTS_DOCSTRING)
     def forward(
@@ -129,7 +141,8 @@ class BlenderbotForConditionalGeneration(PretrainedBartModel):
             use_cache=use_cache,
         )
 
-        scores = F.linear(decoder_outputs[0], self.shared.weight)
+        #scores = F.linear(decoder_outputs[0], self.shared.weight)
+        scores = self.output(decoder_outputs[0])
         # outputs = (scores,) + outputs[1:]
         loss = None
         if labels is not None:
@@ -146,11 +159,6 @@ class BlenderbotForConditionalGeneration(PretrainedBartModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-
-    def prepare_logits_for_generation(self, logits, cur_len, max_length):
-        # force the start token  probability of generation to be 0.
-        logits[:, self.config.bos_token_id] = float("-inf")
-        return logits
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         # exactly as in BartConditionalGeneration
