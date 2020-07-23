@@ -104,6 +104,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         extra_ids=100,
+        never_add_special_tokens=False,
         additional_special_tokens=None,
         **kwargs
     ):
@@ -120,6 +121,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
+        self.never_add_special_tokens = never_add_special_tokens
 
         try:
             import sentencepiece as spm
@@ -171,7 +173,10 @@ class T5Tokenizer(PreTrainedTokenizer):
                     "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+        elif self.never_add_special_tokens:
+            return ([0] * len(token_ids_0)) + ([0] * len(token_ids_1))
 
+        # normal case: some special tokens
         if token_ids_1 is None:
             return ([0] * len(token_ids_0)) + [1]
         return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
@@ -197,7 +202,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         Returns:
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
-        eos = [self.eos_token_id]
+        eos = [] if self.never_add_special_tokens else [self.eos_token_id]
         if token_ids_1 is None:
             return token_ids_0 + eos
         return token_ids_0 + eos + token_ids_1 + eos

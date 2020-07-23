@@ -349,7 +349,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def tokenizer(self):
-        return T5Tokenizer.from_pretrained("t5-base")
+        return T5Tokenizer.from_pretrained("t5-base", never_use_special_tokens=True)
 
     @slow
     def test_summarization(self):
