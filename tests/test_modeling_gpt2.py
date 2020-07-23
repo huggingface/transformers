@@ -311,6 +311,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (GPT2LMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = GPT2ModelTester(self)
