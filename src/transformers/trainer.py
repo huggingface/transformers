@@ -895,7 +895,7 @@ class Trainer:
             self._past = None
 
         for inputs in tqdm(dataloader, desc=description):
-            loss, logits, labels = self.eval_step(model, inputs, prediction_loss_only)
+            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             if loss is not None:
                 eval_losses.append(loss)
             if logits is not None:
@@ -952,7 +952,7 @@ class Trainer:
         output = concat[:num_total_examples]
         return output
 
-    def eval_step(
+    def prediction_step(
         self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
