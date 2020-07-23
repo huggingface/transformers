@@ -899,8 +899,11 @@ class ZeroShotClassificationPipeline(Pipeline):
         """
         inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
-            inputs, add_special_tokens=add_special_tokens, return_tensors=self.framework, padding=padding,
-            truncation='only_first'
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
+            truncation="only_first",
         )
 
         return inputs
