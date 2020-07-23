@@ -6,7 +6,7 @@ license: mit
 # bert-german-dbmdz-uncased-sentence-stsb
 
 ## How to use
-**The usage description above is wrong! Please use this:**
+**The usage description above - provided by Hugging Face - is wrong! Please use this:**
 
 Install the `sentence-transformers` package. See here: <https://github.com/UKPLab/sentence-transformers>
 ```python
