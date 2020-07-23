@@ -577,7 +577,7 @@ class GPT2Model(GPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class GPT2LMHeadModel(GPT2PreTrainedModel):
-    keys_to_ignore_at_load = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+    authorized_missing_keys = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
 
     def __init__(self, config):
         super().__init__(config)

@@ -290,11 +290,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - ``keys_to_ignore_at_load``: a list of re pattern of tensor names to ignore when loading the model (and avoid unnecessary warnings).
+        - **authorized_missing_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
+          when loading the model (and avoid unnecessary warnings).
     """
     config_class = None
     base_model_prefix = ""
-    keys_to_ignore_at_load = None
+    authorized_missing_keys = None
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -813,9 +814,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
             # Some models may have keys that are not in the state by design, removing them before needlessly warning
             # the user.
-            if cls.keys_to_ignore_at_load is not None:
-                for pat in cls.keys_to_ignore_at_load:
-                    unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+            if cls.authorized_missing_keys is not None:
+                for pat in cls.authorized_missing_keys:
                     missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
             if len(unexpected_keys) > 0:
