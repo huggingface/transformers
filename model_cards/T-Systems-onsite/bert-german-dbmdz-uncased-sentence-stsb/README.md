@@ -28,8 +28,11 @@ model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 ```
 
 ## Model description
+This is a German [sentence embedding](https://github.com/UKPLab/sentence-transformers) trained on the [German STSbenchmark Dataset](https://github.com/t-systems-on-site-services-gmbh/german-STSbenchmark). The base language model is the [dbmdz/bert-base-german-uncased](https://huggingface.co/dbmdz/bert-base-german-uncased) from [Bayerische Staatsbibliothek ](https://huggingface.co/dbmdz).
 
 ## Intended uses
+> Sentence-BERT(SBERT) is a  modification  of  the  pretrained BERT network that use siamese and triplet network structures to derive semantically mean-ingful sentence embeddings that can be compared using cosine-similarity. This reduces the effort for finding the most similar pair from 65hours with BERT / RoBERTa to about 5 seconds with SBERT, while maintaining the accuracy from BERT.
+Source: [Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks](https://arxiv.org/abs/1908.10084)
 
 ## Training data
 
