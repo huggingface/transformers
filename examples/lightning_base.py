@@ -56,7 +56,7 @@ class BaseTransformer(pl.LightningModule):
         # self.save_hyperparameters()
         # can also expand arguments into trainer signature for easier reading
 
-        self.hparams = hparams
+        self.save_hyperparameters(hparams)
         self.step_count = 0
         self.tfmr_ckpts = {}
         self.output_dir = Path(self.hparams.output_dir)
@@ -225,6 +225,13 @@ def add_generic_args(parser, root_dir) -> None:
         type=str,
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
+    )
+
+    parser.add_argument(
+        "--gpus",
+        default=0,
+        type=int,
+        help="The number of GPUs allocated for this, it is by default 0 meaning none",
     )
 
     parser.add_argument(
