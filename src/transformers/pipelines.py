@@ -38,8 +38,7 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_base import PaddingStrategy
-from .tokenization_utils_base import BatchEncoding
+from .tokenization_utils_base import BatchEncoding, PaddingStrategy
 
 
 if is_tf_available():
