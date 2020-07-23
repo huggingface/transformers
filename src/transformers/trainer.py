@@ -229,16 +229,16 @@ class Trainer:
         # Some warning for the user related to the usage of datasets that do not implement __len__
         if args.max_steps > 0:
             logger.warning("max_steps is given, it will override any value given in num_train_epochs")
-        if not isinstance(train_dataset, collections.Sized) and args.max_steps == 0:
+        if not isinstance(train_dataset, collections.abc.Sized) and args.max_steps == 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
-        if eval_dataset is not None and not isinstance(eval_dataset, collections.Sized):
-            raise ValueError("Eval Dataset: eval_dataset must implement __len__")
+        if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
+            raise ValueError("eval_dataset must implement __len__")
 
     def get_train_dataloader(self) -> DataLoader:
         """
         Returns the training :class:`~torch.utils.data.DataLoader`.
         """
-        if isinstance(self.train_dataset, collections.Sized):
+        if not isinstance(self.train_dataset, collections.abc.Sized):
             train_sampler = None
         elif self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
@@ -273,7 +273,7 @@ class Trainer:
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
 
-        if isinstance(eval_dataset, collections.Sized):
+        if not isinstance(eval_dataset, collections.abc.Sized):
             sampler = None
         elif is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
@@ -302,7 +302,7 @@ class Trainer:
             test_dataset (obj:`Dataset`): The test dataset to use.
         """
         # We use the same batch_size as for eval.
-        if isinstance(self.test_dataset, collections.Sized):
+        if not isinstance(self.test_dataset, collections.abc.Sized):
             sampler = None
         elif is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
@@ -394,7 +394,7 @@ class Trainer:
                 training will resume from the optimizer/scheduler states loaded here.
         """
         # Keeping track whether we can can len() on the dataset or not
-        train_dataset_is_sized = isinstance(self.train_dataset, collections.Sized)
+        train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
 
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
@@ -813,7 +813,7 @@ class Trainer:
             metrics (:obj:`Dict[str, float]`, `optional`):
                 The potential dictionary of metrics (if the dataset contained labels).
         """
-        if not isinstance(test_dataset, collections.Sized):
+        if not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")
         test_dataloader = self.get_test_dataloader(test_dataset)
 
