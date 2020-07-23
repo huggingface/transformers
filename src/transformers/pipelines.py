@@ -38,6 +38,7 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import PaddingStrategy
 from .tokenization_utils_base import BatchEncoding
 
 
@@ -49,6 +50,10 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     )
 
 if is_torch_available():
@@ -60,11 +65,17 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
         AutoModelForSeq2SeqLM,
+        MODEL_WITH_LM_HEAD_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     )
 
 if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
     from .modeling_tf_utils import TFPreTrainedModel
+
 
 logger = logging.getLogger(__name__)
 
@@ -398,6 +409,7 @@ class Pipeline(_ScikitCompat):
         if framework is None:
             framework = get_framework()
 
+        self.task = task
         self.model = model
         self.tokenizer = tokenizer
         self.modelcard = modelcard
@@ -470,6 +482,19 @@ class Pipeline(_ScikitCompat):
         :return:
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
+
+    def check_model_type(self, supported_models):
+        """
+        Check if the model class is in the supported class list of the pipeline.
+        """
+        if not isinstance(supported_models, list):  # Create from a model mapping
+            supported_models = [item[1].__name__ for item in supported_models.items()]
+        if self.model.__class__.__name__ not in supported_models:
+            raise PipelineException(
+                self.task,
+                self.model.base_model_prefix,
+                f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
+            )
 
     def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
         """
@@ -617,6 +642,11 @@ class TextGenerationPipeline(Pipeline):
         "TFCTRLLMHeadModel",
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.check_model_type(self.ALLOWED_MODELS)
+
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
 
     def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
@@ -642,12 +672,6 @@ class TextGenerationPipeline(Pipeline):
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
-        if self.model.__class__.__name__ not in self.ALLOWED_MODELS:
-            raise NotImplementedError(
-                "Generation is currently not supported for {}. Please select a model from {} for generation.".format(
-                    self.model.__class__.__name__, self.ALLOWED_MODELS
-                )
-            )
 
         text_inputs = self._args_parser(*args)
 
@@ -655,7 +679,12 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
-                if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                if self.model.__class__.__name__ in [
+                    "XLNetLMHeadModel",
+                    "TransfoXLLMHeadModel",
+                    "TFXLNetLMHeadModel",
+                    "TFTransfoXLLMHeadModel",
+                ]:
                     # For XLNet and TransformerXL we had an article to the prompt to give more state to the model.
                     padding_text = self.PADDING_TEXT + self.tokenizer.eos_token
                     padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
@@ -691,6 +720,8 @@ class TextGenerationPipeline(Pipeline):
 
             result = []
             for generated_sequence in output_sequences:
+                if self.framework == "pt" and generated_sequence is not None:
+                    generated_sequence = generated_sequence.cpu()
                 generated_sequence = generated_sequence.numpy().tolist()
                 record = {}
                 if return_tensors:
@@ -765,6 +796,12 @@ class TextClassificationPipeline(Pipeline):
 
     def __init__(self, return_all_scores: bool = False, **kwargs):
         super().__init__(**kwargs)
+
+        self.check_model_type(
+            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+            if self.framework == "tf"
+            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+        )
 
         self.return_all_scores = return_all_scores
 
@@ -841,6 +878,8 @@ class FillMaskPipeline(Pipeline):
             binary_output=True,
             task=task,
         )
+
+        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
 
         self.topk = topk
 
@@ -975,6 +1014,12 @@ class TokenClassificationPipeline(Pipeline):
             task=task,
         )
 
+        self.check_model_type(
+            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+            if self.framework == "tf"
+            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+        )
+
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
@@ -1005,8 +1050,6 @@ class TokenClassificationPipeline(Pipeline):
             labels_idx = score.argmax(axis=-1)
 
             entities = []
-            entity_groups = []
-            entity_group_disagg = []
             # Filter to labels not in `self.ignore_labels`
             filtered_labels_idx = [
                 (idx, label_idx)
@@ -1022,37 +1065,13 @@ class TokenClassificationPipeline(Pipeline):
                     "entity": self.model.config.id2label[label_idx],
                     "index": idx,
                 }
-                last_idx, _ = filtered_labels_idx[-1]
-                if self.grouped_entities:
-                    if not entity_group_disagg:
-                        entity_group_disagg += [entity]
-                        if idx == last_idx:
-                            entity_groups += [self.group_entities(entity_group_disagg)]
-                        continue
-
-                    # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
-                    if (
-                        entity["entity"] == entity_group_disagg[-1]["entity"]
-                        and entity["index"] == entity_group_disagg[-1]["index"] + 1
-                    ):
-                        entity_group_disagg += [entity]
-                        # Group the entities at the last entity
-                        if idx == last_idx:
-                            entity_groups += [self.group_entities(entity_group_disagg)]
-                    # If the current entity is different from the previous entity, aggregate the disaggregated entity group
-                    else:
-                        entity_groups += [self.group_entities(entity_group_disagg)]
-                        entity_group_disagg = [entity]
 
                 entities += [entity]
 
-            # Ensure if an entity is the latest one in the sequence it gets appended to the output
-            if len(entity_group_disagg) > 0:
-                entity_groups.append(self.group_entities(entity_group_disagg))
-
-            # Append
+            # Append grouped entities
             if self.grouped_entities:
-                answers += [entity_groups]
+                answers += [self.group_entities(entities)]
+            # Append ungrouped entities
             else:
                 answers += [entities]
 
@@ -1060,12 +1079,12 @@ class TokenClassificationPipeline(Pipeline):
             return answers[0]
         return answers
 
-    def group_entities(self, entities):
+    def group_sub_entities(self, entities: List[dict]) -> dict:
         """
-        Returns grouped entities
+        Returns grouped sub entities
         """
-        # Get the last entity in the entity group
-        entity = entities[-1]["entity"]
+        # Get the first entity in the entity group
+        entity = entities[0]["entity"]
         scores = np.mean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
 
@@ -1075,6 +1094,45 @@ class TokenClassificationPipeline(Pipeline):
             "word": self.tokenizer.convert_tokens_to_string(tokens),
         }
         return entity_group
+
+    def group_entities(self, entities: List[dict]) -> List[dict]:
+        """
+        Returns grouped entities
+        """
+
+        entity_groups = []
+        entity_group_disagg = []
+
+        if entities:
+            last_idx = entities[-1]["index"]
+
+        for entity in entities:
+            is_last_idx = entity["index"] == last_idx
+            if not entity_group_disagg:
+                entity_group_disagg += [entity]
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+                continue
+
+            # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
+            # The split is meant to account for the "B" and "I" suffixes
+            if (
+                entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
+                and entity["index"] == entity_group_disagg[-1]["index"] + 1
+            ):
+                entity_group_disagg += [entity]
+                # Group the entities at the last entity
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+            # If the current entity is different from the previous entity, aggregate the disaggregated entity group
+            else:
+                entity_groups += [self.group_sub_entities(entity_group_disagg)]
+                entity_group_disagg = [entity]
+                # If it's the last entity, add it to the entity groups
+                if is_last_idx:
+                    entity_groups += [self.group_sub_entities(entity_group_disagg)]
+
+        return entity_groups
 
 
 NerPipeline = TokenClassificationPipeline
@@ -1202,6 +1260,10 @@ class QuestionAnsweringPipeline(Pipeline):
             **kwargs,
         )
 
+        self.check_model_type(
+            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
+        )
+
     @staticmethod
     def create_sample(
         question: Union[str, List[str]], context: Union[str, List[str]]
@@ -1260,6 +1322,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 max_seq_length=kwargs["max_seq_len"],
                 doc_stride=kwargs["doc_stride"],
                 max_query_length=kwargs["max_question_len"],
+                padding_strategy=PaddingStrategy.DO_NOT_PAD.value,
                 is_training=False,
                 tqdm_enabled=False,
             )
@@ -1286,14 +1349,15 @@ class QuestionAnsweringPipeline(Pipeline):
             min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
-                # Mask padding and question
-                start_, end_ = (
-                    start_ * np.abs(np.array(feature.p_mask) - 1),
-                    end_ * np.abs(np.array(feature.p_mask) - 1),
-                )
+                # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
+                undesired_tokens = np.abs(np.array(feature.p_mask) - 1) & feature.attention_mask
 
-                # Mask CLS
-                start_[0] = end_[0] = 0
+                # Generate mask
+                undesired_tokens_mask = undesired_tokens == 0.0
+
+                # Make sure non-context indexes in the tensor cannot contribute to the softmax
+                start_ = np.where(undesired_tokens_mask, -10000.0, start_)
+                end_ = np.where(undesired_tokens_mask, -10000.0, end_)
 
                 # Normalize logits and spans to retrieve the answer
                 start_ = np.exp(start_ - np.log(np.sum(np.exp(start_), axis=-1, keepdims=True)))
@@ -1301,6 +1365,9 @@ class QuestionAnsweringPipeline(Pipeline):
 
                 if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+
+                # Mask CLS
+                start_[0] = end_[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
                 char_to_word = np.array(example.char_to_word_offset)
@@ -1461,9 +1528,13 @@ class SummarizationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         kwargs.update(task="summarization")
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
+
+        self.check_model_type(
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        )
 
     def __call__(
         self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -1592,6 +1663,11 @@ class TranslationPipeline(Pipeline):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
             on the associated CUDA device id.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs

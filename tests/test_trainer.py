@@ -6,15 +6,18 @@ from transformers.testing_utils import require_torch
 
 if is_torch_available():
     import torch
+    from torch.utils.data import IterableDataset
+
     from transformers import (
-        Trainer,
-        LineByLineTextDataset,
         AutoModelForSequenceClassification,
-        default_data_collator,
         DataCollatorForLanguageModeling,
+        DataCollatorForPermutationLanguageModeling,
         GlueDataset,
         GlueDataTrainingArguments,
+        LineByLineTextDataset,
         TextDataset,
+        Trainer,
+        default_data_collator,
     )
 
 
@@ -123,6 +126,48 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 512)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 512)))
 
+    def test_plm(self):
+        tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
+        data_collator = DataCollatorForPermutationLanguageModeling(tokenizer)
+        # ^ permutation lm
+
+        dataset = LineByLineTextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512)
+        examples = [dataset[i] for i in range(len(dataset))]
+        batch = data_collator(examples)
+        self.assertIsInstance(batch, dict)
+        self.assertEqual(batch["input_ids"].shape, torch.Size((31, 112)))
+        self.assertEqual(batch["perm_mask"].shape, torch.Size((31, 112, 112)))
+        self.assertEqual(batch["target_mapping"].shape, torch.Size((31, 112, 112)))
+        self.assertEqual(batch["labels"].shape, torch.Size((31, 112)))
+
+        dataset = TextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512, overwrite_cache=True)
+        examples = [dataset[i] for i in range(len(dataset))]
+        batch = data_collator(examples)
+        self.assertIsInstance(batch, dict)
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 512)))
+        self.assertEqual(batch["perm_mask"].shape, torch.Size((2, 512, 512)))
+        self.assertEqual(batch["target_mapping"].shape, torch.Size((2, 512, 512)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 512)))
+
+        example = [torch.randint(5, [5])]
+        with self.assertRaises(ValueError):
+            # Expect error due to odd sequence length
+            data_collator(example)
+
+
+if is_torch_available():
+
+    class SampleIterableDataset(IterableDataset):
+        def __init__(self, file_path):
+            self.file_path = file_path
+
+        def parse_file(self):
+            f = open(self.file_path, "r")
+            return f.readlines()
+
+        def __iter__(self):
+            return iter(self.parse_file())
+
 
 @require_torch
 class TrainerIntegrationTest(unittest.TestCase):
@@ -147,3 +192,12 @@ class TrainerIntegrationTest(unittest.TestCase):
             tokenizer=tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=tokenizer.max_len_single_sentence,
         )
         self.assertEqual(len(dataset), 31)
+
+    def test_trainer_iterable_dataset(self):
+        MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
+        model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
+        train_dataset = SampleIterableDataset(PATH_SAMPLE_TEXT)
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset)
+        loader = trainer.get_train_dataloader()
+        self.assertIsInstance(loader, torch.utils.data.DataLoader)

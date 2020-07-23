@@ -108,11 +108,11 @@ any other model from the model hub):
     >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
     >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
     >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-    >>> pipe = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
+    >>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
     >>> ## TENSORFLOW CODE
     >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
     >>> # This model only exists in PyTorch, so we use the `from_pt` flag to import that model in TensorFlow.
-    >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True) 
+    >>> model = TFAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True)
     >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
     >>> classifier = pipeline('sentiment-analysis', model=model, tokenizer=tokenizer)
 
@@ -191,7 +191,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     return_tensors="tf"
     ... )
 
-The padding is automatically applied on the side the model expect it (in this case, on the right), with the
+The padding is automatically applied on the side expected by the model (in this case, on the right), with the
 padding token the model was pretrained with. The attention mask is also adapted to take the padding into account:
 
 .. code-block::
@@ -212,9 +212,9 @@ You can learn more about tokenizers :doc:`here <preprocessing>`.
 Using the model
 ^^^^^^^^^^^^^^^
 
-Once your input has been preprocessed by the tokenizer, you can directly send it to the model. As we mentioned, it will
-contain all the relevant information the model needs. If you're using a TensorFlow model, you can directly pass the
-dictionary keys to tensor, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
+Once your input has been preprocessed by the tokenizer, you can send it directly to the model. As we mentioned, it will
+contain all the relevant information the model needs. If you're using a TensorFlow model, you can pass the
+dictionary keys directly to tensor, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
 
 .. code-block::
 
@@ -230,13 +230,18 @@ final activations of the model.
 
     >>> ## PYTORCH CODE
     >>> print(pt_outputs)
-    (tensor([[-4.0833,  4.3364],
-            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>),)
+    SequenceClassifierOutput(loss=None, logits=tensor([[-4.0833,  4.3364],
+            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
     >>> ## TENSORFLOW CODE
     >>> print(tf_outputs)
     (<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
-    array([[-4.0832963 ,  4.3364134 ],
-           [ 0.08181238, -0.04178794]], dtype=float32)>,)
+    array([[-4.0832963 ,  4.336414  ],
+           [ 0.08181786, -0.04179301]], dtype=float32)>,)
+
+The model can return more than just the final activations, which is why the PyTorch output is a special class and the
+TensorFlow output is a tuple. Here we only asked for the final activations, so we get a tuple with one element on the
+TensorFlow side and a :class:`~transformers.modeling_outputs.SequenceClassifierOutput` with just the ``logits`` field
+filled on the PyTorch side.
 
 .. note::
 
@@ -249,7 +254,7 @@ Let's apply the SoftMax activation to get predictions.
 
     >>> ## PYTORCH CODE
     >>> import torch.nn.functional as F
-    >>> pt_predictions = F.softmax(pt_outputs[0], dim=-1)
+    >>> pt_predictions = F.softmax(pt_outputs.logits, dim=-1)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
     >>> tf_predictions = tf.nn.softmax(tf_outputs[0], axis=-1)
@@ -262,7 +267,7 @@ We can see we get the numbers from before:
     >>> print(tf_predictions)
     tf.Tensor(
     [[2.2042994e-04 9.9977952e-01]
-     [5.3086078e-01 4.6913919e-01]], shape=(2, 2), dtype=float32)
+     [5.3086340e-01 4.6913657e-01]], shape=(2, 2), dtype=float32)
     >>> ## PYTORCH CODE
     >>> print(pt_predictions)
     tensor([[2.2043e-04, 9.9978e-01],
@@ -285,7 +290,13 @@ training loop. 🤗 Transformers also provides a :class:`~transformers.Trainer` 
 you are using TensorFlow) class to help with your training (taking care of things such as distributed training, mixed
 precision, etc.). See the :doc:`training tutorial <training>` for more details.
 
-Once your model is fine-tuned, you can save it with its tokenizer the following way:
+.. note::
+
+    Pytorch model outputs are special dataclasses so that you can get autocompletion for their attributes in an IDE.
+    They also behave like a tuple or a dictionary (e.g., you can index with an integer, a slice or a string) in which
+    case the attributes not set (that have :obj:`None` values) are ignored.
+
+Once your model is fine-tuned, you can save it with its tokenizer in the following way:
 
 ::
 
@@ -329,7 +340,9 @@ pretrained model. Behind the scenes, the library has one model class per combina
 code is easy to access and tweak if you need to.
 
 In our previous example, the model was called "distilbert-base-uncased-finetuned-sst-2-english", which means it's
-using the :doc:`DistilBERT </model_doc/distilbert>` architecture. The model automatically created is then a
+using the :doc:`DistilBERT </model_doc/distilbert>` architecture. As
+:class:`~transformers.AutoModelForSequenceClassification` (or  :class:`~transformers.TFAutoModelForSequenceClassification`
+if you are using TensorFlow)` was used, the model automatically created is then a
 :class:`~transformers.DistilBertForSequenceClassification`. You can look at its documentation for all details relevant
 to that specific model, or browse the source code. This is how you would directly instantiate model and tokenizer
 without the auto magic:
@@ -352,7 +365,7 @@ Customizing the model
 
 If you want to change how the model itself is built, you can define your custom configuration class. Each architecture
 comes with its own relevant configuration (in the case of DistilBERT, :class:`~transformers.DistilBertConfig`) which
-allows you to specify any of the hidden dimension, dropout rate etc. If you do core modifications, like changing the
+allows you to specify any of the hidden dimension, dropout rate, etc. If you do core modifications, like changing the
 hidden size, you won't be able to use a pretrained model anymore and will need to train from scratch. You would then
 instantiate the model directly from this configuration.
 

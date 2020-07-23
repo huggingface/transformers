@@ -511,6 +511,11 @@ class BatchEncoding(UserDict):
 
                 self[key] = tensor
             except:  # noqa E722
+                if key == "overflowing_tokens":
+                    raise ValueError(
+                        "Unable to create tensor returning overflowing tokens of different lengths. "
+                        "Please see if a fast version of this tokenizer is available to have this feature available."
+                    )
                 raise ValueError(
                     "Unable to create tensor, you should probably activate truncation and/or padding "
                     "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
@@ -965,7 +970,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 >= 7.5 (Volta).
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
-                PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
+                PyTorch :obj:`torch.Tensor` or Numpy :obj: `np.ndarray` instead of a list of python integers.
 """
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -1900,7 +1905,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
-                PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
+                PyTorch :obj:`torch.Tensor` or Numpy :obj: `np.ndarray` instead of a list of python integers.
             verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Set to ``False`` to avoid printing infos and warnings.
         """
@@ -2250,8 +2255,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return encoded_inputs
 
-    def batch_decode(self, sequences: List[List[int]], **kwargs) -> List[str]:
-        return [self.decode(seq, **kwargs) for seq in sequences]
+    def batch_decode(
+        self, sequences: List[List[int]], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+    ) -> List[str]:
+        """
+        Convert a list of lists of token ids into a list of strings by calling decode.
+
+        Args:
+            token_ids: list of tokenized input ids. Can be obtained using the `encode` or `encode_plus` methods.
+            skip_special_tokens: if set to True, will replace special tokens.
+            clean_up_tokenization_spaces: if set to True, will clean up the tokenization spaces.
+        """
+        return [
+            self.decode(
+                seq, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=clean_up_tokenization_spaces
+            )
+            for seq in sequences
+        ]
 
     def decode(
         self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True

@@ -17,8 +17,8 @@ USE_AMP = False
 
 def train_command_factory(args: Namespace):
     """
-    Factory function used to instantiate serving server from provided command line arguments.
-    :return: ServeCommand
+    Factory function used to instantiate training command from provided command line arguments.
+    :return: TrainCommand
     """
     return TrainCommand(args)
 
