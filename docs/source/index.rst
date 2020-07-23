@@ -157,8 +157,14 @@ conversion utilities for the following models:
     notebooks
     converting_tensorflow_models
     migration
-    torchscript
     contributing
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Exporting models
+
+    model_export/torchscript
+    model_export/onnx
 
 .. toctree::
     :maxdepth: 2
