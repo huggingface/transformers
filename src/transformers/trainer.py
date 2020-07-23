@@ -813,6 +813,8 @@ class Trainer:
             metrics (:obj:`Dict[str, float]`, `optional`):
                 The potential dictionary of metrics (if the dataset contained labels).
         """
+        if not isinstance(test_dataset, collections.Sized):
+            raise ValueError("test_dataset must implement __len__")
         test_dataloader = self.get_test_dataloader(test_dataset)
 
         return self._prediction_loop(test_dataloader, description="Prediction")
