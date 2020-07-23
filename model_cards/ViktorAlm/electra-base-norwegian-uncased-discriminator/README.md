@@ -1,5 +1,5 @@
 ---
-language: norwegian
+language: no
 thumbnail: https://i.imgur.com/QqSEC5I.png
 ---
 

@@ -1010,7 +1010,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
             model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
             input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            logits = model(input_ids)[0]
+            logits = model(input_ids).logits
 
             masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
             probs = logits[0, masked_index].softmax(dim=0)

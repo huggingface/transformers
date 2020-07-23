@@ -1,6 +1,5 @@
 ---
-language:
-- basque
+language: eu
 ---
 
 # BERTeus base cased

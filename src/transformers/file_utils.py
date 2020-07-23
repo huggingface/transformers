@@ -226,7 +226,8 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
 
         >>> outputs = model(**inputs, labels=labels)
-        >>> loss, scores = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 PT_QUESTION_ANSWERING_SAMPLE = r"""
@@ -243,7 +244,9 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
         >>> end_positions = torch.tensor([3])
 
         >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
-        >>> loss, start_scores, end_scores = outputs[:3]
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_scores
+        >>> end_scores = outputs.end_scores
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
@@ -258,7 +261,8 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         >>> outputs = model(**inputs, labels=labels)
-        >>> loss, logits = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 PT_MASKED_LM_SAMPLE = r"""
@@ -273,7 +277,8 @@ PT_MASKED_LM_SAMPLE = r"""
         >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt")["input_ids"]
 
         >>> outputs = model(input_ids, labels=input_ids)
-        >>> loss, prediction_scores = outputs[:2]
+        >>> loss = outputs.loss
+        >>> prediction_logits = outputs.logits
 """
 
 PT_BASE_MODEL_SAMPLE = r"""
@@ -288,7 +293,7 @@ PT_BASE_MODEL_SAMPLE = r"""
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        >>> last_hidden_states = outputs.last_hidden_state
 """
 
 PT_MULTIPLE_CHOICE_SAMPLE = r"""
@@ -309,7 +314,8 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, labels=labels)  # batch size is 1
 
         >>> # the linear classifier still needs to be trained
-        >>> loss, logits = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 PT_CAUSAL_LM_SAMPLE = r"""
@@ -323,7 +329,8 @@ PT_CAUSAL_LM_SAMPLE = r"""
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
-        >>> loss, logits = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 TF_TOKEN_CLASSIFICATION_SAMPLE = r"""

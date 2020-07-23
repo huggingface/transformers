@@ -1,5 +1,5 @@
 ---
-language: french
+language: fr
 ---
 
 # camembert-large-fquad

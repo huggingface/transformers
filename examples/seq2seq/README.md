@@ -7,19 +7,6 @@ For `bertabs` instructions, see `bertabs/README.md`.
 
 
 ### Data
-
-CNN/DailyMail data
-```bash
-cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm.tgz
-tar -xzvf cnn_dm.tgz
-
-export CNN_DIR=${PWD}/cnn_dm
-```
-
-this should make a directory called cnn_dm/ with files like `test.source`.
-To use your own data, copy that files format. Each article to be summarized is on its own line.
-
 XSUM Data:
 ```bash
 cd examples/seq2seq
@@ -27,20 +14,41 @@ wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/xsum.tar.gz
 tar -xzvf xsum.tar.gz
 export XSUM_DIR=${PWD}/xsum
 ```
+this should make a directory called `xsum/` with files like `test.source`.
+To use your own data, copy that files format. Each article to be summarized is on its own line.
 
-
-WMT16 English-Romanian Translation Data:
+CNN/DailyMail data
 ```bash
 cd examples/seq2seq
+wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm.tgz
+tar -xzvf cnn_dm.tgz
+export CNN_DIR=${PWD}/cnn_dm
+this should make a directory called `cnn_dm/` with files like `test.source`.
+```
+
+WMT16 English-Romanian Translation Data:
+
+This dataset comes in two formats. The "packed" version merges short training examples into examples of <200 tokens to increase GPU utilization (and also improves validation performance).
+
+```bash
+cd examples/seq2seq
+wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_packed_train_200.tgz
+tar -xzvf wmt_en_ro_packed_200.tgz
+export ENRO_DIR=wmt_en_ro_packed_train_200
+```
+ 
+The original data can also be downloaded with this command:
+```bash
 wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
+this should make a directory called `wmt_en_ro/` with files like `test.source`.
 ```
 
 If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target.  
 The `.source` files are the input, the `.target` files are the desired output.
 
-
+ 
 ### Tips and Tricks
 
 General Tips:
@@ -60,9 +68,13 @@ Summarization Tips:
 - If you want to run experiments on improving the summarization finetuning process, try the XSUM Shared Task (below). It's faster to train than CNNDM because the summaries are shorter.
 - For CNN/DailyMail, the default `val_max_target_length` and `test_max_target_length` will truncate the ground truth labels, resulting in slightly higher rouge scores. To get accurate rouge scores, you should rerun calculate_rouge on the `{output_dir}/test_generations.txt` file saved by `trainer.test()`
 - `--max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 ` is a reasonable setting for XSUM.
-- `wandb` can be used by specifying `--logger wandb`. It is useful for reproducibility. Specify the environment variable `WANDB_PROJECT='hf_xsum'` to do the XSUM shared task.
+- `wandb` can be used by specifying `--logger_name wandb`. It is useful for reproducibility. Specify the environment variable `WANDB_PROJECT='hf_xsum'` to do the XSUM shared task.
 - If you are finetuning on your own dataset, start from `distilbart-cnn-12-6` if you want long summaries and `distilbart-xsum-12-6` if you want short summaries.
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods). 
+
+**Update 2018-07-18**
+Datasets: Seq2SeqDataset will be used for all models besides MBart, for which MBartDataset will be used.**
+A new dataset is needed to support multilingual tasks.
 
 ### Summarization Finetuning
 Run/modify `finetune.sh`
@@ -78,21 +90,35 @@ The following command should work on a 16GB GPU:
     --model_name_or_path facebook/bart-large
 ```
 
-*Note*: The following tips mostly apply to summarization finetuning.
-
 ### Translation Finetuning
 
 First, follow the wmt_en_ro download instructions.
 Then you can finetune mbart_cc25 on english-romanian with the following command.
-**Recommendation:** Read and potentially modify the fairly opinionated defaults in `train_mbart_cc25_enro.sh` script before running it. 
+**Recommendation:** Read and potentially modify the fairly opinionated defaults in `train_mbart_cc25_enro.sh` script before running it.
+
+Best performing command:
 ```bash
-export ENRO_DIR=${PWD}/wmt_en_ro   # may need to be fixed depending on where you downloaded
+# optionally
+export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
+# export WANDB_PROJECT="MT" # optional 
+export MAX_LEN=200
 export BS=4
-export GAS=8
-./train_mbart_cc25_enro.sh --output_dir cc25_v1_frozen/
+export GAS=8 # gradient accumulation steps
+./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb --sortish_sampler
 ```
+This should take < 2h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 25. (you can see in wandb or metrics.json).
+To get results in line with fairseq, you need to do some postprocessing.
 
-
+MultiGPU command
+(using 8 GPUS as an example)
+```bash
+export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
+ # export WANDB_PROJECT="MT" # optional
+export MAX_LEN=200
+export BS=4
+export GAS=1  # gradient accumulation steps
+./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --gpus 8 --logger_name wandb
+```
 ### Finetuning Outputs 
 As you train, `output_dir` will be filled with files, that look kind of like this (comments are mine). 
 Some of them are metrics, some of them are checkpoints, some of them are metadata. Here is a quick tour:
@@ -107,7 +133,7 @@ output_dir
 │   ├── tokenizer_config.json
 │   └── vocab.json
 ├── git_log.json   # repo, branch, and commit hash
-├── val_avg_rouge2=0.1984-step_count=11.ckpt  # this is a pytorch lightning checkpoint associated with the best val score.
+├── val_avg_rouge2=0.1984-step_count=11.ckpt  # this is a pytorch lightning checkpoint associated with the best val score. (it will be called BLEU for MT)
 ├── metrics.json  # new validation metrics will continually be appended to this
 ├── student  # this is a huggingface checkpoint generated by SummarizationDistiller. It is the student before it gets finetuned.
 │   ├── config.json
@@ -123,23 +149,6 @@ from transformers import AutoModelForSeq2SeqLM
 model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
 ```
 
-#### XSUM Shared Task
-Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
-
-Here is an example command, but you can do whatever you want. Hopefully this will make debugging and collaboration easier!
-```bash
-WANDB_PROJECT='hf_xsum' ./finetune.sh \
-    --data_dir $XSUM_DIR \
-    --output_dir xsum_frozen_embs \
-    --model_name_or_path facebook/bart-large \
-    --train_batch_size 16 --eval_batch_size 16 --freeze_embeds --freeze_encoder \
-    --num_train_epochs 6 \
-    --max_target_length=60 --val_max_target_length=60 --test_max_target_length=100 \
-    --logger wandb
-```
-
-You can see your wandb logs [here](https://app.wandb.ai/sshleifer/hf_xsum?workspace=user-)
-
 ### Evaluation Commands
 
 To create summaries for each article in dataset, we use `run_eval.py`, here are a few commands that run eval for different tasks and models.
@@ -148,7 +157,7 @@ If 'translation' is in your task name, the computed metric will be BLEU. Otherwi
 For t5, you need to specify --task translation_{src}_to_{tgt} as follows:
 ```bash
 export DATA_DIR=wmt_en_ro
-python run_eval.py t5_base \
+python run_eval.py t5-base \
     $DATA_DIR/val.source t5_val_generations.txt \
     --reference_path $DATA_DIR/val.target \
     --score_path enro_bleu.json \

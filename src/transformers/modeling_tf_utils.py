@@ -18,6 +18,7 @@ import functools
 import logging
 import os
 import warnings
+from typing import Dict
 
 import h5py
 import numpy as np
@@ -167,30 +168,31 @@ TFMaskedLanguageModelingLoss = TFCausalLanguageModelingLoss
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
-    r""" Base class for all TF models.
+    r"""
+    Base class for all TF models.
 
-        :class:`~transformers.TFPreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
-        as well as a few methods common to all models to (i) resize the input embeddings and (ii) prune heads in the self-attention heads.
+    :class:`~transformers.TFPreTrainedModel` takes care of storing the configuration of the models and handles methods
+    for loading, downloading and saving models as well as a few methods common to all models to:
 
-        Class attributes (overridden by derived classes):
-            - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-            - ``load_tf_weights``: a python ``method`` for loading a TensorFlow checkpoint in a PyTorch model, taking as arguments:
+        * resize the input embeddings,
+        * prune heads in the self-attention heads.
 
-                - ``model``: an instance of the relevant subclass of :class:`~transformers.PreTrainedModel`,
-                - ``config``: an instance of the relevant subclass of :class:`~transformers.PretrainedConfig`,
-                - ``path``: a path (string) to the TensorFlow checkpoint.
-
-            - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
+    Class attributes (overridden by derived classes):
+        - **config_class** (:class:`~transformers.PretrainedConfig`) -- A subclass of
+          :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
+        - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
+          derived classes of the same architecture adding modules on top of the base model.
     """
     config_class = None
     base_model_prefix = ""
 
     @property
-    def dummy_inputs(self):
-        """ Dummy inputs to build the network.
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
 
         Returns:
-            tf.Tensor with dummy inputs
+            :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
         """
         return {"input_ids": tf.constant(DUMMY_INPUTS)}
 
@@ -207,13 +209,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # Save config in model
         self.config = config
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
         Returns the model's input embeddings.
 
         Returns:
-            :obj:`tf.keras.layers.Layer`:
-                A torch module mapping vocabulary to hidden states.
+            :obj:`tf.keras.layers.Layer`: A torch module mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
@@ -223,7 +224,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def set_input_embeddings(self, value):
         """
-        Set model's input embeddings
+        Set model's input embeddings.
 
         Args:
             value (:obj:`tf.keras.layers.Layer`):
@@ -235,28 +236,30 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             raise NotImplementedError
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         """
         Returns the model's output embeddings.
 
         Returns:
-            :obj:`tf.keras.layers.Layer`:
-                A torch module mapping hidden states to vocabulary.
+            :obj:`tf.keras.layers.Layer`: A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
 
-    def resize_token_embeddings(self, new_num_tokens=None):
-        """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
-        Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
+    def resize_token_embeddings(self, new_num_tokens=None) -> tf.Variable:
+        """
+        Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
+
+        Takes care of tying weights embeddings afterwards if the model class has a :obj:`tie_weights()` method.
 
         Arguments:
+            new_num_tokens (:obj:`int`, `optional`):
+                The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
+                just returns a pointer to the input tokens :obj:`tf.Variable` module of the model wihtout doing
+                anything.
 
-            new_num_tokens: (`optional`) int:
-                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end.
-                If not provided or None: does nothing and just returns a pointer to the input tokens ``tf.Variable`` Module of the model.
-
-        Return: ``tf.Variable``
-            Pointer to the input tokens Embeddings Module of the model
+        Return:
+            :obj:`tf.Variable`: Pointer to the input tokens Embeddings Module of the model.
         """
         model_embeds = self._resize_token_embeddings(new_num_tokens)
         if new_num_tokens is None:
@@ -285,19 +288,24 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             raise ValueError("word embedding is not defined.")
 
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Variable from a provided token Embedding Module.
-            Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end.
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None) -> tf.Variable:
+        """
+        Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
+        initialized vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
-            new_num_tokens: (`optional`) int
+            old_embeddings (:obj:`tf.Variable`):
+                Old embeddings to be resized.
+            new_num_tokens (:obj:`int`, `optional`):
                 New number of tokens in the embedding matrix.
-                Increasing the size will add newly initialized vectors at the end
-                Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
-        Return: ``tf.Variable``
-            Pointer to the resized word Embedding Module or the old Embedding Module if new_num_tokens is None
+
+                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
+                vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
+                :obj:`tf.Variable`` module of the model wihtout doing anything.
+
+        Return:
+            :obj:`tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if
+            :obj:`new_num_tokens` is :obj:`None`
         """
         word_embeddings = self._get_word_embeddings(old_embeddings)
         if new_num_tokens is None:
@@ -325,17 +333,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         return new_embeddings
 
     def prune_heads(self, heads_to_prune):
-        """ Prunes heads of the base model.
+        """
+        Prunes heads of the base model.
 
-            Arguments:
-
-                heads_to_prune: dict with keys being selected layer indices (`int`) and associated values being the list of heads to prune in said layer (list of `int`).
+        Arguments:
+            heads_to_prune (:obj:`Dict[int, List[int]]`):
+                Dictionary with keys being selected layer indices (:obj:`int`) and associated values being the list
+                of heads to prune in said layer (list of :obj:`int`). For instance {1: [0, 2], 2: [2, 3]} will
+                prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
         """
         raise NotImplementedError
 
     def save_pretrained(self, save_directory):
-        """ Save a model and its configuration file to a directory, so that it
-            can be re-loaded using the :func:`~transformers.PreTrainedModel.from_pretrained` class method.
+        """
+        Save a model and its configuration file to a directory, so that it can be re-loaded using the
+        `:func:`~transformers.TFPreTrainedModel.from_pretrained`` class method.
+
+        Arguments:
+            save_directory (:obj:`str`):
+                Directory to which to save. Will be created if it doesn't exist.
         """
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
@@ -352,68 +368,101 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""Instantiate a pretrained TF 2.0 model from a pre-trained model configuration.
+        r"""
+        Instantiate a pretrained TF 2.0 model from a pre-trained model configuration.
 
-        The warning ``Weights from XXX not initialized from pretrained model`` means that the weights of XXX do not come pre-trained with the rest of the model.
-        It is up to you to train those weights with a downstream fine-tuning task.
+        The warning `Weights from XXX not initialized from pretrained model` means that the weights of XXX do not come
+        pretrained with the rest of the model. It is up to you to train those weights with a downstream fine-tuning
+        task.
 
-        The warning ``Weights from XXX not used in YYY`` means that the layer XXX is not used by YYY, therefore those weights are discarded.
+        The warning `Weights from XXX not used in YYY` means that the layer XXX is not used by YYY, therefore those
+        weights are discarded.
 
         Parameters:
-            pretrained_model_name_or_path: either:
-                - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
-                - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `PyTorch state_dict save file` (e.g. `./pt_model/pytorch_model.bin`). In this case, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the PyTorch checkpoint in a TensorFlow model using the provided conversion scripts and loading the TensorFlow model afterwards.
+            pretrained_model_name_or_path (:obj:`str`, `optional`):
+                Can be either:
 
-            model_args: (`optional`) Sequence of positional arguments:
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
+                      ``bert-base-uncased``.
+                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
+                      ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformersTF.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `PyTorch state_dict save file` (e.g, `./pt_model/pytorch_model.bin`). In
+                      this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
+                      as ``config`` argument. This loading path is slower than converting the PyTorch model in a
+                      TensorFlow model using the provided conversion scripts and loading the TensorFlow model
+                      afterwards.
+                    - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
+                      arguments ``config`` and ``state_dict``).
+            model_args (sequence of positional arguments, `optional`):
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+            config (:obj:`Union[PretrainedConfig, str]`, `optional`):
+                Can be either:
 
-            config: (`optional`) one of:
-                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
-                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
-                    - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
-                    - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
-                    - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                be automatically loaded when:
 
-            from_pt: (`optional`) boolean, default False:
-                Load the model weights from a PyTorch state_dict save file (see docstring of pretrained_model_name_or_path argument).
+                    - The model is a model provided by the library (loaded with the `shortcut name` string of a
+                      pretrained model).
+                    - The model was saved using :func:`~transformers.TFPreTrainedModel.save_pretrained` and is reloaded
+                      by suppling the save directory.
+                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      configuration JSON file named `config.json` is found in the directory.
+            from_pt: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Load the model weights from a PyTorch state_dict save file (see docstring of
+                ``pretrained_model_name_or_path`` argument).
+            cache_dir (:obj:`str`, `optional`):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
+                cached versions if they exist.
+            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
+                file exists.
+            proxies: (:obj:`Dict[str, str], `optional`):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
+                request.
+            output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether ot not to also return a dictionnary containing missing keys, unexpected keys and error
+                messages.
+            local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to only look at local files (e.g., not try doanloading the model).
+            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
+                our S3 (faster).
+            kwargs (remaining dictionary of keyword arguments, `optional`):
+                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
+                :obj:`output_attention=True`). Behaves differently depending on whether a ``config`` is provided or
+                automatically loaded:
 
-            cache_dir: (`optional`) string:
-                Path to a directory in which a downloaded pre-trained model
-                configuration should be cached if the standard cache should not be used.
-
-            force_download: (`optional`) boolean, default False:
-                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
-
-            resume_download: (`optional`) boolean, default False:
-                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
-
-            proxies: (`optional`) dict, default None:
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
-                The proxies are used on each request.
-
-            output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
-
-            kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
-
-                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
-                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
+                    - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
+                      underlying model's ``__init__`` method (we assume all relevant updates to the configuration have
+                      already been done)
+                    - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class
+                      initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of
+                      ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
+                      with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
+                      attribute will be passed to the underlying model's ``__init__`` function.
 
         Examples::
 
-            # For example purposes. Not runnable.
-            model = BertModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
-            model = BertModel.from_pretrained('./test/saved_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = BertModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
+            from transformers import BertConfig, TFBertModel
+            # Download model and configuration from S3 and cache.
+            model = TFBertModel.from_pretrained('bert-base-uncased')
+            # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
+            model = TFBertModel.from_pretrained('./test/saved_model/')
+            # Update configuration during loading.
+            model = TFBertModel.from_pretrained('bert-base-uncased', output_attention=True)
             assert model.config.output_attention == True
-            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
-            model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_pt=True, config=config)
+            # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
+            config = BertConfig.from_json_file('./pt_model/my_pt_model_config.json')
+            model = TFBertModel.from_pretrained('./pt_model/my_pytorch_model.bin', from_pt=True, config=config)
 
         """
         config = kwargs.pop("config", None)

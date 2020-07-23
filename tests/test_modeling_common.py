@@ -803,6 +803,8 @@ class ModelTesterMixin:
 
             # Wrap model in nn.DataParallel
             model = torch.nn.DataParallel(model)
+            # Our model outputs do not work with DataParallel, so forcing return tuple.
+            inputs_dict["return_tuple"] = True
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
