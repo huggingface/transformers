@@ -1,3 +1,4 @@
+import collections
 import logging
 import math
 import os
@@ -225,6 +226,13 @@ class Trainer:
                 ),
                 FutureWarning,
             )
+        # Some warning for the user related to the usage of datasets that do not implement __len__
+        if args.max_steps > 0:
+            logger.warning("max_steps is given, it will override any value given in num_train_epochs")
+        if not isinstance(train_dataset, collections.Sized) and args.max_steps == 0:
+            raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
+        if eval_dataset is not None and not isinstance(eval_dataset, collections.Sized):
+            raise ValueError("Eval Dataset: eval_dataset must implement __len__")
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -385,16 +393,27 @@ class Trainer:
                 Local path to the model if the model to train has been instantiated from a local path. If present,
                 training will resume from the optimizer/scheduler states loaded here.
         """
+        # Keeping track whether we can can len() on the dataset or not
+        train_dataset_is_sized = isinstance(self.train_dataset, collections.Sized)
+
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
             num_train_epochs = (
-                self.args.max_steps // (len(train_dataloader) // self.args.gradient_accumulation_steps) + 1
+                (self.args.max_steps // (len(train_dataloader) // self.args.gradient_accumulation_steps) + 1)
+                if train_dataset_is_sized
+                else None
             )
         else:
-            t_total = int(len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.num_train_epochs)
+            t_total = (
+                int(len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.num_train_epochs)
+                if train_dataset_is_sized
+                else None
+            )
             num_train_epochs = self.args.num_train_epochs
 
+        # User received a warning about using a dataset without __len__ and only specifying num_train_epochs
+        # In this case, t_total will be None, this will create an exception in the learning rate scheduler
         optimizer, scheduler = self.get_optimizers(num_training_steps=t_total)
 
         # Check if saved optimizer or scheduler states exist
@@ -442,8 +461,10 @@ class Trainer:
                 * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
             )
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", self.num_examples(train_dataloader))
-        logger.info("  Num Epochs = %d", num_train_epochs)
+        logger.info(
+            "  Num examples = %s", str(self.num_examples(train_dataloader)) if train_dataset_is_sized else "Unknown"
+        )
+        logger.info("  Num Epochs = %s", str(num_train_epochs) if train_dataset_is_sized else "Unknown")
         logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
@@ -458,9 +479,16 @@ class Trainer:
             # set global_step to global_step of last saved checkpoint from model path
             try:
                 self.global_step = int(model_path.split("-")[-1].split("/")[0])
-                epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
-                steps_trained_in_current_epoch = self.global_step % (
-                    len(train_dataloader) // self.args.gradient_accumulation_steps
+                epochs_trained = (
+                    self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
+                    if train_dataset_is_sized
+                    else 0
+                )
+
+                steps_trained_in_current_epoch = (
+                    self.global_step % (len(train_dataloader) // self.args.gradient_accumulation_steps)
+                    if train_dataset_is_sized
+                    else 0
                 )
 
                 logger.info("  Continuing training from checkpoint, will skip to saved global_step")
@@ -474,6 +502,13 @@ class Trainer:
         tr_loss = 0.0
         logging_loss = 0.0
         model.zero_grad()
+
+        # From earlier, num_train_epochs can be None. This is the case when the training dataset has no __len__
+        # At this stage, we train until reaching max_steps, and ignore the num_train_epochs.
+        # We iterate over an infinite number of epochs, until reaching max_steps
+        if not train_dataset_is_sized:
+            num_train_epochs = 1e6  # should be enough (with regards to use case)
+
         train_iterator = trange(
             epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_master()
         )

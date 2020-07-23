@@ -197,7 +197,8 @@ class TrainerIntegrationTest(unittest.TestCase):
         MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
         train_dataset = SampleIterableDataset(PATH_SAMPLE_TEXT)
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
         trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset)
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
+        trainer.train()
