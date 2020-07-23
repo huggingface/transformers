@@ -5,6 +5,7 @@ import os
 import time
 
 import numpy as np
+from argparse import Namespace
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -24,6 +25,8 @@ class GLUETransformer(BaseTransformer):
     mode = "sequence-classification"
 
     def __init__(self, hparams):
+        if type(hparams) == dict:
+            hparams = Namespace(**hparams)
         hparams.glue_output_mode = glue_output_modes[hparams.task]
         num_labels = glue_tasks_num_labels[hparams.task]
 
@@ -41,7 +44,8 @@ class GLUETransformer(BaseTransformer):
         outputs = self(**inputs)
         loss = outputs[0]
 
-        tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
+        #tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
+        tensorboard_logs = {"loss": loss}
         return {"loss": loss, "log": tensorboard_logs}
 
     def prepare_data(self):
