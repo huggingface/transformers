@@ -158,6 +158,7 @@ conversion utilities for the following models:
     converting_tensorflow_models
     migration
     contributing
+    serialization
 
 .. toctree::
     :maxdepth: 2
