@@ -35,8 +35,11 @@ This is a German [sentence embedding](https://github.com/UKPLab/sentence-transfo
 
 Source: [Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks](https://arxiv.org/abs/1908.10084)
 
-## Training data
-
 ## Training procedure
-
-## Eval results
+We did an automatic hyperprameter optimization with [Optuna](https://github.com/optuna/optuna) and found the following hyperprameters:
+- batch_size = 5
+- num_epochs = 11
+- lr = 2.637549780860126e-05
+- eps = 5.0696075038683e-06
+- weight_decay = 0.02817210102940054
+- warmup_steps = 27.342745941760147 % of total steps
