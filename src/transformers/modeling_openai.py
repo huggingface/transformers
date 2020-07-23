@@ -659,7 +659,8 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_token_ids = torch.tensor([input_ids.size(-1)-1, input_ids.size(-1)-1]).unsqueeze(0)  # Batch size 1
 
         outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        lm_prediction_scores, mc_prediction_scores = outputs[:2]
+        lm_logits = outputs.lm_logits
+        mc_logits = outputs.mc_logits
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
         if "lm_labels" in kwargs:
