@@ -4,6 +4,8 @@ tags:
 - portuguese
 - brazil
 - pt_BR
+widget:
+- text: gostei muito dessa <mask>
 ---
 
 # BR_BERTo
