@@ -3,6 +3,7 @@
 import logging
 import math
 import os
+import warnings
 from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
@@ -207,7 +208,9 @@ class TFTrainer:
         wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
 
     @tf.function
-    def prediction_step(self, per_replica_features: tf.Tensor, per_replica_labels: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
+    def prediction_step(
+        self, per_replica_features: tf.Tensor, per_replica_labels: tf.Tensor
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
         """
         Perform an evaluation step across replica.
 
@@ -495,7 +498,7 @@ class TFTrainer:
                 FutureWarning,
             )
             return self._training_steps()
-        
+
         for i, loss in enumerate(self._accumulate_next_gradients(ds)):
             if i % self.args.gradient_accumulation_steps == 0:
                 self._apply_gradients(optimizer)
@@ -575,7 +578,7 @@ class TFTrainer:
                 FutureWarning,
             )
             return self._run_model()
-    
+
         if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
             features["mems"] = self._past
         if isinstance(labels, (dict)):
