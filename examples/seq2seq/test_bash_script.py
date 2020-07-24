@@ -55,9 +55,8 @@ def test_train_mbart_cc25_enro_script():
     if CUDA_AVAILABLE:
         gpus = 1  # torch.cuda.device_count()
     else:
-        bash_script = bash_script.replace("--fp16", "")
         gpus = 0
-
+    bash_script = bash_script.replace("--fp16", "")
     testargs = (
         ["finetune.py"]
         + bash_script.split()
