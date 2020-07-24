@@ -394,6 +394,7 @@ class Trainer:
     def num_examples(self, dataloader: DataLoader) -> int:
         """
         Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
+
         Will raise an exception if the underlying dataset dese not implement method :obj:`__len__`
         """
         return len(dataloader.dataset)
@@ -850,6 +851,8 @@ class Trainer:
         task-dependent (pass it to the init :obj:`compute_metrics` argument).
         If :obj:`eval_dataset` does not implement method :obj:`__len__`, then the :obj:`eval_steps` attribute of
         :class:`TrainingArguments` will be used to determine the number of steps.
+
+        You can also subclass and override this method to inject custom behavior.
 
         You can also subclass and override this method to inject custom behavior.
 
