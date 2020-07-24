@@ -100,7 +100,7 @@ class PretrainedConfig(object):
               method of the model.
 
         Parameters for fine-tuning tasks
-            - **architectures** (:obj:List[`str`], `optional`) -- Model architectures that can be used with the
+            - **architectures** (:obj:`List[str]`, `optional`) -- Model architectures that can be used with the
               model pretrained weights.
             - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
               used when converting from an original (TensorFlow or PyTorch) checkpoint.

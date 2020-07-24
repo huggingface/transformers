@@ -18,7 +18,7 @@ import functools
 import logging
 import os
 import warnings
-from typing import Dict
+from typing import Dict, List, Optional, Union
 
 import h5py
 import numpy as np
@@ -36,12 +36,19 @@ logger = logging.getLogger(__name__)
 
 class TFModelUtilsMixin:
     """
-    A few utilities for `tf.keras.Model`s, to be used as a mixin.
+    A few utilities for :obj:`tf.keras.Model`, to be used as a mixin.
     """
 
     def num_parameters(self, only_trainable: bool = False) -> int:
         """
-        Get number of (optionally, trainable) parameters in the model.
+        Get the number of (optionally, trainable) parameters in the model.
+
+        Args:
+            only_trainable (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return only the number of trainable parameters
+
+        Returns:
+            :obj:`int`: The number of parameters.
         """
         if only_trainable:
             return int(sum(np.prod(w.shape.as_list()) for w in self.trainable_variables))
@@ -54,16 +61,21 @@ def keras_serializable(cls):
     Decorate a Keras Layer class to support Keras serialization.
 
     This is done by:
-    1. adding a `transformers_config` dict to the Keras config dictionary in `get_config` (called by Keras at
-       serialization time
-    2. wrapping `__init__` to accept that `transformers_config` dict (passed by Keras at deserialization time) and
-       convert it to a config object for the actual layer initializer
-    3. registering the class as a custom object in Keras (if the Tensorflow version supports this), so that it does
-       not need to be supplied in `custom_objects` in the call to `tf.keras.models.load_model`
 
-    :param cls: a tf.keras.layers.Layers subclass that accepts a `config` argument to its initializer (typically a
-                `TF*MainLayer` class in this project)
-    :return: the same class object, with modifications for Keras deserialization.
+    1. Adding a :obj:`transformers_config` dict to the Keras config dictionary in :obj:`get_config` (called by Keras at
+       serialization time.
+    2. Wrapping :obj:`__init__` to accept that :obj:`transformers_config` dict (passed by Keras at deserialization
+       time) and convert it to a config object for the actual layer initializer.
+    3. Registering the class as a custom object in Keras (if the Tensorflow version supports this), so that it does
+       not need to be supplied in :obj:`custom_objects` in the call to :obj:`tf.keras.models.load_model`.
+
+    Args:
+        cls (a :obj:`tf.keras.layers.Layers subclass`):
+            Typically a :obj:`TF.MainLayer` class in this project, in general must accept a :obj:`config` argument to
+            its initializer.
+
+    Returns:
+        The same class object, with modifications for Keras deserialization.
     """
     initializer = cls.__init__
 
@@ -110,6 +122,15 @@ def keras_serializable(cls):
 
 
 class TFCausalLanguageModelingLoss:
+    """
+    Loss function suitable for causal language modeling (CLM), that is, the task of guessing the next token.
+
+    .. note::
+
+        Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+
+    """
+
     def compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
@@ -123,6 +144,10 @@ class TFCausalLanguageModelingLoss:
 
 
 class TFQuestionAnsweringLoss:
+    """
+    Loss function suitable for quetion answering.
+    """
+
     def compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
@@ -134,6 +159,15 @@ class TFQuestionAnsweringLoss:
 
 
 class TFTokenClassificationLoss:
+    """
+    Loss function suitable for token classification.
+
+    .. note::
+
+        Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+
+    """
+
     def compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
@@ -141,7 +175,7 @@ class TFTokenClassificationLoss:
         # make sure only labels that are not equal to -100
         # are taken into account as loss
         if tf.math.reduce_any(labels == -1).numpy() is True:
-            warnings.warn("Using `-1` to mask the loss for the token is depreciated. Please use `-100` instead.")
+            warnings.warn("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
             active_loss = tf.reshape(labels, (-1,)) != -1
         else:
             active_loss = tf.reshape(labels, (-1,)) != -100
@@ -152,6 +186,10 @@ class TFTokenClassificationLoss:
 
 
 class TFSequenceClassificationLoss:
+    """
+    Loss function suitable for sequence classification.
+    """
+
     def compute_loss(self, labels, logits):
         if shape_list(logits)[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
@@ -163,8 +201,19 @@ class TFSequenceClassificationLoss:
         return loss_fn(labels, logits)
 
 
-TFMultipleChoiceLoss = TFSequenceClassificationLoss
-TFMaskedLanguageModelingLoss = TFCausalLanguageModelingLoss
+class TFMultipleChoiceLoss(TFSequenceClassificationLoss):
+    """Loss function suitable for multiple choice tasks."""
+
+
+class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
+    """
+   Loss function suitable for masked language modeling (MLM), that is, the task of guessing the masked tokens.
+
+   .. note::
+
+        Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+
+"""
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
@@ -347,7 +396,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     def save_pretrained(self, save_directory):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
-        `:func:`~transformers.TFPreTrainedModel.from_pretrained`` class method.
+        :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
 
         Arguments:
             save_directory (:obj:`str`):
@@ -388,7 +437,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                       ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformersTF.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
-                    - A path or url to a `PyTorch state_dict save file` (e.g, `./pt_model/pytorch_model.bin`). In
+                    - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
                       this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
                       as ``config`` argument. This loading path is slower than converting the PyTorch model in a
                       TensorFlow model using the provided conversion scripts and loading the TensorFlow model
@@ -435,7 +484,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
             use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster).
+                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attention=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -611,10 +660,23 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
 
 class TFConv1D(tf.keras.layers.Layer):
+    """
+    1D-convolutional layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2).
+
+    Basically works like a linear layer but the weights are transposed.
+
+    Args:
+        nf (:obj:`int`):
+            The number of output features.
+        nx (:obj:`int`):
+            The number of input features.
+        initializer_range (:obj:`float`, `optional`, defaults to 0.02):
+            The standard deviation to use to initialize the weights.
+        kwargs:
+            Additional keyword arguments passed along to the :obj:`__init__` of :obj:`tf.keras.layers.Layer`.
+    """
+
     def __init__(self, nf, nx, initializer_range=0.02, **kwargs):
-        """ TFConv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
-            Basically works like a Linear layer but the weights are transposed
-        """
         super().__init__(**kwargs)
         self.nf = nf
         self.nx = nx
@@ -638,10 +700,25 @@ class TFConv1D(tf.keras.layers.Layer):
 
 
 class TFSharedEmbeddings(tf.keras.layers.Layer):
-    """Construct shared token embeddings.
+    """
+    Construct shared token embeddings.
+
+    The weights of the embedding layer is usually shared with the weights of the linear decoder when doing
+    language modeling.
+
+    Args:
+        vocab_size (:obj:`int`):
+            The size of the vocabular, e.g., the number of unique tokens.
+        hidden_size (:obj:`int`):
+            The size of the embedding vectors.
+        initializer_range (:obj:`float`, `optional`):
+            The standard deviation to use when initializing the weights. If no value is provided, it will default to
+            :math:`1/\sqrt{hidden\_size}`.
+        kwargs:
+            Additional keyword arguments passed along to the :obj:`__init__` of :obj:`tf.keras.layers.Layer`.
     """
 
-    def __init__(self, vocab_size, hidden_size, initializer_range=None, **kwargs):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: Optional[float] = None, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -667,20 +744,31 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
 
         return dict(list(base_config.items()) + list(config.items()))
 
-    def call(self, inputs, mode="embedding"):
-        """Get token embeddings of inputs.
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
-        Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with
-                shape [batch_size, length, embedding_size]; (2) mode == "linear", output
-                linear tensor, float32 with shape [batch_size, length, vocab_size].
-        Raises:
-            ValueError: if mode is not valid.
+    def call(self, inputs: tf.Tensor, mode: str = "embedding") -> tf.Tensor:
+        """
+        Get token embeddings of inputs or decode final hidden state.
 
-        Shared weights logic adapted from
-            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        Args:
+            inputs (:obj:`tf.Tensor`):
+                In embedding mode, should be an int64 tensor with shape :obj:`[batch_size, length]`.
+
+                In linear mode, should be a float tensor with shape :obj:`[batch_size, length, hidden_size]`.
+            mode (:obj:`str`, defaults to :obj:`"embedding"`):
+               A valid value is either :obj:`"embedding"` or :obj:`"linear"`, the first one indicates that the layer
+               should be used as an embedding layer, the second one that the layer should be used as a linear decoder.
+
+        Returns:
+            :obj:`tf.Tensor`:
+            In embedding mode, the output is a float32  embedding tensor, with shape
+            :obj:`[batch_size, length, embedding_size]`.
+
+            In linear mode, the ouput is a float32 with shape :obj:`[batch_size, length, vocab_size]`.
+
+        Raises:
+            ValueError: if :obj:`mode` is not valid.
+
+        Shared weights logic is adapted from
+        `here <https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24>`__.
         """
         if mode == "embedding":
             return self._embedding(inputs)
@@ -709,22 +797,38 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
 
 
 class TFSequenceSummary(tf.keras.layers.Layer):
-    r""" Compute a single vector summary of a sequence hidden states according to various possibilities:
-        Args of the config class:
-            summary_type:
-                - 'last' => [default] take the last token hidden state (like XLNet)
-                - 'first' => take the first token hidden state (like Bert)
-                - 'mean' => take the mean of all tokens hidden states
-                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
-                - 'attn' => Not implemented now, use multi-head attention
-            summary_use_proj: Add a projection after the vector extraction
-            summary_proj_to_labels: If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
-            summary_activation: 'tanh' => add a tanh activation to the output, Other => no activation. Default
-            summary_first_dropout: Add a dropout before the projection and activation
-            summary_last_dropout: Add a dropout after the projection and activation
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the
+            actual config class of your model for the default values it uses):
+
+            - **summary_type** (:obj:`str`) -- The method to use to make this summary. Accepted values are:
+
+                - :obj:`"last"` -- Take the last token hidden state (like XLNet)
+                - :obj:`"first"` -- Take the first token hidden state (like Bert)
+                - :obj:`"mean"` -- Take the mean of all tokens hidden states
+                - :obj:`"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - :obj:`"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (:obj:`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (:obj:`bool`) -- If :obj:`True`, the projection outputs to
+              :obj:`config.num_labels` classes (otherwise to :obj:`config.hidden_size`).
+            - **summary_activation**  (:obj:`Optional[str]`) -- Set to :obj:`"tanh"` to add a tanh activation to the
+              output, another string or :obj:`None` will add no activation.
+            - **summary_first_dropout** (:obj:`float`) -- Optional dropout probability before the projection and
+              activation.
+            - **summary_last_dropout** (:obj:`float`)-- Optional dropout probability after the projection and
+              activation.
+
+        initializer_range (:obj:`float`, defaults to 0.02): The standard deviation to use to initialize the weights.
+        kwargs:
+            Additional keyword arguments passed along to the :obj:`__init__` of :obj:`tf.keras.layers.Layer`.
     """
 
-    def __init__(self, config, initializer_range=0.02, **kwargs):
+    def __init__(self, config: PretrainedConfig, initializer_range: float = 0.02, **kwargs):
         super().__init__(**kwargs)
 
         self.summary_type = config.summary_type if hasattr(config, "summary_use_proj") else "last"
@@ -756,12 +860,22 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         if self.has_last_dropout:
             self.last_dropout = tf.keras.layers.Dropout(config.summary_last_dropout)
 
-    def call(self, inputs, training=False):
-        """ hidden_states: float Tensor in shape [bsz, seq_len, hidden_size], the hidden-states of the last layer.
-            cls_index: [optional] position of the classification token if summary_type == 'cls_index',
-                shape (bsz,) or more generally (bsz, ...) where ... are optional leading dimensions of hidden_states.
-                if summary_type == 'cls_index' and cls_index is None:
-                    we take the last token of the sequence as classification token
+    def call(self, inputs, training=False) -> tf.Tensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            inputs (:obj:`Union[tf.Tensor, Tuple[tf.Tensor], List[tf.Tensor], Dict[str, tf.Tensor]]`):
+                One or two tensors representing:
+
+                - **hidden_states** (:obj:`tf.Tensor` of shape :obj:`[batch_size, seq_len, hidden_size]`) -- The hidden
+                  states of the last layer.
+                - **cls_index** :obj:`tf.Tensor` of shape :obj:`[batch_size]` or :obj:`[batch_size, ...]` where ... are
+                  optional leading dimensions of :obj:`hidden_states`. Used if :obj:`summary_type == "cls_index"` and
+                  takes the last token of the sequence as classification token.
+
+        Returns:
+            :obj:`tf.Tensor`: The summary of the sequence hidden states.
         """
         if not isinstance(inputs, (dict, tuple, list)):
             hidden_states = inputs
@@ -815,32 +929,47 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         return output
 
 
-def shape_list(x):
-    """Deal with dynamic shape in tensorflow cleanly."""
+def shape_list(x: tf.Tensor) -> List[int]:
+    """
+    Deal with dynamic shape in tensorflow cleanly.
+
+    Args:
+        x (:obj:`tf.Tensor`): The tensor we want the shape of.
+
+    Returns:
+        :obj:`List[int]`: The shape of the tensor as a list.
+    """
     static = x.shape.as_list()
     dynamic = tf.shape(x)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
-def get_initializer(initializer_range=0.02):
-    """Creates a `tf.initializers.truncated_normal` with the given range.
+def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:
+    """
+    Creates a :obj:`tf.initializers.TruncatedNormal` with the given range.
+
     Args:
-        initializer_range: float, initializer range for stddev.
+        initializer_range (`float`, defaults to 0.02): Standard deviation of the initializer range.
+
     Returns:
-        TruncatedNormal initializer with stddev = `initializer_range`.
+        :obj:`tf.initializers.TruncatedNormal`: The truncated normal initializer.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
 
 
-def cast_bool_to_primitive(bool_variable, default_tensor_to_true=False):
-    """Function arguments can be inserted as boolean tensor
-        and bool variables to cope with keras serialization
-        we need to cast `output_attentions` to correct bool
-        if it is a tensor
+def cast_bool_to_primitive(bool_variable: Union[tf.Tensor, bool], default_tensor_to_true=False) -> bool:
+    """
+    Function arguments can be inserted as boolean tensor and bool variables to cope with Keras serialization we need to
+    cast the bool argumnets (like :obj:`output_attentions` for instance) to correct boolean if it is a tensor.
 
     Args:
-        default_tensor_to_true: bool, if tensor should default to True
-        in case tensor has no numpy attribute
+        bool_variable (:obj:`Union[tf.Tensor, bool]`):
+            The variable to convert to a boolean.
+        default_tensor_to_true (:obj:`bool`, `optional`, defaults to `False`):
+            The default value to use in case the tensor has no numpy attribute.
+
+    Returns:
+        :obj:`bool`: The converted value.
     """
     # if bool variable is tensor and has numpy value
     if tf.is_tensor(bool_variable):
