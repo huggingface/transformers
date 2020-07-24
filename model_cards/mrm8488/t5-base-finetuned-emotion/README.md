@@ -1,5 +1,7 @@
 ---
 language: en
+datasets:
+- emotion
 ---
 
 # T5-base fine-tuned for Emotion Recognition 😂😢😡😃😯

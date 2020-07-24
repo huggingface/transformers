@@ -1366,8 +1366,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
         outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping, labels=labels)
-        loss, next_token_logits = outputs[:2]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
-
+        loss = outputs.loss
+        next_token_logits = outputs.logits  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
@@ -1876,7 +1876,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         >>> end_positions = torch.tensor([3])
         >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
 
-        >>> loss = outputs[0]
+        >>> loss = outputs.loss
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
