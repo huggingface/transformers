@@ -1,5 +1,5 @@
 ---
-language: "UTF-8"
+language: pt
 tags:
 - portuguese
 - brazil
