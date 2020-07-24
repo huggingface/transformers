@@ -349,7 +349,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def tokenizer(self):
-        return T5Tokenizer.from_pretrained("t5-base", never_use_special_tokens=True)
+        return T5Tokenizer.from_pretrained("t5-base")
 
     @slow
     def test_summarization(self):
@@ -416,7 +416,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         tok = self.tokenizer
         use_task_specific_params(model, "translation_en_to_fr")
 
-        en_text = ' This image section from an infrared recording by the Spitzer telescope shows a "family portrait" of countless generations of stars: the oldest stars are seen as blue dots. '  # while more difficult to identify are the pink-coloured "new-borns" in the star delivery room.'
+        en_text = ' This image section from an infrared recording by the Spitzer telescope shows a "family portrait" of countless generations of stars: the oldest stars are seen as blue dots. '
 
         input_ids = tok.encode(model.config.prefix + en_text, return_tensors="pt")
         input_ids = input_ids.to(torch_device)
@@ -436,8 +436,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             "un "
             "« portrait familial » de générations innombrables d’étoiles : les plus anciennes sont observées "
             "sous forme "
-            "de points bleus, tandis que les « nouveau-nés » de couleur rose dans la salle de "
-            "célibataire doivent être plus"  # WE ARE MISSING difficiles
+            "de points bleus."
         )
         # expected_translation = (
         #     "Cette section d'images provenant de l'enregistrement infrarouge effectué par le "
