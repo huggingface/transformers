@@ -4,10 +4,6 @@ thumbnail: https://i.imgur.com/DUlT077.jpg
 widget:
 - text: "España es un país muy <mask> en la UE"
 ---
----
-language: spanish
-thumbnail:
----
 
 # RuPERTa: the Spanish RoBERTa 🎃<img src="https://abs-0.twimg.com/emoji/v2/svg/1f1ea-1f1f8.svg" alt="spain flag" width="25"/>
 
