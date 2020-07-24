@@ -78,7 +78,6 @@ It took about 2 hours to finish.
 
 **Model size**: `477M`
 
-lower train, cased eval
 | Metric | # Value   |
 | ------ | --------- |
 | **EM** | **83.0** |
