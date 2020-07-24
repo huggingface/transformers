@@ -48,7 +48,12 @@ from .modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer, apply_chunking_to_forward
+from .modeling_utils import (
+    PreTrainedModel,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+    apply_chunking_to_forward,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -358,6 +363,7 @@ class BertIntermediate(nn.Module):
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
+
 class BertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -370,6 +376,7 @@ class BertOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
 
 class ChunkFeedForward(nn.Module):
     def __init__(self, config):
@@ -386,8 +393,9 @@ class ChunkFeedForward(nn.Module):
         )
 
     def forward_chunk(self, attention_output):
-        intermediate_output = self.dense(attention_output) 
+        intermediate_output = self.dense(attention_output)
         return self.output(intermediate_output, attention_output)
+
 
 class BertLayer(nn.Module):
     def __init__(self, config):
@@ -426,12 +434,7 @@ class BertLayer(nn.Module):
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
-        #intermediate_output = self.intermediate(attention_output) # WIll probably be replaced by Chunkfeedforward
-        #layer_output = self.output(intermediate_output, attention_output) # WIll probably be replaced by Chunkfeedforward
-
-        # Will look something like this
         layer_output = self.feed_forward(attention_output)
-
         outputs = (layer_output,) + outputs
         return outputs
 
