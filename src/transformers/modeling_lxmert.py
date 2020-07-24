@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 XXX Authors
+# Copyright 2018 Hao Tan, Mohit Bansal
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,42 +12,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch XXX model. """
-
-####################################################
-# In this template, replace all the XXX (various casings) with your model name
-####################################################
+""" PyTorch LXMERT model. """
 
 
 import logging
+import math
 import os
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
-from .configuration_xxx import XxxConfig
+from .configuration_lxmert import LxmertConfig
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
-####################################################
-# This list contrains shortcut names for some of
-# the pretrained weights provided with the models
-####################################################
-XXX_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xxx-base-uncased",
-    "xxx-large-uncased",
-]
+
+LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = {
+    "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased.tar.gz",
+    "bert-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased.tar.gz",
+    "bert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased.tar.gz",
+    "bert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased.tar.gz",
+    "bert-base-multilingual-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased.tar.gz",
+    "bert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased.tar.gz",
+    "bert-base-chinese": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz",
+}
 
 
-####################################################
-# This is a conversion method from TF 1.0 to PyTorch
-# More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
-####################################################
-def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
+def load_tf_weights_in_lxmert(model, config, tf_checkpoint_path):
     """ Load tf checkpoints in a pytorch model.
     """
     try:
@@ -119,32 +114,197 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
     return model
 
 
-####################################################
-# PyTorch Models are constructed by sub-classing
-# - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (itself a sub-class of torch.nn.Module)
-####################################################
-
-####################################################
-# Here is an example of typical layer in a PyTorch model of the library
-# The classes are usually identical to the TF 2.0 ones without the 'TF' prefix.
-#
-# See the conversion methods in modeling_tf_pytorch_utils.py for more details
-####################################################
-
-XxxAttention = nn.Module
-
-XxxIntermediate = nn.Module
-
-XxxOutput = nn.Module
+def gelu(x):
+    """Implementation of the gelu activation function.
+        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+        Also see https://arxiv.org/abs/1606.08415
+    """
+    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
-class XxxLayer(nn.Module):
+class GeLU(nn.Module):
+    """Implementation of the gelu activation function.
+        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
+        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+        Also see https://arxiv.org/abs/1606.08415
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return gelu(x)
+
+
+def swish(x):
+    return x * torch.sigmoid(x)
+
+
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
+
+LxmertLayerNorm = torch.nn.LayerNorm
+
+
+class LxmertEmbeddings(nn.Module):
+    """Construct the embeddings from word, position and token_type embeddings.
+    """
+
     def __init__(self, config):
         super().__init__()
-        self.attention = XxxAttention(config)
-        self.intermediate = XxxIntermediate(config)
-        self.output = XxxOutput(config)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=0)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size, padding_idx=0)
+
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, input_ids, token_type_ids=None):
+        seq_length = input_ids.size(1)
+        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
+        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros_like(input_ids)
+
+        words_embeddings = self.word_embeddings(input_ids)
+        position_embeddings = self.position_embeddings(position_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = words_embeddings + position_embeddings + token_type_embeddings
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+
+class LxmertAttention(nn.Module):
+    def __init__(self, config, ctx_dim=None):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+            )
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        # visual_dim = 2048
+        if ctx_dim is None:
+            ctx_dim = config.hidden_size
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(ctx_dim, self.all_head_size)
+        self.value = nn.Linear(ctx_dim, self.all_head_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(self, hidden_states, context, attention_mask=None):
+        mixed_query_layer = self.query(hidden_states)
+        mixed_key_layer = self.key(context)
+        mixed_value_layer = self.value(context)
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+        if attention_mask is not None:
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(*new_context_layer_shape)
+        return context_layer
+
+
+class LxmertAttOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
+class LxmertCrossattLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.att = LxmertAttention(config)
+        self.output = LxmertAttOutput(config)
+
+    def forward(self, input_tensor, ctx_tensor, ctx_att_mask=None):
+        output = self.att(input_tensor, ctx_tensor, ctx_att_mask)
+        attention_output = self.output(output, input_tensor)
+        return attention_output
+
+
+class LxmertSelfattLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.self = LxmertAttention(config)
+        self.output = LxmertAttOutput(config)
+
+    def forward(self, input_tensor, attention_mask):
+        # Self attention attends to itself, thus keys and querys are the same (input_tensor).
+        self_output = self.self(input_tensor, input_tensor, attention_mask)
+        attention_output = self.output(self_output, input_tensor)
+        return attention_output
+
+
+class LxmertIntermediate(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.intermediate_act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
+
+
+class LxmertOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
+class LxmertLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.attention = LxmertAttention(config)
+        self.intermediate = LxmertIntermediate(config)
+        self.output = LxmertOutput(config)
 
     def forward(self, hidden_states, attention_mask=None, head_mask=None):
         attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
@@ -155,33 +315,240 @@ class XxxLayer(nn.Module):
         return outputs
 
 
-####################################################
-# PreTrainedModel is a sub-class of torch.nn.Module
-# which take care of loading and saving pretrained weights
-# and various common utilities.
-#
-# Here you just need to specify a few (self-explanatory)
-# pointers for your model and the weights initialization
-# method if its not fully covered by PreTrainedModel's default method
-####################################################
+class LxmertXLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        # The cross-attention Layer
+        self.visual_attention = LxmertCrossattLayer(config)
 
-XxxLayerNorm = torch.nn.LayerNorm
+        # Self-attention Layers
+        self.lang_self_att = LxmertSelfattLayer(config)
+        self.visn_self_att = LxmertSelfattLayer(config)
 
-XxxEmbeddings = nn.Module
+        # Intermediate and Output Layers (FFNs)
+        self.lang_inter = LxmertIntermediate(config)
+        self.lang_output = LxmertOutput(config)
+        self.visn_inter = LxmertIntermediate(config)
+        self.visn_output = LxmertOutput(config)
 
-XxxEncoder = nn.Module
+    def cross_att(self, lang_input, lang_attention_mask, visn_input, visn_attention_mask):
+        # Cross Attention
+        lang_att_output = self.visual_attention(lang_input, visn_input, ctx_att_mask=visn_attention_mask)
+        visn_att_output = self.visual_attention(visn_input, lang_input, ctx_att_mask=lang_attention_mask)
+        return lang_att_output, visn_att_output
 
-XxxPooler = nn.Module
+    def self_att(self, lang_input, lang_attention_mask, visn_input, visn_attention_mask):
+        # Self Attention
+        lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
+        visn_att_output = self.visn_self_att(visn_input, visn_attention_mask)
+        return lang_att_output, visn_att_output
+
+    def output_fc(self, lang_input, visn_input):
+        # FC layers
+        lang_inter_output = self.lang_inter(lang_input)
+        visn_inter_output = self.visn_inter(visn_input)
+
+        # Layer output
+        lang_output = self.lang_output(lang_inter_output, lang_input)
+        visn_output = self.visn_output(visn_inter_output, visn_input)
+        return lang_output, visn_output
+
+    def forward(self, lang_feats, lang_attention_mask, visn_feats, visn_attention_mask):
+
+        lang_att_output = lang_feats
+        visn_att_output = visn_feats
+
+        lang_att_output, visn_att_output = self.cross_att(
+            lang_att_output, lang_attention_mask, visn_att_output, visn_attention_mask
+        )
+        lang_att_output, visn_att_output = self.self_att(
+            lang_att_output, lang_attention_mask, visn_att_output, visn_attention_mask
+        )
+        lang_output, visn_output = self.output_fc(lang_att_output, visn_att_output)
+
+        return lang_output, visn_output
 
 
-class XxxPreTrainedModel(PreTrainedModel):
+class VisualFeatEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        feat_dim = config.visual_feat_dim
+        pos_dim = config.visual_pos_dim
+
+        # Object feature encoding
+        self.visn_fc = nn.Linear(feat_dim, config.hidden_size)
+        self.visn_layer_norm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+
+        # Box position encoding
+        self.box_fc = nn.Linear(pos_dim, config.hidden_size)
+        self.box_layer_norm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, visn_input):
+        feats, boxes = visn_input
+
+        x = self.visn_fc(feats)
+        x = self.visn_layer_norm(x)
+        y = self.box_fc(boxes)
+        y = self.box_layer_norm(y)
+        output = (x + y) / 2
+
+        output = self.dropout(output)
+        return output
+
+
+class LxmertEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        # Obj-level image embedding layer
+        self.visn_fc = VisualFeatEncoder(config)
+
+        # Number of layers
+        self.num_l_layers = config.l_layers
+        self.num_x_layers = config.x_layers
+        self.num_r_layers = config.r_layers
+
+        # Layers
+        # Using self.layer instead of self.l_layer to support loading BERT weights.
+        self.layer = nn.ModuleList([LxmertLayer(config) for _ in range(self.num_l_layers)])
+        self.x_layers = nn.ModuleList([LxmertXLayer(config) for _ in range(self.num_x_layers)])
+        self.r_layers = nn.ModuleList([LxmertLayer(config) for _ in range(self.num_r_layers)])
+
+    def forward(self, lang_feats, lang_attention_mask, visn_feats, visn_attention_mask=None):
+        # Run visual embedding layer
+        # Note: Word embedding layer was executed outside this module.
+        #       Keep this design to allow loading BERT weights.
+        visn_feats = self.visn_fc(visn_feats)
+
+        # Run language layers
+        for layer_module in self.layer:
+            lang_feats = layer_module(lang_feats, lang_attention_mask)
+
+        # Run relational layers
+        for layer_module in self.r_layers:
+            visn_feats = layer_module(visn_feats, visn_attention_mask)
+
+        # Run cross-modality layers
+        for layer_module in self.x_layers:
+            lang_feats, visn_feats = layer_module(lang_feats, lang_attention_mask, visn_feats, visn_attention_mask)
+
+        return lang_feats, visn_feats
+
+
+class LxmertPooler(nn.Module):
+    def __init__(self, config):
+        super(LxmertPooler, self).__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class LxmertPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super(LxmertPredictionHeadTransform, self).__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.transform_act_fn = ACT2FN[config.hidden_act]
+        self.LayerNorm = LxmertLayerNorm(config.hidden_size, eps=1e-12)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class LxmertLMPredictionHead(nn.Module):
+    def __init__(self, config, bert_model_embedding_weights):
+        super(LxmertLMPredictionHead, self).__init__()
+        self.transform = LxmertPredictionHeadTransform(config)
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(
+            bert_model_embedding_weights.size(1), bert_model_embedding_weights.size(0), bias=False
+        )
+        self.decoder.weight = bert_model_embedding_weights
+        self.bias = nn.Parameter(torch.zeros(bert_model_embedding_weights.size(0)))
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states) + self.bias
+        return hidden_states
+
+
+class LxmertVisualAnswerHead(nn.Module):
+    def __init__(self, config, num_answers):
+        super().__init__()
+        hid_dim = config.hidden_size
+        self.logit_fc = nn.Sequential(
+            nn.Linear(hid_dim, hid_dim * 2),
+            GeLU(),
+            LxmertLayerNorm(hid_dim * 2, eps=1e-12),
+            nn.Linear(hid_dim * 2, num_answers),
+        )
+
+    def forward(self, hidden_states):
+        return self.logit_fc(hidden_states)
+
+
+class LxmertVisualObjHead(nn.Module):
+    def __init__(self, config, visual_losses):
+        super().__init__()
+        self.transform = LxmertPredictionHeadTransform(config)
+
+        # Decide the use of visual losses
+        visual_losses = {}
+        if config.visual_obj_loss:
+            visual_losses["obj"] = {"shape": (-1,), "num": config.n_object_labels}
+        if config.visual_attr_loss:
+            visual_losses["attr"] = {"shape": (-1,), "num": config.n_attr_labels}
+        if config.visual_obj_loss:
+            visual_losses["feat"] = {"shape": (-1, 2048), "num": config.visual_feat_dim}
+        self.visual_losses = visual_losses
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder_dict = nn.ModuleDict(
+            {key: nn.Linear(config.hidden_size, self.visual_losses[key]["shape"]) for key in self.visual_losses}
+        )
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        output = {}
+        for key in self.visual_losses:
+            output[key] = self.decoder_dict[key](hidden_states)
+        return output
+
+
+class LxmertPreTrainingHeads(nn.Module):
+    def __init__(self, config, bert_model_embedding_weights):
+        super(LxmertPreTrainingHeads, self).__init__()
+        self.predictions = LxmertLMPredictionHead(config, bert_model_embedding_weights)
+        self.seq_relationship = nn.Linear(config.hidden_size, 2)
+
+    def forward(self, sequence_output, pooled_output):
+        prediction_scores = self.predictions(sequence_output)
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return prediction_scores, seq_relationship_score
+
+
+class LxmertPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = XxxConfig
-    load_tf_weights = load_tf_weights_in_xxx
-    base_model_prefix = "transformer"
+    config_class = LxmertConfig
+    load_tf_weights = load_tf_weights_in_lxmert
+    base_model_prefix = "lxmert"
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -189,56 +556,74 @@ class XxxPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, XxxLayerNorm):
+        elif isinstance(module, LxmertLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
 
-XXX_START_DOCSTRING = r"""    The XXX model was proposed in
-    `XXX: Pre-training of Deep Bidirectional Transformers for Language Understanding`_
-    by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. It's a bidirectional transformer
-    pre-trained using a combination of masked language modeling objective and next sentence prediction
-    on a large corpus comprising the Toronto Book Corpus and Wikipedia.
+class LxmertFeatureExtraction(LxmertPreTrainedModel):
+    """
+    Lxmert model for extracting features
+    """
+
+    def __init__(self, config):
+        """
+        :param config:
+        """
+        super().__init__(config)
+        self.bert = LxmertModel(config)
+        self.mode = config.mode
+        self.init_weights()
+
+    def forward(
+        self, input_ids, token_type_ids=None, attention_mask=None, visual_feats=None, visual_attention_mask=None
+    ):
+        feat_seq, pooled_output = self.bert(
+            input_ids,
+            token_type_ids,
+            attention_mask,
+            visual_feats=visual_feats,
+            visual_attention_mask=visual_attention_mask,
+        )
+        if "x" == self.mode:
+            return pooled_output
+        elif "x" in self.mode and ("l" in self.mode or "r" in self.mode):
+            return feat_seq, pooled_output
+        elif "l" in self.mode or "r" in self.mode:
+            return feat_seq
+
+
+LXMERT_START_DOCSTRING = r"""    The LXMERT model was proposed in
+    `LXMERT: Learning Cross-Modality Encoder Representations from Transformers
+    by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
+    pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
+    using a combination of masked language modeling, region of interest feature regression,
+    cross entropy loss for question answering attribute prediction, and object tag predicition.
+
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
 
-    .. _`XXX: Pre-training of Deep Bidirectional Transformers for Language Understanding`:
-        https://arxiv.org/abs/1810.04805
+    .. _`LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
+        https://arxiv.org/pdf/1908.07490.pdf
 
     .. _`torch.nn.Module`:
         https://pytorch.org/docs/stable/nn.html#module
 
     Parameters:
-        config (:class:`~transformers.XxxConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.LxmertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-XXX_INPUTS_DOCSTRING = r"""
+LXMERT_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
-            To match pre-training, XXX input sequence should be formatted with [CLS] and [SEP] tokens as follows:
-
-            (a) For sequence pairs:
-
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-
-                ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
-
-            (b) For single sequences:
-
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
-
-                ``token_type_ids:   0   0   0   0  0     0   0``
-
-            Xxx is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
-
-            Indices can be obtained using :class:`transformers.XxxTokenizer`.
+            To match pre-training, LXMERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            Indices can be obtained using :class:`transformers.LxmertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
@@ -249,63 +634,38 @@ XXX_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            (see `XXX: Pre-training of Deep Bidirectional Transformers for Language Understanding`_ for more details).
-        **position_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
-        **head_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(num_heads,)`` or ``(num_layers, num_heads)``:
-            Mask to nullify selected heads of the self-attention modules.
+        **visual_feats**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length, features_dim)``:
+            Pre-trained and instance-level vision features ROI-aligned and pooled from bounding boxes.
+        **visual_attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length)``:
+            Mask to avoid performing attention on padding token indices for visual features.
             Mask values selected in ``[0, 1]``:
-            ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        **inputs_embeds**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, embedding_dim)``:
-            Optionally, instead of passing ``input_ids`` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 """
 
 
 @add_start_docstrings(
-    "The bare Xxx Model transformer outputting raw hidden-states without any specific head on top.",
-    XXX_START_DOCSTRING,
-    XXX_INPUTS_DOCSTRING,
+    "The bare Lxmert Model transformer outputting raw hidden-states without any specific head on top.",
+    LXMERT_START_DOCSTRING,
+    LXMERT_INPUTS_DOCSTRING,
 )
-class XxxModel(XxxPreTrainedModel):
+class LxmertModel(LxmertPreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
-            Sequence of hidden-states at the output of the last layer of the model.
+
+        **(lang_feats, visn_feats)**: ``Tuple[torch.FloatTensor, Tuple[torch.FloatTensor]]`` of shapes
+        ``(batch_size, sequence_length, hidden_size)`` and  each element of the nested tuple being of shape
+        ``(batch_size, num_features, visual_feat_dim)`` and ``(batch_size, num_features, visual_pos_dim)`` respectively
+
         **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-            Last layer hidden-state of the first token of the sequence (classification token)
+            Last layer hidden-state of the first token of the sequence from the cross modality encoder(classification token)
             further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during Xxx pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = XxxTokenizer.from_pretrained('xxx-base-uncased')
-        model = XxxModel.from_pretrained('xxx-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids)
-        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
-
     """
 
     def __init__(self, config):
         super().__init__(config)
-
-        self.embeddings = XxxEmbeddings(config)
-        self.encoder = XxxEncoder(config)
-        self.pooler = XxxPooler(config)
-
+        self.embeddings = LxmertEmbeddings(config)
+        self.encoder = LxmertEncoder(config)
+        self.pooler = LxmertPooler(config)
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -314,46 +674,19 @@ class XxxModel(XxxPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
-    def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
+        self, input_ids, token_type_ids=None, attention_mask=None, visual_feats=None, visual_attention_mask=None
     ):
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
+            attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            token_type_ids = torch.zeros_like(input_ids)
 
         # We create a 3D attention mask from a 2D tensor mask.
-        # (this can be done with self.invert_attention_mask)
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -361,381 +694,181 @@ class XxxModel(XxxPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        # Process the visual attention mask
+        if visual_attention_mask is not None:
+            extended_visual_attention_mask = visual_attention_mask.unsqueeze(1).unsqueeze(2)
+            extended_visual_attention_mask = extended_visual_attention_mask.to(dtype=next(self.parameters()).dtype)
+            extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * -10000.0
+        else:
+            extended_visual_attention_mask = None
 
-        ##################################
-        # Replace this with your model code
-        embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        # Positional Word Embeddings
+        embedding_output = self.embeddings(input_ids, token_type_ids)
+
+        # Run Lxmert encoder
+        lang_feats, visn_feats = self.encoder(
+            embedding_output,
+            extended_attention_mask,
+            visn_feats=visual_feats,
+            visn_attention_mask=extended_visual_attention_mask,
         )
-        encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
-        sequence_output = encoder_outputs[0]
-        outputs = (sequence_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        pooled_output = self.pooler(lang_feats)
 
-        return outputs  # sequence_output, (hidden_states), (attentions)
+        return (lang_feats, visn_feats), pooled_output
 
 
 @add_start_docstrings(
-    """Xxx Model with a `language modeling` head on top. """, XXX_START_DOCSTRING, XXX_INPUTS_DOCSTRING
+    """Lxmert Model with a specified pre-training heads on top. """, LXMERT_START_DOCSTRING, LXMERT_INPUTS_DOCSTRING
 )
-class XxxForMaskedLM(XxxPreTrainedModel):
+class LxmertPretraining(LxmertPreTrainedModel):
     r"""
-        **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
+    **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        Indices of input sequence tokens in the vocabulary.
+        To match pre-training, LXMERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+        Indices can be obtained using :class:`transformers.LxmertTokenizer`.
+        See :func:`transformers.PreTrainedTokenizer.encode` and
+        :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+    **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        Mask to avoid performing attention on padding token indices.
+        Mask values selected in ``[0, 1]``:
+        ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+    **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        Segment token indices to indicate first and second portions of the inputs.
+        Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+        corresponds to a `sentence B` token
+    **visual_feats**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length, features_dim)``:
+        Pre-trained and instance-level vision features ROI-aligned and pooled from bounding boxes.
+    **pos**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length, visual_pos_dim)``:
+        the bounding box coordinate for each respective visual feature instance.
+    **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        Labels for computing the masked language modeling loss.
+        Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+        Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+        in ``[0, ..., config.vocab_size]``
+    **obj_labels**: (`optional`): ``Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]``
+        each key is named after each one of the visual losses and each element of the tuple is of the shape
+        ``(batch_size, num_features, num_objects/num_attrs)`` and ``(batch_size, num_features)``
+        for each the label id and the label score respectively
+    **matched_label**: (`optional`) ``Torch.Tensor`` of shape ``(batch_size,)`` an int [0,1] that represents
+    whether or not this text is correctly matching its associated image
+    **ans**: (`optional`) ``Torch.Tensor`` of shape ``(batch_size, num_qa_answers)`` a one hot represntation of the correct answer
+
+
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Masked language modeling loss.
-        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = XxxTokenizer.from_pretrained('xxx-base-uncased')
-        model = XxxForMaskedLM.from_pretrained('xxx-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
-        loss, prediction_scores = outputs[:2]
-
+        **total_loss**: ``torch.FloatTensor`` of shape ``(1,)``:
+            total loss as a simple sum from all the modeling objectives.
+        **losses**: ``Tuple[torch.FloatTensor]`` each of shape ``(1,)`` for each indivual loss
+        **answer_score**: ``Torch.FloatTensor`` the accuracy of the question answering loss
     """
 
     def __init__(self, config):
         super().__init__(config)
+        # Configuration
+        self.config = config
+        self.num_answers = config.num_answers
+        self.visual_loss_normalizer = config.visual_loss_normalizer
 
-        self.transformer = XxxModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
+        # Use of pre-training tasks
+        self.task_mask_lm = config.task_mask_lm
+        self.task_obj_predict = config.task_obj_predict
+        self.task_matched = config.task_matched
+        self.task_qa = config.task_qa
 
+        # Lxmert backbone
+        self.bert = LxmertModel(config)
+
+        # Pre-training heads
+        self.cls = LxmertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
+        if self.task_obj_predict:
+            self.obj_predict_head = LxmertVisualObjHead(config)
+        if self.task_qa:
+            self.answer_head = LxmertVisualAnswerHead(config, self.num_answers)
+
+        # Weight initialization
         self.init_weights()
 
-    def get_output_embeddings(self):
-        return self.lm_head
+        # Loss functions
+        self.loss_fcts = {
+            "l2": SmoothL1Loss(reduction="none"),
+            "visn_ce": CrossEntropyLoss(ignore_index=-1, reduction="none"),
+            "ce": CrossEntropyLoss(ignore_index=-1),
+        }
+
+        visual_losses = {}
+        if config.visual_obj_loss:
+            visual_losses["obj"] = {"shape": (-1,), "num": config.n_object_labels, "loss": "visn_ce"}
+        if config.visual_attr_loss:
+            visual_losses["attr"] = {"shape": (-1,), "num": config.n_attr_labels, "loss": "visn_ce"}
+        if config.visual_obj_loss:
+            visual_losses["feat"] = {"shape": (-1, 2048), "num": config.visual_feat_dim, "loss": "l2"}
+        self.visual_losses = visual_losses
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
+        input_ids,
         token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
+        attention_mask=None,
         masked_lm_labels=None,
+        visual_feats=None,
+        pos=None,
+        obj_labels=None,
+        matched_label=None,
+        ans=None,
     ):
 
-        outputs = self.transformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+        (lang_output, visn_output), pooled_output = self.bert(
+            input_ids, token_type_ids, attention_mask, visual_feats=(visual_feats, pos),
         )
 
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        lang_prediction_scores, cross_relationship_score = self.cls(lang_output, pooled_output)
+        if self.task_qa:
+            answer_score = self.answer_head(pooled_output)
+        else:
+            # This answer_score would not be used anywhere,
+            # just to keep a constant return function signature.
+            answer_score = pooled_output[0][0]
 
-        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
-        if masked_lm_labels is not None:
-            loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
-            outputs = (masked_lm_loss,) + outputs
-
-        return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
-
-
-@add_start_docstrings(
-    """Xxx Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
-    XXX_START_DOCSTRING,
-    XXX_INPUTS_DOCSTRING,
-)
-class XxxForSequenceClassification(XxxPreTrainedModel):
-    r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
-            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification (or regression if config.num_labels==1) loss.
-        **logits**: ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = XxxTokenizer.from_pretrained('xxx-base-uncased')
-        model = XxxForSequenceClassification.from_pretrained('xxx-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.transformer = XxxModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
-
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-    ):
-
-        outputs = self.transformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-        )
-
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-
-        if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
-
-        return outputs  # (loss), logits, (hidden_states), (attentions)
-
-
-@add_start_docstrings(
-    """Xxx Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    XXX_START_DOCSTRING,
-    XXX_INPUTS_DOCSTRING,
-)
-class XxxForTokenClassification(XxxPreTrainedModel):
-    r"""
-        **labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Classification loss.
-        **scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.num_labels)``
-            Classification scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = XxxTokenizer.from_pretrained('xxx-base-uncased')
-        model = XxxForTokenClassification.from_pretrained('xxx-base-uncased')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, scores = outputs[:2]
-
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.transformer = XxxModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-    ):
-
-        outputs = self.transformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-        )
-
-        sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
-            if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)[active_loss]
-                active_labels = labels.view(-1)[active_loss]
-                loss = loss_fct(active_logits, active_labels)
-            else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
-
-        return outputs  # (loss), scores, (hidden_states), (attentions)
-
-
-@add_start_docstrings(
-    """Xxx Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
-    XXX_START_DOCSTRING,
-    XXX_INPUTS_DOCSTRING,
-)
-class XxxForQuestionAnswering(XxxPreTrainedModel):
-    r"""
-        **start_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        **end_positions**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size,)``:
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        **start_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
-            Span-start scores (before SoftMax).
-        **end_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
-            Span-end scores (before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = XxxTokenizer.from_pretrained('xxx-base-uncased')
-        model = XxxForQuestionAnswering.from_pretrained('xxx-large-uncased-whole-word-masking-finetuned-squad')
-        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_text = "[CLS] " + question + " [SEP] " + text + " [SEP]"
-        input_ids = tokenizer.encode(input_text)
-        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))]
-        start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-        print(' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1]))
-        # a nice puppet
-
-
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.transformer = XxxModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-    ):
-
-        outputs = self.transformer(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        outputs = (start_logits, end_logits,) + outputs[2:]
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-            outputs = (total_loss,) + outputs
-
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        total_loss = 0.0
+        losses = ()
+        if masked_lm_labels is not None and self.task_mask_lm:
+            masked_lm_loss = self.loss_fcts["ce"](
+                lang_prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1)
+            )
+            total_loss += masked_lm_loss
+            losses += (masked_lm_loss.detach(),)
+        if matched_label is not None and self.task_matched:
+            matched_loss = self.loss_fcts["ce"](cross_relationship_score.view(-1, 2), matched_label.view(-1))
+            total_loss += matched_loss
+            losses += (matched_loss.detach(),)
+        if obj_labels is not None and self.task_obj_predict:
+            total_visn_loss = 0.0
+            visn_prediction_scores_dict = self.obj_predict_head(visn_output)
+            for key, key_info in self.visual_losses.items():
+                label, mask_conf = obj_labels[key]
+                output_dim = key_info["num"]
+                loss_fct_name = key_info["loss"]
+                label_shape = key_info["shape"]
+                weight = self.visual_loss_normalizer
+                visn_loss_fct = self.loss_fcts[loss_fct_name]
+                visn_prediction_scores = visn_prediction_scores_dict[key]
+                visn_loss = visn_loss_fct(visn_prediction_scores.view(-1, output_dim), label.view(*label_shape),)
+                if visn_loss.dim() > 1:  # Regression Losses
+                    visn_loss = visn_loss.mean(1)
+                visn_loss = (visn_loss * mask_conf.view(-1)).mean() * weight
+                total_visn_loss += visn_loss
+                losses += (visn_loss.detach(),)
+            total_loss += total_visn_loss
+        if ans is not None and self.task_qa:
+            answer_loss = self.loss_fcts["ce"](answer_score.view(-1, self.num_answers), ans.view(-1))
+            # exclude "*2" here to match the effect of QA losses.
+            # Previous: (loss *0) for 6 epochs, (loss *2) for 6 epochs.   (Used 10 instead of 6 in EMNLP paper)
+            # Now     : (loss *1) for 12 epochs
+            #
+            # * 2       # Multiply by 2 because > half of the data will not have label
+            total_loss += answer_loss
+            losses += (answer_loss.detach(),)
+        return total_loss, torch.stack(losses).unsqueeze(0), answer_score.detach()

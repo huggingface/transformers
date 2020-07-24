@@ -30,6 +30,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    LxmertConfig,
     MBartConfig,
     OpenAIGPTConfig,
     ReformerConfig,
@@ -55,6 +56,7 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer
+from .tokenization_lxmert import LxmertTokenizer
 from .tokenization_marian import MarianTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
@@ -95,6 +97,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (LxmertConfig, (LxmertTokenizer, None)),
     ]
 )
 
@@ -124,6 +127,7 @@ class AutoTokenizer:
             - `xlm`: XLMTokenizer (XLM model)
             - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `lxmert`: LxmertTokenizer (Lxmert model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -159,6 +163,7 @@ class AutoTokenizer:
             - `xlm`: XLMTokenizer (XLM model)
             - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `lxmert`: LxmertTokenizer (Lxmert model)
 
         Params:
             pretrained_model_name_or_path: either:

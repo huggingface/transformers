@@ -36,6 +36,7 @@ class LXMERTConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=768,
         num_attention_heads=12,
+        num_answers=2,
         intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -69,6 +70,7 @@ class LXMERTConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
+        self.num_answers = num_answers
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob

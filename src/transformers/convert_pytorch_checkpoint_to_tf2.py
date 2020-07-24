@@ -28,6 +28,7 @@ from transformers import (
     ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -44,6 +45,7 @@ from transformers import (
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
+    LxmertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
     T5Config,
@@ -58,11 +60,13 @@ from transformers import (
     TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
+    TFLxmertPretraining,
     TFOpenAIGPTLMHeadModel,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
     TFT5ForConditionalGeneration,
     TFTransfoXLLMHeadModel,
+    TFVisualFeatEncoder,
     TFXLMRobertaForMaskedLM,
     TFXLMWithLMHeadModel,
     TFXLNetLMHeadModel,
@@ -100,6 +104,8 @@ if is_torch_available():
         AlbertForPreTraining,
         T5ForConditionalGeneration,
         ElectraForPreTraining,
+        LxmertPretraining,
+        VisualFeatEncoder,
     )
 
 
@@ -181,6 +187,14 @@ MODEL_CLASSES = {
     "albert": (AlbertConfig, TFAlbertForPreTraining, AlbertForPreTraining, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "t5": (T5Config, TFT5ForConditionalGeneration, T5ForConditionalGeneration, T5_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "electra": (ElectraConfig, TFElectraForPreTraining, ElectraForPreTraining, ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "lxmert": (
+        LxmertConfig,
+        LxmertPretraining,
+        TFLxmertPretraining,
+        VisualFeatEncoder,
+        TFVisualFeatEncoder,
+        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
 }
 
 

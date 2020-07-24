@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert XXX checkpoint."""
+"""Convert LXMERT checkpoint."""
 
 
 import argparse
@@ -20,7 +20,7 @@ import logging
 
 import torch
 
-from transformers import XxxConfig, XxxForPreTraining, load_tf_weights_in_xxx
+from transformers import LxmertConfig, LxmertForPreTraining, load_tf_weights_in_lxmert
 
 
 logging.basicConfig(level=logging.INFO)
@@ -28,12 +28,12 @@ logging.basicConfig(level=logging.INFO)
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = XxxConfig.from_json_file(config_file)
+    config = LxmertConfig.from_json_file(config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = XxxForPreTraining(config)
+    model = LxmertForPreTraining(config)
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_xxx(model, config, tf_checkpoint_path)
+    load_tf_weights_in_lxmert(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))

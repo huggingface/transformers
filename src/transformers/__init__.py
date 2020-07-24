@@ -33,6 +33,7 @@ from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
@@ -148,6 +149,7 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_lxmert import LxmertBertTokenizerFast, LxmertTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
@@ -417,6 +419,20 @@ if is_torch_available():
         RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
+    from .modeling_lxmert import (
+        LxmertPretraining,
+        LxmertModel,
+        LxmertFeatureExtraction,
+        LxmertPreTrainedModel,
+        LxmertVisualAnswerHead,
+        LxmertVisualObjHead,
+        LxmertPreTrainingHeads,
+        LxmertPredictionHeadTransform,
+        LxmertEncoder,
+        LxmertXLayer,
+        VisaulFeatEncoder,
+    )
+
     # Optimization
     from .optimization import (
         AdamW,
@@ -660,6 +676,19 @@ if is_tf_available():
         TFXLNetMainLayer,
         TFXLNetModel,
         TFXLNetPreTrainedModel,
+    )
+
+    from .modeling_tf_lxmert import (
+        TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFVisualFeatEncoder,
+        TFLxmertXLayer,
+        TFLxmertMainLayer,
+        TFLxmertEncoder,
+        TFLxmertPreTrainedModel,
+        TFLxmertPretraining,
+        TFLxmertPreTrainingHeads,
+        TFLxmertVisualObjHead,
+        TFLxmertVisualAnswerHead,
     )
 
     # Optimization
