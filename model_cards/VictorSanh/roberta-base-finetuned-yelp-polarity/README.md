@@ -2,11 +2,6 @@
 language: en
 datasets:
 - yelp_polarity
-tags:
-- text-classification
-- pytorch
-- roberta
-- en
 ---
 
 # RoBERTa-base-finetuned-yelp-polarity
