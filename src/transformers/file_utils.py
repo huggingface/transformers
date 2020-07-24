@@ -199,7 +199,7 @@ RETURN_INTRODUCTION = r"""
 
 def _get_indent(t):
     """Returns the indentation in the first line of t"""
-    search = re.search(r'^(\s*)\S', t)
+    search = re.search(r"^(\s*)\S", t)
     return "" if search is None else search.groups()[0]
 
 
@@ -209,7 +209,7 @@ def _convert_output_args_doc(output_args_doc):
     indent = _get_indent(output_args_doc)
     blocks = []
     current_block = ""
-    for line in output_args_doc.split('\n'):
+    for line in output_args_doc.split("\n"):
         # If the indent is the same as the beginning, the line is the name of new arg.
         if _get_indent(line) == indent:
             if len(current_block) > 0:
@@ -223,10 +223,10 @@ def _convert_output_args_doc(output_args_doc):
 
     # Format each block for proper rendering
     for i in range(len(blocks)):
-        blocks[i] = re.sub(r'^(\s+)(\S+)(\s+)', r'\1- **\2**\3', blocks[i])
-        blocks[i] = re.sub(r':\s*\n\s*(\S)', r' -- \1', blocks[i])
-    
-    return '\n'.join(blocks)
+        blocks[i] = re.sub(r"^(\s+)(\S+)(\s+)", r"\1- **\2**\3", blocks[i])
+        blocks[i] = re.sub(r":\s*\n\s*(\S)", r" -- \1", blocks[i])
+
+    return "\n".join(blocks)
 
 
 def _prepare_output_docstrings(output_type, config_class):
