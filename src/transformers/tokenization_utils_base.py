@@ -1309,6 +1309,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             for key, value in special_tokens_map.items():
                 if isinstance(value, dict):
                     value = AddedToken(**value)
+                elif isinstance(value, list):
+                    value = [
+                        AddedToken(**token) if isinstance(token, dict)
+                        else token for token in value
+                    ]
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
@@ -1371,6 +1376,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             for key, value in self.special_tokens_map_extended.items():
                 if isinstance(value, AddedToken):
                     write_dict[key] = value.__getstate__()
+                elif isinstance(value, list):
+                    write_dict[key] = [
+                        token.__getstate__() if isinstance(token, AddedToken)
+                        else token for token in value
+                    ]
                 else:
                     write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
