@@ -89,7 +89,7 @@ class TFTrainer:
             self.tb_writer = tf.summary.create_file_writer(self.args.logging_dir)
 
         if is_wandb_available():
-            self._setup_wandb()
+            self.setup_wandb()
         else:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
@@ -101,6 +101,8 @@ class TFTrainer:
     def get_train_tfdataset(self) -> tf.data.Dataset:
         """
         Returns the training :class:`~tf.data.Dataset`.
+
+        Subclass and override this method if you want to inject some custom behavior.
         """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
@@ -131,6 +133,8 @@ class TFTrainer:
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
                 If provided, will override `self.eval_dataset`.
+
+        Subclass and override this method if you want to inject some custom behavior.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
@@ -150,6 +154,8 @@ class TFTrainer:
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`): The dataset to use.
+
+        Subclass and override this method if you want to inject some custom behavior.
         """
         ds = test_dataset.batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
 
@@ -162,7 +168,7 @@ class TFTrainer:
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
-        TFTrainer's init through :obj:`optimizers`, or override this method in a subclass.
+        TFTrainer's init through :obj:`optimizers`, or subclass and override this method.
         """
         if self.optimizers is not None:
             return self.optimizers
@@ -177,12 +183,12 @@ class TFTrainer:
 
         return optimizer, scheduler
 
-    def _setup_wandb(self):
+    def setup_wandb(self):
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
-        One can override this method to customize the setup if needed.  Find more information at https://docs.wandb.com/huggingface
-        You can also override the following environment variables:
+        One can subclass and override this method to customize the setup if needed. Find more information
+        `here <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
             WANDB_PROJECT:
@@ -190,21 +196,39 @@ class TFTrainer:
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
         """
+        if hasattr(self, "_setup_wandb"):
+            warnings.warn(
+                "The `_setup_wandb` method is deprecated and won't be called in a future version, define `setup_wandb` in your subclass.",
+                FutureWarning,
+            )
+            return self._setup_wandb()
+
         logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
         wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
 
     @tf.function
-    def _evaluate_steps(self, per_replica_features, per_replica_labels):
+    def prediction_step(self, per_replica_features: tf.Tensor, per_replica_labels: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
         """
-        One step evaluation across replica.
+        Perform an evaluation step across replica.
+
+        Subclass and override to inject custom behavior.
+
         Args:
-          per_replica_features: the batched features.
-          per_replica_labels: the batched labels.
+            per_replica_features (:obj:`tf.Tensor`): The batched features.
+            per_replica_label (:obj:`tf.Tensor`): The batched labels.
+
         Returns:
-          The loss corresponding to the given batch.
+            :obj:`Tuple[tf.Tensor, tf.Tensor]`: The loss and logits corresponding to the given batch.
         """
+        if hasattr(self, "_evaluation_steps"):
+            warnings.warn(
+                "The `_evaluation_steps` method is deprecated and won't be called in a future version, define `prediction_step` in your subclass.",
+                FutureWarning,
+            )
+            return self._evaluation_steps()
+
         per_replica_loss, per_replica_logits = self.args.strategy.experimental_run_v2(
-            self._run_model, args=(per_replica_features, per_replica_labels, False)
+            self.run_model, args=(per_replica_features, per_replica_labels, False)
         )
 
         try:
@@ -214,14 +238,21 @@ class TFTrainer:
 
         return reduced_loss, per_replica_logits
 
-    def _prediction_loop(
+    def prediction_loop(
         self, dataset: tf.data.Dataset, description: str, prediction_loss_only: Optional[bool] = None
     ) -> PredictionOutput:
         """
-        Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
+        Prediction/evaluation loop, shared by :func:`~transformers.TFTrainer.evaluate` and
+        :func:`~transformers.TFTrainer.predict`.
 
         Works both with or without labels.
         """
+        if hasattr(self, "_prediction_loop"):
+            warnings.warn(
+                "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
+                FutureWarning,
+            )
+            return self._prediction_loop()
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
 
@@ -239,7 +270,7 @@ class TFTrainer:
 
         for features, labels in dataset:
             step = tf.convert_to_tensor(step, dtype=tf.int64)
-            loss, logits = self._evaluate_steps(features, labels)
+            loss, logits = self.prediction_step(features, labels)
             loss = tf.reduce_mean(loss)
 
             if not prediction_loss_only:
@@ -322,7 +353,7 @@ class TFTrainer:
         """
         eval_ds = self.get_eval_tfdataset(eval_dataset)
 
-        output = self._prediction_loop(eval_ds, description="Evaluation")
+        output = self.prediction_loop(eval_ds, description="Evaluation")
 
         logs = {**output.metrics}
         logs["epoch"] = self.epoch_logging
@@ -409,7 +440,7 @@ class TFTrainer:
             # Reset the past mems state at the beginning of each epoch if necessary.
             if self.args.past_index >= 0:
                 self._past = None
-            for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
+            for step, training_loss in enumerate(self.training_steps(train_ds, optimizer)):
                 self.global_step = iterations.numpy()
                 self.epoch_logging = epoch_iter - 1 + (step + 1) / steps_per_epoch
 
@@ -452,10 +483,19 @@ class TFTrainer:
             # Clean the state at the end of training
             delattr(self, "_past")
 
-    def _training_steps(self, ds, optimizer):
+    def training_steps(self, ds, optimizer):
         """
         Returns a generator over training steps (i.e. parameters update).
+
+        Subclass and override to inject custom behavior.
         """
+        if hasattr(self, "_training_steps"):
+            warnings.warn(
+                "The `_training_steps` method is deprecated and won't be called in a future version, define `training_steps` in your subclass.",
+                FutureWarning,
+            )
+            return self._training_steps()
+        
         for i, loss in enumerate(self._accumulate_next_gradients(ds)):
             if i % self.args.gradient_accumulation_steps == 0:
                 self._apply_gradients(optimizer)
@@ -508,7 +548,7 @@ class TFTrainer:
 
     def _forward(self, features, labels):
         """Forwards a training example and accumulates the gradients."""
-        per_example_loss, _ = self._run_model(features, labels, True)
+        per_example_loss, _ = self.run_model(features, labels, True)
         gradients = tf.gradients(per_example_loss, self.model.trainable_variables)
         gradients = [
             g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
@@ -518,14 +558,24 @@ class TFTrainer:
 
         return per_example_loss
 
-    def _run_model(self, features, labels, training):
+    def run_model(self, features, labels, training):
         """
         Computes the loss of the given features and labels pair.
+
+        Subclass and override this method if you want to inject some custom behavior.
+
         Args:
           features: the batched features.
           labels: the batched labels.
           training: run the model in training mode or not
         """
+        if hasattr(self, "_run_model"):
+            warnings.warn(
+                "The `_run_model` method is deprecated and won't be called in a future version, define `run_model` in your subclass.",
+                FutureWarning,
+            )
+            return self._run_model()
+    
         if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
             features["mems"] = self._past
         if isinstance(labels, (dict)):
@@ -560,7 +610,7 @@ class TFTrainer:
         """
         test_ds = self.get_test_tfdataset(test_dataset)
 
-        return self._prediction_loop(test_ds, description="Prediction")
+        return self.prediction_loop(test_ds, description="Prediction")
 
     def save_model(self, output_dir: Optional[str] = None):
         """

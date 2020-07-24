@@ -327,7 +327,7 @@ class Trainer:
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
-        Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
+        Trainer's init through :obj:`optimizers`, or subclass and override this method.
         """
         if self.optimizers is not None:
             return self.optimizers
@@ -857,9 +857,13 @@ class Trainer:
         self, dataloader: DataLoader, description: str, prediction_loss_only: Optional[bool] = None
     ) -> PredictionOutput:
         """
-        Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
+        Prediction/evaluation loop, shared by :func:`~transformers.Trainer.evaluate` and
+        :func:`~transformers.Trainer.predict`.
 
         Works both with or without labels.
+
+        Args:
+            dataloader (:obj:`DataLoader`)
         """
         if hasattr(self, "_prediction_loop"):
             warnings.warn(
