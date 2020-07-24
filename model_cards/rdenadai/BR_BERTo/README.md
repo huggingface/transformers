@@ -1,3 +1,15 @@
+---
+language: "UTF-8"
+tags:
+- pytorch
+- roberta
+- lm-head
+- masked-lm
+- portuguese
+- brazil
+- pt_BR
+---
+
 # BR_BERTo
 
 Portuguese (Brazil) model for text inference.
