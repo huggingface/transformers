@@ -10,6 +10,7 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForSequenceClassification,
+        AutoModelForMaskedLM,
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
         GlueDataset,
@@ -158,15 +159,16 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 if is_torch_available():
 
     class SampleIterableDataset(IterableDataset):
-        def __init__(self, file_path):
-            self.file_path = file_path
+        """
+        Criteria is not whether it is IterableDataset or not, criteria is whether __len__ is implemented
+        """
 
-        def parse_file(self):
-            f = open(self.file_path, "r")
-            return f.readlines()
+        def __init__(self, file_path, tokenizer):
+            self.ds = TextDataset(file_path=file_path, tokenizer=tokenizer, block_size=64)
 
         def __iter__(self):
-            return iter(self.parse_file())
+            for i in range(len(self.ds)):
+                yield self.ds[i]
 
 
 @require_torch
@@ -195,10 +197,14 @@ class TrainerIntegrationTest(unittest.TestCase):
 
     def test_trainer_iterable_dataset(self):
         MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-        train_dataset = SampleIterableDataset(PATH_SAMPLE_TEXT)
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
-        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset)
+        model = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        train_dataset = SampleIterableDataset(file_path=PATH_SAMPLE_TEXT, tokenizer=tokenizer)
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2, eval_steps=2)
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+        trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
+        self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
         trainer.train()
+        trainer.predict(train_dataset)
