@@ -8,8 +8,9 @@ logger = logging.getLogger(__name__)
 
 class MPNetConfig(BertConfig):
     r"""
-        :class:`~transformers.XxxConfig` is the configuration class to store the configuration of a
-        `XxxModel`.
+        :class:`~transformers.MPNetConfig` is the configuration class to store the configuration of a
+        `MPNetModel`.
+
         Arguments:
             vocab_size: Vocabulary size of `inputs_ids` in `XxxModel`.
             hidden_size: Size of the encoder layers and the pooler layer.

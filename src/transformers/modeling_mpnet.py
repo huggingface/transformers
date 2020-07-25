@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model. """
+"""PyTorch MPNet model. """
 
 
 import logging
@@ -24,7 +24,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import gelu
 from .configuration_bert import BertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
@@ -39,7 +39,7 @@ from .modeling_bert import (
     BertModel
     
 )
-from .modeling_roberta import RobertaLMHead, create_position_ids_from_input_ids
+from .modeling_roberta import RobertaLMHead
 
 
 logger = logging.getLogger(__name__)
@@ -398,3 +398,16 @@ class MPNetForQuestionAnswering(BertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs 
+
+
+def create_position_ids_from_input_ids(input_ids, padding_idx):
+    """ Replace non-padding symbols with their position numbers. Position numbers begin at
+    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
+    `utils.make_positions`.
+    :param torch.Tensor x:
+    :return torch.Tensor:
+    """
+    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+    mask = input_ids.ne(padding_idx).int()
+    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
+    return incremental_indices.long() + padding_idx
