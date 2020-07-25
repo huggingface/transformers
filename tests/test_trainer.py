@@ -1,5 +1,7 @@
 import unittest
 
+import pytest
+
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
 from transformers.testing_utils import require_torch
 
@@ -196,15 +198,50 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertEqual(len(dataset), 31)
 
     def test_trainer_iterable_dataset(self):
+        # Simulate Language Modeling with an IterableDataset, with no __len__ method
+        # Pick-up a tiny model, so it works on CPU
         MODEL_ID = "sshleifer/tiny-distilbert-base-cased"
         model = AutoModelForMaskedLM.from_pretrained(MODEL_ID)
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         train_dataset = SampleIterableDataset(file_path=PATH_SAMPLE_TEXT, tokenizer=tokenizer)
-        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2, eval_steps=2)
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
+
+        # 5990 iterable dataset = no __len__ method
+        # 5990 - Train with iterable dataset, no __len__
+        training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
         trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+        trainer.train()
+
+        # 5829
         loader = trainer.get_train_dataloader()
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
-        trainer.train()
-        trainer.predict(train_dataset)
+
+        # 5990 - Exception if giving iterable dataset and no max_steps
+        with pytest.raises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+            _ = Trainer(model=model, args=training_args, train_dataset=train_dataset, data_collator=data_collator)
+
+        # 5990 - Exception if eval_dataset is iterable in __init__
+        with pytest.raises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True, max_steps=2)
+            _ = Trainer(
+                model=model,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=train_dataset,
+                data_collator=data_collator,
+            )
+
+        # 5990 - Exception if predicting with iterable dataset
+        with pytest.raises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
+            trainer.predict(train_dataset)
+
+        # 5990 - Exception if evaluating with iterable dataset
+        with pytest.raises(ValueError):
+            training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
+            trainer = Trainer(model=model, args=training_args, data_collator=data_collator)
+            trainer.evaluate(train_dataset)

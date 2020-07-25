@@ -229,7 +229,7 @@ class Trainer:
         # Some warning for the user related to the usage of datasets that do not implement __len__
         if args.max_steps > 0:
             logger.warning("max_steps is given, it will override any value given in num_train_epochs")
-        if not isinstance(train_dataset, collections.abc.Sized) and args.max_steps == 0:
+        if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
@@ -269,7 +269,7 @@ class Trainer:
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
         if not isinstance(eval_dataset, collections.abc.Sized):
-            return None
+            raise ValueError("eval_dataset must implement __len__")
         elif is_torch_tpu_available():
             return SequentialDistributedSampler(eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
         elif self.args.local_rank != -1:
@@ -848,8 +848,7 @@ class Trainer:
 
         The calling script will be responsible for providing a method to compute metrics, as they are
         task-dependent (pass it to the init :obj:`compute_metrics` argument).
-        If :obj:`eval_dataset` does not implement method :obj:`__len__`, then the :obj:`eval_steps` attribute of
-        :class:`TrainingArguments` will be used to determine the number of steps.
+        :obj:`eval_dataset` must implement method :obj:`__len__`.
 
         You can also subclass and override this method to inject custom behavior.
 
@@ -859,6 +858,9 @@ class Trainer:
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
+        if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
+            raise ValueError("eval_dataset must implement __len__")
+
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
@@ -877,8 +879,7 @@ class Trainer:
 
         Depending on the dataset and your use case, your test dataset may contain labels.
         In that case, this method will also return metrics, like in :obj:`evaluate()`.
-        If :obj:`test_dataset` does not implement method :obj:`__len__`, then the :obj:`eval_steps` attribute of
-        :class:`TrainingArguments` will be used to determine the number of steps.
+        :obj:`test_dataset` must implement method :obj:`__len__`
 
         Args:
             test_dataset (:obj:`Dataset`):
@@ -892,6 +893,8 @@ class Trainer:
             metrics (:obj:`Dict[str, float]`, `optional`):
                 The potential dictionary of metrics (if the dataset contained labels).
         """
+        if not isinstance(test_dataset, collections.abc.Sized):
+            raise ValueError("test_dataset must implement __len__")
         test_dataloader = self.get_test_dataloader(test_dataset)
 
         return self.prediction_loop(test_dataloader, description="Prediction")
@@ -911,7 +914,8 @@ class Trainer:
             )
             return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
 
-        is_dataset_sized = isinstance(dataloader.dataset, collections.abc.Sized)
+        if not isinstance(dataloader.dataset, collections.abc.Sized):
+            raise ValueError("dataset must implement __len__")
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
 
         model = self.model
@@ -924,7 +928,7 @@ class Trainer:
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
 
         batch_size = dataloader.batch_size
-        num_examples = self.num_examples(dataloader) if is_dataset_sized else self.args.eval_steps * batch_size
+        num_examples = self.num_examples(dataloader)
         logger.info("***** Running %s *****", description)
         logger.info("  Num examples = %d", num_examples)
         logger.info("  Batch size = %d", batch_size)
@@ -939,7 +943,6 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        eval_steps = 0
         for inputs in tqdm(dataloader, desc=description):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             if loss is not None:
@@ -948,9 +951,6 @@ class Trainer:
                 preds = logits if preds is None else torch.cat((preds, logits), dim=0)
             if labels is not None:
                 label_ids = labels if label_ids is None else torch.cat((label_ids, labels), dim=0)
-            eval_steps += 1
-            if not is_dataset_sized and eval_steps >= self.args.eval_steps:
-                break
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of the evaluation loop
