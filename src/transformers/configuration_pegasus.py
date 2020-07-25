@@ -33,21 +33,21 @@ class PegasusConfig(PretrainedConfig):
     model_type = "pegasus"
 
     def __init__(
-            self,
-            vocab_size=96000,
-            max_input_len=512,
-            max_target_len=256,
-            max_decode_len=256,
-            hidden_size=1024,
-            ffn_dim=4096,
-            num_heads=16,
-            num_encoder_layers=16,
-            num_decoder_layers=16,
-            dropout=0.1,
-            is_encoder_decoder=True,
-            pad_token_id=0,
-            eos_token_id=1,
-            **kwargs
+        self,
+        vocab_size=96000,
+        max_input_len=512,
+        max_target_len=256,
+        max_decode_len=256,
+        hidden_size=1024,
+        ffn_dim=4096,
+        num_heads=16,
+        num_encoder_layers=16,
+        num_decoder_layers=16,
+        dropout=0.1,
+        is_encoder_decoder=True,
+        pad_token_id=0,
+        eos_token_id=1,
+        **kwargs
     ):
         super().__init__(
             pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_encoder_decoder=is_encoder_decoder, **kwargs,
