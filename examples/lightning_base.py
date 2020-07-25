@@ -194,7 +194,7 @@ class BaseTransformer(pl.LightningModule):
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
-        lrs = {f"lr_group_{i}": param['lr'] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
+        lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
         pl_module.logger.log_metrics(lrs)
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
@@ -228,10 +228,7 @@ def add_generic_args(parser, root_dir) -> None:
     )
 
     parser.add_argument(
-        "--gpus",
-        default=0,
-        type=int,
-        help="The number of GPUs allocated for this, it is by default 0 meaning none",
+        "--gpus", default=0, type=int, help="The number of GPUs allocated for this, it is by default 0 meaning none",
     )
 
     parser.add_argument(

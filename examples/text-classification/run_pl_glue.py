@@ -3,9 +3,9 @@ import glob
 import logging
 import os
 import time
+from argparse import Namespace
 
 import numpy as np
-from argparse import Namespace
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -44,7 +44,7 @@ class GLUETransformer(BaseTransformer):
         outputs = self(**inputs)
         loss = outputs[0]
 
-        #tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
+        # tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         tensorboard_logs = {"loss": loss}
         return {"loss": loss, "log": tensorboard_logs}
 
