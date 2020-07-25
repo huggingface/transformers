@@ -194,6 +194,8 @@ class BaseTransformer(pl.LightningModule):
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
+        self.lr_scheduler = trainer.lr_schedulers[0]["scheduler"]
+
         lrs = {f"lr_group_{i}": lr for i, lr in enumerate(self.lr_scheduler.get_lr())}
         pl_module.logger.log_metrics(lrs)
 
@@ -240,7 +242,8 @@ def add_generic_args(parser, root_dir) -> None:
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-    parser.add_argument("--n_tpu_cores", dest="tpu_cores", type=int, default=0)
+    parser.add_argument("--n_tpu_cores", dest="tpu_cores", type=int)
+    parser.add_argument("--n_gpus", dest="gpus", type=int, default=0, help="Whether to run on multiple gpus.")
     parser.add_argument("--max_grad_norm", dest="gradient_clip_val", default=1.0, type=float, help="Max gradient norm")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")

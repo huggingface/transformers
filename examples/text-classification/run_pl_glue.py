@@ -33,6 +33,8 @@ class GLUETransformer(BaseTransformer):
         return self.model(**inputs)
 
     def training_step(self, batch, batch_idx):
+        self.lr_scheduler = self.trainer.lr_schedulers[0]["scheduler"]
+
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
 
         if self.config.model_type != "distilbert":
@@ -94,6 +96,10 @@ class GLUETransformer(BaseTransformer):
             batch_size=batch_size,
             shuffle=True,
         )
+
+    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
+        # XXX: currently ignores the shuffle arg
+        return self.load_dataset(type_path, batch_size)
 
     def validation_step(self, batch, batch_idx):
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
