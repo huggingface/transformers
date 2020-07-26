@@ -203,7 +203,7 @@ class Trainer:
             )
         if is_wandb_available():
             self.setup_wandb()
-        else:
+        elif os.environ.get("WANDB_DISABLED") != "true":
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
