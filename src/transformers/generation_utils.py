@@ -90,7 +90,10 @@ class GenerationMixin:
 
         if bad_words_ids is not None:
             # calculate a list of banned tokens according to bad words
-            banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
+            banned_tokens = calc_banned_bad_words_ids(input_ids.tolist(), bad_words_ids)
+            banned_mask = torch.zeros_like(scores)
+            banned_mask[torch.arange(banned_mask.size(0), dtype=torch.long), banned_tokens] = 1
+            scores.masked_fill_(banned_mask.bool(), -float("inf"))
 
             for i, banned_tokens in enumerate(banned_tokens):
                 scores[i, banned_tokens] = -float("inf")
@@ -893,7 +896,7 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
                 bad_words_ids
             )
 
-            if _tokens_match(prev_input_ids_slice.tolist(), banned_token_seq[:-1]) is False:
+            if _tokens_match(prev_input_ids_slice, banned_token_seq[:-1]) is False:
                 # if tokens do not match continue
                 continue
 
