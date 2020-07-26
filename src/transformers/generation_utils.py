@@ -89,14 +89,13 @@ class GenerationMixin:
                 scores[i, banned_tokens] = -float("inf")
 
         if bad_words_ids is not None:
+            # Exclude EOS token (already processed)
+            bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
             # calculate a list of banned tokens according to bad words
             banned_tokens = calc_banned_bad_words_ids(input_ids.tolist(), bad_words_ids)
             banned_mask = torch.zeros_like(scores)
             banned_mask[torch.arange(banned_mask.size(0), dtype=torch.long), banned_tokens] = 1
             scores.masked_fill_(banned_mask.bool(), -float("inf"))
-
-            for i, banned_tokens in enumerate(banned_tokens):
-                scores[i, banned_tokens] = -float("inf")
 
         return scores
 
