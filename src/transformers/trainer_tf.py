@@ -1,15 +1,14 @@
 """Tensorflow trainer class."""
 
+import datetime
 import logging
 import math
 import os
 import sys
 from typing import Callable, Dict, Optional, Tuple
-import datetime
 
 import numpy as np
 import tensorflow as tf
-
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
@@ -24,8 +23,12 @@ if is_wandb_available():
 logger = logging.getLogger(__name__)
 
 
-if (*map(int, tf.__version__.split('.')),) < (2, 2, 0):
-    logger.info("You need to run the TensorFlow trainer with at least the version 2.2.0, your version is {}".format(tf.__version__))
+if (*map(int, tf.__version__.split(".")),) < (2, 2, 0):
+    logger.info(
+        "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is {}".format(
+            tf.__version__
+        )
+    )
     sys.exit(1)
 
 
@@ -227,8 +230,12 @@ class TFTrainer:
         wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
 
     def _prediction_loop(
-        self, dataset: tf.data.Dataset, steps: int, num_examples: int, description: str,
-        prediction_loss_only: Optional[bool] = None
+        self,
+        dataset: tf.data.Dataset,
+        steps: int,
+        num_examples: int,
+        description: str,
+        prediction_loss_only: Optional[bool] = None,
     ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
@@ -347,6 +354,7 @@ class TFTrainer:
 
     def _create_test_routines(self):
         with self.args.strategy.scope():
+
             def test_step(features, labels):
                 per_example_loss, logits = self._run_model(features, labels, False)
 
@@ -382,9 +390,7 @@ class TFTrainer:
             else:
                 approx = math.ceil
 
-            self.steps_per_epoch = approx(
-                self.num_train_examples / self.total_train_batch_size
-            )
+            self.steps_per_epoch = approx(self.num_train_examples / self.total_train_batch_size)
             t_total = self.steps_per_epoch * self.args.num_train_epochs
 
         with self.args.strategy.scope():
@@ -467,12 +473,15 @@ class TFTrainer:
                                 name="training", step=self.global_step, profiler_outdir=self.args.logging_dir
                             )
 
-                    if self.global_step > 0 and self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
+                    if (
+                        self.global_step > 0
+                        and self.args.evaluate_during_training
+                        and self.global_step % self.args.eval_steps == 0
+                    ):
                         self.evaluate()
 
-                    if (
-                        (self.global_step > 0 and self.global_step % self.args.logging_steps == 0)
-                        or (self.global_step == 1 and self.args.logging_first_step)
+                    if (self.global_step > 0 and self.global_step % self.args.logging_steps == 0) or (
+                        self.global_step == 1 and self.args.logging_first_step
                     ):
                         logs = {}
                         logs["loss"] = training_loss.numpy()
@@ -501,6 +510,7 @@ class TFTrainer:
 
     def _create_training_routines(self):
         with self.args.strategy.scope():
+
             def training_step(features, labels):
                 per_example_loss, _ = self._run_model(features, labels, True)
                 scaled_loss = per_example_loss / self.total_train_batch_size
@@ -524,15 +534,20 @@ class TFTrainer:
                     self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
                 else:
                     for _ in tf.range(self.args.gradient_accumulation_steps):
-                        reduced_features = features[:self.args.train_batch_size / self.args.n_replicas]
-                        reduced_labels = labels[:self.args.train_batch_size / self.args.n_replicas]
+                        reduced_features = features[: self.args.train_batch_size / self.args.n_replicas]
+                        reduced_labels = labels[: self.args.train_batch_size / self.args.n_replicas]
 
                         training_step(reduced_features, reduced_labels)
 
-                        features = tf.concat([features[self.args.train_batch_size / self.args.n_replicas:], reduced_features], axis=0)
+                        features = tf.concat(
+                            [features[self.args.train_batch_size / self.args.n_replicas :], reduced_features], axis=0
+                        )
 
                     gradients = self.gradient_accumulator.gradients
-                    gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
+                    gradients = [
+                        (tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm))
+                        for grad in gradients
+                    ]
 
                     self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
                     self.gradient_accumulator.reset()

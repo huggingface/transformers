@@ -70,9 +70,7 @@ class DataTrainingArguments:
     data_dir: Optional[str] = field(
         default=None, metadata={"help": "The input data dir. Should contain the .json files for the SQuAD task."}
     )
-    use_tfds: Optional[bool] = field(
-        default=True, metadata={"help": "If TFDS should be used or not."}
-    )
+    use_tfds: Optional[bool] = field(default=True, metadata={"help": "If TFDS should be used or not."})
     max_seq_length: int = field(
         default=128,
         metadata={
