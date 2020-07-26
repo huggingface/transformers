@@ -90,12 +90,11 @@ class TFTrainer:
 
         if is_wandb_available():
             self._setup_wandb()
-        else:
-            if os.environ.get("WANDB_DISABLED") != "true":
-                logger.info(
-                    "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
-                    "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
-                )
+        elsif os.environ.get("WANDB_DISABLED") != "true":
+            logger.info(
+                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
+                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
 
         set_seed(self.args.seed)
 
