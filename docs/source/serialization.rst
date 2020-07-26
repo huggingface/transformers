@@ -1,15 +1,44 @@
+**********************************************
 Exporting transformers models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+**********************************************
 
 ONNX / ONNXRuntime
-----------------------------------------------
+==============================================
 
-ONNX (Open Neural Network eXchange) and ONNXRuntime (ORT) are part of an effort from leading industries in the AI field
-to provide an unified and community driven format to store and efficiently execute neural network leveraging variety
+Projects ONNX (Open Neural Network eXchange) and ONNXRuntime (ORT) are part of an effort from leading industries in the AI field
+to provide an unified and community driven format to store and, by extension, efficiently execute neural network leveraging variety
 of hardware and dedicated optimization.
 
+Starting from transformers v2.10.0 we partnered with ONNX Runtime to provide an easy export of transformers models to
+the ONNX format. You can have a look at the effort by looking at our join blog post `Accelerate your NLP pipelines using
+Hugging Face Transformers and ONNX Runtime <https://medium.com/microsoftazure/accelerate-your-nlp-pipelines-using-hugging-face-transformers-and-onnx-runtime-2443578f4333>`_.
+
+Exporting a model is done through the script `convert_graph_to_onnx.py` at the root of the transformers sources.
+The following command shows how easy it is to export a BERT model from the library, simply run:
+
+.. code-block:: bash
+
+    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased bert-base-cased.onnx
+
+The conversion tool works for both PyTorch and Tensorflow models and ensure:
+    * The model and its weight are correctly initialized from the Hugging Face's model hub or a local checkpoint.
+    * The inputs and outputs are correctly generated to their ONNX counterpart.
+    * The generated model cam be correctly loaded through onnxruntime.
+
+.. note::
+    Currently inputs and outputs are always exported with dynamic sequence axis which can prevent some optimizations
+    to be enabled on the different runtime. If you would like to see such support for fixed length inputs/outputs please
+    open up an issue on transformers.
+
+
+Also, the conversion tool supports different options which let you tune the behaviour of the generated model:
+    * Change the target opset version of the generated model: More recent opset generally supports more operator and enables faster inference.
+    * Export pipeline specific prediction heads: Allow to export model along with its task specific prediction head(s).
+    * Use the external data format (PyTorch only): Let you export model which size is above 2Gb `(More info <https://github.com/pytorch/pytorch/pull/33062>)`_.
+
+
 TorchScript
-----------------------------------------------
+=======================================
 
 .. note::
     This is the very beginning of our experiments with TorchScript and we are still exploring its capabilities
@@ -35,7 +64,7 @@ These necessities imply several things developers should be careful about. These
 
 
 Implications
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------------------------------
 
 TorchScript flag and tied weights
 ------------------------------------------------
@@ -72,12 +101,12 @@ It is recommended to be careful of the total number of operations done on each i
 when exporting varying sequence-length models.
 
 Using TorchScript in Python
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-------------------------------------------------
 
 Below are examples of using the Python to save, load models as well as how to use the trace for inference.
 
 Saving a model
-------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This snippet shows how to use TorchScript to export a ``BertModel``. Here the ``BertModel`` is instantiated
 according to a ``BertConfig`` class and then saved to disk under the filename ``traced_bert.pt``
@@ -123,7 +152,7 @@ according to a ``BertConfig`` class and then saved to disk under the filename ``
     torch.jit.save(traced_model, "traced_bert.pt")
 
 Loading a model
-------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This snippet shows how to load the ``BertModel`` that was previously saved to disk under the name ``traced_bert.pt``.
 We are re-using the previously initialised ``dummy_input``.
@@ -136,7 +165,7 @@ We are re-using the previously initialised ``dummy_input``.
     all_encoder_layers, pooled_output = loaded_model(dummy_input)
 
 Using a traced model for inference
-------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Using the traced model for inference is as simple as using its ``__call__`` dunder method:
 
