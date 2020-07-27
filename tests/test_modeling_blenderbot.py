@@ -8,7 +8,6 @@ from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 from .test_configuration_common import ConfigTester
 from .test_modeling_bart import _long_tensor, assert_tensors_close
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from parlai
 
 
 if is_torch_available():

@@ -333,7 +333,8 @@ class BartEncoder(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        if self.variant != "prelayernorm":
+            x = x.transpose(0, 1)
 
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1010,7 +1011,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
             model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
             input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            logits = model(input_ids).logits
+            logits = model(input_ids)[0]
 
             masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
             probs = logits[0, masked_index].softmax(dim=0)
