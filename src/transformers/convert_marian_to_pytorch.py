@@ -451,7 +451,7 @@ class OpusState:
     def load_marian_model(self) -> MarianMTModel:
         state_dict, cfg = self.state_dict, self.hf_config
 
-        assert cfg.static_position_embeddings, "No static position embeddings"
+        assert cfg.static_position_embeddings, "config.static_position_embeddings should be True"
         model = MarianMTModel(cfg)
 
         assert "hidden_size" not in cfg.to_dict()
