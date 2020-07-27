@@ -327,9 +327,15 @@ def convert_examples_to_features(
                 segment_ids.append(pad_token_segment_id)
                 p_mask.append(1)
 
-            assert len(input_ids) == max_seq_length, f"Input ids and sequence have mismatched lengths {len(input_ids)} and {max_seq_length}"
-            assert len(input_mask) == max_seq_length, f"Input mask and sequence have mismatched lengths {len(input_mask)} and {max_seq_length}"
-            assert len(segment_ids) == max_seq_length, f"Segment ids and sequence have mismatched lengths {len(segment_ids)} and {max_seq_length}"
+            assert (
+                len(input_ids) == max_seq_length
+            ), f"Input ids and sequence have mismatched lengths {len(input_ids)} and {max_seq_length}"
+            assert (
+                len(input_mask) == max_seq_length
+            ), f"Input mask and sequence have mismatched lengths {len(input_mask)} and {max_seq_length}"
+            assert (
+                len(segment_ids) == max_seq_length
+            ), f"Segment ids and sequence have mismatched lengths {len(segment_ids)} and {max_seq_length}"
 
             span_is_impossible = example.is_impossible
             start_position = None
