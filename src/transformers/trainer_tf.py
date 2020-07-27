@@ -148,11 +148,7 @@ class TFTrainer:
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
 
-        if self.args.dataloader_drop_last:
-            approx = math.floor
-        else:
-            approx = math.ceil
-
+        approx = math.floor if self.args.dataloader_drop_last else math.ceil
         steps = approx(num_examples / self.args.eval_batch_size)
         ds = (
             eval_dataset.repeat()
@@ -175,11 +171,7 @@ class TFTrainer:
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
 
-        if self.args.dataloader_drop_last:
-            approx = math.floor
-        else:
-            approx = math.ceil
-
+        approx = math.floor if self.args.dataloader_drop_last else math.ceil
         steps = approx(num_examples / self.args.eval_batch_size)
         ds = (
             test_dataset.repeat()
@@ -381,11 +373,7 @@ class TFTrainer:
             t_total = self.args.max_steps
             self.steps_per_epoch = self.args.max_steps
         else:
-            if self.args.dataloader_drop_last:
-                approx = math.floor
-            else:
-                approx = math.ceil
-
+            approx = math.floor if self.args.dataloader_drop_last else math.ceil
             self.steps_per_epoch = approx(self.num_train_examples / self.total_train_batch_size)
             t_total = self.steps_per_epoch * self.args.num_train_epochs
 
@@ -440,7 +428,7 @@ class TFTrainer:
             logger.info("  Total optimization steps = %d", t_total)
 
             self.train_loss = tf.keras.metrics.Sum()
-            distributed_training_steps = self._create_training_routines()
+            maybe_distributed_training_steps = self._create_training_routines()
             start_time = datetime.datetime.now()
 
             for epoch_iter in range(epochs_trained, int(epochs + 1)):
@@ -452,7 +440,7 @@ class TFTrainer:
                     self.global_step = iterations.numpy()
                     self.epoch_logging = epoch_iter - 1 + (step + 1) / self.steps_per_epoch
 
-                    distributed_training_steps(batch)
+                    maybe_distributed_training_steps(batch)
 
                     training_loss = self.train_loss.result() / ((step + 1) * self.total_train_batch_size)
 
