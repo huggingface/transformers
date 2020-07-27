@@ -346,7 +346,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     """
     config_class = None
     base_model_prefix = ""
-    authorized_missing_keys = [r"position_ids"]  # a buffer that is often allocated in init and filled later.
+    authorized_missing_keys = None
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
