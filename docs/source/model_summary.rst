@@ -195,7 +195,7 @@ tokens in the sentence, then allows the model to use the last n tokens to predic
 with a mask, the sentence is actually fed in the model in the right order, but instead of masking the first n tokens 
 for n+1, XLNet uses a mask that hides the previous tokens in some given permutation of 1,...,sequence length.
 
-XLNet also uses the same recurrence mechanism as TransformerXL to build long-term dependencies. 
+XLNet also uses the same recurrence mechanism as Transformer-XL to build long-term dependencies. 
 
 The library provides a version of the model for language modeling, token classification, sentence classification, 
 multiple choice classification and question answering.

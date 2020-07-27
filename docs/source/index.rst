@@ -177,9 +177,9 @@ conversion utilities for the following models:
     main_classes/model
     main_classes/tokenizer
     main_classes/pipelines
+    main_classes/trainer
     main_classes/optimizer_schedules
     main_classes/processors
-    main_classes/trainer
     model_doc/auto
     model_doc/encoderdecoder
     model_doc/bert
@@ -205,3 +205,4 @@ conversion utilities for the following models:
     model_doc/retribert
     model_doc/mobilebert
     model_doc/dpr
+    internal/modeling_utils
