@@ -189,8 +189,44 @@ def add_end_docstrings(*docstr):
 
 RETURN_INTRODUCTION = r"""
     Returns:
-        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)` (if ``return_tuple=True`` is passed or when ``config.return_tuple=True``) comprising various elements depending on the configuration (:class:`~transformers.{config_class}`) and inputs:
+        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`:
+        A :class:`~{full_output_type}` or a tuple of :obj:`torch.FloatTensor` (if ``return_tuple=True`` is passed or
+        when ``config.return_tuple=True``) comprising various elements depending on the configuration
+        (:class:`~transformers.{config_class}`) and inputs.
+
 """
+
+
+def _get_indent(t):
+    """Returns the indentation in the first line of t"""
+    search = re.search(r"^(\s*)\S", t)
+    return "" if search is None else search.groups()[0]
+
+
+def _convert_output_args_doc(output_args_doc):
+    """Convert output_args_doc to display properly."""
+    # Split output_arg_doc in blocks argument/description
+    indent = _get_indent(output_args_doc)
+    blocks = []
+    current_block = ""
+    for line in output_args_doc.split("\n"):
+        # If the indent is the same as the beginning, the line is the name of new arg.
+        if _get_indent(line) == indent:
+            if len(current_block) > 0:
+                blocks.append(current_block[:-1])
+            current_block = f"{line}\n"
+        else:
+            # Otherwise it's part of the description of the current arg.
+            # We need to remove 2 spaces to the indentation.
+            current_block += f"{line[2:]}\n"
+    blocks.append(current_block[:-1])
+
+    # Format each block for proper rendering
+    for i in range(len(blocks)):
+        blocks[i] = re.sub(r"^(\s+)(\S+)(\s+)", r"\1- **\2**\3", blocks[i])
+        blocks[i] = re.sub(r":\s*\n\s*(\S)", r" -- \1", blocks[i])
+
+    return "\n".join(blocks)
 
 
 def _prepare_output_docstrings(output_type, config_class):
@@ -206,6 +242,7 @@ def _prepare_output_docstrings(output_type, config_class):
         i += 1
     if i < len(lines):
         docstrings = "\n".join(lines[(i + 1) :])
+        docstrings = _convert_output_args_doc(docstrings)
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
