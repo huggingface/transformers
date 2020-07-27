@@ -861,9 +861,6 @@ class Trainer:
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
-        if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
-            raise ValueError("eval_dataset must implement __len__")
-
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self.prediction_loop(eval_dataloader, description="Evaluation")
@@ -896,8 +893,6 @@ class Trainer:
             metrics (:obj:`Dict[str, float]`, `optional`):
                 The potential dictionary of metrics (if the dataset contained labels).
         """
-        if not isinstance(test_dataset, collections.abc.Sized):
-            raise ValueError("test_dataset must implement __len__")
         test_dataloader = self.get_test_dataloader(test_dataset)
 
         return self.prediction_loop(test_dataloader, description="Prediction")
