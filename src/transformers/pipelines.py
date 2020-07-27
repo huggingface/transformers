@@ -2119,6 +2119,6 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
-        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+        model = model_class.from_pretrained(model, config=config, return_tuple=True, **model_kwargs)
 
     return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
