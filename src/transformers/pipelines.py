@@ -63,7 +63,6 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForCausalLM,
         AutoModelForMaskedLM,
-        MODEL_WITH_LM_HEAD_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -1666,7 +1665,9 @@ class TranslationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
+        self.check_model_type(
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        )
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
