@@ -224,10 +224,22 @@ class SummarizationModule(BaseTransformer):
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
         sampler = None
+
         if self.hparams.sortish_sampler and type_path == "train":
             assert self.hparams.gpus <= 1  # TODO: assert earlier
-            sampler = dataset.make_sortish_sampler(batch_size)
+            #sampler = dataset.make_sortish_sampler(batch_size)
             shuffle = False
+            batch_size = None
+            from durbango import pickle_load
+            batch_sampler = pickle_load('dynamic_batches.pkl')
+            return DataLoader(
+                dataset,
+                batch_sampler=batch_sampler,
+                collate_fn=dataset.collate_fn,
+                shuffle=shuffle,
+                num_workers=self.num_workers,
+                #sampler=sampler,
+            )
 
         dataloader = DataLoader(
             dataset,
