@@ -25,7 +25,6 @@ from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPIN
 from .configuration_bart import BartConfig, MBartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bertweet import BERTWEET_PRETRAINED_CONFIG_ARCHIVE_MAP, BertweetConfig
-from .configuration_phobert import PHOBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, PhobertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -39,6 +38,7 @@ from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_phobert import PHOBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, PhobertConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -130,7 +130,6 @@ from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
-from .tokenization_phobert import PhobertTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -148,6 +147,7 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_phobert import PhobertTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -524,6 +524,16 @@ if is_tf_available():
         TFBertPreTrainedModel,
     )
 
+    from .modeling_tf_bertweet import (
+        TF_BERTWEET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFBertweetForMaskedLM,
+        TFBertweetModel,
+        TFBertweetForSequenceClassification,
+        TFBertweetForMultipleChoice,
+        TFBertweetForTokenClassification,
+        TFBertweetForQuestionAnswering,
+    )
+
     from .modeling_tf_camembert import (
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCamembertForMaskedLM,
@@ -603,6 +613,16 @@ if is_tf_available():
         TFOpenAIGPTMainLayer,
         TFOpenAIGPTModel,
         TFOpenAIGPTPreTrainedModel,
+    )
+
+    from .modeling_tf_phobert import (
+        TF_PHOBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFPhobertForMaskedLM,
+        TFPhobertModel,
+        TFPhobertForSequenceClassification,
+        TFPhobertForMultipleChoice,
+        TFPhobertForTokenClassification,
+        TFPhobertForQuestionAnswering,
     )
 
     from .modeling_tf_roberta import (
