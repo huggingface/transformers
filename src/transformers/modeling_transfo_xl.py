@@ -155,7 +155,9 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert pointer.shape == array.shape
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise

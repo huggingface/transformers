@@ -603,7 +603,8 @@ class SpecialTokensMixin:
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
-                    assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
+                    assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
+                    assert all(isinstance(t, str) for t in value), f"One of the tokens is not a string"
                     setattr(self, key, value)
                 elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
@@ -663,7 +664,7 @@ class SpecialTokensMixin:
 
         added_tokens = 0
         for key, value in special_tokens_dict.items():
-            assert key in self.SPECIAL_TOKENS_ATTRIBUTES
+            assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
 
             if self.verbose:
                 logger.info("Assigning %s to the %s key of the tokenizer", value, key)

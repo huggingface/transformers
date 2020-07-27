@@ -195,7 +195,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         self.dim = config.dim
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
 
-        assert self.dim % self.n_heads == 0
+        assert self.dim % self.n_heads == 0, f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}"
 
         self.q_lin = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="q_lin"
@@ -311,7 +311,9 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation = config.activation
 
-        assert config.dim % config.n_heads == 0
+        assert (
+            config.dim % config.n_heads == 0
+        ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
 
         self.attention = TFMultiHeadSelfAttention(config, name="attention")
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
@@ -395,11 +397,11 @@ class TFTransformer(tf.keras.layers.Layer):
             hidden_state = layer_outputs[-1]
 
             if cast_bool_to_primitive(output_attentions) is True:
-                assert len(layer_outputs) == 2
+                assert len(layer_outputs) == 2, f"Incorrect number of outputs {len(layer_outputs)} instead of 2"
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1
+                assert len(layer_outputs) == 1, f"Incorrect number of outputs {len(layer_outputs)} instead of 1"
 
         # Add last layer
         if cast_bool_to_primitive(output_hidden_states) is True:
@@ -1024,7 +1026,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
-        assert config.num_labels == 2
+        assert config.num_labels == 2, f"Incorrect number of labels {config.num_labels} instead of 2"
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)

@@ -131,7 +131,9 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
             logger.info("Transposing numpy weight of shape {} for {}".format(array.shape, name))
             array = np.transpose(array)
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
