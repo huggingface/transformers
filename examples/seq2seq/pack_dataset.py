@@ -6,6 +6,7 @@
 """
 
 import argparse
+import shutil
 from pathlib import Path
 
 from tqdm import tqdm
@@ -53,6 +54,10 @@ def pack_data_dir(tok, data_dir: Path, max_tokens, save_path):
         print(f"packed {split} split from {len(src_docs)} examples -> {len(packed_src)}.")
         Path(save_path / f"{split}.source").open("w").write("\n".join(packed_src))
         Path(save_path / f"{split}.target").open("w").write("\n".join(packed_tgt))
+    for split in ["val", "test"]:
+        src_path, tgt_path = data_dir / f"{split}.source", data_dir / f"{split}.target"
+        shutil.copyfile(src_path, save_path / f"{split}.source")
+        shutil.copyfile(tgt_path, save_path / f"{split}.target")
 
 
 def packer_cli():
