@@ -27,17 +27,7 @@ this should make a directory called `cnn_dm/` with files like `test.source`.
 ```
 
 WMT16 English-Romanian Translation Data:
-
-This dataset comes in two formats. The "packed" version merges short training examples into examples of <200 tokens to increase GPU utilization (and also improves validation performance).
-
-```bash
-cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_packed_train_200.tgz
-tar -xzvf wmt_en_ro_packed_200.tgz
-export ENRO_DIR=wmt_en_ro_packed_train_200
-```
- 
-The original data can also be downloaded with this command:
+download with this command:
 ```bash
 wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
