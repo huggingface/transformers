@@ -28,8 +28,8 @@ from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+import tokenizers
 from tokenizers import AddedToken
-from tokenizers import Encoding as EncodingFast
 
 from .file_utils import (
     add_end_docstrings,
@@ -60,6 +60,7 @@ EncodedInput = List[int]
 TextInputPair = Tuple[str, str]
 PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
+EncodingFast = tokenizers.Encoding
 
 
 # Slow tokenizers used to be saved in three separated files
@@ -72,7 +73,8 @@ FULL_TOKENIZER_FILE = "tokenizer.json"
 
 
 class ExplicitEnum(Enum):
-    """ Enum with more explicit error message for missing values.
+    """
+    Enum with more explicit error message for missing values.
     """
 
     @classmethod
@@ -84,6 +86,10 @@ class ExplicitEnum(Enum):
 
 
 class TruncationStrategy(ExplicitEnum):
+    """
+    Possible values for the ``truncation`` argument in :meth:`PreTrainedTokenizerBase.__call__`.
+    Useful for tab-completion in an IDE.
+    """
     ONLY_FIRST = "only_first"
     ONLY_SECOND = "only_second"
     LONGEST_FIRST = "longest_first"
@@ -91,23 +97,32 @@ class TruncationStrategy(ExplicitEnum):
 
 
 class PaddingStrategy(ExplicitEnum):
+    """
+    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`.
+    Useful for tab-completion in an IDE.
+    """
     LONGEST = "longest"
     MAX_LENGTH = "max_length"
     DO_NOT_PAD = "do_not_pad"
 
 
 class TensorType(ExplicitEnum):
+    """
+    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`.
+    Useful for tab-completion in an IDE.
+    """
     PYTORCH = "pt"
     TENSORFLOW = "tf"
     NUMPY = "np"
 
 
 class CharSpan(NamedTuple):
-    """ Character span in the original string
+    """
+    Character span in the original string.
 
-        Args:
-            start: index of the first character in the original string
-            end: index of the character following the last character in the original string
+    Args:
+        start (:obj:`int`): Index of the first character in the original string.
+        end (:obj:`int`): Index of the character following the last character in the original string.
     """
 
     start: int
@@ -115,11 +130,12 @@ class CharSpan(NamedTuple):
 
 
 class TokenSpan(NamedTuple):
-    """ Token span in an encoded string (list of tokens)
+    """
+    Token span in an encoded string (list of tokens).
 
-        Args:
-            start: index of the first token in the span
-            end: index of the token following the last token in the span
+    Args:
+        start (:obj:`int`): Index of the first token in the span.
+        end (:obj:`int`): Index of the token following the last token in the span.
     """
 
     start: int
@@ -127,19 +143,26 @@ class TokenSpan(NamedTuple):
 
 
 class BatchEncoding(UserDict):
-    """ BatchEncoding hold the output of the encode and batch_encode methods (tokens, attention_masks, etc).
-        This class is derived from a python Dictionary and can be used as a dictionnary.
-        In addition, this class expose utility methods to map from word/char space to token space.
+    """
+    BatchEncoding hold the output of the :meth:`PreTrainedTokenizerBase.encode` and
+    :meth:`PreTrainedTokenizerBase.batch_encode` methods (tokens, attention_masks, etc).
 
-        Args:
-            data (:obj:`dict`): Dictionary of lists/arrays returned by the encode/batch_encode methods ('input_ids', 'attention_mask'...)
-            encoding (:obj:`EncodingFast`, :obj:`list(EncodingFast)`, `optional`, defaults to :obj:`None`):
-                If the tokenizer is a fast tokenizer which outputs additional informations like mapping from word/char space to token space
-                the `EncodingFast` instance or list of instance (for batches) hold these informations.
-            tensor_type (:obj:`Union[None, str, TensorType]`, `optional`, defaults to :obj:`None`):
-                You can give a tensor_type here to convert the lists of integers in PyTorch/TF/Numpy Tensors at initialization
-            prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Set to True to add a batch axis when converting in Tensors (see :obj:`tensor_type` above)
+    This class is derived from a python dictionary and can be used as a dictionary. In addition, this class exposes
+    utility methods to map from word/character space to token space.
+
+    Args:
+        data (:obj:`dict`):
+            Dictionary of lists/arrays/tensors returned by the encode/batch_encode methods ('input_ids',
+            'attention_mask', etc.).
+        encoding (:class:`~transformers.tokenization_utils_base.EncodingFast` or :obj:`Sequence[EncodingFast]`, `optional`):
+            If the tokenizer is a fast tokenizer which outputs additional informations like mapping from word/character
+            space to token space the :class:`~transformers.tokenization_utils_base.EncodingFast` instance or list of
+            instance (for batches) hold these informations.
+        tensor_type (:obj:`Union[None, str, TensorType]`, `optional`):
+            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            initialization.
+        prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add a batch axis when converting to tensors (see :obj:`tensor_type` above).
     """
 
     def __init__(
@@ -159,16 +182,24 @@ class BatchEncoding(UserDict):
         self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
 
     @property
-    def is_fast(self):
+    def is_fast(self) -> bool:
         """
-        Indicate if this BatchEncoding was generated from the result of a PreTrainedTokenizerFast
-        Returns: True if generated from subclasses of PreTrainedTokenizerFast, else otherwise
+        Indicate if this :class:`~transformers.BatchEncoding` was generated from the result of a
+        :class:`~transformers.PreTrainedTokenizerFast`.
+
+        Returns:
+            :obj:`bool`: :obj:`True` if generated from subclasses of
+            :class:`~transformers.PreTrainedTokenizerFast`, :obj:`False` otherwise.
         """
         return self._encodings is not None
 
-    def __getitem__(self, item: Union[int, str]) -> EncodingFast:
-        """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
-            If the key is an integer, get the EncodingFast for batch item with index `key`
+    def __getitem__(self, item: Union[int, str]) -> Union[Any, EncodingFast]:
+        """
+        If the key is a string, returns the value of the dict associated to :obj:`key` ('input_ids',
+        'attention_mask', etc.).
+        
+        If the key is an integer, get the :class:`~transformers.tokenization_utils_base.EncodingFast` for batch item
+        with index :obj:`key`.
         """
         if isinstance(item, str):
             return self.data[item]
@@ -212,20 +243,43 @@ class BatchEncoding(UserDict):
     @property
     def encodings(self) -> Optional[List[EncodingFast]]:
         """
-        Return the list all encoding from the tokenization process
+        Return the list all encodings from the tokenization process.
 
-        Returns: List[EncodingFast] or None if input was tokenized through Python (i.e. not fast) tokenizer
+        Returns:
+            :obj:`Optional[List[EncodingFast]]`:
+            Returns :obj:`None` if the input was tokenized through Python (i.e., not a fast) tokenizer, the list of
+            encodings otherwise.
         """
         return self._encodings
 
     def tokens(self, batch_index: int = 0) -> List[str]:
+        """
+        Return the list of tokens at a given index for a fast tokenizer.
+
+        Args:
+            batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
+
+        Returns:
+            :obj:`List[str]`: The list of tokens at that index.
+        """
         if not self._encodings:
-            raise ValueError("tokens() is not available when using Python based tokenizers")
+            raise ValueError("tokens() is not available when using Python-based tokenizers")
         return self._encodings[batch_index].tokens
 
     def words(self, batch_index: int = 0) -> List[Optional[int]]:
+        """
+        Return a list mapping the tokens to their actual word in the initial sentence for a fast tokenizer.
+
+        Args:
+            batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
+
+        Returns:
+            :obj:`List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by
+            the tokenizer are mapped to :obj:`None` and other tokens are mapped to the index of their corresponding
+            word (several tokens will be mapped to the same word index if they are parts of that word).
+        """
         if not self._encodings:
-            raise ValueError("words() is not available when using Python based tokenizers")
+            raise ValueError("words() is not available when using Python-based tokenizers")
         return self._encodings[batch_index].words
 
     def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
@@ -239,21 +293,19 @@ class BatchEncoding(UserDict):
         - ``self.token_to_word(batch_index, token_index)`` if batch size is greater than 1
 
         This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
+        pre-tokenized sequences (i.e., words are defined by the user). In this case it allows
         to easily associate encoded tokens with provided tokenized words.
 
         Args:
             batch_or_token_index (:obj:`int`):
                 Index of the sequence in the batch. If the batch only comprise one sequence,
-                this can be the index of the token in the sequence
+                this can be the index of the token in the sequence.
             token_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index
                 of the token in the sequence.
 
         Returns:
-            :obj:`int`:
-                index of the word in the input sequence.
-
+            :obj:`int`: Index of the word in the input sequence.
         """
 
         if not self._encodings:
@@ -273,10 +325,10 @@ class BatchEncoding(UserDict):
         """
         Get the encoded token span corresponding to a word in the sequence of the batch.
 
-        Token spans are returned as a TokenSpan NamedTuple with:
+        Token spans are returned as a :class:`~transformers.tokenization_utils_base.TokenSpan` with:
 
-        - start: index of the first token
-        - end: index of the token following the last token
+        - **start** -- Index of the first token.
+        - **end** -- Index of the token following the last token.
 
         Can be called as:
 
@@ -290,19 +342,14 @@ class BatchEncoding(UserDict):
         Args:
             batch_or_word_index (:obj:`int`):
                 Index of the sequence in the batch. If the batch only comprises one sequence,
-                this can be the index of the word in the sequence
+                this can be the index of the word in the sequence.
             word_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index
                 of the word in the sequence.
 
         Returns:
-            :obj:`TokenSpan`:
-                Span of tokens in the encoded sequence.
-
-                :obj:`TokenSpan` are NamedTuple with:
-
-                - start: index of the first token
-                - end: index of the token following the last token
+            :class:`~transformers.tokenization_utils_base.TokenSpan`
+            Span of tokens in the encoded sequence.
         """
 
         if not self._encodings:
@@ -322,10 +369,11 @@ class BatchEncoding(UserDict):
         """
         Get the character span corresponding to an encoded token in a sequence of the batch.
 
-        Character spans are returned as a CharSpan NamedTuple with:
+        Character spans are returned as a :class:`~transformers.tokenization_utils_base.CharSpan` with:
 
-        - start: index of the first character in the original string associated to the token
-        - end: index of the character following the last character in the original string associated to the token
+        - **start** -- Index of the first character in the original string associated to the token.
+        - **end** -- Index of the character following the last character in the original string associated to the
+          token.
 
         Can be called as:
 
@@ -335,19 +383,14 @@ class BatchEncoding(UserDict):
         Args:
             batch_or_token_index (:obj:`int`):
                 Index of the sequence in the batch. If the batch only comprise one sequence,
-                this can be the index of the token in the sequence
+                this can be the index of the token in the sequence.
             token_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index
                 of the token or tokens in the sequence.
 
         Returns:
-            :obj:`CharSpan`:
-                Span of characters in the original string.
-
-                :obj:`CharSpan` are NamedTuple with:
-
-                - start: index of the first character in the original string
-                - end: index of the character following the last character in the original string
+            :class:`~transformers.tokenization_utils_base.CharSpan`:
+            Span of characters in the original string.
         """
 
         if not self._encodings:
