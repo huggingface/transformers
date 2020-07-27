@@ -24,9 +24,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu
-from .configuration_bert import BertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .modeling_bert import (
     BertEmbeddings, 
@@ -43,6 +41,7 @@ from .modeling_roberta import RobertaLMHead
 
 
 logger = logging.getLogger(__name__)
+
 
 class MPNetEmbeddings(BertEmbeddings):
     """Construct the embeddings from word, position and token_type embeddings.

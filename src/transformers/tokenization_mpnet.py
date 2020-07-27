@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class MPNetTokenizer(BertTokenizer):
     """
-    Constructs a RoBERTa BPE tokenizer, derived from the GPT-2 tokenizer. Peculiarities:
+    Constructs a MPNet BPE tokenizer, derived from the Bert tokenizer. Peculiarities:
     - Byte-level Byte-Pair-Encoding
     - Requires a space to start the input string => the encoding methods should be called with the
       ``add_prefix_space`` flag set to ``True``.
@@ -84,6 +84,14 @@ class MPNetTokenizer(BertTokenizer):
         mask_token="<mask>",
         **kwargs
     ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        
         super().__init__(
             vocab_file=vocab_file,
             max_len=512,
