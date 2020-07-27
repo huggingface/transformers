@@ -24,6 +24,8 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig, MBartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+from .configuration_bertweet import BERTWEET_PRETRAINED_CONFIG_ARCHIVE_MAP, BertweetConfig
+from .configuration_phobert import PHOBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, PhobertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -127,6 +129,8 @@ from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
+from .tokenization_bertweet import BertweetTokenizer
+from .tokenization_phobert import PhobertTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -309,6 +313,27 @@ if is_torch_available():
         DistilBertForTokenClassification,
         DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+
+    from .modeling_bertweet import (
+        BertweetForMaskedLM,
+        BertweetModel,
+        BertweetForSequenceClassification,
+        BertweetForMultipleChoice,
+        BertweetForTokenClassification,
+        BertweetForQuestionAnswering,
+        BERTWEET_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
+
+    from .modeling_phobert import (
+        PhobertForMaskedLM,
+        PhobertModel,
+        PhobertForSequenceClassification,
+        PhobertForMultipleChoice,
+        PhobertForTokenClassification,
+        PhobertForQuestionAnswering,
+        PHOBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
+
     from .modeling_camembert import (
         CamembertForMaskedLM,
         CamembertModel,
