@@ -1,9 +1,6 @@
 ---
 language: "en"
 tags:
-- T5
-- pytorch
-- tensorflow
 - paraphrase-generation
 - text-generation
 - Conditional Generation
