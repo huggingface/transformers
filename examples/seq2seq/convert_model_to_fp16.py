@@ -12,8 +12,9 @@ def convert(src_path: str, map_location: str = "cpu", save_path: Union[str, None
         if not isinstance(v, torch.Tensor):
             raise TypeError("FP16 conversion only works on paths that are saved state dics, like pytorch_model.bin")
         state_dict[k] = v.half()
-    if save_path is None:  # overwrite
-        torch.save(state_dict, src_path)
+    if save_path is None:  # overwrite src_path
+        save_path = src_path
+    torch.save(state_dict, save_path)
 
 
 if __name__ == "__main__":
