@@ -179,6 +179,7 @@ class MBartDataset(Seq2SeqDataset):
             tgt_texts=[x["tgt_texts"] for x in batch],
             tgt_lang=self.tgt_lang,
             max_length=self.max_source_length,
+            max_target_length=self.max_target_length,
         )
         return batch_encoding.data
 
