@@ -171,6 +171,8 @@ class TFTrainer:
             self.args.learning_rate,
             num_training_steps,
             self.args.warmup_steps,
+            adam_beta1=self.args.adam_beta1,
+            adam_beta2=self.args.adam_beta2,
             adam_epsilon=self.args.adam_epsilon,
             weight_decay_rate=self.args.weight_decay,
         )
