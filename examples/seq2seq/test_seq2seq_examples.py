@@ -328,7 +328,6 @@ def test_mbart_dataset_truncation():
         assert batch["input_ids"][0, -2].item() == tokenizer.eos_token_id
         assert batch["input_ids"][0, -1].item() == tokenizer.lang_code_to_id[src_lang]
 
-
         break  # No need to test every batch
 
 
