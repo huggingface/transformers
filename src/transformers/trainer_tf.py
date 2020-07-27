@@ -575,4 +575,4 @@ class TFTrainer:
         if not isinstance(self.model, TFPreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
 
-        self.model.save_pretrained(self.args.output_dir)
+        self.model.save_pretrained(output_dir)
