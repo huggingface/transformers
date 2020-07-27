@@ -166,7 +166,7 @@ def write_model_card(
     extra_markdown = f"### {hf_model_name}\n\n* source languages: {s}\n* target languages: {t}\n*  OPUS readme: [{opus_name}]({readme_url})\n"
     # combine with opus markdown
     opus_readme_path = Path(f"{repo_path}{opus_name}/README.md")
-    assert opus_readme_path.exists(), f"Readme path {opus_readme_path} not found"
+    assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
     content = opus_readme_path.open().read()
     content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
     content = "*".join(content.split("*")[1:])
