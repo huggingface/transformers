@@ -198,20 +198,16 @@ class TFTrainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         TFTrainer's init through :obj:`optimizers`, or override this method in a subclass.
         """
-        if self.optimizers is not None:
-            return self.optimizers
-
-        optimizer, scheduler = create_optimizer(
-            self.args.learning_rate,
-            num_training_steps,
-            self.args.warmup_steps,
-            adam_beta1=self.args.adam_beta1,
-            adam_beta2=self.args.adam_beta2,
-            adam_epsilon=self.args.adam_epsilon,
-            weight_decay_rate=self.args.weight_decay,
-        )
-
-        return optimizer, scheduler
+        if self.optimizers is None:
+            self.optimizers = create_optimizer(
+                self.args.learning_rate,
+                num_training_steps,
+                self.args.warmup_steps,
+                adam_beta1=self.args.adam_beta1,
+                adam_beta2=self.args.adam_beta2,
+                adam_epsilon=self.args.adam_epsilon,
+                weight_decay_rate=self.args.weight_decay,
+            )
 
     def _setup_wandb(self):
         """
