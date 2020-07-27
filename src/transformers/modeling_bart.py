@@ -329,12 +329,12 @@ class BartEncoder(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
-        x = self.layernorm_embedding(x)
+        if self.variant != "prelayernorm":
+            x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
         # B x T x C -> T x B x C
-        if self.variant != "prelayernorm":
-            x = x.transpose(0, 1)
+        x = x.transpose(0, 1)
 
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
