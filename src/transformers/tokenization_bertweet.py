@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright (c) 2020, VinAI Research and the HuggingFace Inc. team.
+# Copyright (c) 2020, VinAI Research, Facebook AI Research and the HuggingFace Inc. team.
 # Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

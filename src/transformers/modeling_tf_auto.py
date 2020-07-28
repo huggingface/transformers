@@ -23,6 +23,7 @@ from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
     BertConfig,
+    BertweetConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -31,6 +32,7 @@ from .configuration_auto import (
     GPT2Config,
     MobileBertConfig,
     OpenAIGPTConfig,
+    PhobertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -57,6 +59,14 @@ from .modeling_tf_bert import (
     TFBertForTokenClassification,
     TFBertLMHeadModel,
     TFBertModel,
+)
+from .modeling_tf_bertweet import (
+    TFBertweetForMaskedLM,
+    TFBertweetForMultipleChoice,
+    TFBertweetForQuestionAnswering,
+    TFBertweetForSequenceClassification,
+    TFBertweetForTokenClassification,
+    TFBertweetModel,
 )
 from .modeling_tf_camembert import (
     TFCamembertForMaskedLM,
@@ -101,6 +111,14 @@ from .modeling_tf_mobilebert import (
     TFMobileBertModel,
 )
 from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from .modeling_tf_phobert import (
+    TFPhobertForMaskedLM,
+    TFPhobertForMultipleChoice,
+    TFPhobertForQuestionAnswering,
+    TFPhobertForSequenceClassification,
+    TFPhobertForTokenClassification,
+    TFPhobertModel,
+)
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -158,6 +176,8 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
         (ElectraConfig, TFElectraModel),
+        (BertweetConfig, TFBertweetModel),
+        (PhobertConfig, TFPhobertModel),
     ]
 )
 
@@ -179,6 +199,8 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, TFXLMWithLMHeadModel),
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForPreTraining),
+        (BertweetConfig, TFBertweetForMaskedLM),
+        (PhobertConfig, TFPhobertForMaskedLM),
     ]
 )
 
@@ -200,6 +222,8 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMConfig, TFXLMWithLMHeadModel),
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
+        (BertweetConfig, TFBertweetForMaskedLM),
+        (PhobertConfig, TFPhobertForMaskedLM),
     ]
 )
 
@@ -230,6 +254,8 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FlaubertConfig, TFFlaubertWithLMHeadModel),
         (XLMConfig, TFXLMWithLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
+        (BertweetConfig, TFBertweetForMaskedLM),
+        (PhobertConfig, TFPhobertForMaskedLM),
     ]
 )
 
@@ -247,6 +273,8 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (MobileBertConfig, TFMobileBertForSequenceClassification),
         (FlaubertConfig, TFFlaubertForSequenceClassification),
         (XLMConfig, TFXLMForSequenceClassification),
+        (BertweetConfig, TFBertweetForSequenceClassification),
+        (PhobertConfig, TFPhobertForSequenceClassification),
     ]
 )
 
@@ -263,6 +291,8 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
         (ElectraConfig, TFElectraForQuestionAnswering),
+        (BertweetConfig, TFBertweetForQuestionAnswering),
+        (PhobertConfig, TFPhobertForQuestionAnswering),
     ]
 )
 
@@ -279,6 +309,8 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (MobileBertConfig, TFMobileBertForTokenClassification),
         (XLNetConfig, TFXLNetForTokenClassification),
         (ElectraConfig, TFElectraForTokenClassification),
+        (BertweetConfig, TFBertweetForTokenClassification),
+        (PhobertConfig, TFPhobertForTokenClassification),
     ]
 )
 
@@ -294,6 +326,8 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetForMultipleChoice),
         (FlaubertConfig, TFFlaubertForMultipleChoice),
         (AlbertConfig, TFAlbertForMultipleChoice),
+        (BertweetConfig, TFBertweetForMultipleChoice),
+        (PhobertConfig, TFPhobertForMultipleChoice),
     ]
 )
 
@@ -1120,6 +1154,8 @@ class TFAutoModelForMaskedLM:
                 - isInstance of `electra` configuration class: :class:`~transformers.TFElectraForMaskedLM` (Electra model)
                 - isInstance of `camembert` configuration class: :class:`~transformers.TFCamembertForMaskedLM` (Camembert model)
                 - isInstance of `albert` configuration class: :class:`~transformers.TFAlbertForMaskedLM` (Albert model)
+                - isInstance of `bertweet` configuration class: :class:`~transformers.TFBertweetForMaskedLM` (BERTweet model)
+                - isInstance of `phobert` configuration class: :class:`~transformers.TFPhobertForMaskedLM` (PhoBERT model)
 
 
         Examples::
@@ -1156,6 +1192,9 @@ class TFAutoModelForMaskedLM:
             - `flaubert`: :class:`~transformers.TFFlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.TFElectraForMaskedLM` (Electra model)
             - `bert`: :class:`~transformers.TFBertLMHeadModel` (Bert model)
+            - `bertweet`: :class:`~transformers.TFBertweetForMaskedLM` (BERTweet model)
+            - `phobert`: :class:`~transformers.TFPhobertForMaskedLM` (PhoBERT model)
+
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
