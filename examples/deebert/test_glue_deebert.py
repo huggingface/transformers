@@ -75,7 +75,7 @@ class DeeBertTests(unittest.TestCase):
         with patch.object(sys, "argv", eval_args):
             result = run_glue_deebert.main()
             for value in result.values():
-                self.assertGreaterEqual(value, 0.75)
+                self.assertGreaterEqual(value, 0.666)
 
         entropy_eval_args = """
             run_glue_deebert.py
