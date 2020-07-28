@@ -21,7 +21,7 @@ def get_setup_file():
 
 
 class DeeBertTests(unittest.TestCase):
-    def setUp(self) -> None:
+    def setup(self) -> None:
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
