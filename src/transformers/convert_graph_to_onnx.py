@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from os import listdir, makedirs
-from os.path import abspath, dirname, exists
+from os.path import dirname, exists
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from transformers import is_tf_available, is_torch_available
@@ -37,7 +38,36 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb")
+        self.add_argument("--quantize", action="store_true", help="Quantize the neural network to be run with int8")
         self.add_argument("output")
+
+
+def generate_identified_filename(filename: Path, identifier: str) -> Path:
+    """
+    Append an string-identifier at the end (before the extension,  if any) to the provided filepath.
+    Can be used to
+    :param filename:
+    :param identifier:
+    :return:
+    """
+    return filename.parent.joinpath(filename.stem + identifier).with_suffix(filename.suffix)
+
+
+def ensure_onnxruntime_installed():
+    try:
+        import onnxruntime
+
+        # We require 1.4.0 minimum
+        if int(onnxruntime.__version__.split(".")[1]) < 4:
+            print(f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
+                  f"but we require onnxruntime to be >= 1.4.0 to enable all the conversions options.\n"
+                  f"Please update onnxruntime by running `pip install --upgrade onnxruntime`")
+
+    except ImportError:
+        ImportError(
+            "onnxruntime doesn't seem to be currently installed. "
+            "Please install the onnxruntime by running `pip install onnxruntime`"
+            " and relaunch the conversion.")
 
 
 def ensure_valid_input(model, tokens, input_names):
@@ -133,7 +163,7 @@ def load_graph_from_args(pipeline_name: str, framework: str, model: str, tokeniz
     return pipeline(pipeline_name, model=model, tokenizer=tokenizer, framework=framework)
 
 
-def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format: bool):
+def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool):
     if not is_torch_available():
         raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
 
@@ -149,7 +179,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format:
         export(
             nlp.model,
             model_args,
-            f=output,
+            f=output.as_posix(),
             input_names=ordered_input_names,
             output_names=output_names,
             dynamic_axes=dynamic_axes,
@@ -160,7 +190,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format:
         )
 
 
-def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
+def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
     if not is_tf_available():
         raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
 
@@ -178,7 +208,7 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
         # Forward
         nlp.model.predict(tokens.data)
         onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
-        save_model(onnx_model, output)
+        save_model(onnx_model, output.as_posix())
 
     except ImportError as e:
         raise Exception(
@@ -214,17 +244,52 @@ def convert(
         convert_tensorflow(nlp, opset, output)
 
 
-def verify(path: str):
+def quantize(onnx_model_path: Path) -> Path:
+    """
+    Quantize the weights of the model from float32 to in8 to allow very efficient inference on modern CP.
+    :param onnx_model_path: Path to location the exported ONNX model is stored
+    :return: The path generated for the quantized
+    """
+    try:
+        ensure_onnxruntime_installed()
+        import onnx
+        from onnxruntime import __version__ as ort_version
+        from onnxruntime.quantization import quantize, QuantizationMode
+
+        print(f"Found ONNX: {onnx.__version__}")
+        print(f"Found ONNXRuntime: {ort_version}")
+
+        onnx_model = onnx.load(onnx_model_path.as_posix())
+        quantized_model = quantize(
+            model=onnx_model,
+            quantization_mode=QuantizationMode.IntegerOps,
+            force_fusions=True,
+            symmetric_weight=True
+        )
+
+        # Append "-quantized" at the end of the model's name
+        quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
+
+        # Save model
+        print(f"Storing quantized model at {quantized_model_path}")
+        onnx.save(quantized_model, quantized_model_path.as_posix())
+
+        return quantized_model_path
+    except ImportError as ie:
+        print(str(ie))
+
+
+def verify(path: Path):
     from onnxruntime import InferenceSession, SessionOptions
     from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
 
     print("Checking ONNX model loading from: {}".format(path))
     try:
         onnx_options = SessionOptions()
-        _ = InferenceSession(path, onnx_options, providers=["CPUExecutionProvider"])
-        print("Model correctly loaded")
+        _ = InferenceSession(path.as_posix(), onnx_options, providers=["CPUExecutionProvider"])
+        print("Model {} correctly loaded: \N{heavy check mark}".format(path))
     except RuntimeException as re:
-        print("Error while loading the model: {}".format(re))
+        print("Error while loading the model {}: \N{heavy ballot x}".format(re))
 
 
 if __name__ == "__main__":
@@ -232,7 +297,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Make sure output is absolute path
-    args.output = abspath(args.output)
+    args.output = Path(args.output).absolute()
 
     try:
         # Convert
@@ -246,9 +311,16 @@ if __name__ == "__main__":
             args.pipeline,
         )
 
+        if args.quantize:
+            args.quantized_output = quantize(args.output)
+
         # And verify
         if args.check_loading:
             verify(args.output)
+
+            if hasattr(args, "quantized_output"):
+                verify(args.quantized_output)
+
     except Exception as e:
         print("Error while converting the model: {}".format(e))
         exit(1)
