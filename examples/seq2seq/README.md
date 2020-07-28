@@ -3,7 +3,7 @@
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
 Summarization support is more mature than translation support.
 Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
-For `bertabs` instructions, see `bertabs/README.md`. 
+For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md). 
 
 
 ### Data
@@ -180,6 +180,8 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
     --task summarization \
     --n_obs 100 \
     --device cuda \
+    --max_source_length 1024 \
+    --max_target_length 56 \
     --fp16 \
     --bs 32
 ```

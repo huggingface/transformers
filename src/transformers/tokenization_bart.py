@@ -193,6 +193,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         tgt_texts: Optional[List[str]] = None,
         tgt_lang: str = "ro_RO",
         max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
         padding: str = "longest",
         return_tensors: str = "pt",
         **kwargs,
@@ -224,13 +225,16 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         if tgt_texts is None:
             return model_inputs
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
         self.set_tgt_lang_special_tokens(tgt_lang)
         decoder_inputs: BatchEncoding = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             padding=padding,
-            max_length=max_length,
+            max_length=max_target_length,
             truncation=True,
             **kwargs,
         )
