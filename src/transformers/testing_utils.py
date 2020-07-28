@@ -128,3 +128,11 @@ if _torch_available:
     torch_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"
 else:
     torch_device = None
+
+
+def require_torch_and_cuda(test_case):
+    """Decorator marking a test that requires CUDA and PyTorch). """
+    if torch_device != "cuda":
+        return unittest.skip("test requires CUDA")
+    else:
+        return test_case

@@ -629,8 +629,6 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
 
     Args:
-
-    Language modeling loss (for next-token prediction).
         losses (:obj:`torch.FloatTensor` of shape `(batch_size, sequence_length-1)`, `optional`, returned when ``labels`` is provided)
             Language modeling losses (not reduced).
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -1045,14 +1043,13 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
-        outputs = transformer_outputs[1:]
 
         softmax_output = self.crit(pred_hid, labels)
         prediction_scores = softmax_output.view(bsz, tgt_len, -1) if labels is None else ()
         loss = softmax_output.view(bsz, tgt_len - 1) if labels is not None else None
 
         if return_tuple:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TransfoXLLMHeadModelOutput(
