@@ -128,12 +128,6 @@ class Seq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
-    @staticmethod
-    def trim_seq2seq_batch(batch, pad_token_id) -> tuple:
-        y = trim_batch(batch["decoder_input_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
-        return source_ids, source_mask, y
-
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
@@ -150,6 +144,10 @@ class Seq2SeqDataset(Dataset):
 
     def make_sortish_sampler(self, batch_size):
         return SortishSampler(self.src_lens, batch_size)
+
+
+def count_non_pad_tokens(ids: torch.Tensor) -> torch.Tensor:
+    ids.ne
 
 
 class MBartDataset(Seq2SeqDataset):
