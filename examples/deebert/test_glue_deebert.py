@@ -4,9 +4,8 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from transformers.testing_utils import slow
-
 import run_glue_deebert
+from transformers.testing_utils import slow
 
 
 logging.basicConfig(level=logging.DEBUG)
