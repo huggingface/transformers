@@ -4,8 +4,8 @@ from typing import Any, Callable, Dict, List, NewType, Tuple, Union
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from ..tokenization_utils_base import BatchEncoding
 from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils_base import BatchEncoding
 
 
 InputDataClass = NewType("InputDataClass", Any)
