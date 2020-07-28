@@ -1,5 +1,14 @@
 ---
 language: fr
+datasets:
+- PIAF
+- FQuAD
+- SQuAD-FR
+widget:
+- text: "Comment s'appelle le portail open data du gouvernement ?"
+  context: "Etalab est une administration publique française qui fait notamment office de Chief Data Officer de l'État et coordonne la conception et la mise en œuvre de sa stratégie dans le domaine de la donnée (ouverture et partage des données publiques ou open data, exploitation des données et intelligence artificielle...). Ainsi, Etalab développe et maintient le portail des données ouvertes du gouvernement français data.gouv.fr.
+Etalab promeut également une plus grande ouverture l'administration sur la société (gouvernement ouvert) : transparence de l'action publique, innovation ouverte, participation citoyenne... elle promeut l’innovation, l’expérimentation, les méthodes de travail ouvertes, agiles et itératives, ainsi que les synergies avec la société civile pour décloisonner l’administration et favoriser l’adoption des meilleures pratiques professionnelles dans le domaine du numérique. À ce titre elle étudie notamment l’opportunité de recourir à des technologies en voie de maturation issues du monde de la recherche.
+Cette entité chargée de l'innovation au sein de l'administration doit contribuer à l'amélioration du service public grâce au numérique. Elle est rattachée à la Direction interministérielle du numérique, dont les missions et l’organisation ont été fixées par le décret du 30 octobre 2019.  Dirigé par Laure Lucchesi depuis 2016, elle rassemble une équipe pluridisciplinaire d'une trentaine de personnes."
 ---
 
 # camembert-base-squadFR-fquad-piaf
@@ -30,7 +39,7 @@ python run_squad.py \
 ``` 
 
 ## Evaluation results
-### Fquad v1.0 Evaluation
+### FQuAD v1.0 Evaluation
 ```shell
 {"f1": 79.81, "exact_match": 55.14}
 ```
@@ -74,7 +83,7 @@ nlp({
 
 ```
 
-### Fquad
+### FQuAD
 ```
 @article{dHoffschmidt2020FQuADFQ,
   title={FQuAD: French Question Answering Dataset},
@@ -87,7 +96,7 @@ nlp({
 
 ### SQuAD-FR
 ```
- @MISC{maldives,
+ @MISC{kabbadj2018,
    author =       "Kabbadj, Ali",
    title =        "Something new in French Text Mining and Information Extraction (Universal Chatbot): Largest Q&A French training dataset (110 000+) ",
    editor =       "linkedin.com",
