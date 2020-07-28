@@ -90,7 +90,7 @@ class TFTrainer:
 
         if is_wandb_available():
             self._setup_wandb()
-        else:
+        elif os.environ.get("WANDB_DISABLED") != "true":
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
@@ -171,6 +171,8 @@ class TFTrainer:
             self.args.learning_rate,
             num_training_steps,
             self.args.warmup_steps,
+            adam_beta1=self.args.adam_beta1,
+            adam_beta2=self.args.adam_beta2,
             adam_epsilon=self.args.adam_epsilon,
             weight_decay_rate=self.args.weight_decay,
         )
@@ -573,4 +575,4 @@ class TFTrainer:
         if not isinstance(self.model, TFPreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
 
-        self.model.save_pretrained(self.args.output_dir)
+        self.model.save_pretrained(output_dir)

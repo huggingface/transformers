@@ -1,12 +1,19 @@
 Models
 ----------------------------------------------------
 
-The base class ``PreTrainedModel`` implements the common methods for loading/saving a model either from a local file or directory, or from a pretrained model configuration provided by the library (downloaded from HuggingFace's AWS S3 repository).
+The base classes :class:`~transformers.PreTrainedModel` and :class:`~transformers.TFPreTrainedModel` implement the
+common methods for loading/saving a model either from a local file or directory, or from a pretrained model
+configuration provided by the library (downloaded from HuggingFace's AWS S3 repository).
 
-``PreTrainedModel`` also implements a few methods which are common among all the models to:
+:class:`~transformers.PreTrainedModel` and :class:`~transformers.TFPreTrainedModel` also implement a few methods which
+are common among all the models to:
 
 - resize the input token embeddings when new tokens are added to the vocabulary
 - prune the attention heads of the model.
+
+The other methods that are common to each model are defined in :class:`~transformers.modeling_utils.ModuleUtilsMixin`
+(for the PyTorch models) and :class:`~transformers.modeling_tf_utils.TFModuleUtilsMixin` (for the TensorFlow models).
+
 
 ``PreTrainedModel``
 ~~~~~~~~~~~~~~~~~~~~~
@@ -14,14 +21,23 @@ The base class ``PreTrainedModel`` implements the common methods for loading/sav
 .. autoclass:: transformers.PreTrainedModel
     :members:
 
-``Helper Functions``
-~~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: transformers.apply_chunking_to_forward
+``ModuleUtilsMixin``
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_utils.ModuleUtilsMixin
+    :members:
 
 
 ``TFPreTrainedModel``
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFPreTrainedModel
+    :members:
+
+
+``TFModelUtilsMixin``
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_utils.TFModelUtilsMixin
     :members:
