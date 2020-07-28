@@ -59,7 +59,7 @@ def ensure_onnxruntime_installed():
 
         # We require 1.4.0 minimum
         if int(onnxruntime.__version__.split(".")[1]) < 4:
-            print(
+            ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= 1.4.0 to enable all the conversions options.\n"
                 f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
@@ -249,7 +249,7 @@ def convert(
 
 def quantize(onnx_model_path: Path) -> Path:
     """
-    Quantize the weights of the model from float32 to in8 to allow very efficient inference on modern CP.
+    Quantize the weights of the model from float32 to in8 to allow very efficient inference on modern CPU.
     :param onnx_model_path: Path to location the exported ONNX model is stored
     :return: The path generated for the quantized
     """
@@ -276,7 +276,7 @@ def quantize(onnx_model_path: Path) -> Path:
 
         return quantized_model_path
     except ImportError as ie:
-        print(str(ie))
+        print(f"Error while quantizing the model:\n{str(ie)}")
 
 
 def verify(path: Path):

@@ -8,9 +8,9 @@ from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipelin
 from transformers.convert_graph_to_onnx import (
     convert,
     ensure_valid_input,
+    generate_identified_filename,
     infer_shapes,
     quantize,
-    generate_identified_filename,
 )
 from transformers.testing_utils import require_tf, require_torch, slow
 
