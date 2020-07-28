@@ -22,7 +22,7 @@ from typing import List
 
 import timeout_decorator
 
-from transformers import MarianConfig, MarianMTModel, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 
@@ -975,6 +975,8 @@ class UtilsFunctionsTest(unittest.TestCase):
 
     @require_torch
     def test_postprocess_next_token_scores(self):
+        from transformers import MarianConfig, MarianMTModel
+
         config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
         model = MarianMTModel(config=config)
         # Initialize an input id tensor with batch size 8 and sequence length 12
@@ -1010,6 +1012,8 @@ class UtilsFunctionsTest(unittest.TestCase):
     @require_torch
     @timeout_decorator.timeout(2)
     def test_postprocess_next_token_scores_large_bad_words_list(self):
+        from transformers import MarianConfig, MarianMTModel
+
         try:
             config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
             model = MarianMTModel(config=config)
