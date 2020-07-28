@@ -207,5 +207,6 @@ conversion utilities for the following models:
     model_doc/retribert
     model_doc/mobilebert
     model_doc/dpr
+    internal/modeling_utils
     model_doc/bertweet
     model_doc/phobert
