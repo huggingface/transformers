@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from transformers.testing_utils import slow
 
-from . import run_glue_deebert
+import run_glue_deebert
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -56,8 +56,6 @@ class DeeBertTests(unittest.TestCase):
             for value in result.values():
                 self.assertGreaterEqual(value, 0.666)
 
-    @slow
-    def test_glue_deebert_eval(self):
         eval_args = """
             run_glue_deebert.py
             --model_type roberta
@@ -79,8 +77,6 @@ class DeeBertTests(unittest.TestCase):
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
 
-    @slow
-    def test_glue_entropy_eval(self):
         entropy_eval_args = """
             run_glue_deebert.py
             --model_type roberta
