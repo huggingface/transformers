@@ -297,12 +297,11 @@ def convert(
     # Load the pipeline
     nlp = load_graph_from_args(pipeline_name, framework, model, tokenizer)
 
-    parent = dirname(output)
-    if not exists(parent):
-        print("Creating folder {}".format(parent))
-        makedirs(parent)
-    elif len(listdir(parent)) > 0:
-        raise Exception("Folder {} is not empty, aborting conversion".format(parent))
+    if not output.parent.exists():
+        print("Creating folder {}".format(output.parent))
+        makedirs(output.parent.as_posix())
+    elif len(listdir(output.parent.as_posix())) > 0:
+        raise Exception("Folder {} is not empty, aborting conversion".format(output.parent.as_posix()))
 
     # Export the graph
     if framework == "pt":
