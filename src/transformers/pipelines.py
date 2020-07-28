@@ -959,7 +959,7 @@ class ZeroShotClassificationPipeline(Pipeline):
             top_inds = list(reversed(scores[iseq].argsort()))
             result.append(
                 {
-                    "sequence": sequences if num_sequences == 1 else sequences[iseq],
+                    "sequence": sequences if isinstance(sequences, str) else sequences[iseq],
                     "labels": [candidate_labels[i] for i in top_inds],
                     "scores": scores[iseq][top_inds].tolist(),
                 }
