@@ -56,7 +56,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file which is the bpe-codes file
-        normalized (:obj:`boolean`, defaults to False)
+        normalization (:obj:`boolean`, defaults to False)
             Whether to apply a normalization pre-process.
         bos_token (:obj:`string`, `optional`, defaults to "<s>"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
@@ -98,7 +98,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self,
         vocab_file,
         merges_file,
-        normalized=False,
+        normalization=False,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -125,7 +125,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
         self.vocab_file = vocab_file
         self.merges_file = merges_file
-        self.normalized = normalized
+        self.normalization = normalization
 
         self.tokenizerTweet = TweetTokenizer()
 
@@ -222,7 +222,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
     def normalizeTweet(self, tweet):
         """
-        Normalize raw tweet
+        Normalize raw Tweet
         """
         tokens = self.tokenizerTweet.tokenize(tweet.replace("’", "'").replace("…", "..."))
         normTweet = " ".join([self.normalizeToken(token) for token in tokens])
@@ -238,8 +238,8 @@ class BertweetTokenizer(PreTrainedTokenizer):
         return " ".join(normTweet.split())
 
     def _tokenize(self, text):
-        """Apply normalization on tweet if neccessary, then apply fastBPE on the text"""
-        if self.normalized:
+        """Apply normalization on Tweet, then apply fastBPE"""
+        if self.normalization:
             text = self.normalizeTweet(text)
         return self.bpe.apply([text])[0].split()
 
