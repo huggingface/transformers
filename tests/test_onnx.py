@@ -172,4 +172,4 @@ class OnnxExportTestCase(unittest.TestCase):
 
     def test_generate_identified_name(self):
         generated = generate_identified_filename(Path("/home/something/my_fake_model.onnx"), "-test")
-        self.assertEqual("/home/something/my_fake_model-test.onnx", generated)
+        self.assertEqual("/home/something/my_fake_model-test.onnx", generated.as_posix())
