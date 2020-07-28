@@ -54,7 +54,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
-        merges_file (:obj: `str`):
+        merges_file (:obj:`str`):
             Path to the merges file which here is the bpe-codes file
         bos_token (:obj:`string`, `optional`, defaults to "<s>"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.

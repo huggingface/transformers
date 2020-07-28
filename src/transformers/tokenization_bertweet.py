@@ -54,9 +54,9 @@ class BertweetTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
-        merges_file (:obj: `str`):
+        merges_file (:obj:`str`):
             Path to the merges file which is the bpe-codes file
-        normalized (:obj: `boolean`, defaults to False)
+        normalized (:obj:`boolean`, defaults to False)
             Whether to apply a normalization pre-process.
         bos_token (:obj:`string`, `optional`, defaults to "<s>"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
