@@ -29,6 +29,7 @@ from .trainer_utils import (
     TrainOutput,
     is_wandb_available,
     set_seed,
+    estimate_tokens,
 )
 from .training_args import TrainingArguments
 
@@ -172,6 +173,7 @@ class Trainer:
     optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
     global_step: Optional[int] = None
     epoch: Optional[float] = None
+    non_embedding_flos: Optional[int] = None
 
     def __init__(
         self,
@@ -469,6 +471,7 @@ class Trainer:
 
         self.global_step = 0
         self.epoch = 0
+        self.non_embedding_flos = 0
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
         # Check if continuing training from a checkpoint
@@ -476,6 +479,7 @@ class Trainer:
             # set global_step to global_step of last saved checkpoint from model path
             try:
                 self.global_step = int(model_path.split("-")[-1].split("/")[0])
+                self.non_embedding_flos = getattr(model.config, "non_embedding_flos", 0)
                 epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
                 steps_trained_in_current_epoch = self.global_step % (
                     len(train_dataloader) // self.args.gradient_accumulation_steps
@@ -484,9 +488,13 @@ class Trainer:
                 logger.info("  Continuing training from checkpoint, will skip to saved global_step")
                 logger.info("  Continuing training from epoch %d", epochs_trained)
                 logger.info("  Continuing training from global step %d", self.global_step)
+                logger.info(
+                    "  Continuing training from %d non-embedding floating-point operations", self.non_embedding_flos
+                )
                 logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
             except ValueError:
                 self.global_step = 0
+                self.non_embedding_flos = 0
                 logger.info("  Starting fine-tuning.")
 
         tr_loss = 0.0
@@ -539,6 +547,10 @@ class Trainer:
                     model.zero_grad()
                     self.global_step += 1
                     self.epoch = epoch + (step + 1) / len(epoch_iterator)
+                    self.non_embedding_flos += 6 * model.floating_point_ops(
+                        *estimate_tokens(inputs), no_embeddings=True
+                    )
+                    print(self.non_embedding_flos)
 
                     if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
                         self.global_step == 1 and self.args.logging_first_step
@@ -581,10 +593,10 @@ class Trainer:
                             torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+                if self.global_step > self.args.max_steps > 0:
                     epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+            if self.global_step > self.args.max_steps > 0:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:
@@ -621,6 +633,8 @@ class Trainer:
 
         if self.epoch is not None:
             logs["epoch"] = self.epoch
+        if self.non_embedding_flos is not None:
+            logs["non_embedding_flos"] = self.non_embedding_flos
         if self.global_step is None:
             # when logging evaluation metrics without training
             self.global_step = 0
@@ -642,7 +656,7 @@ class Trainer:
         if is_wandb_available():
             if self.is_world_master():
                 wandb.log(logs, step=self.global_step)
-        output = {**logs, **{"step": self.global_step}}
+        output = {**logs, **{"step": self.global_step, "neFLOs": self.non_embedding_flos}}
         if iterator is not None:
             iterator.write(output)
         else:
@@ -761,6 +775,8 @@ class Trainer:
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
 
         xm.rendezvous("saving_checkpoint")
+        # Storing the number of floating-point operations that went into the model
+        self.model.config.non_embedding_flos = self.non_embedding_flos
         self.model.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
@@ -771,6 +787,8 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
+        # Storing the number of floating-point operations that went into the model
+        self.model.config.non_embedding_flos = self.non_embedding_flos
         self.model.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model

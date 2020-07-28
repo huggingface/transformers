@@ -1,6 +1,7 @@
 import os
 import random
 from typing import Dict, NamedTuple, Optional
+import warnings
 
 import numpy as np
 
@@ -44,6 +45,28 @@ def set_seed(seed: int):
         import tensorflow as tf
 
         tf.random.set_seed(seed)
+
+
+def estimate_tokens(inputs):
+    """
+    Helper function to estimate the batch size and sequence length from the model inputs
+
+    Args:
+        inputs (:obj:`dict`): The model inputs.
+
+    Returns:
+        seed (:obj:`tuple`): The batch size and sequence length.
+    """
+    inputs_ids = inputs.get("input_ids")
+    input_embeds = inputs.get("input_embeds")
+    if inputs is not None:
+        return inputs_ids.shape[0], inputs_ids.shape[1]
+    if input_embeds is not None:
+        return input_embeds.shape[0], input_embeds.shape[1]
+    warnings.warn(
+        "Could not estimate the number of tokens of the input, floating-point operations will" "not be computed"
+    )
+    return 0, 0
 
 
 class EvalPrediction(NamedTuple):
