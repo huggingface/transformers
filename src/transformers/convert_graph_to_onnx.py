@@ -44,16 +44,22 @@ class OnnxConverterArgumentParser(ArgumentParser):
 
 def generate_identified_filename(filename: Path, identifier: str) -> Path:
     """
-    Append an string-identifier at the end (before the extension,  if any) to the provided filepath.
-    Can be used to
-    :param filename:
-    :param identifier:
-    :return:
+    Append a string-identifier at the end (before the extension,  if any) to the provided filepath.
+    Args:
+        filename: pathlib.Path The actual path object we would like to add an identifier suffix
+        identifier: The suffix to add
+
+    Returns: String with concatenated indentifier at the end of the filename
     """
     return filename.parent.joinpath(filename.stem + identifier).with_suffix(filename.suffix)
 
 
 def ensure_onnxruntime_installed():
+    """
+    Check onnxruntime is installed and if the installed version match is recent enough.
+    Raises:
+        ImportError: If onnxruntime is not installed or too old version is found
+    """
     try:
         import onnxruntime
 
@@ -101,6 +107,18 @@ def ensure_valid_input(model, tokens, input_names):
 
 
 def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
+    """
+    Attempt to infer the static vs dynamic axes for each input and output tensors for a specific model.
+    Args:
+        nlp: The pipeline object holding the model to be exported
+        framework: The framework identifier to dispatch to the correct inference scheme (pt/tf)
+
+    Returns:
+        - List of the inferred input variable names
+        - List of the inferred output variable names
+        - Dictionary with input/output variables names as key and shape tensor as value
+        - a BatchEncoding reference which was used to infer all the above information
+    """
     def build_shape_dict(name: str, tensor, is_input: bool, seq_len: int):
         if isinstance(tensor, (tuple, list)):
             return [build_shape_dict(name, t, is_input, seq_len) for t in tensor]
@@ -150,6 +168,17 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
 
 def load_graph_from_args(pipeline_name: str, framework: str, model: str, tokenizer: Optional[str] = None) -> Pipeline:
+    """
+    Convert the set of arguments provided through the CLI to an actual pipeline reference (tokenizer + model)
+    Args:
+        pipeline_name: The kind of pipeline to use (ner, question-answering, etc.)
+        framework: The actual model to convert the pipeline from ("pt" or "tf")
+        model: The model name which will be loaded by the pipeline
+        tokenizer: The tokenizer name which will be loaded by the pipeline, defaut to the model's value
+
+    Returns: Pipeline object
+
+    """
     # If no tokenizer provided
     if tokenizer is None:
         tokenizer = model
@@ -167,6 +196,17 @@ def load_graph_from_args(pipeline_name: str, framework: str, model: str, tokeniz
 
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format: bool):
+    """
+    Export a PyTorch backed pipeline to ONNX Intermediate Representation (IR)
+    Args:
+        nlp: The pipeline to be exported
+        opset: The actual version of the ONNX operator set to use
+        output: Path where will be stored the generated ONNX model
+        use_external_format: Split the model definition from its parameters to allow model bigger than 2GB
+
+    Returns:
+
+    """
     if not is_torch_available():
         raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
 
@@ -194,6 +234,16 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
+    """
+    Export a TensorFlow backed pipeline to ONNX Intermediate Representation (IR)
+    Args:
+        nlp: The pipeline to be exported
+        opset: The actual version of the ONNX operator set to use
+        output: Path where will be stored the generated ONNX model
+
+    Notes: TensorFlow cannot export model bigger than 2GB due to internal constraint from TensorFlow
+
+    """
     if not is_tf_available():
         raise Exception("Cannot convert because TF is not installed. Please install tensorflow first.")
 
@@ -222,12 +272,26 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 def convert(
     framework: str,
     model: str,
-    output: str,
+    output: Path,
     opset: int,
     tokenizer: Optional[str] = None,
     use_external_format: bool = False,
     pipeline_name: str = "feature-extraction",
 ):
+    """
+    Convert the pipeline object to the ONNX Intermediate Representation (IR) format.
+    Args:
+        framework: The framework the pipeline is backed by ("pt" or "tf")
+        model: The name of the model to load for the pipeline
+        output: The path where the ONNX graph will be stored
+        opset: The actual version of the ONNX operator set to use
+        tokenizer: The name of the model to load for the pipeline, default to the model's name if not provided
+        use_external_format: Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
+        pipeline_name: The kind of pipeline to instantiate (ner, question-answering, etc.)
+
+    Returns:
+
+    """
     print("ONNX opset version set to: {}".format(opset))
 
     # Load the pipeline
@@ -250,9 +314,12 @@ def convert(
 def quantize(onnx_model_path: Path) -> Path:
     """
     Quantize the weights of the model from float32 to in8 to allow very efficient inference on modern CPU.
-    :param onnx_model_path: Path to location the exported ONNX model is stored
-    :return: The path generated for the quantized
+    Args:
+        onnx_model_path: Path to location the exported ONNX model is stored
+
+    Returns: The Path generated for the quantized
     """
+
     try:
         ensure_onnxruntime_installed()
         import onnx
