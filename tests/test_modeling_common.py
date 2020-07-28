@@ -1035,5 +1035,5 @@ class UtilsFunctionsTest(unittest.TestCase):
                 32,
                 5,
             )
-        except OSError:
+        except timeout_decorator.timeout_decorator.TimeoutError:
             print("Test timed-out")
