@@ -19,7 +19,6 @@
 import argparse
 import ast
 import glob
-import json
 import logging
 import os
 import re
@@ -29,18 +28,18 @@ from collections import Counter
 import torch
 from tqdm import tqdm
 
-from transformers import (
-    WEIGHTS_NAME,
-    AdamW,
-    RagConfig,
-    RagDefaultSequenceModel,
-    RagDefaultTokenizer,
-    get_linear_schedule_with_warmup,
-    squad_convert_examples_to_features,
-)
+from transformers import WEIGHTS_NAME, RagConfig, RagDefaultSequenceModel, RagDefaultTokenizer, RagDefaultTokenModel
 
 
 logger = logging.getLogger(__name__)
+
+
+def infer_model_type(model_name_or_path):
+    if "token" in model_name_or_path:
+        return "token"
+    if "sequence" in model_name_or_path:
+        return "sequence"
+    return None
 
 
 def normalize_answer(s):
@@ -88,10 +87,8 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
 
 
 def get_scores(preds_path, gold_data_path, gold_data_mode):
-    hypos = open(preds_path, "r").readlines()
-    hypos = [line.strip() for line in hypos]
-    references = open(gold_data_path, "r").readlines()
-    references = [line.strip() for line in references]
+    hypos = [line.strip() for line in open(preds_path, "r").readlines()]
+    references = [line.strip() for line in open(gold_data_path, "r").readlines()]
 
     answers = []
     if gold_data_mode == "qa":
@@ -102,7 +99,7 @@ def get_scores(preds_path, gold_data_path, gold_data_mode):
         answers = [[reference] for reference in references]
 
     f1 = em = total = 0
-    for prediction, ground_truths in zip(hypos, answers):  # data[0], data[1]):
+    for prediction, ground_truths in zip(hypos, answers):
         total += 1
         em += metric_max_over_ground_truths(exact_match_score, prediction, ground_truths)
         f1 += metric_max_over_ground_truths(f1_score, prediction, ground_truths)
@@ -121,12 +118,12 @@ def evaluate_batch(args, model, tokenizer, questions):
         ].to(args.device)
         outputs = model.generate(
             input_ids,
-            num_beams=args.n_beams,
-            min_length=1,  # make sure short answers are allowed
-            max_length=10,  # no need for crazy long answers in NQ
+            num_beams=args.num_beams,
+            min_length=args.min_length,  # make sure short answers are allowed
+            max_length=args.max_length,  # no need for crazy long answers in NQ
             early_stopping=False,
             num_return_sequences=1,
-            bad_words_ids=[[0, 0]]
+            # bad_words_ids=[[0, 0]]
             # BART likes to repeat BOS tokens, dont allow it to generate more than one
         )
         output_strings = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -137,6 +134,19 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Required parameters
+    parser.add_argument(
+        "--model_type",
+        choices=["sequence", "token"],
+        type=str,
+        help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
+    )
+    parser.add_argument(
+        "--retriever_type",
+        default="hf_retriever",
+        choices=["hf_retriever", "mpi_retriever"],
+        type=str,
+        help="RAG model retriever type",
+    )
     parser.add_argument(
         "--model_name_or_path",
         default=None,
@@ -160,7 +170,7 @@ def main():
         type=str,
         choices=["qa", "ans"],
         help="Format of the gold data file"
-        "qa - a sinle line in the following format: question [tab] answer_list"
+        "qa - a single line in the following format: question [tab] answer_list"
         "ans - a single line of the gold file contains the expected answer string",
     )
     parser.add_argument(
@@ -174,15 +184,23 @@ def main():
         action="store_true",
         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
+    parser.add_argument("--eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.")
+    parser.add_argument(
+        "--recalculate", help="Recalculate predictions even if the prediction file exists", action="store_true"
+    )
     parser.add_argument(
         "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
     )
     parser.add_argument(
-        "--n_beams", default=3, type=int, help="Number of beams to be used when generating answers",
+        "--num_beams", default=4, type=int, help="Number of beams to be used when generating answers",
     )
-    parser.add_argument("--eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.")
+
     parser.add_argument(
-        "--recalculate", help="Recalculate predictions even if the prediction file exists", action="store_true"
+        "--min_length", default=1, type=int, help="Min length of the generated answers",
+    )
+
+    parser.add_argument(
+        "--max_length", default=50, type=int, help="Max length of the generated answers",
     )
 
     args = parser.parse_args()
@@ -191,20 +209,25 @@ def main():
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    tokenizer = RagDefaultTokenizer.from_pretrained("facebook/bart-large", do_lower_case=args.do_lower_case)
+    if args.model_type is None:
+        args.model_type = infer_model_type(args.model_name_or_path)
+        assert args.model_type is not None
+    model_class = RagDefaultSequenceModel if args.model_type == "sequence" else RagDefaultTokenModel
+
     checkpoints = [args.model_name_or_path]
     if args.eval_all_checkpoints:
         checkpoints = list(
             os.path.dirname(c)
             for c in sorted(glob.glob(args.model_name_or_path + "/**/" + WEIGHTS_NAME, recursive=True))
         )
-
+        rag_config = None
+    else:
+        rag_config = RagConfig.from_pretrained(args.model_name_or_path, retriever_type=args.retriever_type)
     logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
-    tokenizer = RagDefaultTokenizer.from_pretrained("facebook/bart-large", do_lower_case=args.do_lower_case)
     for checkpoint in checkpoints:
-
         predictions_path = os.path.join(checkpoint, args.predictions_filename)
-
         if os.path.exists(predictions_path) and (not args.recalculate):
             logger.info("Calculating metrics based on an existing predictions file: {}".format(predictions_path))
             get_scores(predictions_path, args.gold_data_path, args.gold_data_mode)
@@ -214,7 +237,7 @@ def main():
         logger.info("  Batch size = %d", args.eval_batch_size)
         logger.info("  Predictions will be stored under {}".format(predictions_path))
 
-        model = RagDefaultSequenceModel.from_pretrained(checkpoint)
+        model = model_class.from_pretrained(checkpoint) if rag_config is None else model_class(rag_config)
         model.to(args.device)
 
         with open(args.evaluation_set, "r") as eval_file, open(predictions_path, "w") as preds_file:
@@ -223,15 +246,17 @@ def main():
                 questions.append(line.strip())
                 if len(questions) == args.eval_batch_size:
                     answers = evaluate_batch(args, model, tokenizer, questions)
-                    questions = []
-                    preds_file.write("\n".join(answers))
+                    preds_file.write("\n".join(answers) + "\n")
                     preds_file.flush()
-            if len(datapoints) > 0:
-                answers = evaluate_batch(datapoints)
+                    for q, a in zip(questions, answers):
+                        print("Q:", q, "- A:", a)
+                    questions = []
+                    print()
+            if len(questions) > 0:
+                answers = evaluate_batch(args, model, tokenizer, questions)
                 preds_file.write("\n".join(answers))
                 preds_file.flush()
 
-            evaluate(args, model, tokenizer, predictions_path)
             get_scores(predictions_path, args.gold_data_path, args.gold_data_mode)
 
 

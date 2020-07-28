@@ -52,9 +52,7 @@ def evaluate_batch(args, model, input_strings):
     retriever_inputs = rag_model.retriever_tokenizer.batch_encode_plus(
         input_strings, return_tensors="pt", padding=True, truncation=True,
     )
-    retriever_input_embs = (
-        rag_model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0].detach().cpu().numpy()
-    )
+    retriever_input_embs = rag_model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0]
 
     _, all_docs = rag_model.retriever.retrieve(retriever_input_embs)
 
@@ -147,7 +145,9 @@ def main():
         )
         rag_config = None
     else:
-        rag_config = RagConfig(pretrained_generator_name_or_path="facebook/bart-large", retriever_type=args.retriever_type)
+        rag_config = RagConfig(
+            pretrained_generator_name_or_path="facebook/bart-large", retriever_type=args.retriever_type
+        )
     logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
     for checkpoint in checkpoints:

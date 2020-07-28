@@ -122,6 +122,7 @@ from .pipelines import (
     TranslationPipeline,
     pipeline,
 )
+from .retrieval_rag import *
 
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer

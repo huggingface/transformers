@@ -23,8 +23,8 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 RAG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # "rag-sequence-default": "/private/home/piktus/huggingface_rag/data/rag-sequence-nq/",
-    # "rag-token-default": "/private/home/piktus/huggingface_rag/data/rag-token-nq/",
+    # "rag-sequence-default": "/private/home/piktus/rag_huggingface/data/rag-sequence-nq/",
+    # "rag-token-default": "/private/home/piktus/rag_huggingface/data/rag-token-nq/",
 }
 
 
@@ -39,7 +39,7 @@ class RagConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=50264,
         is_encoder_decoder=True,
         pad_token_id=1,
         bos_token_id=0,
@@ -49,15 +49,25 @@ class RagConfig(PretrainedConfig):
         doc_sep=" // ",
         n_docs=5,
         max_combined_length=300,  # max token length of input with context doc prepended
+        retriever_type="hf_retriever",
+        # hf_retriever default params
         dataset="wiki_dpr",
         dataset_name="psgs_w100_no_embeddings",
         dataset_split="train",
         index_name="embeddings",
+        uncompressed=False,
+        uncompressed_index_path=None,
+        # mpi_retriever default params
+        retrieval_vector_size=786,
+        retrieval_batch_size=8,
+        passages_path=None,
+        index_path=None,
+        # pre-trained components
         pretrained_context_encoder_name_or_path="facebook/dpr-ctx_encoder-single-nq-base",
         pretrained_context_tokenizer_name_or_path="facebook/dpr-ctx_encoder-single-nq-base",
         pretrained_question_encoder_name_or_path="facebook/dpr-question_encoder-single-nq-base",
         pretrained_generator_tokenizer_name_or_path="facebook/bart-large",
-        pretrained_generator_name_or_path="/private/home/piktus/huggingface_rag/data/rag-sequence-nq",
+        pretrained_generator_name_or_path="/private/home/piktus/rag_hugginface/data/rag-sequence-nq",
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -71,10 +81,21 @@ class RagConfig(PretrainedConfig):
         self.doc_sep = doc_sep
         self.n_docs = n_docs
         self.max_combined_length = max_combined_length
+
+        self.retriever_type = retriever_type
+
         self.dataset = dataset
         self.dataset_name = dataset_name
         self.dataset_split = dataset_split
         self.index_name = index_name
+
+        self.retrieval_vector_size = retrieval_vector_size
+        self.retrieval_batch_size = retrieval_batch_size
+        self.passages_path = passages_path
+        self.index_path = index_path
+        self.uncompressed = uncompressed
+        self.uncompressed_index_path = uncompressed_index_path
+
         self.pretrained_context_encoder_name_or_path = pretrained_context_encoder_name_or_path
         self.pretrained_context_tokenizer_name_or_path = pretrained_context_tokenizer_name_or_path
         self.pretrained_question_encoder_name_or_path = pretrained_question_encoder_name_or_path

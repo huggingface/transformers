@@ -1,17 +1,19 @@
 import logging
 import os
 import pprint
+import string
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-from nlp import load_dataset
 
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_bart import BartForConditionalGeneration
 from .modeling_dpr import DPRContextEncoder, DPRQuestionEncoder
+from .modeling_outputs import Seq2SeqLMOutputWithDocs
 from .modeling_utils import PreTrainedModel
+from .retrieval_rag import HFRetriever, MPIRetriever
 from .tokenization_bart import BartTokenizer
 from .tokenization_dpr import DPRContextEncoderTokenizer
 from .tokenization_rag import RagDefaultTokenizer
@@ -19,73 +21,7 @@ from .tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    # format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-    # datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.WARNING  # if args.local_rank in [-1, 0] else logging.WARN,
-)
-
-
-class Retriever(torch.nn.Module):
-    """
-    Encapsulation of the retrieval index. We may not need a separate class
-    for it given how Datasets are evolving but keeping
-    it here for now as it may be easier to have it separate when implementing
-    multi-node training.
-
-    TODO(piktus): Implement handling of multi-node training.
-    """
-
-    def __init__(
-        self,
-        dataset,
-        dataset_name=None,
-        dataset_split=None,
-        index_name="embeddings",
-        doc_encoder: PreTrainedModel = None,
-        doc_tokenizer: PreTrainedTokenizer = None,
-    ):
-        super().__init__()
-        self.dataset = dataset
-        self.dataset_name = dataset_name
-        self.dataset_split = dataset_split
-        self.index_name = index_name
-        self.doc_encoder = doc_encoder
-        self.doc_tokenizer = doc_tokenizer
-        assert (self.doc_encoder is None) == (self.doc_tokenizer is None)
-        self.device = torch.device("cpu")
-        self.index = self.build_index() if self.doc_encoder is not None else self.load_index()
-
-    # Build an index from scratch given a dataset. Higly inefficien.
-    # Keeping this for now for testing - expects title and text columns
-    def build_index(self):
-        def _embed_ctx(examples):
-            batch_inputs = self.doc_tokenizer.batch_encode_plus(
-                batch_text_or_text_pairs=list(zip(examples["title"], examples["text"])),
-                return_tensors="pt",
-                padding="max_length",
-                max_length=None,
-                truncation=True,
-            )["input_ids"].to(self.device)
-            return self.doc_encoder(batch_inputs)[0].cpu().numpy()
-
-        dataset = load_dataset(self.dataset, self.dataset_name, split=self.dataset_split)
-        with torch.no_grad():
-            dataset_with_embeddings = dataset.map(
-                lambda ex: {self.index_name: _embed_ctx(ex)}, batched=True, batch_size=16
-            )
-        # no device specified - index on CPU
-        dataset_with_embeddings.add_faiss_index(column=self.index_name)
-        return dataset_with_embeddings
-
-    # Loading a dataset with a pre-computed index.
-    def load_index(self):
-        # any risk datasets will be silently updated? can I trust it'll remain build by a specific model? add version?
-        return load_dataset(self.dataset, self.dataset_name, with_index=True, split=self.dataset_split)
-
-    def retrieve(self, question_embs, k=5):
-        return self.index.get_nearest_examples_batch(self.index_name, question_embs, k)
+logging.basicConfig(level=logging.WARNING)
 
 
 # Helper functions.
@@ -114,27 +50,6 @@ def _shift_tokens_left(input_ids, pad_token_id):
     return torch.cat([input_ids[:, 1:], input_ids.new(input_ids.shape[0], 1).fill_(pad_token_id)], 1)
 
 
-class RAGEncoder(torch.nn.Module):
-    """RAG is an encoder-decoder model, however, we don't exaplicitly implement an encoder and a decoder layes,
-    like it's done e.g. in BART and T5 implementations - for RAG these are encapsulated inside the generaotr instance.
-    This is a dummy model simulating RAG encode output need in transformers generation code"""
-
-    def __init__(self, RagModel):
-        super().__init__()
-        self.rag_model = RagModel
-
-    def forward(self, input_ids=None, attention_mask=None):
-        """
-        returns a tuple (encoder_embeddings, encoder_hidden_states, encoder_attentions, doc_logprobs)
-        """
-        ctxt_input_ids, ctxt_attention_mask, doc_logprobs = self.rag_model.contextualize(input_ids)
-        encoder = self.rag_model.generator.get_encoder()
-        encoder_out = encoder(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask)
-        unstacked_x = _unstack_ctxt(encoder_out[0], self.rag_model.n_docs)
-
-        return (unstacked_x,) + encoder_out[1:] + (doc_logprobs,)
-
-
 class RagModel(PreTrainedModel):
     """This is a basic RAG model returning raw sequence and document logprobs.
     The model takes a retriever (with a tokenizer) and a generator (with a tokenizer)
@@ -157,46 +72,52 @@ class RagModel(PreTrainedModel):
         # TODO(piktus) validate if generator and retriever compatible / generator rag config compatible ??
 
     def forward(
-        self, input_ids, decoder_input_ids=None, encoder_outputs: Optional[Tuple] = None, **kwargs,
+        self, input_ids, decoder_input_ids=None, encoder_outputs: Optional[Tuple] = None, doc_scores=None, **kwargs,
     ):
         """
-        returns a tuple ((generator seq logprobs, retriever_doc_logprobs), generator decoder outputs, generator encoder outputs)
+        returns a tuple ((generator seq logprobs, retriever_doc_scores), generator decoder outputs, generator encoder outputs)
         """
+        # encoder_outputs are pre-computed during generations
         if encoder_outputs is not None:
-            # encoder_outputs[0] shape (batch_size, num_docs, ...)
-            encoder_outputs = (_stack_ctxt(encoder_outputs[0]),) + encoder_outputs[1:]
-            attention_mask = kwargs["attention_mask"].repeat_interleave(self.n_docs, dim=0)
-            kwargs.pop("attention_mask", None)
-            doc_logprobs = encoder_outputs[-1]
+            doc_scores = encoder_outputs[-1]
         else:
             # Add context documents to input
-            input_ids, attention_mask, doc_logprobs = self.contextualize(input_ids)
+            input_ids, attention_mask, doc_scores = self.contextualize(input_ids)
+            kwargs["attention_mask"] = attention_mask
 
         # Decoder input without context documents
         if decoder_input_ids is not None:
             decoder_input_ids = decoder_input_ids.repeat_interleave(self.n_docs, dim=0)
 
         outputs = self.generator(
-            input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            encoder_outputs=encoder_outputs,
-            **kwargs,
+            input_ids, decoder_input_ids=decoder_input_ids, encoder_outputs=encoder_outputs, **kwargs,
         )
-        # could add a parameter to return logits instead of logprobs
-        seq_logits = outputs[0]
-        seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
-            seq_logits.shape[0] // self.n_docs, self.n_docs, -1, seq_logits.size(-1)
+        return Seq2SeqLMOutputWithDocs(
+            loss=None,
+            logits=outputs.logits,
+            decoder_past_key_values=outputs.decoder_past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            doc_scores=doc_scores,
         )
-        return ((doc_logprobs, seq_logprobs),) + outputs[1:]
 
-    def _cat_input_and_doc(self, doc_title, doc_text, input_string):
+    def _cat_input_and_doc(self, doc_title, doc_text, input_string, print_docs=False):
         # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
-        out = doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string
-        return out.replace("  ", " ")
+        if doc_title.startswith('"'):
+            doc_title = doc_title[1:]
+        if doc_title.endswith('"'):
+            doc_title = doc_title[:-1]
+        out = (doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace("  ", " ")
+        if print_docs:
+            print(out)
+            print()
+        return out
 
     # TODO(piktus): handle truncation
-    def contextualize(self, input_ids):
+    def contextualize(self, input_ids, print_docs=False):
         """
         Retrieve context documents for every sample in the batch
         input_ids dim: [batch_size, src_len]
@@ -207,13 +128,12 @@ class RagModel(PreTrainedModel):
         retriever_inputs = self.retriever_tokenizer.batch_encode_plus(
             input_strings, return_tensors="pt", padding=True, truncation=True,
         )
-        retriever_input_embs = (
-            self.question_encoder(retriever_inputs["input_ids"].to(device))[0].detach().cpu().numpy()
+        retriever_input_embs = self.question_encoder(retriever_inputs["input_ids"].to(device))[0]
+        doc_scores, docs = self.retriever.retrieve(
+            retriever_input_embs, n_docs=self.n_docs, query_strings=input_strings
         )
-        doc_scores, docs = self.retriever.retrieve(retriever_input_embs, self.n_docs)
-        doc_logprobs = torch.log_softmax(torch.FloatTensor(doc_scores).to(device), dim=1)
         rag_input_strings = [
-            self._cat_input_and_doc(docs[i]["title"][j], docs[i]["text"][j], input_strings[i])
+            self._cat_input_and_doc(docs[i]["title"][j], docs[i]["text"][j], input_strings[i], print_docs)
             for i in range(len(docs))
             for j in range(self.n_docs)
         ]
@@ -227,8 +147,36 @@ class RagModel(PreTrainedModel):
         return (
             contextualized_inputs["input_ids"],
             contextualized_inputs["attention_mask"],
-            doc_logprobs,
+            torch.FloatTensor(doc_scores).to(device),
         )
+
+
+class RAGEncoder(torch.nn.Module):
+    """RAG is an encoder-decoder model, however, we don't exaplicitly implement an encoder and a decoder layes,
+    like it's done e.g. in BART and T5 implementations - for RAG these are encapsulated inside the generaotr instance.
+    This is a dummy model simulating RAG encode output need in transformers generation code"""
+
+    def __init__(self, rag_model: RagModel):
+        super().__init__()
+        self.rag_model = rag_model
+
+    def forward(self, input_ids=None, attention_mask=None):
+        ctxt_input_ids, ctxt_attention_mask, doc_scores = self.rag_model.contextualize(input_ids, print_docs=True)
+        encoder = self.rag_model.generator.get_encoder()  # stacked
+        encoder_outputs = encoder(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask)
+        # needed to satisfy assertions in generation_utils
+        unstacked_x = _unstack_ctxt(encoder_outputs.last_hidden_state, self.rag_model.n_docs)
+
+        return (unstacked_x, encoder_outputs.hidden_states, doc_scores)
+
+
+def print_generations(name, strings, extra=None):
+    print(name)
+    if extra is not None:
+        for arg in extra:
+            print(arg)
+    for s in strings:
+        print("\t", s)
 
 
 class RagSequenceModel(PreTrainedModel):
@@ -253,16 +201,12 @@ class RagSequenceModel(PreTrainedModel):
         if return_loss:
             kwargs["use_cache"] = False
         outputs = self.model(input_ids, decoder_input_ids, **kwargs)
-        doc_logprobs, seq_logprobs = outputs[0]
-        first_token_scores = seq_logprobs[:, :, :1, :]
-        remainder = seq_logprobs[:, :, 1:, :]
-        rag_logprobs = torch.cat([first_token_scores + doc_logprobs.unsqueeze(-1).unsqueeze(-1), remainder], dim=2,)
+
         if return_loss:
             assert decoder_input_ids is not None
-            loss = self.get_nll(rag_logprobs, decoder_input_ids).sum()
-            logger.info("loss", loss.shape, loss)
-            return (loss, rag_logprobs,) + outputs[1:]
-        return (rag_logprobs,) + outputs[1:]
+            outputs.loss = self.get_nll(outputs.logits, outputs.doc_scores, decoder_input_ids)
+
+        return outputs
 
     def generate(self, input_ids, **kwargs):
         """implements RAG sequence "thorough" decoding"""
@@ -270,36 +214,35 @@ class RagSequenceModel(PreTrainedModel):
         def _get_unique_rows(_input_ids):
             return torch.stack(list({str(k.tolist()): k for k in _input_ids}.values()))
 
-        ctxt_input_ids, _, doc_scores = self.model.contextualize(input_ids)
+        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, print_docs=True)
         nrs = kwargs.get("num_return_sequences", 1)
         kwargs["num_return_sequences"] = kwargs.get("num_beams", 1)
-        outputs = []
+        hypos = []
 
         for index in range(len(input_ids)):
             # first, generate beams from documents:
-            generator_input_ids = ctxt_input_ids[index * self.n_docs : (index + 1) * self.n_docs]  # (k, max_len)
-            generator_input_string = self.model.generator_tokenizer.batch_decode(
-                generator_input_ids, skip_special_tokens=True
-            )
+            generator_input_ids = ctxt_input_ids[index * self.n_docs : (index + 1) * self.n_docs]  # (n_docs, max_len)
+
             output_sequences = self.model.generator.generate(
                 generator_input_ids, **kwargs
-            )  # k * n_beam, max_output_len
-            output_string = self.model.generator_tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+            )  # n_docs * n_beam, max_output_len
             output_sequences = _get_unique_rows(output_sequences)  # dedup, max_output_len
-            output_string = self.model.generator_tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+            output_strings = self.model.generator_tokenizer.batch_decode(
+                output_sequences
+            )  # , skip_special_tokens=True)
 
             # then, run model forwards to get nll scores:
             new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
-            new_input_str = self.model.generator_tokenizer.batch_decode(new_input_ids, skip_special_tokens=True)
 
-            rag_logprobs = self.forward(new_input_ids, decoder_input_ids=output_sequences, use_cache=False)[0]
-            output_candidate_scores = self.get_nll(rag_logprobs, output_sequences)
-            top_cand_inds = (-output_candidate_scores).topk(nrs)[1]
-            outputs.append(output_sequences[top_cand_inds])
+            outputs = self.forward(new_input_ids, decoder_input_ids=output_sequences, return_loss=True)
+            print_generations("outputs strings with scores", zip(outputs.loss, output_strings))
+            top_cand_inds = (-outputs.loss).topk(nrs)[1]
 
-        return _cat_and_pad(outputs, pad_token_id=self.model.generator_tokenizer.pad_token_id)
+            hypos.append(output_sequences[top_cand_inds])
 
-    def get_nll(self, rag_logprobs, target):
+        return _cat_and_pad(hypos, pad_token_id=self.model.generator_tokenizer.pad_token_id)
+
+    def get_nll(self, seq_logits, doc_scores, target):
         """get negative log likelihood from rag log probs"""
 
         ignore_index = self.model.generator_tokenizer.pad_token_id
@@ -311,10 +254,18 @@ class RagSequenceModel(PreTrainedModel):
                 ll.masked_fill_(pad_mask, 0.0)
             return ll.squeeze(-1)
 
-        target = target.unsqueeze(1).repeat(1, self.n_docs, 1)
-        if target.dim() == rag_logprobs.dim() - 1:
-            target = target.unsqueeze(-1)
+        seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
+            seq_logits.shape[0] // self.n_docs, self.n_docs, -1, seq_logits.size(-1)
+        )
+        doc_logprobs = torch.log_softmax(doc_scores, dim=1).unsqueeze(-1).unsqueeze(-1)
 
+        # RAG-sequence marginaliation
+        first_token_scores = seq_logprobs[:, :, :1, :]
+        remainder = seq_logprobs[:, :, 1:, :]
+        rag_logprobs = torch.cat([first_token_scores + doc_logprobs, remainder], dim=2,)
+
+        # calcualate loss
+        target = target.unsqueeze(1).unsqueeze(-1).repeat(1, self.n_docs, 1, 1)
         ll = rag_logprobs.gather(dim=-1, index=target)
         ll = _mask_pads(ll)
         ll = ll.sum(2)  # sum over tokens
@@ -337,39 +288,39 @@ class RagTokenModel(PreTrainedModel):
         self.model = RagModel(
             config, retriever, retriever_tokenizer, generator, generator_tokenizer, question_encoder,
         )
-
         self.n_docs = self.config.n_docs
         assert self.n_docs > 1  # dont support k > 1
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
-        # first step, decoder_cached_states are empty
-        encoder_outputs, decoder_cached_states = past  # (past, None) if not past[1] else past
-        batch_size = encoder_outputs[0].shape[0]
-        doc_logprobs = encoder_outputs[-1]
-
-        # repeat the doc scores to match the beam size - before the first iteration of generation
-        if batch_size != doc_logprobs.shape[0]:
-            # logger.info("reshaping doc scores", batch_size, doc_logprobs.shape[0])
-            doc_logprobs = doc_logprobs.repeat_interleave(batch_size // doc_logprobs.shape[0], dim=0)
-            encoder_outputs = encoder_outputs[:-1] + (doc_logprobs,)
+        # past cold start
+        if past[1] is None:
+            encoder_last_hidden_state, encoder_hidden_states, doc_scores = past[0]
+            beam_size = encoder_last_hidden_state.shape[0] // doc_scores.shape[0]
+            doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)
+            encoder_outputs = _stack_ctxt(encoder_last_hidden_state), encoder_hidden_states, doc_scores
+            decoder_past_key_values = None
+        # past warm start
+        else:
+            encoder_outputs, decoder_past_key_values = past
 
         return {
             "input_ids": None,
             "encoder_outputs": encoder_outputs,
-            "decoder_cached_states": decoder_cached_states,
+            "decoder_past_key_values": decoder_past_key_values,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
+            "attention_mask": attention_mask.repeat_interleave(self.n_docs, dim=0),
             "use_cache": use_cache,
+            "marginalize": True,
         }
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
         """Mostly copied from BART, but you need to handle extra dimensions"""
 
-        (enc_out, enc_mask, doc_logprobs), decoder_cached_states = past
-        n_docs = doc_logprobs.shape[1]
+        (enc_out, enc_mask, doc_scores), decoder_past_key_values = past
+        n_docs = doc_scores.shape[1]
 
         def _reorder_buffer(attn_cache, new_order):
             for k, input_buffer_k in attn_cache.items():
@@ -378,34 +329,61 @@ class RagTokenModel(PreTrainedModel):
                     attn_cache[k] = _stack_ctxt(input_buffer_k.index_select(0, new_order))
             return attn_cache
 
-        reordered_decoder_cached_states = []
-        for layer_past in decoder_cached_states:
+        reordered_decoder_past_key_values = []
+        for layer_past in decoder_past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
-            reordered_decoder_cached_states.append(layer_past_new)
+            reordered_decoder_past_key_values.append(layer_past_new)
 
-        enc_out = _unstack_ctxt(enc_out, n_docs).index_select(0, beam_idx) if enc_out is not None else None
-        enc_mask = _unstack_ctxt(enc_mask, n_docs).index_select(0, beam_idx) if enc_mask is not None else None
-        doc_logprobs = doc_logprobs.index_select(0, beam_idx)
+        enc_out = (
+            _stack_ctxt(_unstack_ctxt(enc_out, n_docs).index_select(0, beam_idx)) if enc_out is not None else None
+        )
+        enc_mask = (
+            _stack_ctxt(_unstack_ctxt(enc_mask, n_docs).index_select(0, beam_idx)) if enc_mask is not None else None
+        )
+        doc_scores = doc_scores.index_select(0, beam_idx)
 
-        return ((enc_out, enc_mask, doc_logprobs), reordered_decoder_cached_states)
+        return ((enc_out, enc_mask, doc_scores), reordered_decoder_past_key_values)
+
+    def marginalize(self, seq_logits, doc_scores):
+        # RAG-token marginalization
+        seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
+            seq_logits.shape[0] // self.n_docs, self.n_docs, -1, seq_logits.size(-1)
+        )
+        doc_logprobs = torch.log_softmax(doc_scores, dim=1)
+        log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
+        return torch.logsumexp(log_prob_sum, dim=1)
 
     def forward(
-        self, input_ids, decoder_input_ids=None, encoder_outputs: Optional[Tuple] = None, return_loss=False, **kwargs,
+        self,
+        input_ids,
+        decoder_input_ids=None,
+        encoder_outputs: Optional[Tuple] = None,
+        return_loss=False,
+        marginalize=False,
+        **kwargs,
     ):
+        if return_loss:
+            kwargs["use_cache"] = False
+
         outputs = self.model(input_ids, decoder_input_ids, encoder_outputs, **kwargs)
-        doc_logprobs, seq_logprobs = outputs[0]
-        log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
-        rag_logprobs = torch.logsumexp(log_prob_sum, dim=1)
-        (enc_out, enc_mask), decoder_cached_states = outputs[1]
+
+        (enc_out, enc_mask), decoder_past_key_values = outputs.decoder_past_key_values
+        outputs.decoder_past_key_values = (enc_out, enc_mask, outputs.doc_scores), decoder_past_key_values
 
         if return_loss:
             assert decoder_input_ids is not None
-            loss = self.get_nll(rag_logprobs, decoder_input_ids).sum()
-            return (loss, rag_logprobs, ((enc_out, enc_mask, doc_logprobs), decoder_cached_states),) + outputs[2:]
-        return (rag_logprobs, ((enc_out, enc_mask, doc_logprobs), decoder_cached_states),) + outputs[2:]
+            outputs.loss = self.get_nll(rag_logprobs, decoder_input_ids)
+            return outputs
+
+        if marginalize:
+            outputs.logits = self.marginalize(outputs.logits, outputs.doc_scores)
+        return outputs
+
+    def get_input_embeddings(self):
+        return self.model.generator.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.model.generator.get_output_embeddings()
@@ -424,9 +402,9 @@ class RagTokenModel(PreTrainedModel):
                 ll.masked_fill_(pad_mask, 0.0)
             return ll.squeeze(-1)
 
+        rag_logprobs = self.marginalize(seq_logits, doc_scores)
+
         target = target.unsqueeze(1)
-        if target.dim() == rag_logprobs.dim() - 1:
-            target = target.unsqueeze(-1)
 
         ll = rag_logprobs.gather(dim=-1, index=target)
         ll = _mask_pads(ll)
@@ -440,22 +418,35 @@ class RagDefaultMixin(object):
     """
 
     def init_default_components(self, config: RagConfig):
-        # models eval by default when loading from pretrained https://fburl.com/vvgl3h07
+        # models eval by default when loading from pretrained
         dpr_tokenizer = DPRContextEncoderTokenizer.from_pretrained(config.pretrained_context_tokenizer_name_or_path)
         dpr_question_encoder = DPRQuestionEncoder.from_pretrained(config.pretrained_question_encoder_name_or_path)
+
         # TODO(piktus): handle multi-node scenarios for Retriever loading
         # no need to pass context tokenizer or encoder as context embeddings are pre-calculated in the dataset
-        dpr_retriever = Retriever(
-            config.dataset,
-            dataset_name=config.dataset_name,
-            dataset_split=config.dataset_split,
-            index_name=config.index_name,
-        )
+        if config.retriever_type == "hf_retriever":
+            retriever = HFRetriever(
+                config.dataset,
+                dataset_name=config.dataset_name,
+                dataset_split=config.dataset_split,
+                index_name=config.index_name,
+                uncompressed=config.uncompressed,
+                uncompressed_index_path=config.uncompressed_index_path,
+            )
+        elif config.retriever_type == "mpi_retriever":
+            retriever = MPIRetriever(
+                passages_path=config.passages_path,
+                vector_size=config.retrieval_vector_size,
+                index_path=config.index_path,
+                n_docs=config.n_docs,
+                batch_size=config.retrieval_batch_size,
+                use_sampling=False,
+            )
 
         # this is the default BART tokenizer with extra tokens added for tile separator and doc deparator
         bart_tokenizer = RagDefaultTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
         bart = BartForConditionalGeneration.from_pretrained(config.pretrained_generator_name_or_path)
-        return dpr_retriever, dpr_tokenizer, bart, bart_tokenizer, dpr_question_encoder
+        return retriever, dpr_tokenizer, bart, bart_tokenizer, dpr_question_encoder
 
 
 class RagDefaultSequenceModel(RagDefaultMixin, RagSequenceModel):

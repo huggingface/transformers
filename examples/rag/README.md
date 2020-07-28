@@ -9,7 +9,7 @@ python examples/rag/parse_dpr_relevance_data.py --src_path path/to/unziped/bienc
 ```
 3. Run evaluation:
 ```
-python examples/rag/eval_dpr.py --predictions_path path/to/dpr_predictions.tsv --gold_data_path path/to/output/biencoder-nq-dev.tsv --model_type sequence --k 1
+python examples/rag/eval_retrieval.py --predictions_path path/to/dpr_predictions.tsv --gold_data_path path/to/output/biencoder-nq-dev.tsv --model_type sequence --k 1
 ```
 
 ## Results

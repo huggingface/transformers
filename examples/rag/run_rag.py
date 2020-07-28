@@ -522,7 +522,7 @@ def parse_args():
         "--data_dir",
         type=str,
         # required=True,
-        default="/private/home/piktus/huggingface_rag/data/nq_sos_uaa/",
+        default="/private/home/piktus/rag_huggingface/data/nq_sos_uaa/",
         help="The input data dir. Should contain train.source, train.target, val.source, val.target, test.source, test.target",
     )
     parser.add_argument(
@@ -581,7 +581,7 @@ def main(args):
         # Make sure only the first process in distributed training will download model & vocab
         torch.distributed.barrier()
 
-    # model_name_or_path = "/private/home/piktus/huggingface_rag/data/rag-sequence-nq"
+    # model_name_or_path = "/private/home/piktus/rag_huggingface/data/rag-sequence-nq"
     config = RagConfig.from_pretrained(args.model_name_or_path)
     tokenizer = RagDefaultTokenizer.from_pretrained("facebook/bart-large", do_lower_case=args.do_lower_case)
     model = RagDefaultSequenceModel(config) if args.model_type == "rag_sequece" else RagDefaultTokenModel(config)

@@ -1,8 +1,11 @@
 import torch
 
 from transformers import (
+    BartForConditionalGeneration,
+    BartTokenizer,
     DPRContextEncoderTokenizer,
     DPRQuestionEncoder,
+    HFRetriever,
     PretrainedConfig,
     PreTrainedModel,
     RagConfig,
@@ -11,7 +14,6 @@ from transformers import (
     RagDefaultTokenModel,
     RagSequenceModel,
     RagTestSequenceModel,
-    Retriever,
     T5ForConditionalGeneration,
     T5Tokenizer,
 )
@@ -24,11 +26,12 @@ else:
 
 
 # Creating a RAG model on with a DPR question encoder and a T5 generator
+# todo: override decoder start token id
 class RagWithT5SequenceModel(RagSequenceModel):
     def __init__(self, config):
         dpr_tokenizer = DPRContextEncoderTokenizer.from_pretrained(config.pretrained_context_tokenizer_name_or_path)
         dpr_question_encoder = DPRQuestionEncoder.from_pretrained(config.pretrained_question_encoder_name_or_path)
-        dpr_retriever = Retriever(
+        dpr_retriever = HFRetriever(
             config.dataset,
             dataset_name=config.dataset_name,
             dataset_split=config.dataset_split,
@@ -39,27 +42,36 @@ class RagWithT5SequenceModel(RagSequenceModel):
         super().__init__(config, dpr_retriever, dpr_tokenizer, t5, t5_tokenizer, dpr_question_encoder)
 
 
-def generate_from_rag(rag_model, questions, inputs, num_beams=4):
+def generate_from_rag(rag_model, tokenizer, questions, inputs, num_beams=4):
     with torch.no_grad():
         rag_model = rag_model.eval().to(device)
         outputs = rag_model.generate(
             inputs,
             num_beams=num_beams,
             min_length=1,  # make sure short answers are allowed
-            max_length=10,  # no need for crazy long answers in NQ
-            early_stopping=False,
+            max_length=50,  # no need for crazy long answers in NQ
+            # early_stopping=True,
             num_return_sequences=num_beams,
-            bad_words_ids=[[0, 0]]
+            # use_cache=False, - doesn't work for bart
+            # repetition_penalty=10,
+            bad_words_ids=[[0, 0]],
             # BART likes to repeat BOS tokens, dont allow it to generate more than one
         )
-        answers = rag_model.model.generator_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        answers = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         for i in range(0, len(questions)):
             print("Question: " + questions[i])
-            print(f"Top {num_beams} Answers: ", answers[i * num_beams : (i + 1) * num_beams])
+            print("Top {} answers:".format(num_beams))
+            for answer in answers[i * num_beams : (i + 1) * num_beams]:
+                print("\t", answer)
 
 
 if __name__ == "__main__":
     questions = [
+        "who is the owner of reading football club",  #  ['Xiu Li Dai', 'Dai Yongge', 'Dai Xiuli', 'Yongge Dai']
+        "where does the story the great gatsby take place",  # ['Long Island of 1922']
+        "what is the meaning of the name sinead",  #  ['God forgave / God gratified']
+        "when was the last time minnesota vikings was in the super bowl",  # ['1969', 'XI']
+        "prior to 1948 north and south vietnam were a part of",  # ['France']
         "who sings does he love me with reba",
         "who were the two mathematicians that invented calculus",
         "what parts make up the peripheral nervous system",
@@ -72,32 +84,35 @@ if __name__ == "__main__":
     ].to(device)
     rag_t5_config = RagConfig(pretrained_generator_name_or_path="t5-base")
     rag_model = RagWithT5SequenceModel(rag_t5_config)
-    generate_from_rag(rag_model, questions, t5_inputs, num_beams=4)
+    generate_from_rag(rag_model, t5_tokenizer, questions, t5_inputs, num_beams=4)
 
     rag_tokenizer = RagDefaultTokenizer.from_pretrained("facebook/bart-large")
     inputs = rag_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
         "input_ids"
     ].to(device)
 
-    print("\nTOKEN MODEL")
-    rag_token_model_path = "/private/home/piktus/huggingface_rag/data/rag-token-nq"
-    rag_token_config = RagConfig.from_pretrained(rag_token_model_path)
+    print("\nTOKEN MODEL - HF retriever")
+    rag_token_model_path = "/private/home/piktus/rag_huggingface/data/rag-token-nq"
+    rag_token_config = RagConfig.from_pretrained(rag_token_model_path, retriever_type="hf_retriever", uncompressed=True)
     rag_model = RagDefaultTokenModel(rag_token_config)
-    generate_from_rag(rag_model, questions, inputs, num_beams=4)
+    generate_from_rag(rag_model, rag_tokenizer, questions, inputs, num_beams=10)
 
-    rag_token_config = RagConfig(pretrained_generator_name_or_path="facebook/bart-large")
-    rag_model = RagDefaultTokenModel(rag_token_config).to(device=device)
-    generate_from_rag(rag_model, questions, inputs, num_beams=4)
-
-    print("\nSEQUENCE MODEL")
-    rag_sequence_model_path = "/private/home/piktus/huggingface_rag/data/rag-sequence-nq"
-    rag_sequence_config = RagConfig.from_pretrained(rag_sequence_model_path)
+    print("\nSEQUENCE MODEL - HF retriever")
+    rag_sequence_model_path = "/private/home/piktus/rag_huggingface/data/rag-sequence-nq"
+    rag_sequence_config = RagConfig.from_pretrained(
+        rag_sequence_model_path, retriever_type="mpi_retriever", uncompressed=True
+    )
     rag_model = RagDefaultSequenceModel(rag_sequence_config)
-    generate_from_rag(rag_model, questions, inputs, num_beams=4)
+    generate_from_rag(rag_model, rag_tokenizer, questions, inputs, num_beams=6)
 
-    rag_sequence_config = RagConfig(pretrained_generator_name_or_path="facebook/bart-large")
-    rag_model = RagDefaultSequenceModel(rag_sequence_config).to(device=device)
-    generate_from_rag(rag_model, questions, inputs, num_beams=4)
+
+    print("\nSEQUENCE MODEL - MPI retriever")
+    rag_sequence_model_path = "/private/home/piktus/rag_huggingface/data/rag-sequence-nq"
+    rag_sequence_config = RagConfig.from_pretrained(
+        rag_sequence_model_path, retriever_type="mpi_retriever"
+    )
+    rag_model = RagDefaultSequenceModel(rag_sequence_config)
+    generate_from_rag(rag_model, rag_tokenizer, questions, inputs, num_beams=6)
 
     print("\nSEQUENCE MODEL WITH INDEXING ON THE FLY")
     rag_sequence_model_path = "/private/home/piktus/huggingface_rag/data/rag-sequence-nq"
@@ -105,7 +120,7 @@ if __name__ == "__main__":
         rag_sequence_model_path, dataset_name="dummy_psgs_w100_no_embeddings"
     )
     rag_model = RagTestSequenceModel(rag_sequence_test_config)
-    generate_from_rag(rag_model, questions, inputs, num_beams=4)
+    generate_from_rag(rag_model, rag_tokenizer, questions, inputs, num_beams=4)
 
     # Top contexts
     """
