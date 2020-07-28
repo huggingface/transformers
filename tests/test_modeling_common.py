@@ -20,7 +20,9 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import is_torch_available
+import timeout_decorator
+
+from transformers import MarianConfig, MarianMTModel, is_torch_available
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 
@@ -51,7 +53,6 @@ def _config_zero_init(config):
 
 @require_torch
 class ModelTesterMixin:
-
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
@@ -971,3 +972,64 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
         self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))
+
+    @require_torch
+    def test_postprocess_next_token_scores(self):
+        config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
+        model = MarianMTModel(config=config)
+        # Initialize an input id tensor with batch size 8 and sequence length 12
+        input_ids = torch.arange(0, 96, 1).view((8, 12))
+
+        bad_words_ids_test_cases = [[[299]], [[23, 24], [54]], [[config.eos_token_id]], []]
+        masked_scores = [
+            [(0, 299), (1, 299), (2, 299), (3, 299), (4, 299), (5, 299), (6, 299), (7, 299)],
+            [(1, 24), (0, 54), (1, 54), (2, 54), (3, 54), (4, 54), (5, 54), (6, 54), (7, 54)],
+            [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0)],
+            [],
+        ]
+
+        for test_case_index, bad_words_ids in enumerate(bad_words_ids_test_cases):
+            # Initialize a scores tensor with batch size 8 and vocabulary size 300
+            scores = torch.rand((8, 300))
+            output = model.postprocess_next_token_scores(
+                scores,
+                input_ids,
+                0,
+                bad_words_ids,
+                13,
+                15,
+                config.max_length,
+                config.eos_token_id,
+                config.repetition_penalty,
+                32,
+                5,
+            )
+            for masked_score in masked_scores[test_case_index]:
+                self.assertTrue(output[masked_score[0], masked_score[1]] == -float("inf"))
+
+    @timeout_decorator.timeout(1)
+    def test_postprocess_next_token_scores_large_bad_words_list(self):
+        config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
+        model = MarianMTModel(config=config)
+        # Initialize an input id tensor with batch size 8 and sequence length 12
+        input_ids = torch.arange(0, 96, 1).view((8, 12))
+
+        bad_words_ids = []
+        for _ in range(1000):
+            length_bad_word = random.randint(1, 4)
+            bad_words_ids.append(random.sample(range(1, 300), length_bad_word))
+
+        scores = torch.rand((8, 300))
+        _ = model.postprocess_next_token_scores(
+            scores,
+            input_ids,
+            0,
+            bad_words_ids,
+            13,
+            15,
+            config.max_length,
+            config.eos_token_id,
+            config.repetition_penalty,
+            32,
+            5,
+        )
