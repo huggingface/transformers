@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from os import listdir, makedirs
+from packaging.version import parse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -7,6 +8,11 @@ from transformers import is_tf_available, is_torch_available
 from transformers.file_utils import ModelOutput
 from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
+
+
+# This is the minimal required version to
+# support some ONNX Runtime features
+ORT_QUANTIZE_MINIMUM_VERSION = parse("1.4.0")
 
 
 SUPPORTED_PIPELINES = [
@@ -74,8 +80,11 @@ def ensure_onnxruntime_installed():
     try:
         import onnxruntime
 
+        # Parse the version of the installed onnxruntime
+        ort_version = parse(onnxruntime.__version__)
+
         # We require 1.4.0 minimum
-        if int(onnxruntime.__version__.split(".")[1]) < 4:
+        if ort_version < ORT_QUANTIZE_MINIMUM_VERSION:
             ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= 1.4.0 to enable all the conversions options.\n"
