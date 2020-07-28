@@ -89,7 +89,7 @@ FAIRSEQ_LANGUAGE_CODES = [
 
 class MBartTokenizer(XLMRobertaTokenizer):
     """
-    This inherits from XLMRobertaTokenizer. ``prepare_translation_batch`` should be used to encode inputs.
+    This inherits from XLMRobertaTokenizer. ``prepare_seq2seq_batch`` should be used to encode inputs.
     Other tokenizer methods like ``encode`` do not work properly.
     The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and
     ``<language code> <tokens> <eos>``` for target language documents.
@@ -100,7 +100,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-en-ro')
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> batch: dict = tokenizer.prepare_translation_batch(
+        >>> batch: dict = tokenizer.prepare_seq2seq_batch(
         ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
         ... )
 
@@ -186,7 +186,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
-    def prepare_translation_batch(
+    def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
         src_lang: str = "en_XX",

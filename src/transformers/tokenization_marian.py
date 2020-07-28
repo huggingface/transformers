@@ -21,7 +21,8 @@ vocab_files_names = {
 
 class MarianTokenizer(PreTrainedTokenizer):
     """Sentencepiece tokenizer for marian. Source and target languages have different SPM models.
-    The logic is use the relevant source_spm or target_spm to encode txt as pieces, then look up each piece in a vocab dictionary.
+    The logic is use the relevant source_spm or target_spm to encode txt as pieces, then look up each piece in a
+    vocab dictionary.
 
     Examples::
 
@@ -29,7 +30,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         >>> tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
         >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
         >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-        >>> batch_enc: BatchEncoding = tok.prepare_translation_batch(src_texts, tgt_texts=tgt_texts)
+        >>> batch_enc: BatchEncoding = tok.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts)
         >>> # keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask].
         >>> # model(**batch) should work
     """
@@ -122,7 +123,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def prepare_translation_batch(
+    def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
         tgt_texts: Optional[List[str]] = None,

@@ -48,7 +48,7 @@ Example of translating english to many romance languages, using language codes:
     tokenizer = MarianTokenizer.from_pretrained(model_name)
     print(tokenizer.supported_language_codes)
     model = MarianMTModel.from_pretrained(model_name)
-    translated = model.generate(**tokenizer.prepare_translation_batch(src_text))
+    translated = model.generate(**tokenizer.prepare_seq2seq_batch(src_text))
     tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
     # ["c'est une phrase en anglais que nous voulons traduire en français",
     # 'Isto deve ir para o português.',
@@ -96,7 +96,7 @@ MarianTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.MarianTokenizer
-    :members: prepare_translation_batch
+    :members: prepare_seq2seq_batch
 
 
 MarianMTModel

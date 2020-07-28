@@ -167,7 +167,7 @@ class MBartDataset(Seq2SeqDataset):
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
-        batch_encoding = self.tokenizer.prepare_translation_batch(
+        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
             tgt_texts=[x["tgt_texts"] for x in batch],
