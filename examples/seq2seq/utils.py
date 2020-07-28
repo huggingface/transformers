@@ -146,10 +146,6 @@ class Seq2SeqDataset(Dataset):
         return SortishSampler(self.src_lens, batch_size)
 
 
-def count_non_pad_tokens(ids: torch.Tensor) -> torch.Tensor:
-    ids.ne
-
-
 class MBartDataset(Seq2SeqDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
