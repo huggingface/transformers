@@ -3,7 +3,7 @@ Transformers
 
 State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose 
+Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose
 architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural 
 Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between 
 TensorFlow 2.0 and PyTorch.
@@ -42,7 +42,7 @@ The documentation is organized in five parts:
 
 - **GET STARTED** contains a quick tour, the installation instructions and some useful information about our philosophy
   and a glossary.
-- **USING 🤗 TRANSFORMERS** contains general tutorials on how to use the library.
+- **USING TRANSFORMERS** contains general tutorials on how to use the library.
 - **ADVANCED GUIDES** contains more advanced guides that are more specific to a given script or part of the library.
 - **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general resarch in
   transformers model
@@ -124,7 +124,9 @@ conversion utilities for the following models:
 22. `DPR <https://github.com/facebookresearch/DPR>`_ (from Facebook) released with the paper `Dense Passage Retrieval
     for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_ by Vladimir Karpukhin, Barlas Oğuz, Sewon
     Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
-23. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+23. `BERTweet <https://github.com/VinAIResearch/BERTweet>`_ (from VinAI Research) released with the paper `BERTweet: A pre-trained language model for English Tweets <https://arxiv.org/abs/2005.10200>`_ by Dat Quoc Nguyen, Thanh Vu and Anh Tuan Nguyen.
+24. `PhoBERT <https://github.com/VinAIResearch/PhoBERT>`_ (from VinAI Research) released with the paper `PhoBERT: Pre-trained language models for Vietnamese <https://arxiv.org/abs/2003.00744>`_ by Dat Quoc Nguyen and Anh Tuan Nguyen.
+25. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -205,3 +207,5 @@ conversion utilities for the following models:
     model_doc/retribert
     model_doc/mobilebert
     model_doc/dpr
+    model_doc/bertweet
+    model_doc/phobert

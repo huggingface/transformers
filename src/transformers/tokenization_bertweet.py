@@ -48,7 +48,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class BertweetTokenizer(PreTrainedTokenizer):
     """
-        Extend PretrainedTokenizer, with fastBPE (https://github.com/glample/fastBPE), nltk, emoji required
+        Extend PretrainedTokenizer, with fastBPE (https://github.com/glample/fastBPE), nltk, emoji required.
         Install: pip3 install fastBPE nltk emoji
     Args:
         vocab_file (:obj:`str`):
