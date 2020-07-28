@@ -14,7 +14,9 @@ Rust library `tokenizers <https://github.com/huggingface/tokenizers>`__. The "Fa
 The base classes :class:`~transformers.PreTrainedTokenizer` and :class:`~transformers.PreTrainedTokenizerFast`
 implement the common methods for encoding string inputs in model inputs (see below) and instantiating/saving python and
 "Fast" tokenizers either from a local file or directory or from a pretrained tokenizer provided by the library
-(downloaded from HuggingFace's AWS S3 repository).
+(downloaded from HuggingFace's AWS S3 repository). They both rely on
+:class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase` that contains the common methods, and
+:class:`~transformers.tokenization_utils_base.SpecialTokensMixin`.
 
 :class:`~transformers.PreTrainedTokenizer` and :class:`~transformers.PreTrainedTokenizerFast` thus implement the main
 methods for using all the tokenizers:
@@ -54,11 +56,4 @@ getting the index of the token comprising a given character or the span of chara
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BatchEncoding
-    :members:
-
-
-``SpecialTokensMixin``
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.SpecialTokensMixin
     :members:
