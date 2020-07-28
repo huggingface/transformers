@@ -1,8 +1,9 @@
 from argparse import ArgumentParser
 from os import listdir, makedirs
-from packaging.version import parse
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+from packaging.version import parse
 
 from transformers import is_tf_available, is_torch_available
 from transformers.file_utils import ModelOutput
