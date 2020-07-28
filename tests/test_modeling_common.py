@@ -40,6 +40,8 @@ if is_torch_available():
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         top_k_top_p_filtering,
+        MarianConfig,
+        MarianMTModel,
     )
 
 
@@ -975,7 +977,6 @@ class UtilsFunctionsTest(unittest.TestCase):
 
     @require_torch
     def test_postprocess_next_token_scores(self):
-        from transformers import MarianConfig, MarianMTModel
 
         config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
         model = MarianMTModel(config=config)
@@ -1012,7 +1013,6 @@ class UtilsFunctionsTest(unittest.TestCase):
     @require_torch
     @timeout_decorator.timeout(2)
     def test_postprocess_next_token_scores_large_bad_words_list(self):
-        from transformers import MarianConfig, MarianMTModel
 
         try:
             config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
