@@ -48,8 +48,9 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class PhobertTokenizer(PreTrainedTokenizer):
     """
-        Extend PretrainedTokenizer, with fastBPE required: https://github.com/glample/fastBPE
+        Extend PretrainedTokenizer, with `fastBPE` (https://github.com/glample/fastBPE) required.
         Install: pip3 install fastBPE
+
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
@@ -57,12 +58,16 @@ class PhobertTokenizer(PreTrainedTokenizer):
             Path to the merges file which here is the bpe-codes file
         bos_token (:obj:`string`, `optional`, defaults to "<s>"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
+
             .. note::
+
                 When building a sequence using special tokens, this is not the token that is used for the beginning
                 of sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`string`, `optional`, defaults to "</s>"):
             The end of sequence token.
+
             .. note::
+
                 When building a sequence using special tokens, this is not the token that is used for the end
                 of sequence. The token used is the :obj:`sep_token`.
         sep_token (:obj:`string`, `optional`, defaults to "</s>"):

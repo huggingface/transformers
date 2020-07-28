@@ -41,6 +41,7 @@ TF_BERTWEET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 BERTWEET_START_DOCSTRING = r"""
+
     This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
     Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
