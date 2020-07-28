@@ -37,6 +37,15 @@ from .modeling_bert import (
     BertModel
     
 )
+
+from .modeling_outputs import (
+    MaskedLMOutput,
+    MultipleChoiceModelOutput,
+    QuestionAnsweringModelOutput,
+    SequenceClassifierOutput,
+    TokenClassifierOutput,
+)
+
 from .modeling_roberta import RobertaLMHead
 
 
@@ -337,6 +346,79 @@ class MPNetForMaskedLM(BertPreTrainedModel):
             outputs = (masked_lm_loss,) + outputs
 
         return outputs
+
+
+class MPNetForSequenceClassification(BertPreTrainedModel):
+    
+    def __init__(self, config):
+        super().__init__(config)
+
+
+class MPNetForMultipleChoice(BertPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.mpnet = MPNetModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        attention_mask=None,
+        labels=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_tuple=None,
+    ):
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
+        flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        flat_inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
+        outputs = self.mpnet(
+            flat_input_ids,
+            position_ids=flat_position_ids,
+            token_type_ids=flat_token_type_ids,
+            attention_mask=flat_attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_tuple=return_tuple,
+        )
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        reshaped_logits = logits.view(-1, num_choices)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+
+        if return_tuple:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 class MPNetForQuestionAnswering(BertPreTrainedModel):
