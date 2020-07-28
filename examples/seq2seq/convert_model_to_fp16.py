@@ -1,8 +1,9 @@
 from typing import Union
 
-import fire
 import torch
 from tqdm import tqdm
+
+import fire
 
 
 def convert(src_path: str, map_location: str = "cpu", save_path: Union[str, None] = None) -> None:
