@@ -131,7 +131,7 @@ class PhobertModelTest(ModelTesterMixin, unittest.TestCase):
         def check_loss_output(self, result):
             self.parent.assertListEqual(list(result["loss"].size()), [])
 
-        def create_and_check_Phobert_model(
+        def create_and_check_phobert_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = PhobertModel(config=config)
@@ -150,7 +150,7 @@ class PhobertModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
-        def create_and_check_Phobert_for_masked_lm(
+        def create_and_check_phobert_for_masked_lm(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = PhobertForMaskedLM(config=config)
@@ -168,7 +168,7 @@ class PhobertModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
-        def create_and_check_Phobert_for_question_answering(
+        def create_and_check_phobert_for_question_answering(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = PhobertForQuestionAnswering(config=config)
@@ -190,7 +190,7 @@ class PhobertModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
-        def create_and_check_Phobert_for_sequence_classification(
+        def create_and_check_phobert_for_sequence_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
@@ -207,7 +207,7 @@ class PhobertModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
-        def create_and_check_Phobert_for_token_classification(
+        def create_and_check_phobert_for_token_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
@@ -247,25 +247,25 @@ class PhobertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_Phobert_model(self):
+    def test_phobert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Phobert_model(*config_and_inputs)
+        self.model_tester.create_and_check_phobert_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Phobert_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_phobert_for_masked_lm(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Phobert_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_phobert_for_question_answering(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Phobert_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_phobert_for_sequence_classification(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Phobert_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_phobert_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

@@ -132,7 +132,7 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-        def create_and_check_Bertweet_model(
+        def create_and_check_bertweet_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = TFBertweetModel(config=config)
@@ -153,7 +153,7 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
             )
             self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
 
-        def create_and_check_Bertweet_for_masked_lm(
+        def create_and_check_bertweet_for_masked_lm(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = TFBertweetForMaskedLM(config=config)
@@ -166,7 +166,7 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
             )
 
-        def create_and_check_Bertweet_for_sequence_classification(
+        def create_and_check_bertweet_for_sequence_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
@@ -178,7 +178,7 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
             }
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
-        def create_and_check_Bertweet_for_token_classification(
+        def create_and_check_bertweet_for_token_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
@@ -192,7 +192,7 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
                 list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels]
             )
 
-        def create_and_check_Bertweet_for_question_answering(
+        def create_and_check_bertweet_for_question_answering(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = TFBertweetForQuestionAnswering(config=config)
@@ -226,25 +226,25 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_Bertweet_model(self):
+    def test_bertweet_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Bertweet_model(*config_and_inputs)
+        self.model_tester.create_and_check_bertweet_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Bertweet_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_bertweet_for_masked_lm(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Bertweet_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_bertweet_for_question_answering(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Bertweet_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_bertweet_for_sequence_classification(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_Bertweet_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_bertweet_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
