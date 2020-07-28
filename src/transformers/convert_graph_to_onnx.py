@@ -59,15 +59,18 @@ def ensure_onnxruntime_installed():
 
         # We require 1.4.0 minimum
         if int(onnxruntime.__version__.split(".")[1]) < 4:
-            print(f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
-                  f"but we require onnxruntime to be >= 1.4.0 to enable all the conversions options.\n"
-                  f"Please update onnxruntime by running `pip install --upgrade onnxruntime`")
+            print(
+                f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
+                f"but we require onnxruntime to be >= 1.4.0 to enable all the conversions options.\n"
+                f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
+            )
 
     except ImportError:
         ImportError(
             "onnxruntime doesn't seem to be currently installed. "
             "Please install the onnxruntime by running `pip install onnxruntime`"
-            " and relaunch the conversion.")
+            " and relaunch the conversion."
+        )
 
 
 def ensure_valid_input(model, tokens, input_names):
@@ -261,10 +264,7 @@ def quantize(onnx_model_path: Path) -> Path:
 
         onnx_model = onnx.load(onnx_model_path.as_posix())
         quantized_model = quantize(
-            model=onnx_model,
-            quantization_mode=QuantizationMode.IntegerOps,
-            force_fusions=True,
-            symmetric_weight=True
+            model=onnx_model, quantization_mode=QuantizationMode.IntegerOps, force_fusions=True, symmetric_weight=True
         )
 
         # Append "-quantized" at the end of the model's name

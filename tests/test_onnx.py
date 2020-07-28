@@ -5,8 +5,13 @@ from shutil import rmtree
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
-from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes, quantize, \
-    generate_identified_filename
+from transformers.convert_graph_to_onnx import (
+    convert,
+    ensure_valid_input,
+    infer_shapes,
+    quantize,
+    generate_identified_filename,
+)
 from transformers.testing_utils import require_tf, require_torch, slow
 
 
@@ -72,7 +77,7 @@ class OnnxExportTestCase(unittest.TestCase):
             # Ensure the actual quantized model is not bigger than the original one
             if quantized_path.stat().st_size >= Path(path).stat().st_size:
                 self.fail("Quantized model is bigger than initial ONNX model")
-            
+
     def _test_export(self, model, framework, opset, tokenizer=None):
         try:
             # Compute path
