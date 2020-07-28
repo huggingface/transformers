@@ -9,6 +9,7 @@ from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
+from packaging.version import parse
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
@@ -23,7 +24,7 @@ if is_wandb_available():
 logger = logging.getLogger(__name__)
 
 
-if (*map(int, tf.__version__.split(".")),) < (2, 2, 0):
+if parse(tf.__version__).release < (2, 2, 0):
     logger.info(
         "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is {}".format(
             tf.__version__
@@ -68,7 +69,7 @@ class TFTrainer:
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
     prediction_loss_only: bool
     tb_writer: Optional[tf.summary.SummaryWriter] = None
-    optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = None
+    optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = (None, None)
     global_step: Optional[int] = None
     epoch_logging: Optional[float] = None
 
@@ -81,7 +82,10 @@ class TFTrainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
         tb_writer: Optional[tf.summary.SummaryWriter] = None,
-        optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = None,
+        optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = (
+            None,
+            None,
+        ),
     ):
         self.model = model
         self.args = args
@@ -89,7 +93,7 @@ class TFTrainer:
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
-        self.optimizers = optimizers
+        self.optimizer, self.lr_scheduler = optimizers
         self.gradient_accumulator = GradientAccumulator()
         self.global_step = 0
         self.epoch_logging = 0
@@ -181,7 +185,7 @@ class TFTrainer:
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
-    def get_optimizers(
+    def create_optimizer_and_scheduler(
         self, num_training_steps: int,
     ) -> Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]:
         """
@@ -190,8 +194,8 @@ class TFTrainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         TFTrainer's init through :obj:`optimizers`, or override this method in a subclass.
         """
-        if self.optimizers is None:
-            self.optimizers = create_optimizer(
+        if not self.optimizer and not self.lr_scheduler:
+            self.optimizer, self.lr_scheduler = create_optimizer(
                 self.args.learning_rate,
                 num_training_steps,
                 self.args.warmup_steps,
@@ -240,14 +244,13 @@ class TFTrainer:
         label_ids: np.ndarray = None
         preds: np.ndarray = None
         self.eval_loss = tf.keras.metrics.Sum()
-        distributed_test_steps = self._create_test_routines()
 
         # Reset the past mems state at the beginning of the evaluation if necessary.
         if self.args.past_index >= 0:
             self._past = None
 
         for step, batch in enumerate(dataset):
-            logits = distributed_test_steps(batch)
+            logits = self.distributed_test_steps(batch)
             _, labels = batch
 
             if not prediction_loss_only:
@@ -340,23 +343,18 @@ class TFTrainer:
 
         return output.metrics
 
-    def _create_test_routines(self):
-        with self.args.strategy.scope():
+    def test_step(self, features, labels):
+        per_example_loss, logits = self._run_model(features, labels, False)
 
-            def test_step(features, labels):
-                per_example_loss, logits = self._run_model(features, labels, False)
+        self.eval_loss.update_state(per_example_loss)
 
-                self.eval_loss.update_state(per_example_loss)
+        return logits
 
-                return logits
+    @tf.function
+    def distributed_test_steps(self, batch):
+        logits = self.args.strategy.run(self.test_step, batch)
 
-            @tf.function
-            def distributed_test_steps(batch):
-                logits = self.args.strategy.experimental_run_v2(test_step, batch)
-
-                return logits
-
-            return distributed_test_steps
+        return logits
 
     def train(self) -> None:
         """
@@ -378,11 +376,11 @@ class TFTrainer:
             t_total = self.steps_per_epoch * self.args.num_train_epochs
 
         with self.args.strategy.scope():
-            self.get_optimizers(num_training_steps=t_total)
-            iterations = self.optimizers[0].iterations
+            self.create_optimizer_and_scheduler(num_training_steps=t_total)
+            iterations = self.optimizer.iterations
             self.global_step = iterations.numpy()
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
-            ckpt = tf.train.Checkpoint(optimizer=self.optimizers[0], model=self.model)
+            ckpt = tf.train.Checkpoint(optimizer=self.optimizer, model=self.model)
             self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=self.args.save_total_limit)
 
             if self.model.ckpt_manager.latest_checkpoint:
@@ -428,7 +426,6 @@ class TFTrainer:
             logger.info("  Total optimization steps = %d", t_total)
 
             self.train_loss = tf.keras.metrics.Sum()
-            maybe_distributed_training_steps = self._create_training_routines()
             start_time = datetime.datetime.now()
 
             for epoch_iter in range(epochs_trained, int(epochs + 1)):
@@ -440,7 +437,7 @@ class TFTrainer:
                     self.global_step = iterations.numpy()
                     self.epoch_logging = epoch_iter - 1 + (step + 1) / self.steps_per_epoch
 
-                    maybe_distributed_training_steps(batch)
+                    self.distributed_training_steps(batch)
 
                     training_loss = self.train_loss.result() / ((step + 1) * self.total_train_batch_size)
 
@@ -469,7 +466,7 @@ class TFTrainer:
                     ):
                         logs = {}
                         logs["loss"] = training_loss.numpy()
-                        logs["learning_rate"] = self.optimizers[1](self.global_step).numpy()
+                        logs["learning_rate"] = self.lr_scheduler(self.global_step).numpy()
                         logs["epoch"] = self.epoch_logging
 
                         self._log(logs)
@@ -492,55 +489,50 @@ class TFTrainer:
             # Clean the state at the end of training
             delattr(self, "_past")
 
-    def _create_training_routines(self):
+    def training_step(self, features, labels):
+        per_example_loss, _ = self._run_model(features, labels, True)
+        scaled_loss = per_example_loss / self.total_train_batch_size
+        gradients = tf.gradients(scaled_loss, self.model.trainable_variables)
+        gradients = [
+            g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
+        ]
+
+        if self.args.gradient_accumulation_steps > 1:
+            self.gradient_accumulator(gradients)
+
+        self.train_loss.update_state(per_example_loss)
+
+        if self.args.gradient_accumulation_steps == 1:
+            return gradients
+
+    def apply_gradients(self, features, labels):
+        if self.args.gradient_accumulation_steps == 1:
+            gradients = self.training_step(features, labels)
+
+            self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+        else:
+            for _ in tf.range(self.args.gradient_accumulation_steps):
+                reduced_features = features[: self.args.train_batch_size / self.args.n_replicas]
+                reduced_labels = labels[: self.args.train_batch_size / self.args.n_replicas]
+
+                self.training_step(reduced_features, reduced_labels)
+
+                features = tf.concat(
+                    [features[self.args.train_batch_size / self.args.n_replicas :], reduced_features], axis=0
+                )
+
+            gradients = self.gradient_accumulator.gradients
+            gradients = [
+                (tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients
+            ]
+
+            self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+            self.gradient_accumulator.reset()
+
+    @tf.function
+    def distributed_training_steps(self, batch):
         with self.args.strategy.scope():
-
-            def training_step(features, labels):
-                per_example_loss, _ = self._run_model(features, labels, True)
-                scaled_loss = per_example_loss / self.total_train_batch_size
-                gradients = tf.gradients(scaled_loss, self.model.trainable_variables)
-                gradients = [
-                    g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
-                ]
-
-                if self.args.gradient_accumulation_steps > 1:
-                    self.gradient_accumulator(gradients)
-
-                self.train_loss.update_state(per_example_loss)
-
-                if self.args.gradient_accumulation_steps == 1:
-                    return gradients
-
-            def apply_gradients(features, labels):
-                if self.args.gradient_accumulation_steps == 1:
-                    gradients = training_step(features, labels)
-
-                    self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
-                else:
-                    for _ in tf.range(self.args.gradient_accumulation_steps):
-                        reduced_features = features[: self.args.train_batch_size / self.args.n_replicas]
-                        reduced_labels = labels[: self.args.train_batch_size / self.args.n_replicas]
-
-                        training_step(reduced_features, reduced_labels)
-
-                        features = tf.concat(
-                            [features[self.args.train_batch_size / self.args.n_replicas :], reduced_features], axis=0
-                        )
-
-                    gradients = self.gradient_accumulator.gradients
-                    gradients = [
-                        (tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm))
-                        for grad in gradients
-                    ]
-
-                    self.optimizers[0].apply_gradients(list(zip(gradients, self.model.trainable_variables)))
-                    self.gradient_accumulator.reset()
-
-            @tf.function
-            def distributed_training_steps(batch):
-                self.args.strategy.experimental_run_v2(apply_gradients, batch)
-
-            return distributed_training_steps
+            self.args.strategy.run(self.apply_gradients, batch)
 
     def _run_model(self, features, labels, training):
         """
@@ -552,14 +544,16 @@ class TFTrainer:
         """
         if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
             features["mems"] = self._past
+
         if isinstance(labels, (dict)):
             outputs = self.model(features, training=training, **labels)[:2]
         else:
             outputs = self.model(features, labels=labels, training=training)[:2]
+
         loss, logits = outputs[:2]
+
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
-        # loss += sum(self.model.losses) * (1.0 / self.args.n_replicas)
 
         return loss, logits
 
