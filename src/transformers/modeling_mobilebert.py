@@ -788,6 +788,8 @@ class MobileBertModel(MobileBertPreTrainedModel):
         https://arxiv.org/pdf/2004.02984.pdf
     """
 
+    authorized_missing_keys = [r"position_ids"]
+
     def __init__(self, config):
         super().__init__(config)
         self.config = config
