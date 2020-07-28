@@ -189,8 +189,8 @@ class MecabTokenizer:
         import ipadic
 
         # Use ipadic by default (later options can override it)
-        mecab_option = mecab_option or ''
-        mecab_option = ipadic.MECAB_ARGS + ' ' + mecab_option
+        mecab_option = mecab_option or ""
+        mecab_option = ipadic.MECAB_ARGS + " " + mecab_option
 
         self.mecab = fugashi.GenericTagger(mecab_option)
 
