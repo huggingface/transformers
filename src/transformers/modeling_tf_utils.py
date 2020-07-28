@@ -17,7 +17,6 @@
 import functools
 import logging
 import os
-import warnings
 from typing import Dict, List, Optional, Union
 
 import h5py
