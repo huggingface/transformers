@@ -151,4 +151,4 @@ class MBartCC25IntegrationTest(AbstractMBartIntegrationTest):
         prediction: str = self.tokenizer.batch_decode(
             outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True
         )[0]
-        self.assertEqual(prediction, "One of the best books I ever read!")
+        self.assertEqual(prediction, "of the best books I ever read!")
