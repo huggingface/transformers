@@ -3,7 +3,7 @@ Transformers
 
 State-of-the-art Natural Language Processing for Pytorch and TensorFlow 2.0.
 
-Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides general-purpose
 architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural Language Understanding (NLU) and Natural 
 Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between 
 TensorFlow 2.0 and PyTorch.
@@ -42,7 +42,7 @@ The documentation is organized in five parts:
 
 - **GET STARTED** contains a quick tour, the installation instructions and some useful information about our philosophy
   and a glossary.
-- **USING TRANSFORMERS** contains general tutorials on how to use the library.
+- **USING 🤗 TRANSFORMERS** contains general tutorials on how to use the library.
 - **ADVANCED GUIDES** contains more advanced guides that are more specific to a given script or part of the library.
 - **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general resarch in
   transformers model
