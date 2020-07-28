@@ -28,7 +28,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
     """
 
     def __init__(self):
-        super(OnnxConverterArgumentParser, self).__init__("ONNX Converter")
+        super().__init__("ONNX Converter")
 
         self.add_argument(
             "--pipeline", type=str, choices=SUPPORTED_PIPELINES, default="feature-extraction",
