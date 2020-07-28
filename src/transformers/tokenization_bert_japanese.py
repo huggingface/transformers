@@ -202,8 +202,6 @@ class MecabTokenizer:
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
-        mecab_output = self.mecab.parse(text)
-
         for word in self.mecab(text):
             token = word.surface
 
