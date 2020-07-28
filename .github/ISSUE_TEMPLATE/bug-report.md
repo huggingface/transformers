@@ -36,7 +36,6 @@ assignees: ''
  examples/distillation: @VictorSanh
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
  rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
- TransfoXL/XLNet: @TevenLeScao
  Text Generation: @TevenLeScao
  blenderbot: @mariamabarham
  Bart: @sshleifer
