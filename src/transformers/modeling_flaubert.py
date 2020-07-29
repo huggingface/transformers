@@ -162,11 +162,13 @@ class FlaubertModel(XLMModel):
         else:
             bs, slen = inputs_embeds.size()[:-1]
 
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if lengths is None:
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.LongTensor([slen] * bs)
+                lengths = torch.LongTensor([slen] * bs).to(device)
         # mask = input_ids != self.pad_index
 
         # check inputs
@@ -182,8 +184,6 @@ class FlaubertModel(XLMModel):
         mask, attn_mask = get_masks(slen, lengths, self.causal, padding_mask=attention_mask)
         # if self.is_decoder and src_enc is not None:
         #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
-
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # position_ids
         if position_ids is None:
