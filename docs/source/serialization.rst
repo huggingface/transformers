@@ -32,10 +32,56 @@ The conversion tool works for both PyTorch and Tensorflow models and ensures:
 
 
 Also, the conversion tool supports different options which let you tune the behavior of the generated model:
-    * Change the target opset version of the generated model: More recent opset generally supports more operator and enables faster inference.
-    * Export pipeline specific prediction heads: Allow to export model along with its task-specific prediction head(s).
-    * Use the external data format (PyTorch only): Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_).
 
+* Change the target opset version of the generated model: More recent opset generally supports more operator and enables faster inference.
+* Export pipeline specific prediction heads: Allow to export model along with its task-specific prediction head(s).
+* Use the external data format (PyTorch only): Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_).
+
+Quantization
+------------------------------------------------
+
+ONNX exporter supports generating a quantized version of the model to allow efficient inference.
+
+Quantization works by converting the data representation of all/some of the parameters in the network
+to a compact integer format. Commonly, parameters of a neural network are stored as single-precision float (`float32`)
+which can express a wide-range of floating-point numbers with decent precision. This properties are especially interesting
+at training where you want fine-grained representation.
+
+On the other hand, after the training phase, it has been shown the range and the precision of `float32` numbers can be
+greatly reduced without necessary changing the performances of the neural network.
+
+More technically, `float32` parameters are converted to a type requiring less bits to represent each number, thus reducing
+the overall size of the model. Here, we are enabling `int8` conversion which basically maps every `float32` values
+to non-floating, single byte, number representation according to the following formula:
+
+.. math::
+    y_{float32} = scale * x_{int8} - zero\_point
+
+.. note::
+    The quantization process will infer the parameter `scale` and `zero_point` from the neural network parameters
+
+Leveraging tiny-integers has numerous advantages when it comes to inference:
+
+* Storing fewer bits instead of 32 bits for the `float32` reduces the size of the model and makes it load faster.
+* Integer operations execute a magnitude faster on modern hardware
+* Integer operations require less power to do the computations
+
+In order to convert a transformers model to ONNX IR with quantized weights you just need to specify ``--quantize``
+when using ``convert_graph_to_onnx.py`` or you can have a look at the ``quantize()`` utility-method in this
+same script file.
+
+Example of quantized BERT model export:
+
+.. code-block:: bash
+
+    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --quantize bert-base-cased.onnx
+
+.. note::
+    Quantization support requires ONNX Runtime >= 1.4.0
+
+.. note::
+    When exporting quantized model you will end up with two different ONNX models. The one specified at the end of the
+    above command will contains the original ONNX model storing `float32` weights and a second one, with ``-quantized`` suffix.
 
 TorchScript
 =======================================
