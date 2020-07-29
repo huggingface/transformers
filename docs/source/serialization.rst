@@ -21,9 +21,10 @@ The following command shows how easy it is to export a BERT model from the libra
     python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased bert-base-cased.onnx
 
 The conversion tool works for both PyTorch and Tensorflow models and ensures:
-    * The model and its weights are correctly initialized from the Hugging Face model hub or a local checkpoint.
-    * The inputs and outputs are correctly generated to their ONNX counterpart.
-    * The generated model can be correctly loaded through onnxruntime.
+
+* The model and its weights are correctly initialized from the Hugging Face model hub or a local checkpoint.
+* The inputs and outputs are correctly generated to their ONNX counterpart.
+* The generated model can be correctly loaded through onnxruntime.
 
 .. note::
     Currently, inputs and outputs are always exported with dynamic sequence axes preventing some optimizations
