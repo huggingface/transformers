@@ -301,7 +301,6 @@ class TFFlaubertModelTester:
 class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        # TODO The multiple choice model is missing and should be added.
         (
             TFFlaubertModel,
             TFFlaubertWithLMHeadModel,

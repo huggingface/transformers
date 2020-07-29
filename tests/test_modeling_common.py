@@ -140,7 +140,6 @@ class ModelTesterMixin:
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
-            print(model_class)
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             model = model_class(config)
