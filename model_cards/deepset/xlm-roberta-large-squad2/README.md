@@ -1,4 +1,7 @@
 ---
+language: multilingual
+tags:
+- question-answering
 datasets:
 - squad_v2
 ---
