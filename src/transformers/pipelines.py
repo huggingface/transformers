@@ -1053,7 +1053,7 @@ class TokenClassificationPipeline(Pipeline):
             "entity_group": entity,
             "score": np.mean(scores),
             "word": self.tokenizer.convert_tokens_to_string(tokens),
-            "indices": indices
+            "indices": indices,
         }
         return entity_group
 
