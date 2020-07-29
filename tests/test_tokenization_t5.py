@@ -127,3 +127,56 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # Test that special tokens are reset
         self.assertEqual(tokenizer.prefix_tokens, [])
 
+    def test_empty_target_text(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        batch = tokenizer.prepare_seq2seq_batch(src_text, return_tensors=FRAMEWORK)
+        # check if input_ids are returned and no decoder_input_ids
+        self.assertIn("input_ids", batch.keys())
+        self.assertIn("attention_mask", batch.keys())
+        self.assertNotIn("decoder_input_ids", batch.keys())
+        self.assertNotIn("decoder_attention_mask", batch.keys())
+
+    def test_max_target_length(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text, tgt_texts=tgt_text, max_target_length=32, padding="max_length", return_tensors=FRAMEWORK
+        )
+        self.assertEqual(32, batch["decoder_input_ids"].shape[1])
+        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+
+        # test None max_target_length
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text, tgt_texts=tgt_text, max_length=32, padding="max_length", return_tensors=FRAMEWORK
+        )
+        self.assertEqual(32, batch["decoder_input_ids"].shape[1])
+        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+
+    def test_outputs_not_longer_than_maxlen(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        batch = tokenizer.prepare_seq2seq_batch(
+            ["I am a small frog" * 1000, "I am a small frog"], return_tensors=FRAMEWORK
+        )
+        self.assertIsInstance(batch, BatchEncoding)
+        self.assertEqual(batch.input_ids.shape, (2, 512))
+
+    def test_eos_in_input(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization. </s>"]
+        tgt_text = ["Summary of the text. </s>"]
+        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, 1]
+        expected_tgt_tokens = [0, 20698, 13, 8, 1499, 5, 1]
+
+        batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK)
+
+        src_ids = batch.input_ids.tolist()[0]
+        tgt_ids = batch.decoder_input_ids.tolist()[0]
+
+        self.assertEqual(expected_src_tokens, src_ids)
+        self.assertEqual(expected_tgt_tokens, tgt_ids)
