@@ -329,7 +329,6 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         import tempfile
 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config_and_inputs[0].return_tuple = True
         model = T5Model(config_and_inputs[0]).to(torch_device)
         with tempfile.TemporaryDirectory() as tmpdirname:
             torch.onnx.export(

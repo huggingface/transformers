@@ -1167,7 +1167,7 @@ class SQuADHead(nn.Module):
         cls_index: Optional[torch.LongTensor] = None,
         is_impossible: Optional[torch.LongTensor] = None,
         p_mask: Optional[torch.FloatTensor] = None,
-        return_tuple: bool = False,
+        return_dict: bool = False,
     ) -> Union[SquadHeadOutput, Tuple[torch.FloatTensor]]:
         """
     Args:
@@ -1184,8 +1184,8 @@ class SQuADHead(nn.Module):
         p_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len)`, `optional`):
             Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS).
             1.0 means token should be masked.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to return a plain tuple instead of a :class:`~transformers.file_utils.ModelOuput`.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOuput` instead of a plain tuple.
 
     Returns:
         """
@@ -1214,7 +1214,7 @@ class SQuADHead(nn.Module):
                 # note(zhiliny): by default multiply the loss by 0.5 so that the scale is comparable to start_loss and end_loss
                 total_loss += cls_loss * 0.5
 
-            return (total_loss,) if return_tuple else SquadHeadOutput(loss=total_loss)
+            return SquadHeadOutput(loss=total_loss) if return_dict else (total_loss,)
 
         else:
             # during inference, compute the end logits based on beam search
@@ -1244,7 +1244,7 @@ class SQuADHead(nn.Module):
             start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)
             cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)
 
-            if return_tuple:
+            if not return_dict:
                 return (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits)
             else:
                 return SquadHeadOutput(
