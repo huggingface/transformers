@@ -157,8 +157,8 @@ conversion utilities for the following models:
     notebooks
     converting_tensorflow_models
     migration
-    torchscript
     contributing
+    serialization
 
 .. toctree::
     :maxdepth: 2
