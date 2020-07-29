@@ -3,7 +3,7 @@ from os import listdir, makedirs
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from packaging.version import parse, Version
+from packaging.version import Version, parse
 
 from transformers import is_tf_available, is_torch_available
 from transformers.file_utils import ModelOutput
