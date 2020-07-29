@@ -144,7 +144,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
     def test_loss_fn(self):
-        model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY)
+        model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY, return_dict=True)
         input_ids, mask = model.dummy_inputs["input_ids"], model.dummy_inputs["attention_mask"]
         target_ids = torch.tensor([[0, 4, 8, 2], [0, 8, 2, 1]], dtype=torch.long, device=model.device)
         decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
