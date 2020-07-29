@@ -4,10 +4,7 @@ import datetime
 import logging
 import math
 import os
-<<<<<<< HEAD
 import sys
-=======
->>>>>>> tf_trainer_cleanup
 import warnings
 from typing import Callable, Dict, Optional, Tuple
 
@@ -109,11 +106,7 @@ class TFTrainer:
 
         if is_wandb_available():
             self.setup_wandb()
-<<<<<<< HEAD
         elif os.environ.get("WANDB_DISABLED") != "true":
-=======
-        else:
->>>>>>> tf_trainer_cleanup
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
@@ -240,7 +233,6 @@ class TFTrainer:
         logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
         wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
 
-<<<<<<< HEAD
     def prediction_loop(
         self,
         dataset: tf.data.Dataset,
@@ -248,44 +240,6 @@ class TFTrainer:
         num_examples: int,
         description: str,
         prediction_loss_only: Optional[bool] = None,
-=======
-    @tf.function
-    def prediction_step(
-        self, per_replica_features: tf.Tensor, per_replica_labels: tf.Tensor
-    ) -> Tuple[tf.Tensor, tf.Tensor]:
-        """
-        Perform an evaluation step across replica.
-
-        Subclass and override to inject custom behavior.
-
-        Args:
-            per_replica_features (:obj:`tf.Tensor`): The batched features.
-            per_replica_label (:obj:`tf.Tensor`): The batched labels.
-
-        Returns:
-            :obj:`Tuple[tf.Tensor, tf.Tensor]`: The loss and logits corresponding to the given batch.
-        """
-        if hasattr(self, "_evaluation_steps"):
-            warnings.warn(
-                "The `_evaluation_steps` method is deprecated and won't be called in a future version, define `prediction_step` in your subclass.",
-                FutureWarning,
-            )
-            return self._evaluation_steps()
-
-        per_replica_loss, per_replica_logits = self.args.strategy.experimental_run_v2(
-            self.run_model, args=(per_replica_features, per_replica_labels, False)
-        )
-
-        try:
-            reduced_loss = self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, axis=0)
-        except ValueError:
-            reduced_loss = self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, None)
-
-        return reduced_loss, per_replica_logits
-
-    def prediction_loop(
-        self, dataset: tf.data.Dataset, description: str, prediction_loss_only: Optional[bool] = None
->>>>>>> tf_trainer_cleanup
     ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by :func:`~transformers.TFTrainer.evaluate` and
@@ -298,13 +252,9 @@ class TFTrainer:
                 "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
                 FutureWarning,
             )
-<<<<<<< HEAD
             return self._prediction_loop(
                 dataset, steps, num_examples, description, prediction_loss_only=prediction_loss_only
             )
-=======
-            return self._prediction_loop()
->>>>>>> tf_trainer_cleanup
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
 
@@ -320,16 +270,9 @@ class TFTrainer:
         if self.args.past_index >= 0:
             self._past = None
 
-<<<<<<< HEAD
         for step, batch in enumerate(dataset):
             logits = self.distributed_prediction_steps(batch)
             _, labels = batch
-=======
-        for features, labels in dataset:
-            step = tf.convert_to_tensor(step, dtype=tf.int64)
-            loss, logits = self.prediction_step(features, labels)
-            loss = tf.reduce_mean(loss)
->>>>>>> tf_trainer_cleanup
 
             if not prediction_loss_only:
                 if isinstance(logits, tuple):
@@ -416,13 +359,7 @@ class TFTrainer:
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
-<<<<<<< HEAD
         eval_ds, steps, num_examples = self.get_eval_tfdataset(eval_dataset)
-=======
-        eval_ds = self.get_eval_tfdataset(eval_dataset)
-
-        output = self.prediction_loop(eval_ds, description="Evaluation")
->>>>>>> tf_trainer_cleanup
 
         output = self._prediction_loop(eval_ds, steps, num_examples, description="Evaluation")
         logs = {**output.metrics}
@@ -508,7 +445,6 @@ class TFTrainer:
 
             self.tb_writer.flush()
 
-<<<<<<< HEAD
             logger.info("***** Running training *****")
             logger.info("  Num examples = %d", self.num_train_examples)
             logger.info("  Num Epochs = %d", epochs)
@@ -579,88 +515,14 @@ class TFTrainer:
             end_time = datetime.datetime.now()
 
             logger.info("Training took: {}".format(str(end_time - start_time)))
-=======
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", self.num_train_examples)
-        logger.info("  Num Epochs = %d", epochs)
-        logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
-        logger.info(
-            "  Total train batch size (w. parallel, distributed & accumulation) = %d", self.args.train_batch_size
-        )
-        logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-        logger.info("  Total optimization steps = %d", t_total)
-
-        for epoch_iter in range(epochs_trained, int(epochs + 1)):
-            # Reset the past mems state at the beginning of each epoch if necessary.
-            if self.args.past_index >= 0:
-                self._past = None
-            for step, training_loss in enumerate(self.training_steps(train_ds, optimizer)):
-                self.global_step = iterations.numpy()
-                self.epoch_logging = epoch_iter - 1 + (step + 1) / steps_per_epoch
-
-                if self.args.debug:
-                    logs = {}
-                    logs["loss"] = training_loss.numpy()
-                    logs["epoch"] = self.epoch_logging
-
-                    self._log(logs)
-
-                if self.global_step == 1 and self.args.debug:
-                    with self.tb_writer.as_default():
-                        tf.summary.trace_export(
-                            name="training", step=self.global_step, profiler_outdir=self.args.logging_dir
-                        )
-
-                if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
-                    self.evaluate()
-
-                if (
-                    self.global_step % self.args.logging_steps == 0
-                    or self.global_step == 1
-                    and self.args.logging_first_step
-                ):
-                    logs = {}
-                    logs["loss"] = training_loss.numpy()
-                    logs["learning_rate"] = lr_scheduler(self.global_step).numpy()
-                    logs["epoch"] = self.epoch_logging
-
-                    self._log(logs)
-
-                if self.global_step % self.args.save_steps == 0:
-                    ckpt_save_path = self.model.ckpt_manager.save()
-                    logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
-
-                if self.args.max_steps > 0 and self.global_step % self.args.max_steps == 0:
-                    break
->>>>>>> tf_trainer_cleanup
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
             delattr(self, "_past")
 
-<<<<<<< HEAD
     def training_step(self, features, labels):
         """
         Perform a training step on features and labels.
-=======
-    def training_steps(self, ds, optimizer):
-        """
-        Returns a generator over training steps (i.e. parameters update).
-
-        Subclass and override to inject custom behavior.
-        """
-        if hasattr(self, "_training_steps"):
-            warnings.warn(
-                "The `_training_steps` method is deprecated and won't be called in a future version, define `training_steps` in your subclass.",
-                FutureWarning,
-            )
-            return self._training_steps()
-
-        for i, loss in enumerate(self._accumulate_next_gradients(ds)):
-            if i % self.args.gradient_accumulation_steps == 0:
-                self._apply_gradients(optimizer)
-                yield loss
->>>>>>> tf_trainer_cleanup
 
         Subclass and override to inject some custom behavior.
         """
@@ -700,20 +562,8 @@ class TFTrainer:
                 (tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients
             ]
 
-<<<<<<< HEAD
             self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
             self.gradient_accumulator.reset()
-=======
-    def _forward(self, features, labels):
-        """Forwards a training example and accumulates the gradients."""
-        per_example_loss, _ = self.run_model(features, labels, True)
-        gradients = tf.gradients(per_example_loss, self.model.trainable_variables)
-        gradients = [
-            g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
-        ]
-
-        self.gradient_accumulator(gradients)
->>>>>>> tf_trainer_cleanup
 
     @tf.function
     def distributed_training_steps(self, batch):
@@ -736,11 +586,7 @@ class TFTrainer:
                 "The `_run_model` method is deprecated and won't be called in a future version, define `run_model` in your subclass.",
                 FutureWarning,
             )
-<<<<<<< HEAD
             return self._run_model(features, labels, training)
-=======
-            return self._run_model()
->>>>>>> tf_trainer_cleanup
 
         if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
             features["mems"] = self._past
@@ -778,11 +624,7 @@ class TFTrainer:
         """
         test_ds, steps, num_examples = self.get_test_tfdataset(test_dataset)
 
-<<<<<<< HEAD
         return self.prediction_loop(test_ds, steps, num_examples, description="Prediction")
-=======
-        return self.prediction_loop(test_ds, description="Prediction")
->>>>>>> tf_trainer_cleanup
 
     def save_model(self, output_dir: Optional[str] = None):
         """
