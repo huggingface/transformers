@@ -375,7 +375,9 @@ XLM_INPUTS_DOCSTRING = r"""
     XLM_START_DOCSTRING,
 )
 class XLMModel(XLMPreTrainedModel):
-    def __init__(self, config):  # , dico, is_encoder, with_output):
+    authorized_missing_keys = [r"position_ids"]
+
+    def __init__(self, config):
         super().__init__(config)
 
         # encoder / decoder, output layer

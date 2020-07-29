@@ -60,13 +60,14 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
-        AutoModelWithLMHead,
         AutoModelForSeq2SeqLM,
-        MODEL_WITH_LM_HEAD_MAPPING,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
     )
 
 if TYPE_CHECKING:
@@ -816,6 +817,159 @@ class TextClassificationPipeline(Pipeline):
             ]
 
 
+class ZeroShotClassificationArgumentHandler(ArgumentHandler):
+    """
+    Handles arguments for zero-shot for text classification by turning each possible label into an NLI
+    premise/hypothesis pair.
+    """
+
+    def _parse_labels(self, labels):
+        if isinstance(labels, str):
+            labels = [label.strip() for label in labels.split(",")]
+        return labels
+
+    def __call__(self, sequences, labels, hypothesis_template):
+        if len(labels) == 0 or len(sequences) == 0:
+            raise ValueError("You must include at least one label and at least one sequence.")
+        if hypothesis_template.format(labels[0]) == hypothesis_template:
+            raise ValueError(
+                (
+                    'The provided hypothesis_template "{}" was not able to be formatted with the target labels. '
+                    "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
+                ).format(hypothesis_template)
+            )
+
+        if isinstance(sequences, str):
+            sequences = [sequences]
+        labels = self._parse_labels(labels)
+
+        sequence_pairs = []
+        for sequence in sequences:
+            sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
+
+        return sequence_pairs
+
+
+class ZeroShotClassificationPipeline(Pipeline):
+    """
+    NLI-based zero-shot classification pipeline using a ModelForSequenceClassification head with models trained on
+    NLI tasks.
+
+    Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
+    pair and passed to the pre-trained model. Then logit for `entailment` is then taken as the logit for the
+    candidate label being valid. Any NLI model can be used as long as the first output logit corresponds to
+    `contradiction` and the last to `entailment`.
+
+    This pipeline can currently be loaded from the :func:`~transformers.pipeline` method using the following task
+    identifier(s):
+
+    - "zero-shot-classification"
+
+    The models that this pipeline can use are models that have been fine-tuned on a Natural Language Inference task.
+    See the up-to-date list of available models on
+    `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
+
+    Arguments:
+        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+            :class:`~transformers.PreTrainedTokenizer`.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
+
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
+        super().__init__(*args, args_parser=args_parser, **kwargs)
+
+    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+        """
+        Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
+        """
+        inputs = self._args_parser(*args, **kwargs)
+        inputs = self.tokenizer(
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
+            truncation="only_first",
+        )
+
+        return inputs
+
+    def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
+        """
+        NLI-based zero-shot classification. Any combination of sequences and labels can be passed and each
+        combination will be posed as a premise/hypothesis pair and passed to the pre-trained model. Then logit for
+        `entailment` is then taken as the logit for the candidate label being valid. Any NLI model can be used as
+        long as the first output logit corresponds to `contradiction` and the last to `entailment`.
+
+        Args:
+            sequences (:obj:`str` or obj:`List`):
+                The sequence or sequences to classify. Truncated if model input is too large.
+            candidate_labels (:obj:`str` or obj:`List`):
+                The set of possible class labels to classify each sequence into. Can be a single label, a string of
+                comma-separated labels, or a list of labels.
+            hypothesis_template (obj:`str`, defaults to "This example is {}."):
+                The template used to turn each label into an NLI-style hypothesis. This template must include a {}
+                or similar syntax for the candidate label to be inserted into the template. For example, the default
+                template is "This example is {}." With the candidate label "sports", this would be fed into the model
+                like `<cls> sequence to classify <sep> This example is sports . <sep>`. The default template works
+                well in many cases, but it may be worthwhile to experiment with different templates depending on the
+                task setting.
+            multi_class (obj:`bool`, defaults to False):
+                When False, it is assumed that only one candidate label can be true, and the scores are normalized
+                such that the sum of the label likelihoods for each sequence is 1. When True, the labels are
+                considered independent and probabilities are normalized for each candidate by doing a of softmax of
+                the entailment score vs. the contradiction score.
+        """
+        outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
+        num_sequences = 1 if isinstance(sequences, str) else len(sequences)
+        candidate_labels = self._args_parser._parse_labels(candidate_labels)
+        reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
+
+        if len(candidate_labels) == 1:
+            multi_class = True
+
+        if not multi_class:
+            # softmax the "entailment" logits over all candidate labels
+            entail_logits = reshaped_outputs[..., -1]
+            scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
+        else:
+            # softmax over the entailment vs. contradiction dim for each label independently
+            entail_contr_logits = reshaped_outputs[..., [0, -1]]
+            scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
+            scores = scores[..., 1]
+
+        result = []
+        for iseq in range(num_sequences):
+            top_inds = list(reversed(scores[iseq].argsort()))
+            result.append(
+                {
+                    "sequence": sequences if isinstance(sequences, str) else sequences[iseq],
+                    "labels": [candidate_labels[i] for i in top_inds],
+                    "scores": scores[iseq][top_inds].tolist(),
+                }
+            )
+
+        if len(result) == 1:
+            return result[0]
+        return result
+
+
 class FillMaskPipeline(Pipeline):
     """
     Masked language modeling prediction pipeline using ModelWithLMHead head. See the
@@ -876,7 +1030,7 @@ class FillMaskPipeline(Pipeline):
             task=task,
         )
 
-        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
+        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
 
         self.topk = topk
 
@@ -1664,7 +1818,9 @@ class TranslationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
+        self.check_model_type(
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        )
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -1780,7 +1936,7 @@ SUPPORTED_TASKS = {
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForMaskedLM if is_torch_available() else None,
         "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
     },
     "summarization": {
@@ -1792,26 +1948,36 @@ SUPPORTED_TASKS = {
     "translation_en_to_fr": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_de": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_ro": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForCausalLM if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
+    },
+    "zero-shot-classification": {
+        "impl": ZeroShotClassificationPipeline,
+        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
+        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+        },
     },
 }
 
@@ -1956,6 +2122,6 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
-        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+        model = model_class.from_pretrained(model, config=config, return_tuple=True, **model_kwargs)
 
     return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
