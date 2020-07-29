@@ -86,14 +86,14 @@ def ensure_onnxruntime_installed():
 
         # We require 1.4.0 minimum
         if ort_version < ORT_QUANTIZE_MINIMUM_VERSION:
-            ImportError(
+            raise ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= 1.4.0 to enable all the conversions options.\n"
                 f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
             )
 
     except ImportError:
-        ImportError(
+        raise ImportError(
             "onnxruntime doesn't seem to be currently installed. "
             "Please install the onnxruntime by running `pip install onnxruntime`"
             " and relaunch the conversion."
