@@ -1,7 +1,7 @@
 Tokenizer
 ----------------------------------------------------
 
-A tokenizer is in charge of preparing the inputs for a model. The library comprise tokenizers for all the models. Most
+A tokenizer is in charge of preparing the inputs for a model. The library contains tokenizers for all the models. Most
 of the tokenizers are available in two flavors: a full python implementation and a "Fast" implementation based on the
 Rust library `tokenizers <https://github.com/huggingface/tokenizers>`__. The "Fast" implementations allows:
 
