@@ -204,6 +204,9 @@ class PretrainedConfig(object):
 
     @property
     def num_labels(self) -> int:
+        """
+        :obj:`int`: The number of labels for classification models.
+        """
         return len(self.id2label)
 
     @num_labels.setter

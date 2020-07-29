@@ -157,10 +157,8 @@ class ModuleUtilsMixin:
     @property
     def device(self) -> device:
         """
-        The device on which the module is (assuming that all the module parameters are on the same device).
-
-        Returns:
-            :obj:`torch.device` The device of the module.
+        :obj:`torch.device`: The device on which the module is (assuming that all the module parameters are on the same
+        device).
         """
         try:
             return next(self.parameters()).device
@@ -178,10 +176,7 @@ class ModuleUtilsMixin:
     @property
     def dtype(self) -> dtype:
         """
-        The dtype of the module (assuming that all the module parameters have the same dtype).
-
-        Returns:
-            :obj:`torch.dtype` The dtype of the module.
+        :obj:`torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
         try:
             return next(self.parameters()).dtype
@@ -350,10 +345,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
-        """ Dummy inputs to do a forward pass in the network.
-
-        Returns:
-            :obj:`Dict[str, torch.Tensor]`: The dummy inputs.
+        """
+        :obj:`Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
@@ -371,7 +364,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         self.config = config
 
     @property
-    def base_model(self):
+    def base_model(self) -> nn.Module:
+        """
+        :obj:`torch.nn.Module`: The main body of the model.
+        """
         return getattr(self, self.base_model_prefix, self)
 
     def get_input_embeddings(self) -> nn.Module:
