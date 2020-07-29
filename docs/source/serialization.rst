@@ -6,8 +6,8 @@ ONNX / ONNXRuntime
 ==============================================
 
 Projects ONNX (Open Neural Network eXchange) and ONNXRuntime (ORT) are part of an effort from leading industries in the AI field
-to provide an unified and community driven format to store and, by extension, efficiently execute neural network leveraging variety
-of hardware and dedicated optimization.
+to provide a unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
+of hardware and dedicated optimizations.
 
 Starting from transformers v2.10.0 we partnered with ONNX Runtime to provide an easy export of transformers models to
 the ONNX format. You can have a look at the effort by looking at our join blog post `Accelerate your NLP pipelines using
@@ -23,17 +23,17 @@ The following command shows how easy it is to export a BERT model from the libra
 The conversion tool works for both PyTorch and Tensorflow models and ensure:
     * The model and its weight are correctly initialized from the Hugging Face's model hub or a local checkpoint.
     * The inputs and outputs are correctly generated to their ONNX counterpart.
-    * The generated model cam be correctly loaded through onnxruntime.
+    * The generated model can be correctly loaded through onnxruntime.
 
 .. note::
-    Currently inputs and outputs are always exported with dynamic sequence axis which can prevent some optimizations
-    to be enabled on the different runtime. If you would like to see such support for fixed length inputs/outputs please
+    Currently, inputs and outputs are always exported with dynamic sequence axes preventing some optimizations
+    on the ONNX Runtime. If you would like to see such support for fixed-length inputs/outputs, please
     open up an issue on transformers.
 
 
-Also, the conversion tool supports different options which let you tune the behaviour of the generated model:
+Also, the conversion tool supports different options which let you tune the behavior of the generated model:
     * Change the target opset version of the generated model: More recent opset generally supports more operator and enables faster inference.
-    * Export pipeline specific prediction heads: Allow to export model along with its task specific prediction head(s).
+    * Export pipeline specific prediction heads: Allow to export model along with its task-specific prediction head(s).
     * Use the external data format (PyTorch only): Let you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_).
 
 
