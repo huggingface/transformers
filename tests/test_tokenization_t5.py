@@ -17,6 +17,8 @@
 import os
 import unittest
 
+from transformers import BatchEncoding
+from transformers.testing_utils import _torch_available
 from transformers.tokenization_t5 import T5Tokenizer
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
@@ -24,6 +26,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
+
+FRAMEWORK = "pt" if _torch_available else "tf"
 
 
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -102,3 +106,25 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
+
+    def test_prepare_seq2seq_batch(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, 1]
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text, tgt_texts=tgt_text, max_length=len(expected_src_tokens), return_tensors=FRAMEWORK
+        )
+        self.assertIsInstance(batch, BatchEncoding)
+
+        self.assertEqual((2, 10), batch.input_ids.shape)
+        self.assertEqual((2, 10), batch.attention_mask.shape)
+        result = batch.input_ids.tolist()[0]
+        self.assertListEqual(expected_src_tokens, result)
+        self.assertEqual(1, batch.decoder_input_ids[0, -1])  # EOS
+        # Test that special tokens are reset
+        self.assertEqual(tokenizer.prefix_tokens, [])
+        self.assertEqual(tokenizer.suffix_tokens, [tokenizer.eos_token_id])

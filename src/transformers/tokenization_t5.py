@@ -19,8 +19,9 @@ import logging
 import os
 import re
 from shutil import copyfile
+from typing import List, Optional
 
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,9 @@ class T5Tokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+
+    prefix_tokens: List[int] = []
+    suffix_tokens: List[int] = []
 
     def __init__(
         self,
@@ -206,3 +210,90 @@ class T5Tokenizer(PreTrainedTokenizer):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens. The special tokens depend on calling source text or target text.
+        An T5 sequence has the following format, where ``X`` represents the sequence:
+        - ``input_ids`` (for encoder) ``X [eos]``
+        - ``decoder_input_ids``: (for decoder) ``[pad] X [eos]``
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        if token_ids_1 is None:
+            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: str = None,
+        **kwargs,
+    ) -> BatchEncoding:
+        """Prepare a batch that can be passed directly to an instance of T5Model.
+        Arguments:
+            src_texts: list of src language texts
+            tgt_texts: list of tgt language texts
+            max_length: (default=None, which defers to the config value of 512 for t5*
+            padding: strategy for padding input_ids and decoder_input_ids. Should be max_length or longest.
+            **kwargs: passed to self.__call__
+
+        Returns:
+            :obj:`BatchEncoding`: with keys input_ids, attention_mask, decoder_input_ids, decoder_attention_mask.
+        """
+        if max_length is None:
+            max_length = self.max_len
+        self.set_src_special_tokens()
+        model_inputs: BatchEncoding = self(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            padding=padding,
+            truncation=True,
+            **kwargs,
+        )
+        if tgt_texts is None:
+            return model_inputs
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+        self.set_tgt_special_tokens()
+        decoder_inputs: BatchEncoding = self(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_target_length,
+            truncation=True,
+            **kwargs,
+        )
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
+
+        self.set_src_special_tokens()
+        return model_inputs
+
+    def set_src_special_tokens(self) -> None:
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id]
+
+    def set_tgt_special_tokens(self) -> None:
+        self.prefix_tokens = [self.pad_token_id]
+        self.suffix_tokens = [self.eos_token_id]
