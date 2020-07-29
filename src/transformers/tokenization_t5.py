@@ -98,7 +98,6 @@ class T5Tokenizer(PreTrainedTokenizer):
     model_input_names = ["attention_mask"]
 
     prefix_tokens: List[int] = []
-    suffix_tokens: List[int] = []
 
     def __init__(
         self,
@@ -232,9 +231,9 @@ class T5Tokenizer(PreTrainedTokenizer):
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
+            return self.prefix_tokens + token_ids_0
         # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+        return self.prefix_tokens + token_ids_0 + token_ids_1
 
     def prepare_seq2seq_batch(
         self,
@@ -292,8 +291,6 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def set_src_special_tokens(self) -> None:
         self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id]
 
     def set_tgt_special_tokens(self) -> None:
         self.prefix_tokens = [self.pad_token_id]
-        self.suffix_tokens = [self.eos_token_id]

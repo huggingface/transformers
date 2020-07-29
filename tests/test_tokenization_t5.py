@@ -114,17 +114,16 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
             "Another summary.",
         ]
-        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, 1]
+        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5]
         batch = tokenizer.prepare_seq2seq_batch(
             src_text, tgt_texts=tgt_text, max_length=len(expected_src_tokens), return_tensors=FRAMEWORK
         )
         self.assertIsInstance(batch, BatchEncoding)
 
-        self.assertEqual((2, 10), batch.input_ids.shape)
-        self.assertEqual((2, 10), batch.attention_mask.shape)
+        self.assertEqual((2, 9), batch.input_ids.shape)
+        self.assertEqual((2, 9), batch.attention_mask.shape)
         result = batch.input_ids.tolist()[0]
         self.assertListEqual(expected_src_tokens, result)
-        self.assertEqual(1, batch.decoder_input_ids[0, -1])  # EOS
         # Test that special tokens are reset
         self.assertEqual(tokenizer.prefix_tokens, [])
-        self.assertEqual(tokenizer.suffix_tokens, [tokenizer.eos_token_id])
+
