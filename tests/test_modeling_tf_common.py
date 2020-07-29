@@ -80,8 +80,8 @@ class TFModelTesterMixin:
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
             inputs_dict = {
-                k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices, 1))
-                if isinstance(v, tf.Tensor) and v.ndim != 0
+                k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
+                if isinstance(v, tf.Tensor) and v.ndim > 0
                 else v
                 for k, v in inputs_dict.items()
             }

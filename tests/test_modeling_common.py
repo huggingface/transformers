@@ -66,7 +66,7 @@ class ModelTesterMixin:
         if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
             return {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-                if isinstance(v, torch.Tensor) and v.ndim != 0
+                if isinstance(v, torch.Tensor) and v.ndim > 1
                 else v
                 for k, v in inputs_dict.items()
             }

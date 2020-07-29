@@ -25,6 +25,7 @@ from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import BaseModelOutput
 from .modeling_xlm import (
+    XLMForMultipleChoice,
     XLMForQuestionAnswering,
     XLMForQuestionAnsweringSimple,
     XLMForSequenceClassification,
@@ -373,6 +374,25 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
 class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
     """
     This class overrides :class:`~transformers.XLMForQuestionAnswering`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = FlaubertConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.transformer = FlaubertModel(config)
+        self.init_weights()
+
+
+@add_start_docstrings(
+    """Flaubert Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    FLAUBERT_START_DOCSTRING,
+)
+class FlaubertForMultipleChoice(XLMForMultipleChoice):
+    """
+    This class overrides :class:`~transformers.XLMForMultipleChoice`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 

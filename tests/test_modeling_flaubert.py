@@ -32,6 +32,7 @@ if is_torch_available():
         FlaubertForQuestionAnsweringSimple,
         FlaubertForSequenceClassification,
         FlaubertForTokenClassification,
+        FlaubertForMultipleChoice,
     )
     from transformers.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -90,6 +91,7 @@ class FlaubertModelTester(object):
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             is_impossible_labels = ids_tensor([self.batch_size], 2).float()
+            choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = FlaubertConfig(
             vocab_size=self.vocab_size,
@@ -118,6 +120,7 @@ class FlaubertModelTester(object):
             sequence_labels,
             token_labels,
             is_impossible_labels,
+            choice_labels,
             input_mask,
         )
 
@@ -133,6 +136,7 @@ class FlaubertModelTester(object):
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = FlaubertModel(config=config)
@@ -158,6 +162,7 @@ class FlaubertModelTester(object):
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = FlaubertWithLMHeadModel(config)
@@ -183,6 +188,7 @@ class FlaubertModelTester(object):
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = FlaubertForQuestionAnsweringSimple(config)
@@ -212,6 +218,7 @@ class FlaubertModelTester(object):
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = FlaubertForQuestionAnswering(config)
@@ -278,6 +285,7 @@ class FlaubertModelTester(object):
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = FlaubertForSequenceClassification(config)
@@ -304,6 +312,7 @@ class FlaubertModelTester(object):
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         config.num_labels = self.num_labels
@@ -319,6 +328,38 @@ class FlaubertModelTester(object):
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
         self.check_loss_output(result)
 
+    def create_and_check_flaubert_multiple_choice(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_lengths,
+        sequence_labels,
+        token_labels,
+        is_impossible_labels,
+        choice_labels,
+        input_mask,
+    ):
+        config.num_choices = self.num_choices
+        model = FlaubertForMultipleChoice(config=config)
+        model.to(torch_device)
+        model.eval()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        loss, logits = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            token_type_ids=multiple_choice_token_type_ids,
+            labels=choice_labels,
+        )
+        result = {
+            "loss": loss,
+            "logits": logits,
+        }
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+        self.check_loss_output(result)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -329,6 +370,7 @@ class FlaubertModelTester(object):
             sequence_labels,
             token_labels,
             is_impossible_labels,
+            choice_labels,
             input_mask,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "lengths": input_lengths}
@@ -346,6 +388,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             FlaubertForQuestionAnsweringSimple,
             FlaubertForSequenceClassification,
             FlaubertForTokenClassification,
+            FlaubertForMultipleChoice,
         )
         if is_torch_available()
         else ()
@@ -381,6 +424,10 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flaubert_token_classif(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_flaubert_token_classif(*config_and_inputs)
+
+    def test_flaubert_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_flaubert_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
