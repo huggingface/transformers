@@ -916,18 +916,17 @@ def set_scores_to_inf_for_banned_tokens(scores: torch.Tensor, banned_tokens: Lis
     for idx, batch_banned_tokens in enumerate(banned_tokens):
         for token in batch_banned_tokens:
             banned_mask_list.append([idx, token])
-    if len(banned_mask_list) > 0:
-        banned_mask = torch.LongTensor(banned_mask_list)
-        indices = torch.ones(len(banned_mask))
-        # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
-        # [ 0  1  1 ]
-        # [ 0  0  0 ]
-        # [ 1  0  0 ]
+    if not banned_mask_list:
+        return
+    banned_mask = torch.LongTensor(banned_mask_list)
+    indices = torch.ones(len(banned_mask))
+    # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
+    # [ 0  1  1 ]
+    # [ 0  0  0 ]
+    # [ 1  0  0 ]
 
-        banned_mask = (
-            torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
-        )
-        scores.masked_fill_(banned_mask, -float("inf"))
+    banned_mask = torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
+    scores.masked_fill_(banned_mask, -float("inf"))
 
 
 def top_k_top_p_filtering(
