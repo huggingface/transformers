@@ -10,7 +10,7 @@ to provide a unified and community-driven format to store and, by extension, eff
 of hardware and dedicated optimizations.
 
 Starting from transformers v2.10.0 we partnered with ONNX Runtime to provide an easy export of transformers models to
-the ONNX format. You can have a look at the effort by looking at our join blog post `Accelerate your NLP pipelines using
+the ONNX format. You can have a look at the effort by looking at our joint blog post `Accelerate your NLP pipelines using
 Hugging Face Transformers and ONNX Runtime <https://medium.com/microsoftazure/accelerate-your-nlp-pipelines-using-hugging-face-transformers-and-onnx-runtime-2443578f4333>`_.
 
 Exporting a model is done through the script `convert_graph_to_onnx.py` at the root of the transformers sources.
@@ -20,8 +20,8 @@ The following command shows how easy it is to export a BERT model from the libra
 
     python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased bert-base-cased.onnx
 
-The conversion tool works for both PyTorch and Tensorflow models and ensure:
-    * The model and its weight are correctly initialized from the Hugging Face's model hub or a local checkpoint.
+The conversion tool works for both PyTorch and Tensorflow models and ensures:
+    * The model and its weights are correctly initialized from the Hugging Face model hub or a local checkpoint.
     * The inputs and outputs are correctly generated to their ONNX counterpart.
     * The generated model can be correctly loaded through onnxruntime.
 
@@ -34,7 +34,7 @@ The conversion tool works for both PyTorch and Tensorflow models and ensure:
 Also, the conversion tool supports different options which let you tune the behavior of the generated model:
     * Change the target opset version of the generated model: More recent opset generally supports more operator and enables faster inference.
     * Export pipeline specific prediction heads: Allow to export model along with its task-specific prediction head(s).
-    * Use the external data format (PyTorch only): Let you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_).
+    * Use the external data format (PyTorch only): Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_).
 
 
 TorchScript
