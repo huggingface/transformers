@@ -328,7 +328,7 @@ class FlaubertModelTester(object):
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
         self.check_loss_output(result)
 
-    def create_and_check_bert_for_multiple_choice(
+    def create_and_check_flaubert_multiple_choice(
         self,
         config,
         input_ids,
@@ -424,6 +424,10 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flaubert_token_classif(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_flaubert_token_classif(*config_and_inputs)
+
+    def test_flaubert_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_flaubert_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
