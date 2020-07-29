@@ -335,7 +335,7 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
 )
 class FlaubertForTokenClassification(XLMForTokenClassification):
     """
-    This class overrides :class:`~transformers.XLMForMultipleChoice`. Please check the
+    This class overrides :class:`~transformers.XLMForTokenClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 

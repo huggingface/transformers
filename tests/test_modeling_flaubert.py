@@ -312,6 +312,7 @@ class FlaubertModelTester(object):
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         config.num_labels = self.num_labels
