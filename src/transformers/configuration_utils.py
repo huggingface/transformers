@@ -194,12 +194,18 @@ class PretrainedConfig(object):
                 raise err
 
     @property
-    def use_return_tuple(self):
+    def use_return_tuple(self) -> bool:
+        """
+        :obj:`bool`: Whether or not the model should return tuple.
+        """
         # If torchscript is set, force return_tuple to avoid jit errors
         return self.return_tuple or self.torchscript
 
     @property
     def num_labels(self) -> int:
+        """
+        :obj:`int`: The number of labels for classification models.
+        """
         return len(self.id2label)
 
     @num_labels.setter
