@@ -288,6 +288,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
+        (BartConfig, BartForConditionalGeneration),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (LongformerConfig, LongformerForMaskedLM),

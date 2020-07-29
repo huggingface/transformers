@@ -56,12 +56,12 @@ class EncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            from transformers import AutoModel
+            from .modeling_auto import AutoModel
 
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            from transformers import AutoModelForCausalLM
+            from .modeling_auto import AutoModelForCausalLM
 
             decoder = AutoModelForCausalLM.from_config(config.decoder)
 
@@ -159,7 +159,7 @@ class EncoderDecoderModel(PreTrainedModel):
             from .modeling_auto import AutoModelForCausalLM
 
             if "config" not in kwargs_decoder:
-                from transformers import AutoConfig
+                from .configuration_auto import AutoConfig
 
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False:

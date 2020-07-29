@@ -3,7 +3,7 @@
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
 Summarization support is more mature than translation support.
 Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
-For `bertabs` instructions, see `bertabs/README.md`. 
+For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md). 
 
 
 ### Data
@@ -27,17 +27,7 @@ this should make a directory called `cnn_dm/` with files like `test.source`.
 ```
 
 WMT16 English-Romanian Translation Data:
-
-This dataset comes in two formats. The "packed" version merges short training examples into examples of <200 tokens to increase GPU utilization (and also improves validation performance).
-
-```bash
-cd examples/seq2seq
-https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro_packed_train_200.tgz
-tar -xzvf wmt_en_ro_packed_200.tgz
-export ENRO_DIR=wmt_en_ro_packed_train_200
-```
- 
-The original data can also be downloaded with this command:
+download with this command:
 ```bash
 wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
@@ -99,20 +89,20 @@ Then you can finetune mbart_cc25 on english-romanian with the following command.
 Best performing command:
 ```bash
 # optionally
-export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
+export ENRO_DIR='wmt_en_ro' # Download instructions above
 # export WANDB_PROJECT="MT" # optional 
 export MAX_LEN=200
 export BS=4
 export GAS=8 # gradient accumulation steps
 ./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb --sortish_sampler
 ```
-This should take < 2h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 25. (you can see in wandb or metrics.json).
+This should take < 6h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 25. (you can see metrics in wandb or metrics.json).
 To get results in line with fairseq, you need to do some postprocessing.
 
 MultiGPU command
 (using 8 GPUS as an example)
 ```bash
-export ENRO_DIR='wmt_en_ro_packed_train_200' # Download instructions above
+export ENRO_DIR='wmt_en_ro' # Download instructions above
  # export WANDB_PROJECT="MT" # optional
 export MAX_LEN=200
 export BS=4
@@ -190,6 +180,8 @@ python run_eval.py sshleifer/distilbart-cnn-12-6 $DATA_DIR/val.source dbart_val_
     --task summarization \
     --n_obs 100 \
     --device cuda \
+    --max_source_length 1024 \
+    --max_target_length 56 \
     --fp16 \
     --bs 32
 ```

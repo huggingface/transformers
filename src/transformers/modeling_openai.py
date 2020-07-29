@@ -272,6 +272,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config_class = OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights.
@@ -391,6 +392,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
 
+        self.register_buffer("position_ids", torch.arange(config.n_positions))
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -443,9 +445,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
         if position_ids is None:
             # Code is different from when we had a single embedding matrice from position and token embeddings
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(input_shape[-1], dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+            position_ids = self.position_ids[None, : input_shape[-1]]
 
         # Attention mask.
         if attention_mask is not None:

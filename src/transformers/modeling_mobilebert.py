@@ -32,8 +32,6 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.modeling_bert import BertIntermediate
-
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig
 from .file_utils import (
@@ -43,6 +41,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
+from .modeling_bert import BertIntermediate
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -179,18 +178,22 @@ class MobileBertEmbeddings(nn.Module):
         self.LayerNorm = NORM2FN[config.normalization_type](config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
             input_shape = inputs_embeds.size()[:-1]
+
         seq_length = input_shape[1]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if position_ids is None:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(input_shape)
+            position_ids = self.position_ids[:, :seq_length]
+
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
@@ -783,6 +786,8 @@ class MobileBertModel(MobileBertPreTrainedModel):
     """
         https://arxiv.org/pdf/2004.02984.pdf
     """
+
+    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
