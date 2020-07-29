@@ -196,7 +196,7 @@ class PretrainedConfig(object):
     @property
     def use_return_tuple(self) -> bool:
         """
-        :obj:`bool`: Whether or not the model should return tuple.
+        :obj:`bool`: Whether or not the model should return a tuple.
         """
         # If torchscript is set, force return_tuple to avoid jit errors
         return self.return_tuple or self.torchscript
