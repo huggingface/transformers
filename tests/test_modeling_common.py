@@ -74,6 +74,7 @@ class ModelTesterMixin:
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -803,8 +804,6 @@ class ModelTesterMixin:
 
             # Wrap model in nn.DataParallel
             model = torch.nn.DataParallel(model)
-            # Our model outputs do not work with DataParallel, so forcing return tuple.
-            inputs_dict["return_tuple"] = True
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
