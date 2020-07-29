@@ -46,7 +46,7 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 
-from .modeling_roberta import RobertaLMHead
+from .modeling_roberta import RobertaLMHead, RobertaClassificationHead
 
 
 logger = logging.getLogger(__name__)
@@ -350,11 +350,77 @@ class MPNetForMaskedLM(BertPreTrainedModel):
 
 class MPNetForSequenceClassification(BertPreTrainedModel):
     
+    base_model_prefix = "mpnet"
+
     def __init__(self, config):
         super().__init__(config)
 
+        self.num_labels = config.num_labels
+        self.mpnet = MPNetModel(config)
+        self.classifier = RobertaClassificationHead(config)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_tuple=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+
+        outputs = self.mpnet(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_tuple=return_tuple,
+        )
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if return_tuple:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
+
+
 
 class MPNetForMultipleChoice(BertPreTrainedModel):
+
+    base_model_prefix = "mpnet"
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -422,6 +488,8 @@ class MPNetForMultipleChoice(BertPreTrainedModel):
 
 
 class MPNetForQuestionAnswering(BertPreTrainedModel):
+
+    base_model_prefix = "mpnet"
 
     def __init__(self, config):
         super().__init__(config)
