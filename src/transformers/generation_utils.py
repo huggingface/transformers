@@ -15,7 +15,7 @@
 # limitations under the License.
 
 import logging
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -93,20 +93,7 @@ class GenerationMixin:
             bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
             # calculate a list of banned tokens according to bad words
             banned_tokens = calc_banned_bad_words_ids(input_ids.tolist(), bad_words_ids)
-            banned_mask_list = []
-            for idx, batch_banned_tokens in enumerate(banned_tokens):
-                for token in batch_banned_tokens:
-                    banned_mask_list.append([idx, token])
-            if len(banned_mask_list) > 0:
-                banned_mask = torch.LongTensor(banned_mask_list).to(scores.device)
-                indices = torch.ones(len(banned_mask)).to(scores.device)
-                # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
-                # [ 0  1  1 ]
-                # [ 0  0  0 ]
-                # [ 1  0  0 ]
-
-                banned_mask = torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to_dense().bool()
-                scores.masked_fill_(banned_mask, -float("inf"))
+            set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
         return scores
 
@@ -915,6 +902,25 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
         banned_tokens.append(banned_tokens_slice)
 
     return banned_tokens
+
+
+def set_scores_to_inf_for_banned_tokens(scores: torch.Tensor, banned_tokens: List[List[int]]) -> None:
+    banned_mask_list = []
+    for idx, batch_banned_tokens in enumerate(banned_tokens):
+        for token in batch_banned_tokens:
+            banned_mask_list.append([idx, token])
+    if len(banned_mask_list) > 0:
+        banned_mask = torch.LongTensor(banned_mask_list)
+        indices = torch.ones(len(banned_mask))
+        # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
+        # [ 0  1  1 ]
+        # [ 0  0  0 ]
+        # [ 1  0  0 ]
+
+        banned_mask = (
+            torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
+        )
+        scores.masked_fill_(banned_mask, -float("inf"))
 
 
 def top_k_top_p_filtering(
