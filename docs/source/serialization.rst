@@ -45,7 +45,7 @@ Optimizations
 ------------------------------------------------
 
 ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph.
-Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (1):
+Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (see 1.):
 
 * Constant folding
 * Attention Layer fusing
