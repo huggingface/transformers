@@ -168,7 +168,7 @@ class FlaubertModel(XLMModel):
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.LongTensor([slen] * bs).to(device)
+                lengths = torch.tensor([slen] * bs, device=device)
         # mask = input_ids != self.pad_index
 
         # check inputs
