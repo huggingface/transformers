@@ -1,7 +1,9 @@
 import itertools
 import json
+import linecache
 import os
 import pickle
+import warnings
 from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List
@@ -13,50 +15,43 @@ from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
 from torch import nn
 from torch.utils.data import Dataset, Sampler
-from tqdm import tqdm
 
 from transformers import BartTokenizer
 
 
-def encode_file(
-    tokenizer,
-    data_path,
-    max_length,
-    pad_to_max_length=True,
-    return_tensors="pt",
-    overwrite_cache=False,
-    prefix="",
-    tok_name="",
-):
+def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
+    """From fairseq"""
+    if target.dim() == lprobs.dim() - 1:
+        target = target.unsqueeze(-1)
+    nll_loss = -lprobs.gather(dim=-1, index=target)
+    smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
+    if ignore_index is not None:
+        pad_mask = target.eq(ignore_index)
+        nll_loss.masked_fill_(pad_mask, 0.0)
+        smooth_loss.masked_fill_(pad_mask, 0.0)
+        bs = pad_mask.long().sum()
+    else:
+        nll_loss = nll_loss.squeeze(-1)
+        smooth_loss = smooth_loss.squeeze(-1)
+        bs = lprobs.shape[0]
+
+    nll_loss = nll_loss.sum()  # mean()? Scared to break other math.
+    smooth_loss = smooth_loss.sum()
+    eps_i = epsilon / lprobs.size(-1)
+    loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
+    return loss / bs, nll_loss / bs
+
+
+def encode_line(tokenizer, line, max_length, pad_to_max_length=True, return_tensors="pt"):
     extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
-    cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
-    if not overwrite_cache and cache_path.exists():
-        try:
-            examples = torch.load(cache_path)
-            assert isinstance(examples, list)
-            return examples
-
-        except Exception:
-            print(f"failed to load from {cache_path}, retokenizing {data_path}")
-    data_path = Path(data_path)
-
-    lns = lmap(str.strip, data_path.open().readlines())
-    lns = [prefix + text for text in lns]
-    assert lns, f"found empty file at {data_path}"
-    examples = []
-    for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
-        tokenized = tokenizer(
-            [text],
-            max_length=max_length,
-            padding="max_length" if pad_to_max_length else None,
-            truncation=True,
-            return_tensors=return_tensors,
-            **extra_kw,
-        )
-        assert tokenized.input_ids.shape[1] == max_length
-        examples.append(tokenized)
-    torch.save(lmap(dict, examples), cache_path.open("wb"))
-    return examples
+    return tokenizer(
+        [line],
+        max_length=max_length,
+        padding="max_length" if pad_to_max_length else None,
+        truncation=True,
+        return_tensors=return_tensors,
+        **extra_kw,
+    )
 
 
 def lmap(f: Callable, x: Iterable) -> List:
@@ -80,73 +75,107 @@ def trim_batch(
         return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
 
 
-class SummarizationDataset(Dataset):
+class Seq2SeqDataset(Dataset):
     def __init__(
         self,
         tokenizer,
         data_dir,
+        max_source_length,
+        max_target_length,
         type_path="train",
-        max_source_length=1024,
-        max_target_length=56,
         n_obs=None,
-        overwrite_cache=False,
-        prefix="",
         src_lang=None,
         tgt_lang=None,
+        prefix="",
     ):
         super().__init__()
-        # FIXME: the rstrip logic strips all the chars, it seems.
-        tok_name = tokenizer.__class__.__name__.lower().rstrip("tokenizer")
-        if hasattr(tokenizer, "set_lang") and src_lang is not None:
-            tokenizer.set_lang(src_lang)  # HACK: only applies to mbart
-        self.source = encode_file(
-            tokenizer,
-            os.path.join(data_dir, type_path + ".source"),
-            max_source_length,
-            overwrite_cache=overwrite_cache,
-            prefix=prefix,
-            tok_name=tok_name,
-        )
-        tgt_path = os.path.join(data_dir, type_path + ".target")
-        if hasattr(tokenizer, "set_lang"):
-            assert tgt_lang is not None, "--tgt_lang must be passed to build a translation"
-            tokenizer.set_lang(tgt_lang)  # HACK: only applies to mbart
-        self.target = encode_file(
-            tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name
-        )
+        self.src_file = Path(data_dir).joinpath(type_path + ".source")
+        self.tgt_file = Path(data_dir).joinpath(type_path + ".target")
+        self.src_lens = self.get_char_lens(self.src_file)
+        self.max_source_length = max_source_length
+        self.max_target_length = max_target_length
+        assert min(self.src_lens) > 0, f"found empty line in {self.src_file}"
+        self.tokenizer = tokenizer
+        self.prefix = prefix
         if n_obs is not None:
-            self.source = self.source[:n_obs]
-            self.target = self.target[:n_obs]
-        self.pad_token_id = tokenizer.pad_token_id
+            self.src_lens = self.src_lens[:n_obs]
+        self.pad_token_id = self.tokenizer.pad_token_id
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
 
     def __len__(self):
-        return len(self.source)
+        return len(self.src_lens)
 
-    def __getitem__(self, index):
-        source_ids = self.source[index]["input_ids"].squeeze()
-        target_ids = self.target[index]["input_ids"].squeeze()
-        src_mask = self.source[index]["attention_mask"].squeeze()
-        return {"input_ids": source_ids, "attention_mask": src_mask, "decoder_input_ids": target_ids}
+    def __getitem__(self, index) -> Dict[str, torch.Tensor]:
+        index = index + 1  # linecache starts at 1
+        source_line = self.prefix + linecache.getline(str(self.src_file), index).rstrip("\n")
+        tgt_line = linecache.getline(str(self.tgt_file), index).rstrip("\n")
+        assert source_line, f"empty source line for index {index}"
+        assert tgt_line, f"empty tgt line for index {index}"
+        source_inputs = encode_line(self.tokenizer, source_line, self.max_source_length)
+        target_inputs = encode_line(self.tokenizer, tgt_line, self.max_target_length)
+
+        source_ids = source_inputs["input_ids"].squeeze()
+        target_ids = target_inputs["input_ids"].squeeze()
+        src_mask = source_inputs["attention_mask"].squeeze()
+        return {
+            "input_ids": source_ids,
+            "attention_mask": src_mask,
+            "decoder_input_ids": target_ids,
+        }
 
     @staticmethod
-    def trim_seq2seq_batch(batch, pad_token_id):
-        y = trim_batch(batch["decoder_input_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
-        return source_ids, source_mask, y
+    def get_char_lens(data_file):
+        return [len(x) for x in Path(data_file).open().readlines()]
 
-    def collate_fn(self, batch) -> dict:
+    def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
         target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
         pad_token_id = self.pad_token_id
         y = trim_batch(target_ids, pad_token_id)
         source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
-        batch = {"input_ids": source_ids, "attention_mask": source_mask, "decoder_input_ids": y}
+        batch = {
+            "input_ids": source_ids,
+            "attention_mask": source_mask,
+            "decoder_input_ids": y,
+        }
         return batch
 
     def make_sortish_sampler(self, batch_size):
-        lens = [x["input_ids"].ne(self.pad_token_id).sum() for x in self.source]
-        return SortishSampler(lens, batch_size)
+        return SortishSampler(self.src_lens, batch_size)
+
+
+class MBartDataset(Seq2SeqDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.max_source_length != self.max_target_length:
+            warnings.warn(
+                f"Mbart is using sequence lengths {self.max_source_length}, {self.max_target_length}. "
+                f"Imbalanced sequence lengths may be undesired for translation tasks"
+            )
+
+    def __getitem__(self, index) -> Dict[str, str]:
+        index = index + 1  # linecache starts at 1
+        source_line = self.prefix + linecache.getline(str(self.src_file), index).rstrip("\n")
+        tgt_line = linecache.getline(str(self.tgt_file), index).rstrip("\n")
+        assert source_line, f"empty source line for index {index}"
+        assert tgt_line, f"empty tgt line for index {index}"
+        return {
+            "tgt_texts": tgt_line,
+            "src_texts": source_line,
+        }
+
+    def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
+        batch_encoding = self.tokenizer.prepare_translation_batch(
+            [x["src_texts"] for x in batch],
+            src_lang=self.src_lang,
+            tgt_texts=[x["tgt_texts"] for x in batch],
+            tgt_lang=self.tgt_lang,
+            max_length=self.max_source_length,
+            max_target_length=self.max_target_length,
+        )
+        return batch_encoding.data
 
 
 class SortishSampler(Sampler):

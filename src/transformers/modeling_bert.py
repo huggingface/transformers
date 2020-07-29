@@ -180,6 +180,9 @@ class BertEmbeddings(nn.Module):
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -187,12 +190,12 @@ class BertEmbeddings(nn.Module):
             input_shape = inputs_embeds.size()[:-1]
 
         seq_length = input_shape[1]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if position_ids is None:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(input_shape)
+            position_ids = self.position_ids[:, :seq_length]
+
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -565,6 +568,7 @@ class BertPreTrainedModel(PreTrainedModel):
     config_class = BertConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -873,8 +877,8 @@ class BertForPreTraining(BertPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> prediction_scores, seq_relationship_scores = outputs[:2]
-
+        >>> prediction_logits = outptus.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
         """
         if "masked_lm_labels" in kwargs:
             warnings.warn(
@@ -978,7 +982,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> prediction_scores = outputs.prediction_scores
+        >>> prediction_logits = outputs.logits
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
@@ -1181,7 +1185,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
 
         >>> outputs = model(**encoding, next_sentence_label=torch.LongTensor([1]))
-        >>> logits = outputs.seq_relationship_scores
+        >>> logits = outputs.logits
         >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
         """
         return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple

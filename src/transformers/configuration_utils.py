@@ -47,7 +47,7 @@ class PretrainedConfig(object):
                 Whether or not the model should return all hidden-states.
             output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the model should returns all attentions.
-            use_cache (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should return the last key/values attentions (not used by all models).
             return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the model should return tuples instead of :obj:`ModelOutput` objects.
@@ -100,7 +100,7 @@ class PretrainedConfig(object):
               method of the model.
 
         Parameters for fine-tuning tasks
-            - **architectures** (:obj:List[`str`], `optional`) -- Model architectures that can be used with the
+            - **architectures** (:obj:`List[str]`, `optional`) -- Model architectures that can be used with the
               model pretrained weights.
             - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
               used when converting from an original (TensorFlow or PyTorch) checkpoint.

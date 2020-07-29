@@ -577,6 +577,8 @@ class GPT2Model(GPT2PreTrainedModel):
     GPT2_START_DOCSTRING,
 )
 class GPT2LMHeadModel(GPT2PreTrainedModel):
+    authorized_missing_keys = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPT2Model(config)
@@ -754,7 +756,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
 
         >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
+        >>> lm_logits = outputs.lm_logits
+        >>> mc_logits = outputs.mc_logits
 
         """
         if "lm_labels" in kwargs:

@@ -58,6 +58,34 @@ class BartTokenizerFast(RobertaTokenizerFast):
 _all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
 
+FAIRSEQ_LANGUAGE_CODES = [
+    "ar_AR",
+    "cs_CZ",
+    "de_DE",
+    "en_XX",
+    "es_XX",
+    "et_EE",
+    "fi_FI",
+    "fr_XX",
+    "gu_IN",
+    "hi_IN",
+    "it_IT",
+    "ja_XX",
+    "kk_KZ",
+    "ko_KR",
+    "lt_LT",
+    "lv_LV",
+    "my_MM",
+    "ne_NP",
+    "nl_XX",
+    "ro_RO",
+    "ru_RU",
+    "si_LK",
+    "tr_TR",
+    "vi_VN",
+    "zh_CN",
+]
+
 
 class MBartTokenizer(XLMRobertaTokenizer):
     """
@@ -81,49 +109,25 @@ class MBartTokenizer(XLMRobertaTokenizer):
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
-    lang_code_to_id = {  # NOTE(SS): resize embeddings will break this
-        "ar_AR": 250001,
-        "cs_CZ": 250002,
-        "de_DE": 250003,
-        "en_XX": 250004,
-        "es_XX": 250005,
-        "et_EE": 250006,
-        "fi_FI": 250007,
-        "fr_XX": 250008,
-        "gu_IN": 250009,
-        "hi_IN": 250010,
-        "it_IT": 250011,
-        "ja_XX": 250012,
-        "kk_KZ": 250013,
-        "ko_KR": 250014,
-        "lt_LT": 250015,
-        "lv_LV": 250016,
-        "my_MM": 250017,
-        "ne_NP": 250018,
-        "nl_XX": 250019,
-        "ro_RO": 250020,
-        "ru_RU": 250021,
-        "si_LK": 250022,
-        "tr_TR": 250023,
-        "vi_VN": 250024,
-        "zh_CN": 250025,
-    }
-    id_to_lang_code = {v: k for k, v in lang_code_to_id.items()}
-    cur_lang_code = lang_code_to_id["en_XX"]
+
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.sp_model_size = len(self.sp_model)
+        self.lang_code_to_id = {
+            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+        }
+        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
+        self.cur_lang_code = self.lang_code_to_id["en_XX"]
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
+
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
-        self.reset_special_tokens()
-
-    def reset_special_tokens(self) -> None:
-        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -183,12 +187,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
-    def set_lang(self, lang: str) -> None:
-        """Set the current language code in order to call tokenizer properly."""
-        self.cur_lang_code = self.lang_code_to_id[lang]
-        self.prefix_tokens = [self.cur_lang_code]
-        self.suffix_tokens = [self.eos_token_id]
-
     def prepare_translation_batch(
         self,
         src_texts: List[str],
@@ -196,6 +194,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         tgt_texts: Optional[List[str]] = None,
         tgt_lang: str = "ro_RO",
         max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
         padding: str = "longest",
         return_tensors: str = "pt",
         **kwargs,
@@ -215,7 +214,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         """
         if max_length is None:
             max_length = self.max_len
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.set_src_lang_special_tokens(src_lang)
         model_inputs: BatchEncoding = self(
             src_texts,
             add_special_tokens=True,
@@ -227,18 +226,33 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         if tgt_texts is None:
             return model_inputs
-        self.set_lang(tgt_lang)
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+        self.set_tgt_lang_special_tokens(tgt_lang)
         decoder_inputs: BatchEncoding = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             padding=padding,
-            max_length=max_length,
+            max_length=max_target_length,
             truncation=True,
             **kwargs,
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
-        self.reset_special_tokens()  # sets to src_lang
+
+        self.set_src_lang_special_tokens(src_lang)  # sets to src_lang
         return model_inputs
+
+    def set_src_lang_special_tokens(self, src_lang) -> None:
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
+        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+
+    def set_tgt_lang_special_tokens(self, lang: str) -> None:
+        """Reset the special tokens to the target language setting. Prefix [tgt_lang_code], suffix =[eos]."""
+        self.cur_lang_code = self.lang_code_to_id[lang]
+        self.prefix_tokens = [self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]
