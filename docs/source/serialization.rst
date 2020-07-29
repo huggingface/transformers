@@ -42,17 +42,17 @@ Quantization
 
 ONNX exporter supports generating a quantized version of the model to allow efficient inference.
 
-Quantization works by converting the data representation of all/some of the parameters in the network
-to a compact integer format. Commonly, parameters of a neural network are stored as single-precision float (`float32`)
-which can express a wide-range of floating-point numbers with decent precision. This properties are especially interesting
-at training where you want fine-grained representation.
+Quantization works by converting the memory representation of the parameters in the neural network
+to a compact integer format. By default, weights of a neural network are stored as single-precision float (`float32`)
+which can express a wide-range of floating-point numbers with decent precision.
+These properties are especially interesting at training where you want fine-grained representation.
 
-On the other hand, after the training phase, it has been shown the range and the precision of `float32` numbers can be
-greatly reduced without necessary changing the performances of the neural network.
+On the other hand, after the training phase, it has been shown one can greatly reduce the range and the precision of `float32` numbers
+without changing the performances of the neural network.
 
-More technically, `float32` parameters are converted to a type requiring less bits to represent each number, thus reducing
-the overall size of the model. Here, we are enabling `int8` conversion which basically maps every `float32` values
-to non-floating, single byte, number representation according to the following formula:
+More technically, `float32` parameters are converted to a type requiring fewer bits to represent each number, thus reducing
+the overall size of the model. Here, we are enabling `float32` mapping to `int8` values (a non-floating, single byte, number representation)
+according to the following formula:
 
 .. math::
     y_{float32} = scale * x_{int8} - zero\_point
@@ -67,7 +67,7 @@ Leveraging tiny-integers has numerous advantages when it comes to inference:
 * Integer operations require less power to do the computations
 
 In order to convert a transformers model to ONNX IR with quantized weights you just need to specify ``--quantize``
-when using ``convert_graph_to_onnx.py`` or you can have a look at the ``quantize()`` utility-method in this
+when using ``convert_graph_to_onnx.py``. Also, you can have a look at the ``quantize()`` utility-method in this
 same script file.
 
 Example of quantized BERT model export:
@@ -80,8 +80,10 @@ Example of quantized BERT model export:
     Quantization support requires ONNX Runtime >= 1.4.0
 
 .. note::
-    When exporting quantized model you will end up with two different ONNX models. The one specified at the end of the
-    above command will contains the original ONNX model storing `float32` weights and a second one, with ``-quantized`` suffix.
+    When exporting quantized model you will end up with two different ONNX files. The one specified at the end of the
+    above command will contain the original ONNX model storing `float32` weights.
+    The second one, with ``-quantized`` suffix, will hold the quantized parameters.
+
 
 TorchScript
 =======================================
