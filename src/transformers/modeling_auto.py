@@ -24,6 +24,7 @@ from .configuration_auto import (
     AutoConfig,
     BartConfig,
     BertConfig,
+    BertweetConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -34,6 +35,7 @@ from .configuration_auto import (
     LongformerConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
+    PhobertConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -69,6 +71,14 @@ from .modeling_bert import (
     BertForTokenClassification,
     BertLMHeadModel,
     BertModel,
+)
+from .modeling_bertweet import (
+    BertweetForMaskedLM,
+    BertweetForMultipleChoice,
+    BertweetForQuestionAnswering,
+    BertweetForSequenceClassification,
+    BertweetForTokenClassification,
+    BertweetModel,
 )
 from .modeling_camembert import (
     CamembertForMaskedLM,
@@ -124,6 +134,14 @@ from .modeling_mobilebert import (
     MobileBertModel,
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_phobert import (
+    PhobertForMaskedLM,
+    PhobertForMultipleChoice,
+    PhobertForQuestionAnswering,
+    PhobertForSequenceClassification,
+    PhobertForTokenClassification,
+    PhobertModel,
+)
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
@@ -191,6 +209,8 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
+        (BertweetConfig, BertweetModel),
+        (PhobertConfig, PhobertModel),
     ]
 )
 
@@ -215,6 +235,8 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
+        (BertweetConfig, BertweetForMaskedLM),
+        (PhobertConfig, PhobertForMaskedLM),
     ]
 )
 
@@ -241,6 +263,8 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
+        (BertweetConfig, BertweetForMaskedLM),
+        (PhobertConfig, PhobertForMaskedLM),
     ]
 )
 
@@ -264,7 +288,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
-        (BartConfig, BartForConditionalGeneration),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (LongformerConfig, LongformerForMaskedLM),
@@ -275,6 +298,8 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
+        (BertweetConfig, BertweetForMaskedLM),
+        (PhobertConfig, PhobertForMaskedLM),
     ]
 )
 
@@ -302,6 +327,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
+        (BertweetConfig, BertweetForSequenceClassification),
+        (PhobertConfig, PhobertForSequenceClassification),
     ]
 )
 
@@ -321,6 +348,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
+        (BertweetConfig, BertweetForQuestionAnswering),
+        (PhobertConfig, PhobertForQuestionAnswering),
     ]
 )
 
@@ -338,6 +367,8 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
+        (BertweetConfig, BertweetForTokenClassification),
+        (PhobertConfig, PhobertForTokenClassification),
     ]
 )
 
@@ -353,6 +384,8 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (MobileBertConfig, MobileBertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
         (AlbertConfig, AlbertForMultipleChoice),
+        (BertweetConfig, BertweetForMultipleChoice),
+        (PhobertConfig, PhobertForMultipleChoice),
     ]
 )
 
@@ -441,6 +474,8 @@ class AutoModel:
             - `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
             - `flaubert`: :class:`~transformers.FlaubertModel` (Flaubert  model)
             - `electra`: :class:`~transformers.ElectraModel` (Electra  model)
+            - `bertweet`: :class:`~transformers.BertweetModel` (BERTweet model)
+            - `phobert`: :class:`~transformers.PhobertModel` (PhoBERT model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -596,6 +631,8 @@ class AutoModelForPreTraining:
             - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForPreTraining` (Electra model)
+            - `bertweet`: :class:`~transformers.BertweetForMaskedLM` (BERTweet model)
+            - `phobert`: :class:`~transformers.PhobertForMaskedLM` (PhoBERT model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -751,6 +788,8 @@ class AutoModelWithLMHead:
             - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+            - `bertweet`: :class:`~transformers.BertweetForMaskedLM` (BERTweet model)
+            - `phobert`: :class:`~transformers.PhobertForMaskedLM` (PhoBERT model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -999,6 +1038,8 @@ class AutoModelForMaskedLM:
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForMaskedLM` (Camembert model)
                 - isInstance of `albert` configuration class: :class:`~transformers.AlbertForMaskedLM` (Albert model)
+                - isInstance of `bertweet` configuration class: :class:`~transformers.BertweetForMaskedLM` (BERTweet model)
+                - isInstance of `phobert` configuration class: :class:`~transformers.PhobertForMaskedLM` (PhoBERT model)
 
 
         Examples::
@@ -1035,6 +1076,9 @@ class AutoModelForMaskedLM:
             - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
             - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
             - `bert`: :class:`~transformers.BertLMHeadModel` (Bert model)
+            - `bertweet`: :class:`~transformers.BertweetForMaskedLM` (BERTweet model)
+            - `phobert`: :class:`~transformers.PhobertForMaskedLM` (PhoBERT model)
+
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1277,6 +1321,8 @@ class AutoModelForSequenceClassification:
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMForSequenceClassification` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
+                - isInstance of `bertweet` configuration class: :class:`~transformers.BertweetForSequenceClassification` (BERTweet model)
+                - isInstance of `phobert` configuration class: :class:`~transformers.PhobertForSequenceClassification` (PhoBERT model)
 
 
         Examples::
@@ -1313,6 +1359,8 @@ class AutoModelForSequenceClassification:
             - `bert`: :class:`~transformers.BertForSequenceClassification` (Bert model)
             - `xlnet`: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
             - `flaubert`: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
+            - `bertweet`: :class:`~transformers.BertweetForSequenceClassification` (BERTweet model)
+            - `phobert`: :class:`~transformers.PhobertForSequenceClassification` (PhoBERT model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1575,6 +1623,8 @@ class AutoModelForTokenClassification:
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForTokenClassification` (Camembert model)
                 - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForTokenClassification` (Roberta model)
                 - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+                - isInstance of `bertweet` configuration class: :class:`~transformers.BertweetForTokenClassification` (BERTweet model)
+                - isInstance of `phobert` configuration class: :class:`~transformers.PhobertForTokenClassification` (PhoBERT model)
 
         Examples::
 
@@ -1612,6 +1662,8 @@ class AutoModelForTokenClassification:
             - `flaubert`: :class:`~transformers.FlaubertForTokenClassification` (Flaubert model)
             - `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
             - `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+            - `bertweet`: :class:`~transformers.BertweetForTokenClassification` (BERTweet model)
+            - `phobert`: :class:`~transformers.PhobertForTokenClassification` (PhoBERT model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`

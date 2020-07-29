@@ -18,11 +18,14 @@
 import logging
 from collections import OrderedDict
 
+from transformers.configuration_mobilebert import MobileBertConfig
+
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
     BartConfig,
     BertConfig,
+    BertweetConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -32,6 +35,7 @@ from .configuration_auto import (
     LongformerConfig,
     MBartConfig,
     OpenAIGPTConfig,
+    PhobertConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -42,12 +46,12 @@ from .configuration_auto import (
     XLNetConfig,
 )
 from .configuration_marian import MarianConfig
-from .configuration_mobilebert import MobileBertConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer, MBartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
+from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -58,6 +62,7 @@ from .tokenization_longformer import LongformerTokenizer
 from .tokenization_marian import MarianTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_phobert import PhobertTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -95,6 +100,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (BertweetConfig, (BertweetTokenizer, None)),
+        (PhobertConfig, (PhobertTokenizer, None)),
     ]
 )
 
@@ -124,6 +131,8 @@ class AutoTokenizer:
             - `xlm`: XLMTokenizer (XLM model)
             - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `bertweet`: BertweetTokenizer (BERTweet model)
+            - `phobert`: PhobertTokenizer (PhoBERT model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -159,6 +168,8 @@ class AutoTokenizer:
             - `xlm`: XLMTokenizer (XLM model)
             - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `bertweet`: BertweetTokenizer (BERTweet model)
+            - `phobert`: PhobertTokenizer (PhoBERT model)
 
         Params:
             pretrained_model_name_or_path: either:

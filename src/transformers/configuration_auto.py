@@ -21,6 +21,7 @@ from collections import OrderedDict
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig, MBartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
+from .configuration_bertweet import BERTWEET_PRETRAINED_CONFIG_ARCHIVE_MAP, BertweetConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -32,6 +33,7 @@ from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from .configuration_marian import MarianConfig
 from .configuration_mobilebert import MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_phobert import PHOBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, PhobertConfig
 from .configuration_reformer import ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -67,6 +69,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BERTWEET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PHOBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -97,6 +101,8 @@ CONFIG_MAPPING = OrderedDict(
         ("ctrl", CTRLConfig,),
         ("electra", ElectraConfig,),
         ("encoder-decoder", EncoderDecoderConfig,),
+        ("bertweet", BertweetConfig,),
+        ("phobert", PhobertConfig,),
     ]
 )
 
@@ -155,6 +161,8 @@ class AutoConfig:
             - `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
             - `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
             - `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
+            - `bertweet`: :class:`~transformers.BertweetConfig` (BERTweet model)
+            - `phobert`: :class:`~transformers.PhobertConfig` (PhoBERT model)
 
         Args:
             pretrained_model_name_or_path (:obj:`string`):
