@@ -20,30 +20,25 @@ if is_torch_available():
 @require_torch
 class GenerationUtilsTest(unittest.TestCase):
     @cached_property
-    def config_and_model(self):
+    def config(self):
         config = MarianConfig.from_pretrained("sshleifer/tiny-marian-en-de")
-        return config, MarianMTModel(config)
+        return config
 
-    @require_torch
+    @cached_property
+    def model(self):
+        return MarianMTModel(self.config)
+
     def test_postprocess_next_token_scores(self):
-        config, model = self.config_and_model
+        config = self.config
+        model = self.model
         # Initialize an input id tensor with batch size 8 and sequence length 12
         input_ids = torch.arange(0, 96, 1).view((8, 12))
-
+        eos = config.eos_token_id
         bad_words_ids_test_cases = [[[299]], [[23, 24], [54]], [[config.eos_token_id]], []]
         masked_scores = [
             [(0, 299), (1, 299), (2, 299), (3, 299), (4, 299), (5, 299), (6, 299), (7, 299)],
             [(1, 24), (0, 54), (1, 54), (2, 54), (3, 54), (4, 54), (5, 54), (6, 54), (7, 54)],
-            [
-                (0, config.eos_token_id),
-                (1, config.eos_token_id),
-                (2, config.eos_token_id),
-                (3, config.eos_token_id),
-                (4, config.eos_token_id),
-                (5, config.eos_token_id),
-                (6, config.eos_token_id),
-                (7, config.eos_token_id),
-            ],
+            [(0, eos), (1, eos), (2, eos), (3, eos), (4, eos), (5, eos), (6, eos), (7, eos),],
             [],
         ]
 
@@ -66,11 +61,11 @@ class GenerationUtilsTest(unittest.TestCase):
             for masked_score in masked_scores[test_case_index]:
                 self.assertTrue(output[masked_score[0], masked_score[1]] == -float("inf"))
 
-    @require_torch
     @timeout_decorator.timeout(10)
     def test_postprocess_next_token_scores_large_bad_words_list(self):
 
-        config, model = self.config_and_model
+        config = self.config
+        model = self.model
         # Initialize an input id tensor with batch size 8 and sequence length 12
         input_ids = torch.arange(0, 96, 1).view((8, 12))
 
