@@ -93,6 +93,7 @@ class GenerationMixin:
             bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
             # calculate a list of banned tokens according to bad words
             banned_tokens = calc_banned_bad_words_ids(input_ids.tolist(), bad_words_ids)
+            # Modify the scores in place by setting the banned tokens logits to `-inf`
             set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
         return scores
@@ -905,6 +906,12 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
 
 
 def set_scores_to_inf_for_banned_tokens(scores: torch.Tensor, banned_tokens: List[List[int]]) -> None:
+    """ Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be
+    a list of list of banned tokens to ban in the format [[batch index, vocabulary position],...]
+        Args:
+            scores: logits distribution of shape (batch size, vocabulary size)
+            banned_tokens: list of list of tokens to ban of length (batch_size)
+    """
     banned_mask_list = []
     for idx, batch_banned_tokens in enumerate(banned_tokens):
         for token in batch_banned_tokens:
