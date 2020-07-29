@@ -20,8 +20,6 @@ import tempfile
 import unittest
 from typing import List
 
-import timeout_decorator
-
 from transformers import is_torch_available
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
@@ -40,8 +38,6 @@ if is_torch_available():
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         top_k_top_p_filtering,
-        MarianConfig,
-        MarianMTModel,
     )
 
 
