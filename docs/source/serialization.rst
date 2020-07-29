@@ -5,7 +5,7 @@ Exporting transformers models
 ONNX / ONNXRuntime
 ==============================================
 
-Projects ONNX (Open Neural Network eXchange) and ONNXRuntime (ORT) are part of an effort from leading industries in the AI field
+Projects `ONNX (Open Neural Network eXchange) <http://onnx.ai>`_ and `ONNXRuntime (ORT) <https://microsoft.github.io/onnxruntime/>`_ are part of an effort from leading industries in the AI field
 to provide a unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
 of hardware and dedicated optimizations.
 
@@ -34,9 +34,36 @@ The conversion tool works for both PyTorch and Tensorflow models and ensures:
 
 Also, the conversion tool supports different options which let you tune the behavior of the generated model:
 
-* Change the target opset version of the generated model: More recent opset generally supports more operator and enables faster inference.
-* Export pipeline specific prediction heads: Allow to export model along with its task-specific prediction head(s).
-* Use the external data format (PyTorch only): Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_).
+* **Change the target opset version of the generated model.**  (More recent opset generally supports more operator and enables faster inference)
+
+* **Export pipeline specific prediction heads.**  (Allow to export model along with its task-specific prediction head(s))
+
+* **Use the external data format (PyTorch only).**  (Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_))
+
+
+Optimizations
+------------------------------------------------
+
+ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph.
+Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (1):
+
+* Constant folding
+* Attention Layer fusing
+* Skip connection LayerNormalization fusing
+* FastGeLU approximation
+
+
+Fortunately, you can let ONNXRuntime find all the possible optimized operators for you. Simply add ``--optimize``
+when exporting your model through ``convert_graph_to_onnx.py``.
+
+Example:
+
+.. code-block:: bash
+
+    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --optimize bert-base-cased.onnx
+
+.. note::
+    (1) For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
 
 Quantization
 ------------------------------------------------
@@ -78,13 +105,15 @@ Example of quantized BERT model export:
     python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --quantize bert-base-cased.onnx
 
 .. note::
-    Quantization support requires ONNX Runtime >= 1.4.0
+    (1) Quantization support requires ONNX Runtime >= 1.4.0
 
 .. note::
     When exporting quantized model you will end up with two different ONNX files. The one specified at the end of the
     above command will contain the original ONNX model storing `float32` weights.
     The second one, with ``-quantized`` suffix, will hold the quantized parameters.
 
+.. note::
+    The quantization export gives the best performances when used in combination with ``--optimize``.
 
 TorchScript
 =======================================
