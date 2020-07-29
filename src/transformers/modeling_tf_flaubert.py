@@ -22,7 +22,7 @@ import tensorflow as tf
 
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_start_docstrings
-from .modeling_tf_utils import keras_serializable, shape_list
+from .modeling_tf_utils import cast_bool_to_primitive, keras_serializable, shape_list
 from .modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
@@ -138,9 +138,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
-        training=False,
         output_attentions=None,
         output_hidden_states=None,
+        training=False,
     ):
         # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
@@ -271,7 +271,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
                     [tensor, attn_mask, None, cache, head_mask[i], output_attentions], training=training
                 )
                 attn = attn_outputs[0]
-                if output_attentions:
+                if cast_bool_to_primitive(output_attentions, self.output_attentions) is True:
                     attentions = attentions + (attn_outputs[1],)
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
@@ -282,7 +282,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
                     [tensor_normalized, attn_mask, None, cache, head_mask[i]], training=training
                 )
                 attn = attn_outputs[0]
-                if output_attentions:
+                if cast_bool_to_primitive(output_attentions, self.output_attentions) is True:
                     attentions = attentions + (attn_outputs[1],)
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
@@ -305,7 +305,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states, self.output_hidden_states) is True:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -316,9 +316,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states, self.output_hidden_states) is True:
             outputs = outputs + (hidden_states,)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions, self.output_attentions) is True:
             outputs = outputs + (attentions,)
         return outputs  # outputs, (hidden_states), (attentions)
 

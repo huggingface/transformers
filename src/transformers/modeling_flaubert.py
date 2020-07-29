@@ -329,25 +329,6 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
 
 
 @add_start_docstrings(
-    """Flaubert Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    FLAUBERT_START_DOCSTRING,
-)
-class FlaubertForTokenClassification(XLMForTokenClassification):
-    """
-    This class overrides :class:`~transformers.XLMForTokenClassification`. Please check the
-    superclass for the appropriate documentation alongside usage examples.
-    """
-
-    config_class = FlaubertConfig
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.transformer = FlaubertModel(config)
-        self.init_weights()
-
-
-@add_start_docstrings(
     """Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     FLAUBERT_START_DOCSTRING,

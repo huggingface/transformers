@@ -19,9 +19,9 @@
 import itertools
 import logging
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import numpy as np
 import torch
@@ -41,6 +41,7 @@ from .file_utils import (
 from .modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
+    MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
@@ -1141,7 +1142,12 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xlm-mlm-en-2048")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="xlm-mlm-en-2048",
+        output_type=MultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -1153,34 +1159,18 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
+        labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        labels=None,
+        return_tuple=None,
     ):
         r"""
         labels (:obj:`torch.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
-
-    Return:
-        :obj:`tuple(torch.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
-        classification_scores (:obj:`Numpy array` or :obj:`torch.Tensor` of shape :obj:`(batch_size, num_choices)`:
-            `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
-
-            Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`torch.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`torch.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1214,17 +1204,25 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_tuple=return_tuple,
         )
         output = transformer_outputs[0]
         logits = self.sequence_summary(output)
         logits = self.logits_proj(logits)
         reshaped_logits = logits.view(-1, num_choices)
 
-        outputs = (reshaped_logits,) + transformer_outputs[1:]  # add hidden states and attention if they are here
-
+        loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-            outputs = (loss,) + outputs
 
-        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
+        if return_tuple:
+            output = (reshaped_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
