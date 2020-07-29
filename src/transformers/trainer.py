@@ -20,6 +20,7 @@ from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_apex_available, is_torch_tpu_available
+from .integrations import is_comet_available, is_wandb_available, is_tensorboard_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import (
@@ -27,7 +28,6 @@ from .trainer_utils import (
     EvalPrediction,
     PredictionOutput,
     TrainOutput,
-    is_wandb_available,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -62,6 +62,8 @@ def is_tensorboard_available():
 if is_wandb_available():
     import wandb
 
+if is_comet_available():
+    import comet_ml
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +209,13 @@ class Trainer:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
+        if is_comet_available():
+            self.setup_comet()
+        elif os.environ.get("COMET_MODE") != "DISABLED":
+            logger.info(
+                "To use comet_ml logging, run `pip/conda install comet_ml` "
+                "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
         set_seed(self.args.seed)
         # Create output directory if needed
@@ -387,6 +396,37 @@ class Trainer:
                 wandb.watch(
                     self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
                 )
+
+    def setup_comet(self):
+        """
+        Setup the optional Comet.ml integration.
+
+        Environment:
+            COMET_MODE:
+                (Optional): str - "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME:
+                (Optional): str - Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY:
+                (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+
+        For a number of configurable items in the environment,
+        see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
+        """
+        if self.is_world_master():
+            comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
+            args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
+            if comet_mode == "ONLINE":
+                experiment = comet_ml.Experiment(**args)
+                logger.info(
+                    'Automatic Comet.ml online logging enabled'
+                )
+            elif comet_mode == "OFFLINE":
+                args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
+                experiment = comet_ml.OfflineExperiment(**args)
+                logger.info(
+                    'Automatic Comet.ml offline logging enabled; use `comet upload` when finished'
+                )
+
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -642,6 +682,11 @@ class Trainer:
         if is_wandb_available():
             if self.is_world_master():
                 wandb.log(logs, step=self.global_step)
+        if is_comet_available():
+            if self.is_world_master():
+                experiment = comet_ml.config.get_global_experiment()
+                if experiment is not None:
+                    experiment.log_metrics(logs, step=self.global_step, epoch=self.epoch)
         output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
