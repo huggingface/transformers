@@ -399,19 +399,19 @@ class NerPipelineTests(unittest.TestCase):
                     "entity_group": "B-PER",
                     "score": 0.9710702640669686,
                     "word": "Consuelo Araújo Noguera",
-                    "indeces": [1, 2, 3, 4, 5, 6, 7],
+                    "indices": [1, 2, 3, 4, 5, 6, 7],
                 },
                 {
                     "entity_group": "B-PER",
                     "score": 0.9997273534536362,
                     "word": "Andrés Pastrana",
-                    "indeces": [15, 16, 17, 18],
+                    "indices": [15, 16, 17, 18],
                 },
-                {"entity_group": "B-ORG", "score": 0.8589080572128296, "word": "Farc", "indeces": [28, 29]},
+                {"entity_group": "B-ORG", "score": 0.8589080572128296, "word": "Farc", "indices": [28, 29]},
             ],
             [
-                {"entity_group": "I-PER", "score": 0.9962901175022125, "word": "Enzo", "indeces": [1, 2]},
-                {"entity_group": "I-ORG", "score": 0.9986497163772583, "word": "UN", "indeces": [7]},
+                {"entity_group": "I-PER", "score": 0.9962901175022125, "word": "Enzo", "indices": [1, 2]},
+                {"entity_group": "I-ORG", "score": 0.9986497163772583, "word": "UN", "indices": [7]},
             ],
         ]
 
