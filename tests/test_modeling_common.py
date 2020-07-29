@@ -1011,33 +1011,30 @@ class UtilsFunctionsTest(unittest.TestCase):
                 self.assertTrue(output[masked_score[0], masked_score[1]] == -float("inf"))
 
     @require_torch
-    @timeout_decorator.timeout(2)
+    @timeout_decorator.timeout(10)
     def test_postprocess_next_token_scores_large_bad_words_list(self):
 
-        try:
-            config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
-            model = MarianMTModel(config=config)
-            # Initialize an input id tensor with batch size 8 and sequence length 12
-            input_ids = torch.arange(0, 96, 1).view((8, 12))
+        config = MarianConfig.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
+        model = MarianMTModel(config=config)
+        # Initialize an input id tensor with batch size 8 and sequence length 12
+        input_ids = torch.arange(0, 96, 1).view((8, 12))
 
-            bad_words_ids = []
-            for _ in range(1000):
-                length_bad_word = random.randint(1, 4)
-                bad_words_ids.append(random.sample(range(1, 300), length_bad_word))
+        bad_words_ids = []
+        for _ in range(100):
+            length_bad_word = random.randint(1, 4)
+            bad_words_ids.append(random.sample(range(1, 300), length_bad_word))
 
-            scores = torch.rand((8, 300))
-            _ = model.postprocess_next_token_scores(
-                scores,
-                input_ids,
-                0,
-                bad_words_ids,
-                13,
-                15,
-                config.max_length,
-                config.eos_token_id,
-                config.repetition_penalty,
-                32,
-                5,
-            )
-        except timeout_decorator.timeout_decorator.TimeoutError:
-            print("Test timed-out")
+        scores = torch.rand((8, 300))
+        _ = model.postprocess_next_token_scores(
+            scores,
+            input_ids,
+            0,
+            bad_words_ids,
+            13,
+            15,
+            config.max_length,
+            config.eos_token_id,
+            config.repetition_penalty,
+            32,
+            5,
+        )

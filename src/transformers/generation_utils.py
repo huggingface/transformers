@@ -98,19 +98,14 @@ class GenerationMixin:
                 for token in batch_banned_tokens:
                     banned_mask_list.append([idx, token])
             if len(banned_mask_list) > 0:
-                banned_mask = torch.LongTensor(banned_mask_list)
-                indices = torch.ones(len(banned_mask))
+                banned_mask = torch.LongTensor(banned_mask_list).to(scores.device)
+                indices = torch.ones(len(banned_mask)).to(scores.device)
                 # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
                 # [ 0  1  1 ]
                 # [ 0  0  0 ]
                 # [ 1  0  0 ]
 
-                banned_mask = (
-                    torch.sparse.LongTensor(banned_mask.t(), indices, scores.size())
-                    .to_dense()
-                    .bool()
-                    .to(scores.device)
-                )
+                banned_mask = torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to_dense().bool()
                 scores.masked_fill_(banned_mask, -float("inf"))
 
         return scores
