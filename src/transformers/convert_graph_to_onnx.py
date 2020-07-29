@@ -421,6 +421,12 @@ if __name__ == "__main__":
 
         print("\n====== Optimizing ONNX model ======")
         if args.optimize:
+            if args.framework == "tf":
+                print(
+                    "\t Using TensorFlow exported might not provide the same level of optimization"
+                    " compared to the PyTorch one."
+                )
+
             check_onnxruntime_requirements(ORT_TRANSFORMERS_OPTIM_MINIMUM_VERSION)
             args.optimized_output = optimize(args.output)
 
