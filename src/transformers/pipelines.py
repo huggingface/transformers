@@ -81,9 +81,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_framework(model=None):
-    """ Select framework (TensorFlow/PyTorch) to use.
-        If both frameworks are installed and no specific model is provided, defaults to using PyTorch.
+def get_framework(model: Union[str, PreTrainedModel, TFPreTrainedModel] = None):
+    """
+    Select framework (TensorFlow or PyTorch) to use.
+
+    Args:
+        model (:obj:`str`, :class:`~transformers.PreTrainedModel` or :class:`~transformers.TFPreTrainedModel`, `optional`):
+            If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
+            the model name). If no specific model is provided, defaults to using PyTorch.
     """
     if is_tf_available() and is_torch_available() and model is not None and not isinstance(model, str):
         # Both framework are available but the user supplied a model class instance.
@@ -103,7 +108,12 @@ def get_framework(model=None):
 
 class PipelineException(Exception):
     """
-    Raised by pipelines when handling __call__
+    Raised by a `~transformers.pipelines.Pipeline` when handling __call__.
+
+    Args:
+        task (:obj:`str`): The task of the pipeline.
+        model (:obj:`str`): The model used by the pipeline.
+        reason (:obj:`str`): The error message to display.
     """
 
     def __init__(self, task: str, model: str, reason: str):

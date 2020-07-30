@@ -3,13 +3,14 @@ Pipelines
 
 The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most
 of the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
-Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering.
+Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering. See the
+:doc:`task summary <../task_summary>` for examples of use.
 
 There are two categories of pipeline abstractions to be aware about:
 
-- The :func:`~transformers.pipeline` which is the most powerful object encapsulating all other pipelines
+- The :func:`~transformers.pipeline` which is the most powerful object encapsulating all other pipelines.
 - The other task-specific pipelines, such as :class:`~transformers.TokenClassificationPipeline`
-  or :class:`~transformers.QuestionAnsweringPipeline`
+  or :class:`~transformers.QuestionAnsweringPipeline`.
 
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -37,8 +38,8 @@ TokenClassificationPipeline
 NerPipeline
 ==========================================
 
-This class is an alias of the :class:`~transformers.TokenClassificationPipeline` defined above. Please refer to that pipeline for
-documentation and usage examples.
+This class is an alias of the :class:`~transformers.TokenClassificationPipeline` defined above. Please refer to that
+pipeline for documentation and usage examples.
 
 FillMaskPipeline
 ==========================================
