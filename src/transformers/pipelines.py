@@ -52,8 +52,8 @@ if is_tf_available():
         TF_MODEL_WITH_LM_HEAD_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-    )
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING, TFAutoModelForCausalLM,
+)
 
 if is_torch_available():
     import torch
@@ -1950,6 +1950,7 @@ class ConversationalPipeline(Pipeline):
     Multi-turn conversational pipeline.
 
     Usage::
+
         conversational_pipeline = pipeline("conversational")
 
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
@@ -1958,6 +1959,7 @@ class ConversationalPipeline(Pipeline):
         conversational_pipeline([conversation_1, conversation_2])
 
         conversation_1.add_user_input("Is it an action movie?")
+        conversation_2.add_user_input("What is the genre of this book?")
 
         conversational_pipeline([conversation_1, conversation_2])
 
@@ -2124,18 +2126,20 @@ class ConversationalPipeline(Pipeline):
         Builds an input prepended by the history for this conversation, allowing multi-turn conversation with context
         """
         outputs = []
-        for input, history in zip(inputs, histories):
+        for new_input, history in zip(inputs, histories):
             if history is not None:
-                input = history + input
-            if len(input) > max_length - self.min_length_for_response:
+                new_input = history + new_input
+            if len(new_input) > max_length - self.min_length_for_response:
                 cutoff_eos_index = 0
-                while len(input) - cutoff_eos_index > max_length - self.min_length_for_response:
-                    cutoff_eos_index = input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
-                    if cutoff_eos_index == 0 or cutoff_eos_index == len(input) - 1:
+                while len(new_input) - cutoff_eos_index > max_length - self.min_length_for_response:
+                    if cutoff_eos_index >= len(new_input):
+                        break
+                    cutoff_eos_index = new_input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
+                    if cutoff_eos_index == 0 or cutoff_eos_index == len(new_input) - 1:
                         break
                     else:
-                        input = input[cutoff_eos_index + 1 :]
-            outputs.append(input)
+                        new_input = new_input[cutoff_eos_index + 1 :]
+            outputs.append(new_input)
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
         outputs = BatchEncoding(
@@ -2230,8 +2234,8 @@ SUPPORTED_TASKS = {
     },
     "conversational": {
         "impl": ConversationalPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
+        "pt": AutoModelForCausalLM if is_torch_available() else None,
         "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
 }
