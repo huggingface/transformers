@@ -28,13 +28,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
-def get_setup_file():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f")
-    args = parser.parse_args()
-    return args.f
-
-
 @require_torch_tpu
 class TorchXLAExamplesTests(unittest.TestCase):
     def test_run_glue(self):
@@ -54,7 +47,7 @@ class TorchXLAExamplesTests(unittest.TestCase):
             --task_name=MRPC
             --data_dir=/datasets/glue_data/MRPC
             --cache_dir=./cache_dir
-            --num_train_epochs=3
+            --num_train_epochs=1
             --max_seq_length=128
             --learning_rate=3e-5
             --output_dir={output_directory}
@@ -87,5 +80,4 @@ class TorchXLAExamplesTests(unittest.TestCase):
                 self.assertGreaterEqual(value, 0.70)
 
             # Assert that the script takes less than 300 seconds to make sure it doesn't hang.
-            # TODO: Change back to 300s once the 3-epoch test is done.
-            self.assertLess(end - start, 600)
+            self.assertLess(end - start, 300)
