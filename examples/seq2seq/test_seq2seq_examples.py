@@ -278,21 +278,16 @@ def test_finetune(model):
 
 
 def test_finetune_extra_model_args():
-    # test models whose config includes the extra_model_args
-    model = BART_TINY
     args_d: dict = CHEAP_ARGS.copy()
 
     task = "summarization"
     tmp_dir = make_test_data_dir()
-    output_dir = tempfile.mkdtemp(prefix="output_")
 
     args_d.update(
         data_dir=tmp_dir,
-        model_name_or_path=model,
         tokenizer_name=None,
         train_batch_size=2,
         eval_batch_size=2,
-        output_dir=output_dir,
         do_predict=False,
         task=task,
         src_lang="en_XX",
@@ -301,44 +296,32 @@ def test_finetune_extra_model_args():
         freeze_embeds=True,
     )
 
+    ### test models whose config includes the extra_model_args
+    model = BART_TINY
+    output_dir = tempfile.mkdtemp(prefix="output_1_")
+    args_d1 = args_d.copy()
+    args_d1.update(
+        model_name_or_path=model, output_dir=output_dir,
+    )
     extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
     for p in extra_model_params:
-        args_d[p] = 0.5
-
-    args = argparse.Namespace(**args_d)
+        args_d1[p] = 0.5
+    args = argparse.Namespace(**args_d1)
     model = main(args)
-
     for p in extra_model_params:
         assert getattr(model.config, p) == 0.5, f"failed to override the model config for param {p}"
 
-
-def test_finetune_extra_model_args2():
-    # test models whose config doesn't include the extra_model_args
+    ### test models whose config doesn't include the extra_model_args
     model = T5_TINY
-    args_d: dict = CHEAP_ARGS.copy()
-
-    task = "summarization"
-    tmp_dir = make_test_data_dir()
-    output_dir = tempfile.mkdtemp(prefix="output_")
-
-    args_d.update(
-        data_dir=tmp_dir,
-        model_name_or_path=model,
-        tokenizer_name=None,
-        train_batch_size=2,
-        eval_batch_size=2,
-        output_dir=output_dir,
-        do_predict=False,
-        task=task,
-        src_lang="en_XX",
-        tgt_lang="ro_RO",
-        freeze_encoder=True,
-        freeze_embeds=True,
+    output_dir = tempfile.mkdtemp(prefix="output_2_")
+    args_d2 = args_d.copy()
+    args_d2.update(
+        model_name_or_path=model, output_dir=output_dir,
     )
 
     unsupported_param = "encoder_layerdrop"
-    args_d[unsupported_param] = 0.5
-    args = argparse.Namespace(**args_d)
+    args_d2[unsupported_param] = 0.5
+    args = argparse.Namespace(**args_d2)
     with pytest.raises(Exception) as excinfo:
         model = main(args)
     assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
