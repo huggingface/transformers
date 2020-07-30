@@ -385,8 +385,7 @@ class Trainer:
         """
         if hasattr(self, "_setup_wandb"):
             warnings.warn(
-                "The `_setup_wandb` method is deprecated and won't be called in a future version, define `setup_wandb`"
-                " in your subclass.",
+                "The `_setup_wandb` method is deprecated and won't be called in a future version, define `setup_wandb` in your subclass.",
                 FutureWarning,
             )
             return self._setup_wandb()
@@ -628,8 +627,7 @@ class Trainer:
         """
         if hasattr(self, "_log"):
             warnings.warn(
-                "The `_log` method is deprecated and won't be called in a future version, define `log` in your"
-                " subclass.",
+                "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
                 FutureWarning,
             )
             return self._log(logs, iterator=iterator)
@@ -706,8 +704,7 @@ class Trainer:
         """
         if hasattr(self, "_training_step"):
             warnings.warn(
-                "The `_training_step` method is deprecated and won't be called in a future version, define"
-                " `training_step` in your subclass.",
+                "The `_training_step` method is deprecated and won't be called in a future version, define `training_step` in your subclass.",
                 FutureWarning,
             )
             return self._training_step(model, inputs, optimizer)
@@ -892,8 +889,7 @@ class Trainer:
         """
         if hasattr(self, "_prediction_loop"):
             warnings.warn(
-                "The `_prediction_loop` method is deprecated and won't be called in a future version, define"
-                " `prediction_loop` in your subclass.",
+                "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
                 FutureWarning,
             )
             return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
