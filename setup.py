@@ -68,9 +68,11 @@ extras = {}
 extras["mecab"] = ["mecab-python3<1"]
 extras["sklearn"] = ["scikit-learn"]
 
+tf_min_ver = "2.2.0"
+
 # keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
 extras["tf"] = [
-    "tensorflow",
+    f"tensorflow >= {tf_min_ver}",
     # "onnxconverter-common",
     # "keras2onnx"
     "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
@@ -97,7 +99,7 @@ extras["quality"] = [
     "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
     "flake8",
 ]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3<1", "scikit-learn", "tensorflow", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3<1", "scikit-learn", f"tensorflow >= {tf_min_ver}", "torch"]
 
 setup(
     name="transformers",
