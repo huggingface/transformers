@@ -538,13 +538,20 @@ class Trainer:
                     len(epoch_iterator) <= self.args.gradient_accumulation_steps
                     and (step + 1) == len(epoch_iterator)
                 ):
-                    if self.args.fp16 and _use_apex:
+                    if self.args.fp16 and _use_native_amp:
+                        self.scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+                    elif self.args.fp16 and _use_apex:
                         torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), self.args.max_grad_norm)
                     else:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+                        torch.nn.utils.clip_grad_norm(model.parameters(), self.args.max_grad_norm)
 
                     if is_torch_tpu_available():
                         xm.optimizer_step(optimizer)
+
+                    if self.args.fp16 and _use_native_amp:
+                        self.scaler.step(optimizer)
+                        self.scaler.update()
                     else:
                         optimizer.step()
 
