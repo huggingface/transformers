@@ -45,7 +45,7 @@ Optimizations
 ------------------------------------------------
 
 ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph.
-Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (see 1.):
+Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (*see note below*):
 
 * Constant folding
 * Attention Layer fusing
@@ -63,7 +63,7 @@ Example:
     python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --optimize bert-base-cased.onnx
 
 .. note::
-    (1) For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
+    For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
 
 Quantization
 ------------------------------------------------
@@ -105,7 +105,7 @@ Example of quantized BERT model export:
     python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --quantize bert-base-cased.onnx
 
 .. note::
-    (1) Quantization support requires ONNX Runtime >= 1.4.0
+    Quantization support requires ONNX Runtime >= 1.4.0
 
 .. note::
     When exporting quantized model you will end up with two different ONNX files. The one specified at the end of the
