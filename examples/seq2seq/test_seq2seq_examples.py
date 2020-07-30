@@ -296,7 +296,7 @@ def test_finetune_extra_model_args():
         freeze_embeds=True,
     )
 
-    ### test models whose config includes the extra_model_args
+    # test models whose config includes the extra_model_args
     model = BART_TINY
     output_dir = tempfile.mkdtemp(prefix="output_1_")
     args_d1 = args_d.copy()
@@ -311,14 +311,13 @@ def test_finetune_extra_model_args():
     for p in extra_model_params:
         assert getattr(model.config, p) == 0.5, f"failed to override the model config for param {p}"
 
-    ### test models whose config doesn't include the extra_model_args
+    # test models whose config doesn't include the extra_model_args
     model = T5_TINY
     output_dir = tempfile.mkdtemp(prefix="output_2_")
     args_d2 = args_d.copy()
     args_d2.update(
         model_name_or_path=model, output_dir=output_dir,
     )
-
     unsupported_param = "encoder_layerdrop"
     args_d2[unsupported_param] = 0.5
     args = argparse.Namespace(**args_d2)
