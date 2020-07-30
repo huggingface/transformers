@@ -146,7 +146,7 @@ class TokenSpan(NamedTuple):
 
 class BatchEncoding(UserDict):
     """
-    BatchEncoding hold the output of the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.encode`
+    Holds the output of the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`
     and :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.batch_encode` methods (tokens,
     attention_masks, etc).
 
@@ -248,7 +248,8 @@ class BatchEncoding(UserDict):
 
     def tokens(self, batch_index: int = 0) -> List[str]:
         """
-        Return the list of tokens at a given index for a fast tokenizer.
+        Return the list of tokens (sub-parts of the input strings after word/subword splitting and before converstion
+        to integer indices) at a given batch index (only works for the output of a fast tokenizer).
 
         Args:
             batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
@@ -1672,9 +1673,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
 
         Same as doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
-
-        .. warning::
-            This method is deprecated, ``__call__`` should be used instead.
 
         Args:
             text (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`):

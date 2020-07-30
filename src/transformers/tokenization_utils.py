@@ -164,7 +164,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens (:obj:`str` or :obj:`List[str]`):
+            new_tokens (:obj:`List[str]`or :obj:`List[tokenizers.AddedToken]`):
                 Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
                 checking if the tokenizer assign the index of the ``unk_token`` to them).
             special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -692,19 +692,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def _convert_id_to_token(self, index: int) -> str:
         raise NotImplementedError
 
-    def convert_tokens_to_string(self, tokens: List[int]) -> str:
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """
         Converts a sequence of token ids in a single string.
 
-        The most simple way to do it is ``' '.join(self.convert_ids_to_tokens(token_ids))`` but we often want to remove
+        The most simple way to do it is ``" ".join(tokens)`` but we often want to remove
         sub-word tokenization artifacts at the same time.
 
         Args:
-            tokens (:obj:`List[int]`): The token ids to convert.
+            tokens (:obj:`List[str]`): The token to join in a string.
 
-        Return: The decode text.
+        Return: The joined tokens.
         """
-        return " ".join(self.convert_ids_to_tokens(tokens))
+        return " ".join(tokens)
 
     def decode(
         self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
