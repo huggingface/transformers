@@ -529,7 +529,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class LxmertFeatureExtraction(LxmertPreTrainedModel):
+class LxmertForFeatureExtraction(LxmertPreTrainedModel):
     """
     Lxmert model for extracting features
     """
