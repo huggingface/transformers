@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import argparse
 import logging
 import sys
 import unittest
@@ -47,15 +46,15 @@ class TorchXLAExamplesTests(unittest.TestCase):
         output_directory = "run_glue_output"
 
         testargs = f"""
-            text-classification/run_glue.py
+            transformers/examples/text-classification/run_glue.py
             --num_cores=8
-            text-classification/run_glue.py
+            transformers/examples/text-classification/run_glue.py
             --do_train
             --do_eval
             --task_name=MRPC
-            --data_dir=../glue_data/MRPC
+            --data_dir=/datasets/glue_data/MRPC
             --cache_dir=./cache_dir
-            --num_train_epochs=1
+            --num_train_epochs=3
             --max_seq_length=128
             --learning_rate=3e-5
             --output_dir={output_directory}
@@ -87,5 +86,6 @@ class TorchXLAExamplesTests(unittest.TestCase):
                 # Assert that the model trains
                 self.assertGreaterEqual(value, 0.70)
 
-            # Assert that the script takes less than 100 seconds to make sure it doesn't hang.
-            self.assertLess(end - start, 100)
+            # Assert that the script takes less than 300 seconds to make sure it doesn't hang.
+            # TODO: Change back to 300s once the 3-epoch test is done.
+            self.assertLess(end - start, 600)

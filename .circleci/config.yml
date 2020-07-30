@@ -1,4 +1,54 @@
-version: 2
+version: 2.1
+orbs:
+    gcp-gke: circleci/gcp-gke@1.0.4
+    go: circleci/go@1.3.0
+references:
+    checkout_ml_testing: &checkout_ml_testing
+        run:
+            name: Checkout ml-testing-accelerators
+            command: |
+                git clone https://github.com/GoogleCloudPlatform/ml-testing-accelerators.git
+                cd ml-testing-accelerators
+                git fetch origin 5e88ac24f631c27045e62f0e8d5dfcf34e425e25:stable
+                git checkout stable
+    build_push_docker: &build_push_docker
+        run:
+            name: Configure Docker
+            command: |
+                gcloud --quiet auth configure-docker
+                cd docker/transformers-pytorch-tpu
+                if [ -z "$CIRCLE_PR_NUMBER" ]; then docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1"; else docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" --build-arg "GITHUB_REF=pull/$CIRCLE_PR_NUMBER/head" . ; fi
+                docker push "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID"
+    deploy_cluster: &deploy_cluster
+        run:
+            name: Deploy the job on the kubernetes cluster
+            command: |
+                # TODO BEFORE SUBMIT: Remove debug ls
+                ls
+                go get github.com/google/go-jsonnet/cmd/jsonnet && \
+                export PATH=$PATH:$HOME/go/bin && \
+                kubectl create -f docker/transformers-pytorch-tpu/dataset.yaml || true && \
+                job_name=$(jsonnet -J ml-testing-accelerators/ docker/transformers-pytorch-tpu/bert-base-cased.jsonnet --ext-str image=$GCR_IMAGE_PATH --ext-str image-tag=$CIRCLE_WORKFLOW_JOB_ID | kubectl create -f -) && \
+                job_name=${job_name#job.batch/} && \
+                job_name=${job_name% created} && \
+                echo "Waiting on kubernetes job: $job_name" && \
+                i=0 && \
+                # 30 checks spaced 30s apart = 900s total.
+                max_checks=30 && \
+                status_code=2 && \
+                # Check on the job periodically. Set the status code depending on what
+                # happened to the job in Kubernetes. If we try max_checks times and
+                # still the job hasn't finished, give up and return the starting
+                # non-zero status code.
+                while [ $i -lt $max_checks ]; do ((i++)); if kubectl get jobs $job_name -o jsonpath='Failed:{.status.failed}' | grep "Failed:1"; then status_code=1 && break; elif kubectl get jobs $job_name -o jsonpath='Succeeded:{.status.succeeded}' | grep "Succeeded:1" ; then status_code=0 && break; else echo "Job not finished yet"; fi; sleep 30; done && \
+                echo "Done waiting. Job status code: $status_code" && \
+                # Allow time for logs to flush.
+                sleep 60 && \
+                echo "JOB_NAME: $job_name" && \
+                gcloud logging read "resource.type=k8s_container resource.labels.project_id=$GOOGLE_PROJECT_ID resource.labels.location=$GOOGLE_COMPUTE_ZONE resource.labels.cluster_name=$GKE_CLUSTER resource.labels.namespace_name=default resource.labels.pod_name:$job_name" --limit 10000000 --order asc --format 'value(textPayload)' --project=$GOOGLE_PROJECT_ID && \
+                echo "Done with log retrieval attempt." && \
+                gcloud container images delete "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" --force-delete-tags && \
+                exit $status_code
 jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
@@ -77,6 +127,24 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt
+    run_examples_tpu:
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - go/install
+            - *checkout_ml_testing
+            - gcp-gke/install
+            - gcp-gke/update-kubeconfig-with-credentials:
+                cluster: $GKE_CLUSTER
+                perform-login: true
+            - setup_remote_docker
+            - *build_push_docker
+            - *deploy_cluster
     build_doc:
         working_directory: ~/transformers
         docker:
@@ -134,6 +202,7 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - run_examples_torch
+            - run_examples_tpu
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
             - run_tests_torch
