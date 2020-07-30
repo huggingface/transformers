@@ -689,7 +689,7 @@ class LxmertModel(LxmertPreTrainedModel):
 @add_start_docstrings(
     """Lxmert Model with a specified pre-training heads on top. """, LXMERT_START_DOCSTRING, LXMERT_INPUTS_DOCSTRING
 )
-class LxmertPretraining(LxmertPreTrainedModel):
+class LxmertForPretraining(LxmertPreTrainedModel):
     r"""
     **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
         Indices of input sequence tokens in the vocabulary.
