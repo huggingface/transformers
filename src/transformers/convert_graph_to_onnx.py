@@ -13,7 +13,6 @@ from transformers.tokenization_utils import BatchEncoding
 
 # This is the minimal required version to
 # support some ONNX Runtime features
-ORT_TRANSFORMERS_OPTIM_MINIMUM_VERSION = parse("1.3.0")
 ORT_QUANTIZE_MINIMUM_VERSION = parse("1.4.0")
 
 
@@ -353,6 +352,7 @@ def optimize(onnx_model_path: Path) -> Path:
     _ = InferenceSession(onnx_model_path.as_posix(), sess_option)
 
     print(f"Optimized model has been written at {opt_model_path}: \N{heavy check mark}")
+    print("/!\\ Optimized model contains hardware specific operators which might not be portable. /!\\")
 
     return opt_model_path
 
@@ -379,7 +379,7 @@ def quantize(onnx_model_path: Path) -> Path:
 
         # Save model
         print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
-        onnx.save(quantized_model, quantized_model_path.as_posix())
+        onnx.save_model(quantized_model, quantized_model_path.as_posix())
 
         return quantized_model_path
     except Exception as ie:
@@ -420,28 +420,21 @@ if __name__ == "__main__":
         )
 
         print("\n====== Optimizing ONNX model ======")
-        if args.optimize:
-            if args.framework == "tf":
-                print(
-                    "\t Using TensorFlow exported might not provide the same level of optimization"
-                    " compared to the PyTorch one."
-                )
-
-            check_onnxruntime_requirements(ORT_TRANSFORMERS_OPTIM_MINIMUM_VERSION)
-            args.optimized_output = optimize(args.output)
-
         if args.quantize:
+            # Ensure requirements for quantization on onnxruntime is met
             check_onnxruntime_requirements(ORT_QUANTIZE_MINIMUM_VERSION)
 
+            # onnxruntime optimizations doesn't provide the same level of performances on TensorFlow than PyTorch
+            if args.framework == "tf":
+                print(
+                    "\t Using TensorFlow might not provide the same level of optimization compared to the PyTorch one."
+                )
+
             # Quantization works best when using the optimized version of the model
-            if args.optimize:
-                quantization_input_model_path = args.optimized_output
-            else:
-                print("--quantize provides best performances when use together with --optimize")
-                quantization_input_model_path = args.output
+            args.optimized_output = optimize(args.output)
 
             # Do the quantization on the right graph
-            args.quantized_output = quantize(quantization_input_model_path)
+            args.quantized_output = quantize(args.optimized_output)
 
         # And verify
         if args.check_loading:
