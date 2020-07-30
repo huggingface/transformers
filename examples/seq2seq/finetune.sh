@@ -10,4 +10,8 @@ python finetune.py \
     --do_predict \
     --n_val 1000 \
     --val_check_interval 0.1 \
+    --encoder_layerdrop 0.1 \
+    --decoder_layerdrop 0.1 \
+    --dropout 0.1 \
+    --attention_dropout 0.1 \
     $@
