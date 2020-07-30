@@ -646,7 +646,7 @@ class Trainer:
         if iterator is not None:
             iterator.write(output)
         else:
-            logger.info(output)
+            print(output)
 
     def _prepare_inputs(
         self, inputs: Dict[str, Union[torch.Tensor, Any]], model: nn.Module
@@ -661,9 +661,7 @@ class Trainer:
 
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
-        # Our model outputs do not work with DataParallel, so forcing return tuple.
-        if isinstance(model, nn.DataParallel):
-            inputs["return_tuple"] = True
+
         return inputs
 
     def training_step(

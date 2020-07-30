@@ -429,7 +429,7 @@ class BertEncoder(nn.Module):
         encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_tuple=False,
+        return_dict=False,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -469,7 +469,7 @@ class BertEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
@@ -568,6 +568,7 @@ class BertPreTrainedModel(PreTrainedModel):
     config_class = BertConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -608,9 +609,9 @@ class BertForPretrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    prediction_logits: torch.FloatTensor
-    seq_relationship_logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    prediction_logits: torch.FloatTensor = None
+    seq_relationship_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -673,8 +674,9 @@ BERT_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -698,8 +700,6 @@ class BertModel(BertPreTrainedModel):
         https://arxiv.org/abs/1706.03762
 
     """
-
-    authorized_missing_keys = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -744,13 +744,13 @@ class BertModel(BertPreTrainedModel):
         encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -801,12 +801,12 @@ class BertModel(BertPreTrainedModel):
             encoder_attention_mask=encoder_extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        if return_tuple:
+        if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
@@ -848,7 +848,7 @@ class BertForPreTraining(BertPreTrainedModel):
         next_sentence_label=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -873,7 +873,7 @@ class BertForPreTraining(BertPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = BertForPreTraining.from_pretrained('bert-base-uncased')
+        >>> model = BertForPreTraining.from_pretrained('bert-base-uncased', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -888,7 +888,7 @@ class BertForPreTraining(BertPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -899,7 +899,7 @@ class BertForPreTraining(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -912,7 +912,7 @@ class BertForPreTraining(BertPreTrainedModel):
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
@@ -956,7 +956,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -978,14 +978,14 @@ class BertLMHeadModel(BertPreTrainedModel):
         >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
         >>> config = BertConfig.from_pretrained("bert-base-cased")
         >>> config.is_decoder = True
-        >>> model = BertLMHeadModel.from_pretrained('bert-base-cased', config=config)
+        >>> model = BertLMHeadModel.from_pretrained('bert-base-cased', config=config, return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -998,7 +998,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1012,7 +1012,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
@@ -1066,7 +1066,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -1087,7 +1087,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         assert "lm_labels" not in kwargs, "Use `BertWithLMHead` for autoregressive language modeling task."
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1100,7 +1100,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1111,7 +1111,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -1162,7 +1162,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         next_sentence_label=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         next_sentence_label (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1179,7 +1179,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+        >>> model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased', return_dict=True)
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1189,7 +1189,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> logits = outputs.logits
         >>> assert logits[0, 0] < logits[0, 1] # next sentence was random
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1200,7 +1200,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         pooled_output = outputs[1]
@@ -1212,7 +1212,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             next_sentence_loss = loss_fct(seq_relationship_scores.view(-1, 2), next_sentence_label.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (seq_relationship_scores,) + outputs[2:]
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
@@ -1258,7 +1258,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1267,7 +1267,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1278,7 +1278,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         pooled_output = outputs[1]
@@ -1296,7 +1296,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1338,7 +1338,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1346,7 +1346,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
             Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1368,7 +1368,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         pooled_output = outputs[1]
@@ -1382,7 +1382,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if return_tuple:
+        if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1425,14 +1425,14 @@ class BertForTokenClassification(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1443,7 +1443,7 @@ class BertForTokenClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1465,7 +1465,7 @@ class BertForTokenClassification(BertPreTrainedModel):
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1508,7 +1508,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1520,7 +1520,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
             input_ids,
@@ -1531,7 +1531,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1558,7 +1558,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
