@@ -28,6 +28,7 @@ from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
 from tokenizers import AddedToken
 from tokenizers import Encoding as EncodingFast
 

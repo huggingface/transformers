@@ -184,8 +184,6 @@ class TFModelTesterMixin:
                     list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
-                out = model(inputs_dict)
-                self.assertEqual(len(out[-1]), self.model_tester.num_hidden_layers)
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
