@@ -230,19 +230,16 @@ final activations of the model.
 
     >>> ## PYTORCH CODE
     >>> print(pt_outputs)
-    SequenceClassifierOutput(loss=None, logits=tensor([[-4.0833,  4.3364],
-            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>), hidden_states=None, attentions=None)
+    (tensor([[-4.0833,  4.3364],
+            [ 0.0818, -0.0418]], grad_fn=<AddmmBackward>),)
     >>> ## TENSORFLOW CODE
     >>> print(tf_outputs)
     (<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
     array([[-4.0832963 ,  4.336414  ],
            [ 0.08181786, -0.04179301]], dtype=float32)>,)
 
-The model can return more than just the final activations, which is why the PyTorch output is a special class and the
-TensorFlow output is a tuple. Here we only asked for the final activations, so we get a tuple with one element on the
-TensorFlow side and a :class:`~transformers.modeling_outputs.SequenceClassifierOutput` with just the ``logits`` field
-filled on the PyTorch side.
-
+The model can return more than just the final activations, which is why the output is a tuple. Here we only asked for
+the final activations, so we get a tuple with one element.
 .. note::
 
     All 🤗 Transformers models (PyTorch or TensorFlow) return the activations of the model *before* the final
@@ -254,7 +251,7 @@ Let's apply the SoftMax activation to get predictions.
 
     >>> ## PYTORCH CODE
     >>> import torch.nn.functional as F
-    >>> pt_predictions = F.softmax(pt_outputs.logits, dim=-1)
+    >>> pt_predictions = F.softmax(pt_outputs[0], dim=-1)
     >>> ## TENSORFLOW CODE
     >>> import tensorflow as tf
     >>> tf_predictions = tf.nn.softmax(tf_outputs[0], axis=-1)
@@ -341,8 +338,8 @@ code is easy to access and tweak if you need to.
 
 In our previous example, the model was called "distilbert-base-uncased-finetuned-sst-2-english", which means it's
 using the :doc:`DistilBERT </model_doc/distilbert>` architecture. As
-:class:`~transformers.AutoModelForSequenceClassification` (or  :class:`~transformers.TFAutoModelForSequenceClassification`
-if you are using TensorFlow)` was used, the model automatically created is then a
+:class:`~transformers.AutoModelForSequenceClassification` (or :class:`~transformers.TFAutoModelForSequenceClassification`
+if you are using TensorFlow) was used, the model automatically created is then a
 :class:`~transformers.DistilBertForSequenceClassification`. You can look at its documentation for all details relevant
 to that specific model, or browse the source code. This is how you would directly instantiate model and tokenizer
 without the auto magic:
