@@ -181,9 +181,8 @@ class Trainer:
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
         self.optimizer, self.lr_scheduler = optimizers
-        if tb_writer is not None:
-            self.tb_writer = tb_writer
-        elif is_tensorboard_available() and self.is_world_main_process():
+        self.tb_writer = tb_writer
+        if tb_writer is None and is_tensorboard_available() and self.is_world_main_process():
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         if not is_tensorboard_available():
             logger.warning(
