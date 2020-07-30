@@ -38,13 +38,13 @@ T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
 
   In this setup spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) 
   and the output sequence is formed as a concatenation of the same sentinel tokens and the *real* masked tokens. 
-  Each sentinel token represents a unique mask token for this sentence and should start with ``<extra_id_1>``, ``<extra_id_2>``, ... up to ``<extra_id_100>``. As a default 100 sentinel tokens are available in ``T5Tokenizer``.
+  Each sentinel token represents a unique mask token for this sentence and should start with ``<extra_id_0>``, ``<extra_id_1>``, ... up to ``<extra_id_99>``. As a default 100 sentinel tokens are available in ``T5Tokenizer``.
   *E.g.* the sentence "The cute dog walks in the park" with the masks put on "cute dog" and "the" should be processed as follows: 
 
 ::
 
-  input_ids = tokenizer.encode('The <extra_id_1> walks in <extra_id_2> park', return_tensors='pt')
-  labels = tokenizer.encode('<extra_id_1> cute dog <extra_id_2> the <extra_id_3> </s>', return_tensors='pt')
+  input_ids = tokenizer.encode('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt')
+  labels = tokenizer.encode('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt')
   # the forward function automatically creates the correct decoder_input_ids
   model(input_ids=input_ids, labels=labels)
 
