@@ -66,12 +66,12 @@ except ImportError:
         _has_tensorboard = False
 
 
-def is_tensorboard_available():
+def is_tensorboard_available() -> bool:
     return _has_tensorboard
 
 
 if is_wandb_available():
-    import wandb
+    import wandb  # type: ignore
 
 
 logger = logging.getLogger(__name__)

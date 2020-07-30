@@ -1,14 +1,15 @@
 import dataclasses
 import json
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, List, NewType, Tuple, Union
+from typing import Any, Dict, Iterable, List, Literal, Optional, Protocol, Tuple, Type, Union, cast, overload
 
 
-DataClass = NewType("DataClass", Any)
-DataClassType = NewType("DataClassType", Any)
+class DataClassProtocol(Protocol):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        ...
 
 
 class HfArgumentParser(ArgumentParser):
@@ -21,9 +22,11 @@ class HfArgumentParser(ArgumentParser):
     and you'll get the output back after parsing as an additional namespace.
     """
 
-    dataclass_types: Iterable[DataClassType]
+    dataclass_types: Iterable[Type[DataClassProtocol]]
 
-    def __init__(self, dataclass_types: Union[DataClassType, Iterable[DataClassType]], **kwargs):
+    def __init__(
+        self, dataclass_types: Union[Type[DataClassProtocol], Iterable[Type[DataClassProtocol]]], **kwargs: Any
+    ):
         """
         Args:
             dataclass_types:
@@ -34,15 +37,15 @@ class HfArgumentParser(ArgumentParser):
         """
         super().__init__(**kwargs)
         if dataclasses.is_dataclass(dataclass_types):
-            dataclass_types = [dataclass_types]
-        self.dataclass_types = dataclass_types
+            dataclass_types = [dataclass_types]  # type: ignore[list-item]
+        self.dataclass_types = cast(Iterable[Type[DataClassProtocol]], dataclass_types)
         for dtype in self.dataclass_types:
             self._add_dataclass_arguments(dtype)
 
-    def _add_dataclass_arguments(self, dtype: DataClassType):
+    def _add_dataclass_arguments(self, dtype: Type[DataClassProtocol]) -> None:
         for field in dataclasses.fields(dtype):
             field_name = f"--{field.name}"
-            kwargs = field.metadata.copy()
+            kwargs = cast(Dict[str, Any], field.metadata).copy()
             # field.metadata is not used at all by Data Classes,
             # it is provided as a third-party extension mechanism.
             if isinstance(field.type, str):
@@ -54,12 +57,15 @@ class HfArgumentParser(ArgumentParser):
             typestring = str(field.type)
             for prim_type in (int, float, str):
                 for collection in (List,):
-                    if typestring == f"typing.Union[{collection[prim_type]}, NoneType]":
-                        field.type = collection[prim_type]
+                    # reason for type: ignore: mypy complains about this kind of
+                    # "dynamic type generation"
+                    if typestring == f"typing.Union[{collection[prim_type]}, NoneType]":  # type: ignore [index]
+                        # https://github.com/python/mypy/issues/6910
+                        field.type = collection[prim_type]  # type: ignore [index]
                 if typestring == f"typing.Union[{prim_type.__name__}, NoneType]":
                     field.type = prim_type
 
-            if isinstance(field.type, type) and issubclass(field.type, Enum):
+            if isinstance(field.type, type) and issubclass(field.type, Enum):  # type: ignore[unreachable]
                 kwargs["choices"] = list(field.type)
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
@@ -75,21 +81,47 @@ class HfArgumentParser(ArgumentParser):
                 assert all(
                     x == kwargs["type"] for x in field.type.__args__
                 ), "{} cannot be a List of mixed types".format(field.name)
-                if field.default_factory is not dataclasses.MISSING:
-                    kwargs["default"] = field.default_factory()
+                if field.default_factory is not dataclasses.MISSING:  # type: ignore
+                    kwargs["default"] = field.default_factory()  # type: ignore[misc]
             else:
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
-                elif field.default_factory is not dataclasses.MISSING:
-                    kwargs["default"] = field.default_factory()
+                elif field.default_factory is not dataclasses.MISSING:  # type: ignore
+                    kwargs["default"] = field.default_factory()  # type: ignore[misc]
                 else:
                     kwargs["required"] = True
             self.add_argument(field_name, **kwargs)
 
+    @overload
     def parse_args_into_dataclasses(
-        self, args=None, return_remaining_strings=False, look_for_args_file=True
-    ) -> Tuple[DataClass, ...]:
+        self,
+        *,
+        return_remaining_strings: Literal[False],
+        args: Optional[List[str]] = None,
+        look_for_args_file: bool = True,
+    ) -> Tuple[Union[Namespace, DataClassProtocol], ...]:
+        ...
+
+    @overload
+    def parse_args_into_dataclasses(
+        self,
+        *,
+        return_remaining_strings: Literal[True],
+        args: Optional[List[str]] = None,
+        look_for_args_file: bool = True,
+    ) -> Tuple[Union[Namespace, List[str], DataClassProtocol], ...]:
+        ...
+
+    @overload  # Specify overload for when return_remaining_strings is not specified
+    def parse_args_into_dataclasses(
+        self, *, args: Optional[List[str]] = None, look_for_args_file: bool = True,
+    ) -> Tuple[Union[Namespace, DataClassProtocol], ...]:
+        ...
+
+    def parse_args_into_dataclasses(
+        self, args: Optional[List[str]] = None, return_remaining_strings: bool = False, look_for_args_file: bool = True
+    ) -> Tuple[Union[Namespace, List[str], DataClassProtocol], ...]:
         """
         Parse command-line args into instances of the specified dataclass types.
 
@@ -145,7 +177,7 @@ class HfArgumentParser(ArgumentParser):
 
             return (*outputs,)
 
-    def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
+    def parse_json_file(self, json_file: str) -> Tuple[DataClassProtocol, ...]:
         """
         Alternative helper method that does not use `argparse` at all,
         instead loading a json file and populating the dataclass types.

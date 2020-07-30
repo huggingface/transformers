@@ -19,7 +19,9 @@ import dataclasses
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Any, List, Literal, Mapping, Optional, Sequence, Tuple, Union, overload
+
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 from ...file_utils import is_tf_available, is_torch_available
 
@@ -47,7 +49,7 @@ class InputExample:
     text_b: Optional[str] = None
     label: Optional[str] = None
 
-    def to_json_string(self):
+    def to_json_string(self) -> str:
         """Serializes this instance to a JSON string."""
         return json.dumps(dataclasses.asdict(self), indent=2) + "\n"
 
@@ -74,7 +76,7 @@ class InputFeatures:
     token_type_ids: Optional[List[int]] = None
     label: Optional[Union[int, float]] = None
 
-    def to_json_string(self):
+    def to_json_string(self) -> str:
         """Serializes this instance to a JSON string."""
         return json.dumps(dataclasses.asdict(self)) + "\n"
 
@@ -82,7 +84,7 @@ class InputFeatures:
 class DataProcessor:
     """Base class for data converters for sequence classification data sets."""
 
-    def get_example_from_tensor_dict(self, tensor_dict):
+    def get_example_from_tensor_dict(self, tensor_dict: Mapping[Any, Any]) -> InputExample:
         """Gets an example from a dict with tensorflow tensors.
 
         Args:
@@ -91,31 +93,32 @@ class DataProcessor:
         """
         raise NotImplementedError()
 
-    def get_train_examples(self, data_dir):
+    def get_train_examples(self, data_dir: str) -> List[InputExample]:
         """Gets a collection of :class:`InputExample` for the train set."""
         raise NotImplementedError()
 
-    def get_dev_examples(self, data_dir):
+    def get_dev_examples(self, data_dir: str) -> List[InputExample]:
         """Gets a collection of :class:`InputExample` for the dev set."""
         raise NotImplementedError()
 
-    def get_test_examples(self, data_dir):
+    def get_test_examples(self, data_dir: str) -> List[InputExample]:
         """Gets a collection of :class:`InputExample` for the test set."""
         raise NotImplementedError()
 
-    def get_labels(self):
+    def get_labels(self) -> List[str]:
         """Gets the list of labels for this data set."""
         raise NotImplementedError()
 
-    def tfds_map(self, example):
+    def tfds_map(self, example: InputExample) -> InputExample:
         """Some tensorflow_datasets datasets are not formatted the same way the GLUE datasets are.
         This method converts examples to the correct format."""
         if len(self.get_labels()) > 1:
+            assert example.label is not None
             example.label = self.get_labels()[int(example.label)]
         return example
 
     @classmethod
-    def _read_tsv(cls, input_file, quotechar=None):
+    def _read_tsv(cls, input_file: str, quotechar: Optional[str] = None) -> List[List[str]]:
         """Reads a tab separated value file."""
         with open(input_file, "r", encoding="utf-8-sig") as f:
             return list(csv.reader(f, delimiter="\t", quotechar=quotechar))
@@ -124,24 +127,45 @@ class DataProcessor:
 class SingleSentenceClassificationProcessor(DataProcessor):
     """ Generic processor for a single sentence classification data set."""
 
-    def __init__(self, labels=None, examples=None, mode="classification", verbose=False):
+    def __init__(
+        self,
+        labels: Optional[List[str]] = None,
+        examples: Optional[List[InputExample]] = None,
+        mode: Literal["classification", "regression"] = "classification",
+        verbose: bool = False,
+    ):
         self.labels = [] if labels is None else labels
         self.examples = [] if examples is None else examples
         self.mode = mode
         self.verbose = verbose
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.examples)
 
-    def __getitem__(self, idx):
+    @overload
+    def __getitem__(self, idx: slice) -> "SingleSentenceClassificationProcessor":
+        ...
+
+    @overload
+    def __getitem__(self, idx: int) -> InputExample:
+        ...
+
+    def __getitem__(self, idx: Union[slice, int]) -> Union["SingleSentenceClassificationProcessor", InputExample]:
         if isinstance(idx, slice):
             return SingleSentenceClassificationProcessor(labels=self.labels, examples=self.examples[idx])
         return self.examples[idx]
 
     @classmethod
     def create_from_csv(
-        cls, file_name, split_name="", column_label=0, column_text=1, column_id=None, skip_first_row=False, **kwargs
-    ):
+        cls,
+        file_name: str,
+        split_name: str = "",
+        column_label: int = 0,
+        column_text: int = 1,
+        column_id: Optional[int] = None,
+        skip_first_row: bool = False,
+        **kwargs: Any
+    ) -> "SingleSentenceClassificationProcessor":
         processor = cls(**kwargs)
         processor.add_examples_from_csv(
             file_name,
@@ -155,23 +179,42 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         )
         return processor
 
+    @overload
     @classmethod
-    def create_from_examples(cls, texts_or_text_and_labels, labels=None, **kwargs):
+    def create_from_examples(
+        cls, texts_or_text_and_labels: Sequence[str], labels: Sequence[str], **kwargs: Any
+    ) -> "SingleSentenceClassificationProcessor":
+        ...
+
+    @overload
+    @classmethod
+    def create_from_examples(
+        cls, texts_or_text_and_labels: Sequence[Tuple[str, str]], labels: Literal[None] = None, **kwargs: Any
+    ) -> "SingleSentenceClassificationProcessor":
+        ...
+
+    @classmethod
+    def create_from_examples(
+        cls,
+        texts_or_text_and_labels: Union[Sequence[str], Sequence[Tuple[str, str]]],
+        labels: Optional[Sequence[str]] = None,
+        **kwargs: Any
+    ) -> "SingleSentenceClassificationProcessor":
         processor = cls(**kwargs)
-        processor.add_examples(texts_or_text_and_labels, labels=labels)
+        processor.add_examples(texts_or_text_and_labels, labels=labels)  # type: ignore
         return processor
 
     def add_examples_from_csv(
         self,
-        file_name,
-        split_name="",
-        column_label=0,
-        column_text=1,
-        column_id=None,
-        skip_first_row=False,
-        overwrite_labels=False,
-        overwrite_examples=False,
-    ):
+        file_name: str,
+        split_name: str = "",
+        column_label: int = 0,
+        column_text: int = 1,
+        column_id: Optional[int] = None,
+        skip_first_row: bool = False,
+        overwrite_labels: bool = False,
+        overwrite_examples: bool = False,
+    ) -> List[InputExample]:
         lines = self._read_tsv(file_name)
         if skip_first_row:
             lines = lines[1:]
@@ -191,9 +234,36 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             texts, labels, ids, overwrite_labels=overwrite_labels, overwrite_examples=overwrite_examples
         )
 
+    @overload
     def add_examples(
-        self, texts_or_text_and_labels, labels=None, ids=None, overwrite_labels=False, overwrite_examples=False
-    ):
+        self,
+        texts_or_text_and_labels: Sequence[Tuple[str, str]],
+        labels: Literal[None] = None,
+        ids: Optional[List[str]] = None,
+        overwrite_labels: bool = False,
+        overwrite_examples: bool = False,
+    ) -> List[InputExample]:
+        ...
+
+    @overload
+    def add_examples(
+        self,
+        texts_or_text_and_labels: Sequence[str],
+        labels: List[str],
+        ids: Optional[List[str]] = None,
+        overwrite_labels: bool = False,
+        overwrite_examples: bool = False,
+    ) -> List[InputExample]:
+        ...
+
+    def add_examples(
+        self,
+        texts_or_text_and_labels: Union[Sequence[Tuple[str, str]], Sequence[str]],
+        labels: Optional[Sequence[Optional[str]]] = None,
+        ids: Optional[Sequence[str]] = None,
+        overwrite_labels: bool = False,
+        overwrite_examples: bool = False,
+    ) -> List[InputExample]:
         assert labels is None or len(texts_or_text_and_labels) == len(
             labels
         ), f"Text and labels have mismatched lengths {len(texts_or_text_and_labels)} and {len(labels)}"
@@ -201,7 +271,8 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             ids
         ), f"Text and ids have mismatched lengths {len(texts_or_text_and_labels)} and {len(ids)}"
         if ids is None:
-            ids = [None] * len(texts_or_text_and_labels)
+            # https://github.com/huggingface/transformers/issues/6118
+            ids = [None] * len(texts_or_text_and_labels)  # type: ignore
         if labels is None:
             labels = [None] * len(texts_or_text_and_labels)
         examples = []
@@ -230,12 +301,12 @@ class SingleSentenceClassificationProcessor(DataProcessor):
 
     def get_features(
         self,
-        tokenizer,
-        max_length=None,
-        pad_on_left=False,
-        pad_token=0,
-        mask_padding_with_zero=True,
-        return_tensors=None,
+        tokenizer: PreTrainedTokenizerBase,
+        max_length: Optional[int] = None,
+        pad_on_left: bool = False,
+        pad_token: int = 0,
+        mask_padding_with_zero: bool = True,
+        return_tensors: int = None,
     ):
         """
         Convert examples in a list of ``InputFeatures``
@@ -320,7 +391,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         elif return_tensors == "tf":
             if not is_tf_available():
                 raise RuntimeError("return_tensors set to 'tf' but TensorFlow 2.0 can't be imported")
-            import tensorflow as tf
+            import tensorflow as tf  # type: ignore
 
             def gen():
                 for ex in features:

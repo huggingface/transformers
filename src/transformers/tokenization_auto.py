@@ -17,6 +17,7 @@
 
 import logging
 from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Dict, Optional, overload
 
 from .configuration_auto import (
     AlbertConfig,
@@ -66,6 +67,10 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
+
+
+if TYPE_CHECKING:
+    from .tokenization_utils_base import PreTrainedTokenizerBase
 
 
 logger = logging.getLogger(__name__)
@@ -133,6 +138,28 @@ class AutoTokenizer:
             "AutoTokenizer is designed to be instantiated "
             "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method."
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str,) -> "PreTrainedTokenizerBase":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *inputs: Any,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Dict[str, str]] = None,
+        use_fast: bool = False,
+        **kwargs: Any
+    ) -> "PreTrainedTokenizerBase":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):

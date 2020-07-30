@@ -17,6 +17,7 @@
 
 import logging
 from collections import OrderedDict
+from typing import Any, Dict, Literal, Optional, Tuple, overload
 
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig, MBartConfig
@@ -128,6 +129,36 @@ class AutoConfig:
                 model_type, ", ".join(CONFIG_MAPPING.keys())
             )
         )
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *,
+        return_unused_kwargs: Literal[True],
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Dict[str, str]] = None,
+        **kwargs: Any
+    ) -> Tuple[PretrainedConfig, Dict[str, str]]:
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *,
+        return_unused_kwargs: Literal[False] = False,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Dict[str, str]] = None,
+        **kwargs: Any
+    ) -> PretrainedConfig:
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):

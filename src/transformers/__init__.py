@@ -9,7 +9,7 @@ __version__ = "3.0.2"
 # see: https://github.com/abseil/abseil-py/issues/99
 # and: https://github.com/tensorflow/tensorflow/issues/26691#issuecomment-500369493
 try:
-    import absl.logging
+    import absl.logging  # type: ignore
 except ImportError:
     pass
 else:

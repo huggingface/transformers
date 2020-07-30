@@ -18,6 +18,7 @@
 import logging
 import warnings
 from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Type, overload
 
 from .configuration_auto import (
     AlbertConfig,
@@ -168,10 +169,13 @@ from .modeling_xlnet import (
 )
 
 
+if TYPE_CHECKING:
+    from .modeling_utils import PreTrainedModel
+
 logger = logging.getLogger(__name__)
 
 
-MODEL_MAPPING = OrderedDict(
+MODEL_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5Model),
@@ -196,7 +200,7 @@ MODEL_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
+MODEL_FOR_PRETRAINING_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
@@ -220,7 +224,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
+MODEL_WITH_LM_HEAD_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -246,7 +250,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
+MODEL_FOR_CAUSAL_LM_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
@@ -262,7 +266,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
+MODEL_FOR_MASKED_LM_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
@@ -280,7 +284,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
+MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (T5Config, T5ForConditionalGeneration),
         (MarianConfig, MarianMTModel),
@@ -289,7 +293,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
+MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
@@ -307,7 +311,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
+MODEL_FOR_QUESTION_ANSWERING_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
@@ -326,7 +330,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
+MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
@@ -344,7 +348,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     ]
 )
 
-MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
+MODEL_FOR_MULTIPLE_CHOICE_MAPPING: Mapping[Type[PretrainedConfig], Type["PreTrainedModel"]] = OrderedDict(
     [
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
@@ -380,7 +384,7 @@ class AutoModel:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -420,6 +424,30 @@ class AutoModel:
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str,) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -536,7 +564,7 @@ class AutoModelForPreTraining:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -576,6 +604,30 @@ class AutoModelForPreTraining:
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -686,7 +738,7 @@ class AutoModelWithLMHead:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -730,6 +782,30 @@ class AutoModelWithLMHead:
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -845,7 +921,7 @@ class AutoModelForCausalLM:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -880,6 +956,30 @@ class AutoModelForCausalLM:
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -982,7 +1082,7 @@ class AutoModelForMaskedLM:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -1020,6 +1120,30 @@ class AutoModelForMaskedLM:
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1125,7 +1249,7 @@ class AutoModelForSeq2SeqLM:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -1159,6 +1283,30 @@ class AutoModelForSeq2SeqLM:
                 ", ".join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1260,7 +1408,7 @@ class AutoModelForSequenceClassification:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -1300,6 +1448,30 @@ class AutoModelForSequenceClassification:
                 ", ".join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys()),
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1412,7 +1584,7 @@ class AutoModelForQuestionAnswering:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -1449,6 +1621,30 @@ class AutoModelForQuestionAnswering:
                 ", ".join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1557,7 +1753,7 @@ class AutoModelForTokenClassification:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
@@ -1598,6 +1794,30 @@ class AutoModelForTokenClassification:
                 ", ".join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
             )
         )
+
+    # To avoid touching the actual implementation while doing type annotations,
+    # at least two "overloads" are required, if we're to avoid stub files.
+    @overload
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: str) -> "PreTrainedModel":
+        ...
+
+    @overload
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *model_args: Any,
+        config: Optional[PretrainedConfig] = None,
+        state_dict: Optional[Mapping[str, Any]] = None,
+        cache_dir: Optional[str] = None,
+        force_download: bool = False,
+        resume_download: bool = False,
+        proxies: Optional[Mapping[str, str]] = None,
+        output_loading_info: bool = ...,
+        **kwargs: Any
+    ) -> "PreTrainedModel":
+        ...
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1709,7 +1929,7 @@ class AutoModelForMultipleChoice:
         )
 
     @classmethod
-    def from_config(cls, config):
+    def from_config(cls, config: PretrainedConfig) -> "PreTrainedModel":
         for config_class, model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class(config)
@@ -1724,7 +1944,7 @@ class AutoModelForMultipleChoice:
         )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: str, *model_args: Any, **kwargs: Any):
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
