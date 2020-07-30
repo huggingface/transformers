@@ -3,6 +3,7 @@ import os
 import pickle
 import random
 import time
+from typing import Dict
 
 import torch
 from filelock import FileLock
@@ -202,9 +203,9 @@ class AlbertTextDataset(Dataset):
                     segment_ids = tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
 
                     example = {
-                        "input_ids": tokens,
-                        "segment_ids": segment_ids,
-                        "sentence_order_label": 0 if is_next else 1}
+                        "tokens": torch.tensor(tokens, dtype=torch.long),
+                        "segment_ids": torch.tensor(segment_ids, dtype=torch.long),
+                        "sentence_order_label": torch.tensor(0 if is_next else 1, dtype=torch.long)}
                     examples.append(example)
                 current_chunk = []  # clear current chunk
                 current_length = 0  # reset current text length
@@ -214,5 +215,5 @@ class AlbertTextDataset(Dataset):
     def __len__(self):
         return len(self.examples)
 
-    def __getitem__(self, i) -> torch.Tensor:
-        return torch.tensor(self.examples[i], dtype=torch.long)
+    def __getitem__(self, i) -> Dict[str, torch.tensor]:
+        return self.examples[i]
