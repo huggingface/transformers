@@ -55,9 +55,6 @@ class OnnxConverterArgumentParser(ArgumentParser):
             "--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb",
         )
         self.add_argument(
-            "--optimize", action="store_true", help="Let ONNX Runtime apply all the optimisations on the graph"
-        )
-        self.add_argument(
             "--quantize", action="store_true", help="Quantize the neural network to be run with int8",
         )
         self.add_argument("output")
