@@ -190,10 +190,14 @@ class BaseTransformer(pl.LightningModule):
             help="Where do you want to store the pre-trained models downloaded from s3",
         )
         parser.add_argument(
-            "--encoder_layerdrop", type=float, help="Encoder layer dropout probability (Optional). Goes into model.config",
+            "--encoder_layerdrop",
+            type=float,
+            help="Encoder layer dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument(
-            "--decoder_layerdrop", type=float, help="Decoder layer dropout probability (Optional). Goes into model.config",
+            "--decoder_layerdrop",
+            type=float,
+            help="Decoder layer dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument(
             "--dropout", type=float, help="Dropout probability (Optional). Goes into model.config",
