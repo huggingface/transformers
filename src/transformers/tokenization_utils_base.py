@@ -780,7 +780,7 @@ class SpecialTokensMixin:
         Args:
             new_tokens (:obj:`str`, :obj:`tokenizers.AddedToken` or a list of `str` or :obj:`tokenizers.AddedToken`):
                 Tokens are only added if they are not already in the vocabulary. :obj:`tokenizers.AddedToken` wraps a
-                string token to let you personnalize it's behavior: whether this token should only match against single
+                string token to let you personalize its behavior: whether this token should only match against a single
                 word, whether this token should strip all potential whitespaces on the left side, whether this token
                 should strip all potential whitespaces on the right side, etc.
             special_token (:obj:`bool`, `optional`, defaults to :obj:`False`):
