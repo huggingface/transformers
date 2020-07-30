@@ -3,6 +3,7 @@
 
 import logging
 
+from .configuration_bart import BartConfig
 from .configuration_utils import PretrainedConfig
 
 
@@ -25,7 +26,7 @@ PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class PegasusConfig(PretrainedConfig):
+class PegasusConfig(BartConfig):
     r"""
         :class:`~transformers.PegasusConfig` is the configuration class to store the configuration of a
         `PegasusModel`.
@@ -35,42 +36,34 @@ class PegasusConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=96000,
-        max_input_len=512,
+        max_position_embeddings=512,
         max_target_len=256,
         max_decode_len=256,
-        hidden_size=1024,
-        ffn_dim=4096,
-        num_heads=16,
-        num_encoder_layers=16,
-        num_decoder_layers=16,
+        d_model=1024,
+        encoder_ffn_dim=4096,
+        decoder_ffn_dim=4096,
+        encoder_attention_heads=16,
+        decoder_attention_heads=16,
+        encoder_layers=16,
+        decoder_layers=16,
         dropout=0.1,
-        is_encoder_decoder=True,
         pad_token_id=0,
         eos_token_id=1,
         **kwargs
     ):
         super().__init__(
-            pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_encoder_decoder=is_encoder_decoder, **kwargs,
+            vocab_size=vocab_size,
+            d_model=d_model,
+            encoder_layers=encoder_layers,
+            decoder_layers=decoder_layers,
+            dropout=dropout,
+            decoder_attention_heads=decoder_attention_heads,
+            encoder_attention_heads=encoder_attention_heads,
+            encoder_ffn_dim=encoder_ffn_dim,
+            decoder_ffn_dim=decoder_ffn_dim,
+            max_position_embeddings=max_position_embeddings,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=True,
+            **kwargs,
         )
-        self.vocab_size = vocab_size
-        self.max_input_len = max_input_len
-        self.max_target_len = max_target_len
-        self.max_decode_len = max_decode_len
-        self.hidden_size = hidden_size
-        self.ffn_dim = ffn_dim
-        self.num_heads = num_heads
-        self.num_encoder_layers = num_encoder_layers
-        self.num_decoder_layers = num_decoder_layers
-        self.dropout = dropout
-
-    @property
-    def max_position_embeddings(self):
-        return self.max_input_len
-
-    @property
-    def num_attention_heads(self):
-        return self.num_heads
-
-    @property
-    def num_hidden_layers(self):
-        return self.num_encoder_layers
