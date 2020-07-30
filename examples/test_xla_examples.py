@@ -45,7 +45,7 @@ class TorchXLAExamplesTests(unittest.TestCase):
             --do_train
             --do_eval
             --task_name=MRPC
-            --data_dir=/datasets/glue/MRPC
+            --data_dir=/datasets/glue_data/MRPC
             --cache_dir=./cache_dir
             --num_train_epochs=1
             --max_seq_length=128

@@ -1,25 +1,25 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: glue-datasets-europe-west4-a
+  name: huggingface-cluster-disk
 spec:
   storageClassName: ""
   capacity:
-    storage: 200Gi
+    storage: 500Gi
   accessModes:
     - ReadOnlyMany
   claimRef:
     namespace: default
-    name: glue-datasets-europe-west4-a-claim
+    name: huggingface-cluster-disk-claim
   gcePersistentDisk:
-    pdName: glue-datasets-europe-west4-a
+    pdName: huggingface-cluster-disk
     fsType: ext4
     readOnly: true
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: glue-datasets-europe-west4-a-claim
+  name: huggingface-cluster-disk-claim
 spec:
   # Specify "" as the storageClassName so it matches the PersistentVolume's StorageClass.
   # A nil storageClassName value uses the default StorageClass. For details, see

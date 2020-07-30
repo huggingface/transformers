@@ -21,7 +21,7 @@ local bertBasedCase = base.BaseTest {
 
   volumeMap+: {
     datasets: volumes.PersistentVolumeSpec {
-      name: "glue-datasets-europe-west4-a",
+      name: "huggingface-cluster-disk",
       mountPath: "/datasets",
     },
   },
