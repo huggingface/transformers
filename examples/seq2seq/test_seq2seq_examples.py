@@ -277,6 +277,73 @@ def test_finetune(model):
         assert bart.decoder.embed_tokens == bart.shared
 
 
+def test_finetune_extra_model_args():
+    # test models whose config includes the extra_model_args
+    model = BART_TINY
+    args_d: dict = CHEAP_ARGS.copy()
+
+    task = "summarization"
+    tmp_dir = make_test_data_dir()
+    output_dir = tempfile.mkdtemp(prefix="output_")
+
+    args_d.update(
+        data_dir=tmp_dir,
+        model_name_or_path=model,
+        tokenizer_name=None,
+        train_batch_size=2,
+        eval_batch_size=2,
+        output_dir=output_dir,
+        do_predict=False,
+        task=task,
+        src_lang="en_XX",
+        tgt_lang="ro_RO",
+        freeze_encoder=True,
+        freeze_embeds=True,
+    )
+
+    extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
+    for p in extra_model_params:
+        args_d[p] = 0.5
+
+    args = argparse.Namespace(**args_d)
+    model = main(args)
+
+    for p in extra_model_params:
+        assert getattr(model.config, p) == 0.5, f"failed to override the model config for param {p}"
+
+
+def test_finetune_extra_model_args2():
+    # test models whose config doesn't include the extra_model_args
+    model = T5_TINY
+    args_d: dict = CHEAP_ARGS.copy()
+
+    task = "summarization"
+    tmp_dir = make_test_data_dir()
+    output_dir = tempfile.mkdtemp(prefix="output_")
+
+    args_d.update(
+        data_dir=tmp_dir,
+        model_name_or_path=model,
+        tokenizer_name=None,
+        train_batch_size=2,
+        eval_batch_size=2,
+        output_dir=output_dir,
+        do_predict=False,
+        task=task,
+        src_lang="en_XX",
+        tgt_lang="ro_RO",
+        freeze_encoder=True,
+        freeze_embeds=True,
+    )
+
+    unsupported_param = "encoder_layerdrop"
+    args_d[unsupported_param] = 0.5
+    args = argparse.Namespace(**args_d)
+    with pytest.raises(Exception) as excinfo:
+        model = main(args)
+    assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
+
+
 def test_pack_dataset():
     tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
