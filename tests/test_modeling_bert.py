@@ -219,9 +219,7 @@ class BertModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
         self.check_loss_output(result)
 
     def create_and_check_bert_for_masked_lm(
@@ -231,9 +229,7 @@ class BertModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
         self.check_loss_output(result)
 
     def create_and_check_bert_model_for_causal_lm_as_decoder(
@@ -266,9 +262,7 @@ class BertModelTester:
             labels=token_labels,
             encoder_hidden_states=encoder_hidden_states,
         )
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
         self.check_loss_output(result)
 
     def create_and_check_bert_for_next_sequence_prediction(
@@ -326,9 +320,7 @@ class BertModelTester:
         model = BertForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
         self.check_loss_output(result)
 

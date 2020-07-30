@@ -257,9 +257,7 @@ class BartHeadTests(unittest.TestCase):
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = BartForQuestionAnswering(config)
         model.to(torch_device)
-        outputs = model(
-            input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
-        )
+        outputs = model(input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,)
 
         self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
         self.assertEqual(outputs["end_logits"].shape, input_ids.shape)

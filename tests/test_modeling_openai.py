@@ -113,7 +113,7 @@ class OpenAIGPTModelTester:
 
         result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result =  model(input_ids)
+        result = model(input_ids)
 
         self.parent.assertListEqual(
             list(result["last_hidden_state"].size()), [self.batch_size, self.seq_length, self.hidden_size],

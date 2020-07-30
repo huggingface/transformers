@@ -152,9 +152,7 @@ class XxxModelTester:
         result = model(
             input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
         )
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
         self.check_loss_output(result)
 
     def create_and_check_xxx_for_question_answering(
@@ -181,9 +179,7 @@ class XxxModelTester:
         model = XxxForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
         self.check_loss_output(result)
 

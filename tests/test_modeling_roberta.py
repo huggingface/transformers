@@ -125,12 +125,8 @@ class RobertaModelTester:
         model = RobertaForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
-        )
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
         self.check_loss_output(result)
 
     def create_and_check_roberta_for_token_classification(

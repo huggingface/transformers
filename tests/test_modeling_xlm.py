@@ -214,7 +214,7 @@ class XLMModelTester:
         model.eval()
 
         result = model(input_ids)
-        
+
         result_with_labels = model(
             input_ids,
             start_positions=sequence_labels,
@@ -234,10 +234,10 @@ class XLMModelTester:
 
         (total_loss,) = result_with_labels.to_tuple()
 
-        outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+        result_with_labels = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
 
         (total_loss,) = result_with_labels.to_tuple()
-        
+
         self.parent.assertListEqual(list(result_with_labels["loss"].size()), [])
         self.parent.assertListEqual(
             list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]

@@ -234,7 +234,9 @@ class T5ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()

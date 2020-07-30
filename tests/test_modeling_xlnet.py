@@ -279,7 +279,7 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)[ "attentions"]
+        attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)["attentions"]
 
         self.parent.assertEqual(len(attentions), config.n_layer)
         self.parent.assertIsInstance(attentions[0], tuple)
@@ -309,7 +309,7 @@ class XLNetModelTester:
 
         result2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=result1["mems"])
 
-        result = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
+        _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
 
         self.parent.assertListEqual(list(result1["loss"].size()), [])
         self.parent.assertListEqual(
