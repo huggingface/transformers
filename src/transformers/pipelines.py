@@ -1899,6 +1899,34 @@ class TranslationPipeline(Pipeline):
 
 
 class Conversation:
+    """
+    Utility class containing a conversation and its history. This class is meant to be used as an input to the
+    :obj:`~transformers.ConversationalPipeline`. The conversation contains a number of utility function to manage the addition of new
+    user input and generated model responses. A conversation needs to contain an unprocessed user input before being
+    passed to the :obj:`~transformers.ConversationalPipeline`. This user input is either created when the class is instantiated, or by calling
+    `append_response("input")` after a conversation turn.
+
+    Usage::
+
+        conversation = Conversation("Going to the movies tonight - any suggestions?")
+
+        # Steps usually performed by the model when generating a response:
+        # 1. Mark the user input as processed (moved to the history)
+        conversation.mark_processed()
+        # 2. Append a mode response
+        conversation.append_response("The Big lebowski.")
+
+        conversation.add_user_input("Is it good?")
+
+    Arguments:
+        text (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The initial user input to start the conversation.
+            If :obj:`None`, a user input needs to be provided manually using `add_user_input` before the conversation can begin.
+        conversation_id (:obj:`uuid.UUID`, `optional`, defaults to :obj:`None`):
+            Unique identifier for the conversation
+            If :obj:`None`, the random UUID4 id will be assigned to the conversation.
+    """
+
     def __init__(self, text: str = None, conversation_id: UUID = None):
         if not conversation_id:
             conversation_id = uuid.uuid4()
@@ -1909,6 +1937,14 @@ class Conversation:
         self.new_user_input: Optional[str] = text
 
     def add_user_input(self, text: str, overwrite: bool = False):
+        """
+        Add a user input to the conversation for the next round. This populates the internal `new_user_input` field.
+
+        Args:
+            text: str, the user input for the next conversation round
+            overwrite: bool, flag indicating if existing and unprocessed user input should be overwritten when this function is called
+
+        """
         if self.new_user_input:
             if overwrite:
                 logger.warning(
@@ -1926,17 +1962,45 @@ class Conversation:
             self.new_user_input = text
 
     def mark_processed(self):
+        """
+        Mark the conversation as processed (moves the content of `new_user_input` to `past_user_inputs`) and empties the
+        `new_user_input` field.
+        """
         if self.new_user_input:
             self.past_user_inputs.append(self.new_user_input)
         self.new_user_input = None
 
     def append_response(self, response: str):
+        """
+        Append a response to the list of generated responses.
+
+        Args:
+            response: str, the model generated response
+        """
         self.generated_responses.append(response)
 
     def set_history(self, history: List[int]):
+        """
+        Updates the value of the history of the conversation. The history is represented by a list of `token_ids`. The
+        history is used by the model to generate responses based on the previous conversation turns.
+
+        Args:
+            history: (list of int), history of tokens provided and generated for this conversation
+        """
         self.history = history
 
     def __repr__(self):
+        """
+        Generates a string representation of the conversation.
+
+        Return:
+            :obj:`str` or :obj:`Dict`:
+
+            Example:
+            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114
+            user >> Going to the movies tonight - any suggestions?
+            bot >> The Big Lebowski
+        """
         output = "Conversation id: {} \n".format(self.uuid)
         for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
             output += "user >> {} \n".format(user_input)
