@@ -110,8 +110,9 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -148,13 +149,13 @@ class FlaubertModel(XLMModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # removed: src_enc=None, src_len=None
         if input_ids is not None:
@@ -284,7 +285,7 @@ class FlaubertModel(XLMModel):
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
 
         return BaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
