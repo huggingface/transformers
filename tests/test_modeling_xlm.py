@@ -113,6 +113,7 @@ class XLMModelTester:
             use_proj=self.use_proj,
             num_labels=self.num_labels,
             bos_token_id=self.bos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -145,15 +146,11 @@ class XLMModelTester:
         model = XLMModel(config=config)
         model.to(torch_device)
         model.eval()
-        outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
-        outputs = model(input_ids, langs=token_type_ids)
-        outputs = model(input_ids)
-        sequence_output = outputs[0]
-        result = {
-            "sequence_output": sequence_output,
-        }
+        result = model(input_ids, lengths=input_lengths, langs=token_type_ids)
+        result = model(input_ids, langs=token_type_ids)
+        result = model(input_ids)
         self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            list(result["last_hidden_state"].size()), [self.batch_size, self.seq_length, self.hidden_size]
         )
 
     def create_and_check_xlm_lm_head(
@@ -172,13 +169,7 @@ class XLMModelTester:
         model.to(torch_device)
         model.eval()
 
-        loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
-
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-
+        result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertListEqual(list(result["loss"].size()), [])
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
 
@@ -201,13 +192,7 @@ class XLMModelTester:
         outputs = model(input_ids)
 
         outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
-        loss, start_logits, end_logits = outputs
-
-        result = {
-            "loss": loss,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
+        result = outputs
         self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
         self.check_loss_output(result)
@@ -228,10 +213,9 @@ class XLMModelTester:
         model.to(torch_device)
         model.eval()
 
-        outputs = model(input_ids)
-        start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = outputs
-
-        outputs = model(
+        result = model(input_ids)
+        
+        result_with_labels = model(
             input_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -240,7 +224,7 @@ class XLMModelTester:
             p_mask=input_mask,
         )
 
-        outputs = model(
+        result_with_labels = model(
             input_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -248,22 +232,13 @@ class XLMModelTester:
             is_impossible=is_impossible_labels,
         )
 
-        (total_loss,) = outputs
+        (total_loss,) = result_with_labels.to_tuple()
 
         outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
 
-        (total_loss,) = outputs
-
-        result = {
-            "loss": total_loss,
-            "start_top_log_probs": start_top_log_probs,
-            "start_top_index": start_top_index,
-            "end_top_log_probs": end_top_log_probs,
-            "end_top_index": end_top_index,
-            "cls_logits": cls_logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        (total_loss,) = result_with_labels.to_tuple()
+        
+        self.parent.assertListEqual(list(result_with_labels["loss"].size()), [])
         self.parent.assertListEqual(
             list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
         )
@@ -295,14 +270,8 @@ class XLMModelTester:
         model.to(torch_device)
         model.eval()
 
-        (logits,) = model(input_ids)
-        loss, logits = model(input_ids, labels=sequence_labels)
-
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-
+        result = model(input_ids)
+        result = model(input_ids, labels=sequence_labels)
         self.parent.assertListEqual(list(result["loss"].size()), [])
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size])
 
@@ -323,11 +292,7 @@ class XLMModelTester:
         model.to(torch_device)
         model.eval()
 
-        loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
         self.check_loss_output(result)
 
@@ -350,16 +315,12 @@ class XLMModelTester:
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        loss, logits = model(
+        result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
         self.check_loss_output(result)
 
