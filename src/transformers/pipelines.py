@@ -2076,7 +2076,7 @@ class ConversationalPipeline(Pipeline):
     ):
         r"""
         Args:
-            *conversations: (list of `:class:Conversation`) Conversations to generate responses for
+            conversations: (list of :class:`~transformers.pipelines.Conversation`) Conversations to generate responses for
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
 
         Returns:
