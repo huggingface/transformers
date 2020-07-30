@@ -89,7 +89,12 @@ def convert_fairseq_rag_checkpoint_to_hf_bart_checkpoint(
     """
     if hf_checkpoint_name is None:
         hf_checkpoint_name = checkpoint_path.replace(".", "-")
-    config = BartConfig.from_pretrained(hf_checkpoint_name)
+
+    config = (
+        BartConfig.from_pretrained(hf_checkpoint_name)
+        if hf_checkpoint_name == "facebook/bart-large-cnn"
+        else BartConfig.from_pretrained(hf_checkpoint_name, vocab_size=50264)
+    )
 
     state_dict = torch.load(checkpoint_path)
     state_dict = {s: v for s, v in state_dict["model"].items() if (s.startswith("encoder") or s.startswith("decoder"))}
@@ -120,10 +125,18 @@ if __name__ == "__main__":
         "fairseq_path", type=str, help="bart.large, bart.large.cnn or a path to a model.pt on local filesystem."
     )
     parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--config",
+        default="bart-large-cnn",
+        choices=["bart-large-cnn", "bart-large"],
+        type=str,
+        help="Target config for the HF model.",
+    )
+
     args = parser.parse_args()
     # TODO: very hacky right now, also we dont handle the retriever params, !
 
-    args.hf_config = "facebook/bart-large-cnn"
+    args.hf_config = "facebook/" + args.config
     convert_fairseq_rag_checkpoint_to_hf_bart_checkpoint(
         args.fairseq_path, args.pytorch_dump_folder_path, hf_checkpoint_name=args.hf_config
     )

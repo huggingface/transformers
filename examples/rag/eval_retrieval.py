@@ -26,7 +26,7 @@ import os
 import torch
 from tqdm import tqdm
 
-from transformers import WEIGHTS_NAME, RagConfig, RagDefaultSequenceModel, RagDefaultTokenModel
+from transformers import WEIGHTS_NAME, RagSequenceModel, RagTokenModel
 
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ def main():
     parser.add_argument(
         "--predictions_path",
         type=str,
-        default="dpr_predictions.tsv",
+        default="retrieval_predictions.tsv",
         help="Name of the predictions file, to be stored in the checkpoints directry",
     )
     parser.add_argument(
@@ -135,18 +135,14 @@ def main():
         args.model_type = infer_model_type(args.model_name_or_path)
         assert args.model_type is not None
         logger.info("Inferred model type:", args.model_type)
-    model_class = RagDefaultSequenceModel if args.model_type == "sequence" else RagDefaultTokenModel
+
+    model_class = RagSequenceModel if args.model_type == "sequence" else RagTokenModel
 
     checkpoints = [args.model_name_or_path]
     if args.eval_all_checkpoints:
         checkpoints = list(
             os.path.dirname(c)
             for c in sorted(glob.glob(args.model_name_or_path + "/**/" + WEIGHTS_NAME, recursive=True))
-        )
-        rag_config = None
-    else:
-        rag_config = RagConfig(
-            pretrained_generator_name_or_path="facebook/bart-large", retriever_type=args.retriever_type
         )
     logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
@@ -161,7 +157,7 @@ def main():
         logger.info("  Batch size = %d", args.eval_batch_size)
         logger.info("  Predictions will be stored under {}".format(args.predictions_path))
 
-        model = model_class.from_pretrained(checkpoint) if rag_config is None else model_class(rag_config)
+        model = model_class.from_pretrained(checkpoint, retriever_type=args.retriever_type)
         model.to(args.device)
 
         with open(args.gold_data_path, "r") as eval_file, open(args.predictions_path, "w") as preds_file:
