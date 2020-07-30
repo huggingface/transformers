@@ -34,7 +34,7 @@ The conversion tool works for both PyTorch and Tensorflow models and ensures:
 
 Also, the conversion tool supports different options which let you tune the behavior of the generated model:
 
-* **Change the target opset version of the generated model.**  (More recent opset generally supports more operator and enables faster inference)
+* **Change the target opset version of the generated model.**  (More recent opset generally supports more operators and enables faster inference)
 
 * **Export pipeline-specific prediction heads.**  (Allow to export model along with its task-specific prediction head(s))
 
