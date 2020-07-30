@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: huggingface-cluster-disk
+spec:
+  storageClassName: ""
+  capacity:
+    storage: 500Gi
+  accessModes:
+    - ReadOnlyMany
+  claimRef:
+    namespace: default
+    name: huggingface-cluster-disk-claim
+  gcePersistentDisk:
+    pdName: huggingface-cluster-disk
+    fsType: ext4
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: huggingface-cluster-disk-claim
+spec:
+  # Specify "" as the storageClassName so it matches the PersistentVolume's StorageClass.
+  # A nil storageClassName value uses the default StorageClass. For details, see
+  # https://kubernetes.io/docs/concepts/storage/persistent-volumes/#class-1
+  storageClassName: ""
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ki
