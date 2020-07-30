@@ -23,8 +23,6 @@ references:
         run:
             name: Deploy the job on the kubernetes cluster
             command: |
-                # TODO BEFORE SUBMIT: Remove debug ls
-                ls
                 go get github.com/google/go-jsonnet/cmd/jsonnet && \
                 export PATH=$PATH:$HOME/go/bin && \
                 kubectl create -f docker/transformers-pytorch-tpu/dataset.yaml || true && \
@@ -54,11 +52,11 @@ references:
         run:
             name: Delete GKE Jobs
             command: |
-            # Match jobs whose age matches patterns like '1h' or '1d', i.e. any job
-            # that has been around longer than 1hr. First print all columns for
-            # matches, then execute the delete.
-            kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $0}'
-            kubectl delete job $(kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $1}')
+                # Match jobs whose age matches patterns like '1h' or '1d', i.e. any job
+                # that has been around longer than 1hr. First print all columns for
+                # matches, then execute the delete.
+                kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $0}'
+                kubectl delete job $(kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $1}')
 
 jobs:
     run_tests_torch_and_tf:
