@@ -49,6 +49,17 @@ references:
                 echo "Done with log retrieval attempt." && \
                 gcloud container images delete "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" --force-delete-tags && \
                 exit $status_code
+
+    delete_gke_jobs: &delete_gke_jobs
+        run:
+            name: Delete GKE Jobs
+            command: |
+            # Match jobs whose age matches patterns like '1h' or '1d', i.e. any job
+            # that has been around longer than 1hr. First print all columns for
+            # matches, then execute the delete.
+            kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $0}'
+            kubectl delete job $(kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $1}')
+
 jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
@@ -145,6 +156,15 @@ jobs:
             - setup_remote_docker
             - *build_push_docker
             - *deploy_cluster
+    cleanup-gke-jobs:
+        docker:
+            - image: circleci/python:3.6
+        steps:
+            - gcp-gke/install
+            - gcp-gke/update-kubeconfig-with-credentials:
+                cluster: $GKE_CLUSTER
+                perform-login: true
+            - *delete_gke_jobs
     build_doc:
         working_directory: ~/transformers
         docker:
@@ -209,3 +229,14 @@ workflows:
             - run_tests_tf
             - build_doc
             - deploy_doc: *workflow_filters
+    cleanup_gke_jobs:
+        triggers:
+            - schedule:
+                # Set to run at the first minute of every hour.
+                cron: "0 * * * *"
+                filters:
+                    branches:
+                        only:
+                            - master
+        jobs:
+            - cleanup-gke-jobs
