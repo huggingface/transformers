@@ -203,7 +203,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             f"- This IS expected if you are initializing {tf_model.__class__.__name__} from a TF 2.0 model trained on another task "
             f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPretraining model).\n"
             f"- This IS NOT expected if you are initializing {tf_model.__class__.__name__} from a TF 2.0 model that you expect "
-            f"to be exactly identical (initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
+            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
@@ -350,7 +350,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             f"- This IS expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model trained on another task "
             f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPretraining model).\n"
             f"- This IS NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect "
-            f"to be exactly identical (initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
+            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
