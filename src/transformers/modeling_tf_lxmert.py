@@ -664,7 +664,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         return outputs
 
 
-class TFLxmertFeatureExtraction(TFLxmertPreTrainedModel):
+class TFLxmertForFeatureExtraction(TFLxmertPreTrainedModel):
     """
     Lxmert model for extracting features
     """
