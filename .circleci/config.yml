@@ -15,16 +15,9 @@ references:
         run:
             name: Configure Docker
             command: |
-                # TODO BEFORE SUBMIT: Remove debug ls
-                ls
                 gcloud --quiet auth configure-docker
                 cd docker/transformers-pytorch-tpu
-                # TODO: Is this an OK way to find GITHUB_REF in CircleCI?
-                # $CI_PULL_REQUEST seems to be of form: https://github.com/org/repo-name/pull/11.
-                # Grab the last bit, e.g. pull/11, convert to pull/11/head, and use it
-                # for the GITHUB_REF so Docker can pull the latest pending code in PR.
-                git_ref=$(echo "$CI_PULL_REQUEST" | sed "s/.*xl-ml-test-dashboard\///")/head
-                docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" --build-arg "GITHUB_REF=$git_ref" .
+                if [ -z "$CIRCLE_PR_NUMBER" ]; then docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1"; else docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" --build-arg "GITHUB_REF=pull/$CIRCLE_PR_NUMBER/head" . ; fi
                 docker push "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID"
     deploy_cluster: &deploy_cluster
         run:
