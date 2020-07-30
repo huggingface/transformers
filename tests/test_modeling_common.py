@@ -66,7 +66,7 @@ class ModelTesterMixin:
         if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
             return {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-                if isinstance(v, torch.Tensor) and v.ndim != 0
+                if isinstance(v, torch.Tensor) and v.ndim > 1
                 else v
                 for k, v in inputs_dict.items()
             }
@@ -74,6 +74,7 @@ class ModelTesterMixin:
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -803,8 +804,6 @@ class ModelTesterMixin:
 
             # Wrap model in nn.DataParallel
             model = torch.nn.DataParallel(model)
-            # Our model outputs do not work with DataParallel, so forcing return tuple.
-            inputs_dict["return_tuple"] = True
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 

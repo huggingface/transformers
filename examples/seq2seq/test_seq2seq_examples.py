@@ -43,7 +43,7 @@ CHEAP_ARGS = {
     "student_decoder_layers": 1,
     "val_check_interval": 1.0,
     "output_dir": "",
-    "fp16": CUDA_AVAILABLE,
+    "fp16": False,  # TODO(SS): set this to CUDA_AVAILABLE if ci installs apex or start using native amp
     "no_teacher": False,
     "fp16_opt_level": "O1",
     "gpus": 1 if CUDA_AVAILABLE else 0,
@@ -144,7 +144,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
     def test_loss_fn(self):
-        model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY)
+        model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY, return_dict=True)
         input_ids, mask = model.dummy_inputs["input_ids"], model.dummy_inputs["attention_mask"]
         target_ids = torch.tensor([[0, 4, 8, 2], [0, 8, 2, 1]], dtype=torch.long, device=model.device)
         decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
@@ -277,6 +277,55 @@ def test_finetune(model):
         assert bart.decoder.embed_tokens == bart.shared
 
 
+def test_finetune_extra_model_args():
+    args_d: dict = CHEAP_ARGS.copy()
+
+    task = "summarization"
+    tmp_dir = make_test_data_dir()
+
+    args_d.update(
+        data_dir=tmp_dir,
+        tokenizer_name=None,
+        train_batch_size=2,
+        eval_batch_size=2,
+        do_predict=False,
+        task=task,
+        src_lang="en_XX",
+        tgt_lang="ro_RO",
+        freeze_encoder=True,
+        freeze_embeds=True,
+    )
+
+    # test models whose config includes the extra_model_args
+    model = BART_TINY
+    output_dir = tempfile.mkdtemp(prefix="output_1_")
+    args_d1 = args_d.copy()
+    args_d1.update(
+        model_name_or_path=model, output_dir=output_dir,
+    )
+    extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
+    for p in extra_model_params:
+        args_d1[p] = 0.5
+    args = argparse.Namespace(**args_d1)
+    model = main(args)
+    for p in extra_model_params:
+        assert getattr(model.config, p) == 0.5, f"failed to override the model config for param {p}"
+
+    # test models whose config doesn't include the extra_model_args
+    model = T5_TINY
+    output_dir = tempfile.mkdtemp(prefix="output_2_")
+    args_d2 = args_d.copy()
+    args_d2.update(
+        model_name_or_path=model, output_dir=output_dir,
+    )
+    unsupported_param = "encoder_layerdrop"
+    args_d2[unsupported_param] = 0.5
+    args = argparse.Namespace(**args_d2)
+    with pytest.raises(Exception) as excinfo:
+        model = main(args)
+    assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
+
+
 def test_pack_dataset():
     tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
@@ -300,14 +349,17 @@ def test_mbart_dataset_truncation():
     tmp_dir = make_test_data_dir()
     max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
     max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
-    trunc = 4
+    max_src_len = 4
+    max_tgt_len = 8
+    assert max_len_target > max_src_len  # Truncated
+    assert max_len_source > max_src_len
     src_lang, tgt_lang = "ro_RO", "de_DE"  # NOT WHAT IT WAS TRAINED ON
     train_dataset = MBartDataset(
         tokenizer,
         data_dir=tmp_dir,
         type_path="train",
-        max_source_length=trunc,
-        max_target_length=1000,  # ignored
+        max_source_length=max_src_len,
+        max_target_length=max_tgt_len,  # ignored
         src_lang=src_lang,
         tgt_lang=tgt_lang,
     )
@@ -316,17 +368,15 @@ def test_mbart_dataset_truncation():
         assert isinstance(batch, dict)
         assert batch["attention_mask"].shape == batch["input_ids"].shape
         # show that articles were trimmed.
-        assert batch["input_ids"].shape[1] == trunc
+        assert batch["input_ids"].shape[1] == max_src_len
         # show that targets are the same len
-        assert batch["decoder_input_ids"].shape[1] == trunc
+        assert batch["decoder_input_ids"].shape[1] == max_tgt_len
         # check language codes in correct place
         assert batch["decoder_input_ids"][0, 0].item() == tokenizer.lang_code_to_id[tgt_lang]
         assert batch["decoder_input_ids"][0, -1].item() == tokenizer.eos_token_id
         assert batch["input_ids"][0, -2].item() == tokenizer.eos_token_id
         assert batch["input_ids"][0, -1].item() == tokenizer.lang_code_to_id[src_lang]
 
-        assert max_len_target > trunc  # Truncated
-        assert max_len_source > trunc
         break  # No need to test every batch
 
 
