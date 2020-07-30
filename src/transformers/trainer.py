@@ -42,7 +42,7 @@ if not version.parse(torch.__version__) >= version.parse("1.6"):
 
     if is_apex_available():
         from apex import amp
-    _use_apex = False
+    _use_apex = True
 else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
