@@ -52,8 +52,9 @@ if is_tf_available():
         TF_MODEL_WITH_LM_HEAD_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING, TFAutoModelForCausalLM,
-)
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TFAutoModelForCausalLM,
+    )
 
 if is_torch_available():
     import torch
