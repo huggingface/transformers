@@ -427,7 +427,10 @@ if __name__ == "__main__":
             # onnxruntime optimizations doesn't provide the same level of performances on TensorFlow than PyTorch
             if args.framework == "tf":
                 print(
-                    "\t Using TensorFlow might not provide the same level of optimization compared to the PyTorch one."
+                    "\t Using TensorFlow might not provide the same optimization level compared to PyTorch.\n"
+                    "\t For TensorFlow users you can try optimizing the model directly through onnxruntime_tools.\n"
+                    "\t For more information, please refer to the onnxruntime documentation:\n"
+                    "\t\thttps://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers\n"
                 )
 
             # Quantization works best when using the optimized version of the model
