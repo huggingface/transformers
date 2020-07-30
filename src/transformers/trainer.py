@@ -544,7 +544,7 @@ class Trainer:
                     elif self.args.fp16 and _use_apex:
                         torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), self.args.max_grad_norm)
                     else:
-                        torch.nn.utils.clip_grad_norm(model.parameters(), self.args.max_grad_norm)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
                     if is_torch_tpu_available():
                         xm.optimizer_step(optimizer)
