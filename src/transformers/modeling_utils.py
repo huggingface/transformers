@@ -51,8 +51,7 @@ try:
 except ImportError:
     # Older PyTorch compatibility
     class Identity(nn.Module):
-        r"""A placeholder identity operator that is argument-insensitive.
-        """
+        r"""A placeholder identity operator that is argument-insensitive."""
 
         def __init__(self, *args, **kwargs):
             super().__init__()
@@ -157,8 +156,10 @@ class ModuleUtilsMixin:
     @property
     def device(self) -> device:
         """
-        :obj:`torch.device`: The device on which the module is (assuming that all the module parameters are on the same
-        device).
+        The device on which the module is (assuming that all the module parameters are on the same device).
+
+        Returns:
+            :obj:`torch.device` The device of the module.
         """
         try:
             return next(self.parameters()).device
@@ -176,7 +177,10 @@ class ModuleUtilsMixin:
     @property
     def dtype(self) -> dtype:
         """
-        :obj:`torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
+        The dtype of the module (assuming that all the module parameters have the same dtype).
+
+        Returns:
+            :obj:`torch.dtype` The dtype of the module.
         """
         try:
             return next(self.parameters()).dtype
@@ -274,7 +278,7 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_head_mask(
-        self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+        self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False,
     ) -> Tensor:
         """
         Prepare the head mask if needed.
@@ -345,8 +349,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
-        """
-        :obj:`Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
+        """Dummy inputs to do a forward pass in the network.
+
+        Returns:
+            :obj:`Dict[str, torch.Tensor]`: The dummy inputs.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
@@ -354,9 +360,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
-                "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
-                "To create a model from a pretrained model use "
-                "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
+                "Parameter config in `{}(config)` should be an instance of class"
+                " `PretrainedConfig`. To create a model from a pretrained model use"
+                " `model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
                     self.__class__.__name__, self.__class__.__name__
                 )
             )
@@ -364,10 +370,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         self.config = config
 
     @property
-    def base_model(self) -> nn.Module:
-        """
-        :obj:`torch.nn.Module`: The main body of the model.
-        """
+    def base_model(self):
         return getattr(self, self.base_model_prefix, self)
 
     def get_input_embeddings(self) -> nn.Module:
@@ -417,8 +420,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
-        """ Tie or clone module weights depending of whether we are using TorchScript or not
-        """
+        """Tie or clone module weights depending of whether we are using TorchScript or not"""
         if self.config.torchscript:
             output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
         else:
@@ -729,17 +731,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
+                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index",],
                             pretrained_model_name_or_path,
                         )
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert (
-                    from_tf
-                ), "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
-                    pretrained_model_name_or_path + ".index"
+                assert from_tf, (
+                    "We found a TensorFlow checkpoint at {}, please set from_tf to True"
+                    " to load from this checkpoint".format(pretrained_model_name_or_path + ".index")
                 )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
@@ -763,9 +764,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     raise EnvironmentError
             except EnvironmentError:
                 msg = (
-                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
-                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make"
+                    f" sure that:\n\n- '{pretrained_model_name_or_path}' is a correct"
+                    " model identifier listed on 'https://huggingface.co/models'\n\n-"
+                    f" or '{pretrained_model_name_or_path}' is the correct path to a"
+                    f" directory containing a file named one of {WEIGHTS_NAME},"
+                    f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
                 )
                 raise EnvironmentError(msg)
 
@@ -784,8 +788,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 state_dict = torch.load(resolved_archive_file, map_location="cpu")
             except Exception:
                 raise OSError(
-                    "Unable to load weights from pytorch checkpoint file. "
-                    "If you tried to load a PyTorch model from a TF 2.0 checkpoint, please set from_tf=True. "
+                    "Unable to load weights from pytorch checkpoint file. If you tried"
+                    " to load a PyTorch model from a TF 2.0 checkpoint, please set"
+                    " from_tf=True. "
                 )
 
         missing_keys = []
@@ -804,8 +809,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     model = load_tf2_checkpoint_in_pytorch_model(model, resolved_archive_file, allow_missing_keys=True)
                 except ImportError:
                     logger.error(
-                        "Loading a TensorFlow model in PyTorch, requires both PyTorch and TensorFlow to be installed. Please see "
-                        "https://pytorch.org/ and https://www.tensorflow.org/install/ for installation instructions."
+                        "Loading a TensorFlow model in PyTorch, requires both PyTorch"
+                        " and TensorFlow to be installed. Please see"
+                        " https://pytorch.org/ and https://www.tensorflow.org/install/"
+                        " for installation instructions."
                     )
                     raise
         else:
@@ -867,26 +874,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
             if len(unexpected_keys) > 0:
                 logger.warning(
-                    f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
-                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                    "Some weights of the model checkpoint at"
+                    f" {pretrained_model_name_or_path} were not used when initializing"
+                    f" {model.__class__.__name__}: {unexpected_keys}\n- This IS"
+                    f" expected if you are initializing {model.__class__.__name__} from"
+                    " the checkpoint of a model trained on another task or with"
+                    " another architecture (e.g. initializing a"
+                    " BertForSequenceClassification model from a BertForPretraining"
+                    " model).\n- This IS NOT expected if you are initializing"
+                    f" {model.__class__.__name__} from the checkpoint of a model that"
+                    " you expect to be exactly identical (initializing a"
+                    " BertForSequenceClassification model from a"
+                    " BertForSequenceClassification model)."
                 )
             else:
                 logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
             if len(missing_keys) > 0:
                 logger.warning(
-                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                    f"and are newly initialized: {missing_keys}\n"
-                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                    f"Some weights of {model.__class__.__name__} were not initialized"
+                    f" from the model checkpoint at {pretrained_model_name_or_path} and"
+                    f" are newly initialized: {missing_keys}\nYou should probably TRAIN"
+                    " this model on a down-stream task to be able to use it for"
+                    " predictions and inference."
                 )
             else:
                 logger.info(
-                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                    f"If your task is similar to the task the model of the ckeckpoint was trained on, "
-                    f"you can already use {model.__class__.__name__} for predictions without further training."
+                    f"All the weights of {model.__class__.__name__} were initialized"
+                    " from the model checkpoint at"
+                    f" {pretrained_model_name_or_path}.\nIf your task is similar to the"
+                    " task the model of the checkpoint was trained on, you can already"
+                    f" use {model.__class__.__name__} for predictions without further"
+                    " training."
                 )
             if len(error_msgs) > 0:
                 raise RuntimeError(
@@ -956,7 +974,7 @@ class PoolerStartLogits(nn.Module):
         self.dense = nn.Linear(config.hidden_size, 1)
 
     def forward(
-        self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
+        self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.FloatTensor:
         """
         Args:
@@ -1170,24 +1188,24 @@ class SQuADHead(nn.Module):
         return_tuple: bool = False,
     ) -> Union[SquadHeadOutput, Tuple[torch.FloatTensor]]:
         """
-    Args:
-        hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`):
-            Final hidden states of the model on the sequence tokens.
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Positions of the first token for the labeled span.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Positions of the last token for the labeled span.
-        cls_index (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Position of the CLS token for each sentence in the batch. If :obj:`None`, takes the last token.
-        is_impossible (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Whether the question has a possible answer in the paragraph or not.
-        p_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len)`, `optional`):
-            Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS).
-            1.0 means token should be masked.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to return a plain tuple instead of a :class:`~transformers.file_utils.ModelOuput`.
+        Args:
+            hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`):
+                Final hidden states of the model on the sequence tokens.
+            start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                Positions of the first token for the labeled span.
+            end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                Positions of the last token for the labeled span.
+            cls_index (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                Position of the CLS token for each sentence in the batch. If :obj:`None`, takes the last token.
+            is_impossible (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                Whether the question has a possible answer in the paragraph or not.
+            p_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len)`, `optional`):
+                Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS).
+                1.0 means token should be masked.
+            return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return a plain tuple instead of a :class:`~transformers.file_utils.ModelOuput`.
 
-    Returns:
+        Returns:
         """
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 
@@ -1245,7 +1263,13 @@ class SQuADHead(nn.Module):
             cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)
 
             if return_tuple:
-                return (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits)
+                return (
+                    start_top_log_probs,
+                    start_top_index,
+                    end_top_log_probs,
+                    end_top_index,
+                    cls_logits,
+                )
             else:
                 return SquadHeadOutput(
                     start_top_log_probs=start_top_log_probs,
@@ -1303,7 +1327,7 @@ class SequenceSummary(nn.Module):
             self.summary = nn.Linear(config.hidden_size, num_classes)
 
         activation_string = getattr(config, "summary_activation", None)
-        self.activation: Callable = (get_activation(activation_string) if activation_string else Identity())
+        self.activation: Callable = get_activation(activation_string) if activation_string else Identity()
 
         self.first_dropout = Identity()
         if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
@@ -1314,7 +1338,7 @@ class SequenceSummary(nn.Module):
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
     def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         """
         Compute a single vector summary of a sequence hidden states.
@@ -1422,7 +1446,7 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
 
 
 def prune_layer(
-    layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
+    layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None,
 ) -> Union[torch.nn.Linear, Conv1D]:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
@@ -1447,7 +1471,7 @@ def prune_layer(
 
 
 def apply_chunking_to_forward(
-    chunk_size: int, chunk_dim: int, forward_fn: Callable[..., torch.Tensor], *input_tensors
+    chunk_size: int, chunk_dim: int, forward_fn: Callable[..., torch.Tensor], *input_tensors,
 ) -> torch.Tensor:
     """
     This function chunks the :obj:`input_tensors` into smaller input tensor parts of size :obj:`chunk_size` over the
