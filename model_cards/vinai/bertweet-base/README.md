@@ -24,7 +24,7 @@ For further information or requests, please go to [BERTweet's homepage](https://
 
  -  Python version >= 3.6
  - [PyTorch](http://pytorch.org/) version >= 1.4.0
- - [`transformers`](https://github.com/huggingface/transformers), `fastBPE`, `nltk` and `emoji`: `pip3 install transformers fastBPE nltk emoji`
+ - [`transformers`](https://github.com/huggingface/transformers), `fastBPE` and `emoji`: `pip3 install transformers fastBPE emoji`
 
 ### <a name="models2"></a> Pre-trained model 
 
