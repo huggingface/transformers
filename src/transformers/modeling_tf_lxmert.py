@@ -822,7 +822,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
 @add_start_docstrings(
     """Lxmert Model with a `language modeling` head on top. """, LXMERT_START_DOCSTRING, LXMERT_INPUTS_DOCSTRING
 )
-class TFLxmertPretraining(TFLxmertPreTrainedModel):
+class TFLxmertForPretraining(TFLxmertPreTrainedModel):
     r"""
     **input_ids**: ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
         Indices of input sequence tokens in the vocabulary.
