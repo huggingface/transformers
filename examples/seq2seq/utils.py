@@ -19,6 +19,29 @@ from torch.utils.data import Dataset, Sampler
 from transformers import BartTokenizer
 
 
+def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
+    """From fairseq"""
+    if target.dim() == lprobs.dim() - 1:
+        target = target.unsqueeze(-1)
+    nll_loss = -lprobs.gather(dim=-1, index=target)
+    smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
+    if ignore_index is not None:
+        pad_mask = target.eq(ignore_index)
+        nll_loss.masked_fill_(pad_mask, 0.0)
+        smooth_loss.masked_fill_(pad_mask, 0.0)
+        bs = pad_mask.long().sum()
+    else:
+        nll_loss = nll_loss.squeeze(-1)
+        smooth_loss = smooth_loss.squeeze(-1)
+        bs = lprobs.shape[0]
+
+    nll_loss = nll_loss.sum()  # mean()? Scared to break other math.
+    smooth_loss = smooth_loss.sum()
+    eps_i = epsilon / lprobs.size(-1)
+    loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
+    return loss / bs, nll_loss / bs
+
+
 def encode_line(tokenizer, line, max_length, pad_to_max_length=True, return_tensors="pt"):
     extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) else {}
     return tokenizer(
@@ -105,12 +128,6 @@ class Seq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
-    @staticmethod
-    def trim_seq2seq_batch(batch, pad_token_id) -> tuple:
-        y = trim_batch(batch["decoder_input_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
-        return source_ids, source_mask, y
-
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
@@ -134,7 +151,8 @@ class MBartDataset(Seq2SeqDataset):
         super().__init__(*args, **kwargs)
         if self.max_source_length != self.max_target_length:
             warnings.warn(
-                f"Mbart will ignore max_target_length = {self.max_target_length} and use {self.max_source_length} for both sides."
+                f"Mbart is using sequence lengths {self.max_source_length}, {self.max_target_length}. "
+                f"Imbalanced sequence lengths may be undesired for translation tasks"
             )
 
     def __getitem__(self, index) -> Dict[str, str]:
@@ -144,8 +162,8 @@ class MBartDataset(Seq2SeqDataset):
         assert source_line, f"empty source line for index {index}"
         assert tgt_line, f"empty tgt line for index {index}"
         return {
-            "tgt_texts": source_line,
-            "src_texts": tgt_line,
+            "tgt_texts": tgt_line,
+            "src_texts": source_line,
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
@@ -155,6 +173,7 @@ class MBartDataset(Seq2SeqDataset):
             tgt_texts=[x["tgt_texts"] for x in batch],
             tgt_lang=self.tgt_lang,
             max_length=self.max_source_length,
+            max_target_length=self.max_target_length,
         )
         return batch_encoding.data
 

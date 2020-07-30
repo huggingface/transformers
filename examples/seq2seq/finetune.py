@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import MBartTokenizer, get_linear_schedule_with_warmup
+from transformers import MBartTokenizer, T5ForConditionalGeneration, get_linear_schedule_with_warmup
 
 
 try:
@@ -33,9 +33,10 @@ try:
         calculate_bleu_score,
         Seq2SeqDataset,
         MBartDataset,
+        label_smoothed_nll_loss,
     )
 
-    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
+    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 except ImportError:
     from utils import (
         Seq2SeqDataset,
@@ -52,8 +53,9 @@ except ImportError:
         get_git_info,
         ROUGE_KEYS,
         calculate_bleu_score,
+        label_smoothed_nll_loss,
     )
-    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback
+    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +105,13 @@ class SummarizationModule(BaseTransformer):
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.decoder_start_token_id = None
-        self.dataset_class = Seq2SeqDataset
+        if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
+            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
+            self.model.config.decoder_start_token_id = self.decoder_start_token_id
+        if isinstance(self.tokenizer, MBartTokenizer):
+            self.dataset_class = MBartDataset
+        else:
+            self.dataset_class = Seq2SeqDataset
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
@@ -128,17 +136,40 @@ class SummarizationModule(BaseTransformer):
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        y_ids = y[:, :-1].contiguous()
-        lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=lm_labels,)
-        loss = outputs[0]
+        source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+
+        if isinstance(self.model, T5ForConditionalGeneration):
+            decoder_input_ids = self.model._shift_right(target_ids)
+            lm_labels = target_ids
+        else:
+            decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
+            lm_labels = target_ids[:, 1:].clone()  # why clone?
+
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
+
+        if self.hparams.label_smoothing == 0:
+            # Same behavior as modeling_bart.py
+            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            lm_logits = outputs[0]
+            assert lm_logits.shape[-1] == self.model.config.vocab_size
+            loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
+        else:
+            lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
+            loss, nll_loss = label_smoothed_nll_loss(
+                lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
+            )
         return (loss,)
+
+    @property
+    def pad(self) -> int:
+        return self.tokenizer.pad_token_id
 
     def training_step(self, batch, batch_idx) -> Dict:
         loss_tensors = self._step(batch)
+
         logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        # tokens per batch
+        logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["decoder_input_ids"].ne(self.pad).sum()
         return {"loss": loss_tensors[0], "log": logs}
 
     def validation_step(self, batch, batch_idx) -> Dict:
@@ -148,7 +179,7 @@ class SummarizationModule(BaseTransformer):
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "summ_len"]}
+        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]}
         rouge_tensor: torch.FloatTensor = torch.tensor(rouges[self.val_metric]).type_as(loss)
         rouges.update({k: v.item() for k, v in losses.items()})
         losses.update(rouges)
@@ -166,23 +197,21 @@ class SummarizationModule(BaseTransformer):
         return calculate_rouge(preds, target)
 
     def _generative_step(self, batch: dict) -> dict:
-        pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = Seq2SeqDataset.trim_seq2seq_batch(batch, pad_token_id)
         t0 = time.time()
         generated_ids = self.model.generate(
-            input_ids=source_ids,
-            attention_mask=source_mask,
+            batch["input_ids"],
+            attention_mask=batch["attention_mask"],
             use_cache=True,
             decoder_start_token_id=self.decoder_start_token_id,
         )
-        gen_time = (time.time() - t0) / source_ids.shape[0]
-        preds = self.ids_to_clean_text(generated_ids)
-        target = self.ids_to_clean_text(y)
+        gen_time = (time.time() - t0) / batch["input_ids"].shape[0]
+        preds: List[str] = self.ids_to_clean_text(generated_ids)
+        target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
         loss_tensors = self._step(batch)
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         rouge: Dict = self.calc_generative_metrics(preds, target)
         summ_len = np.mean(lmap(len, generated_ids))
-        base_metrics.update(gen_time=gen_time, summ_len=summ_len, preds=preds, target=target, **rouge)
+        base_metrics.update(gen_time=gen_time, gen_len=summ_len, preds=preds, target=target, **rouge)
         return base_metrics
 
     def test_step(self, batch, batch_idx):
@@ -290,8 +319,16 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument(
             "--task", type=str, default="summarization", required=False, help="# examples. -1 means use all."
         )
+        parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
+        parser.add_argument(
+            "--early_stopping_patience",
+            type=int,
+            default=-1,
+            required=False,
+            help="-1 means never early stop. early_stopping_patience is measured in validation checks, not epochs. So val_check_interval will effect it.",
+        )
         return parser
 
 
@@ -305,10 +342,6 @@ class TranslationModule(SummarizationModule):
         super().__init__(hparams, **kwargs)
         self.dataset_kwargs["src_lang"] = hparams.src_lang
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
-        if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
-            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
-        if isinstance(self.tokenizer, MBartTokenizer):
-            self.dataset_class = MBartDataset
 
     def calc_generative_metrics(self, preds, target) -> dict:
         return calculate_bleu_score(preds, target)
@@ -335,17 +368,24 @@ def main(args, model=None) -> SummarizationModule:
     elif args.logger_name == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=model.output_dir.name, project=dataset)
+        project = os.environ.get("WANDB_PROJECT", dataset)
+        logger = WandbLogger(name=model.output_dir.name, project=project)
 
     elif args.logger_name == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
         logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
+
+    if args.early_stopping_patience >= 0:
+        es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
+    else:
+        es_callback = False
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
+        early_stopping_callback=es_callback,
         logger=logger,
         # TODO: early stopping callback seems messed up
     )

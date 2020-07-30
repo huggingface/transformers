@@ -20,11 +20,13 @@ import logging
 import os
 import pickle
 import sys
+import uuid
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from uuid import UUID
 
 import numpy as np
 
@@ -36,6 +38,7 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import BatchEncoding, PaddingStrategy
 
 
 if is_tf_available():
@@ -50,6 +53,7 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TFAutoModelForCausalLM,
     )
 
 if is_torch_available():
@@ -59,13 +63,14 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelForTokenClassification,
-        AutoModelWithLMHead,
         AutoModelForSeq2SeqLM,
-        MODEL_WITH_LM_HEAD_MAPPING,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
     )
 
 if TYPE_CHECKING:
@@ -815,6 +820,159 @@ class TextClassificationPipeline(Pipeline):
             ]
 
 
+class ZeroShotClassificationArgumentHandler(ArgumentHandler):
+    """
+    Handles arguments for zero-shot for text classification by turning each possible label into an NLI
+    premise/hypothesis pair.
+    """
+
+    def _parse_labels(self, labels):
+        if isinstance(labels, str):
+            labels = [label.strip() for label in labels.split(",")]
+        return labels
+
+    def __call__(self, sequences, labels, hypothesis_template):
+        if len(labels) == 0 or len(sequences) == 0:
+            raise ValueError("You must include at least one label and at least one sequence.")
+        if hypothesis_template.format(labels[0]) == hypothesis_template:
+            raise ValueError(
+                (
+                    'The provided hypothesis_template "{}" was not able to be formatted with the target labels. '
+                    "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
+                ).format(hypothesis_template)
+            )
+
+        if isinstance(sequences, str):
+            sequences = [sequences]
+        labels = self._parse_labels(labels)
+
+        sequence_pairs = []
+        for sequence in sequences:
+            sequence_pairs.extend([[sequence, hypothesis_template.format(label)] for label in labels])
+
+        return sequence_pairs
+
+
+class ZeroShotClassificationPipeline(Pipeline):
+    """
+    NLI-based zero-shot classification pipeline using a ModelForSequenceClassification head with models trained on
+    NLI tasks.
+
+    Any combination of sequences and labels can be passed and each combination will be posed as a premise/hypothesis
+    pair and passed to the pre-trained model. Then logit for `entailment` is then taken as the logit for the
+    candidate label being valid. Any NLI model can be used as long as the first output logit corresponds to
+    `contradiction` and the last to `entailment`.
+
+    This pipeline can currently be loaded from the :func:`~transformers.pipeline` method using the following task
+    identifier(s):
+
+    - "zero-shot-classification"
+
+    The models that this pipeline can use are models that have been fine-tuned on a Natural Language Inference task.
+    See the up-to-date list of available models on
+    `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
+
+    Arguments:
+        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+            :class:`~transformers.PreTrainedTokenizer`.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
+
+    def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
+        super().__init__(*args, args_parser=args_parser, **kwargs)
+
+    def _parse_and_tokenize(self, *args, padding=True, add_special_tokens=True, **kwargs):
+        """
+        Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
+        """
+        inputs = self._args_parser(*args, **kwargs)
+        inputs = self.tokenizer(
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
+            truncation="only_first",
+        )
+
+        return inputs
+
+    def __call__(self, sequences, candidate_labels, hypothesis_template="This example is {}.", multi_class=False):
+        """
+        NLI-based zero-shot classification. Any combination of sequences and labels can be passed and each
+        combination will be posed as a premise/hypothesis pair and passed to the pre-trained model. Then logit for
+        `entailment` is then taken as the logit for the candidate label being valid. Any NLI model can be used as
+        long as the first output logit corresponds to `contradiction` and the last to `entailment`.
+
+        Args:
+            sequences (:obj:`str` or obj:`List`):
+                The sequence or sequences to classify. Truncated if model input is too large.
+            candidate_labels (:obj:`str` or obj:`List`):
+                The set of possible class labels to classify each sequence into. Can be a single label, a string of
+                comma-separated labels, or a list of labels.
+            hypothesis_template (obj:`str`, defaults to "This example is {}."):
+                The template used to turn each label into an NLI-style hypothesis. This template must include a {}
+                or similar syntax for the candidate label to be inserted into the template. For example, the default
+                template is "This example is {}." With the candidate label "sports", this would be fed into the model
+                like `<cls> sequence to classify <sep> This example is sports . <sep>`. The default template works
+                well in many cases, but it may be worthwhile to experiment with different templates depending on the
+                task setting.
+            multi_class (obj:`bool`, defaults to False):
+                When False, it is assumed that only one candidate label can be true, and the scores are normalized
+                such that the sum of the label likelihoods for each sequence is 1. When True, the labels are
+                considered independent and probabilities are normalized for each candidate by doing a of softmax of
+                the entailment score vs. the contradiction score.
+        """
+        outputs = super().__call__(sequences, candidate_labels, hypothesis_template)
+        num_sequences = 1 if isinstance(sequences, str) else len(sequences)
+        candidate_labels = self._args_parser._parse_labels(candidate_labels)
+        reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
+
+        if len(candidate_labels) == 1:
+            multi_class = True
+
+        if not multi_class:
+            # softmax the "entailment" logits over all candidate labels
+            entail_logits = reshaped_outputs[..., -1]
+            scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
+        else:
+            # softmax over the entailment vs. contradiction dim for each label independently
+            entail_contr_logits = reshaped_outputs[..., [0, -1]]
+            scores = np.exp(entail_contr_logits) / np.exp(entail_contr_logits).sum(-1, keepdims=True)
+            scores = scores[..., 1]
+
+        result = []
+        for iseq in range(num_sequences):
+            top_inds = list(reversed(scores[iseq].argsort()))
+            result.append(
+                {
+                    "sequence": sequences if isinstance(sequences, str) else sequences[iseq],
+                    "labels": [candidate_labels[i] for i in top_inds],
+                    "scores": scores[iseq][top_inds].tolist(),
+                }
+            )
+
+        if len(result) == 1:
+            return result[0]
+        return result
+
+
 class FillMaskPipeline(Pipeline):
     """
     Masked language modeling prediction pipeline using ModelWithLMHead head. See the
@@ -875,7 +1033,7 @@ class FillMaskPipeline(Pipeline):
             task=task,
         )
 
-        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
+        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
 
         self.topk = topk
 
@@ -1318,6 +1476,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 max_seq_length=kwargs["max_seq_len"],
                 doc_stride=kwargs["doc_stride"],
                 max_query_length=kwargs["max_question_len"],
+                padding_strategy=PaddingStrategy.DO_NOT_PAD.value,
                 is_training=False,
                 tqdm_enabled=False,
             )
@@ -1662,7 +1821,9 @@ class TranslationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_WITH_LM_HEAD_MAPPING)
+        self.check_model_type(
+            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+        )
 
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -1737,6 +1898,321 @@ class TranslationPipeline(Pipeline):
             return results
 
 
+class Conversation:
+    """
+    Utility class containing a conversation and its history. This class is meant to be used as an input to the
+    :obj:`~transformers.ConversationalPipeline`. The conversation contains a number of utility function to manage the addition of new
+    user input and generated model responses. A conversation needs to contain an unprocessed user input before being
+    passed to the :obj:`~transformers.ConversationalPipeline`. This user input is either created when the class is instantiated, or by calling
+    `append_response("input")` after a conversation turn.
+
+    Usage::
+
+        conversation = Conversation("Going to the movies tonight - any suggestions?")
+
+        # Steps usually performed by the model when generating a response:
+        # 1. Mark the user input as processed (moved to the history)
+        conversation.mark_processed()
+        # 2. Append a mode response
+        conversation.append_response("The Big lebowski.")
+
+        conversation.add_user_input("Is it good?")
+
+    Arguments:
+        text (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The initial user input to start the conversation.
+            If :obj:`None`, a user input needs to be provided manually using `add_user_input` before the conversation can begin.
+        conversation_id (:obj:`uuid.UUID`, `optional`, defaults to :obj:`None`):
+            Unique identifier for the conversation
+            If :obj:`None`, the random UUID4 id will be assigned to the conversation.
+    """
+
+    def __init__(self, text: str = None, conversation_id: UUID = None):
+        if not conversation_id:
+            conversation_id = uuid.uuid4()
+        self.uuid: UUID = conversation_id
+        self.past_user_inputs: List[str] = []
+        self.generated_responses: List[str] = []
+        self.history: List[int] = []
+        self.new_user_input: Optional[str] = text
+
+    def add_user_input(self, text: str, overwrite: bool = False):
+        """
+        Add a user input to the conversation for the next round. This populates the internal `new_user_input` field.
+
+        Args:
+            text: str, the user input for the next conversation round
+            overwrite: bool, flag indicating if existing and unprocessed user input should be overwritten when this function is called
+
+        """
+        if self.new_user_input:
+            if overwrite:
+                logger.warning(
+                    'User input added while unprocessed input was existing: "{}" was overwritten with: "{}".'.format(
+                        self.new_user_input, text
+                    )
+                )
+                self.new_user_input = text
+            else:
+                logger.warning(
+                    'User input added while unprocessed input was existing: "{}" new input ignored: "{}". '
+                    "Set `overwrite` to True to overwrite unprocessed user input".format(self.new_user_input, text)
+                )
+        else:
+            self.new_user_input = text
+
+    def mark_processed(self):
+        """
+        Mark the conversation as processed (moves the content of `new_user_input` to `past_user_inputs`) and empties the
+        `new_user_input` field.
+        """
+        if self.new_user_input:
+            self.past_user_inputs.append(self.new_user_input)
+        self.new_user_input = None
+
+    def append_response(self, response: str):
+        """
+        Append a response to the list of generated responses.
+
+        Args:
+            response: str, the model generated response
+        """
+        self.generated_responses.append(response)
+
+    def set_history(self, history: List[int]):
+        """
+        Updates the value of the history of the conversation. The history is represented by a list of `token_ids`. The
+        history is used by the model to generate responses based on the previous conversation turns.
+
+        Args:
+            history: (list of int), history of tokens provided and generated for this conversation
+        """
+        self.history = history
+
+    def __repr__(self):
+        """
+        Generates a string representation of the conversation.
+
+        Return:
+            :obj:`str` or :obj:`Dict`:
+
+            Example:
+            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114
+            user >> Going to the movies tonight - any suggestions?
+            bot >> The Big Lebowski
+        """
+        output = "Conversation id: {} \n".format(self.uuid)
+        for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
+            output += "user >> {} \n".format(user_input)
+            output += "bot >> {} \n".format(generated_response)
+        if self.new_user_input is not None:
+            output += "user >> {} \n".format(self.new_user_input)
+        return output
+
+
+class ConversationalPipeline(Pipeline):
+    """
+    Multi-turn conversational pipeline.
+
+    Usage::
+
+        conversational_pipeline = pipeline("conversational")
+
+        conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
+        conversation_2 = Conversation("What's the last book you have read?")
+
+        conversational_pipeline([conversation_1, conversation_2])
+
+        conversation_1.add_user_input("Is it an action movie?")
+        conversation_2.add_user_input("What is the genre of this book?")
+
+        conversational_pipeline([conversation_1, conversation_2])
+
+    The models that this pipeline can use are models that have been fine-tuned on a multi-turn conversational task,
+    currently: "microsoft/DialoGPT-small", "microsoft/DialoGPT-medium", "microsoft/DialoGPT-large"
+    See the up-to-date list of available models on
+    `huggingface.co/models <https://huggingface.co/models?filter=conversational>`__.
+
+    Arguments:
+        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
+            The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
+            checkpoint identifier or an actual pre-trained model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+            If :obj:`None`, the default of the pipeline will be loaded.
+        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`, defaults to :obj:`None`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This can be :obj:`None`,
+            a string checkpoint identifier or an actual pre-trained tokenizer inheriting from
+            :class:`~transformers.PreTrainedTokenizer`.
+            If :obj:`None`, the default of the pipeline will be loaded.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
+
+    def __init__(self, min_length_for_response=32, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert self.tokenizer.eos_token_id is not None, "DialoguePipeline tokenizer should have an EOS token set"
+        if self.tokenizer.pad_token_id is not None:
+            self.pad_token_id = self.tokenizer.pad_token_id
+        else:
+            self.pad_token_id = self.tokenizer.eos_token_id
+        self.min_length_for_response = min_length_for_response
+
+    def __call__(
+        self,
+        conversations: Union[Conversation, List[Conversation]],
+        clean_up_tokenization_spaces=True,
+        **generate_kwargs
+    ):
+        r"""
+        Args:
+            conversations: (list of :class:`~transformers.pipelines.Conversation`) Conversations to generate responses for
+            **generate_kwargs: extra kwargs passed to `self.model.generate`_
+
+        Returns:
+            list of conversations with updated generated responses for those containing a new user input
+        """
+
+        # Input validation
+        if isinstance(conversations, list):
+            for conversation in conversations:
+                assert isinstance(
+                    conversation, Conversation
+                ), "DialoguePipeline expects a Conversation or list of Conversations as an input"
+                if conversation.new_user_input is None:
+                    raise ValueError(
+                        "Conversation with UUID {} does not contain new user input to process. "
+                        "Add user inputs with the conversation's `add_user_input` method".format(
+                            type(conversation.uuid)
+                        )
+                    )
+            assert (
+                self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
+            ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
+        elif isinstance(conversations, Conversation):
+            conversations = [conversations]
+        else:
+            raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
+
+        with self.device_placement():
+
+            inputs = self._parse_and_tokenize([conversation.new_user_input for conversation in conversations])
+            histories = [conversation.history for conversation in conversations]
+            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+            inputs = self._concat_inputs_history(inputs, histories, max_length)
+
+            if self.framework == "pt":
+                inputs = self.ensure_tensor_on_device(**inputs)
+                input_length = inputs["input_ids"].shape[-1]
+
+            elif self.framework == "tf":
+                input_length = tf.shape(inputs["input_ids"])[-1].numpy()
+
+            if input_length > 0.9 * max_length:
+                logger.warning(
+                    "Longest conversation length: {} is bigger than 0.9 * max_length: {}. "
+                    "You might consider trimming the early phase of the conversation".format(input_length, max_length)
+                )
+            generated_responses = self.model.generate(
+                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+            )
+
+            cleaned_history = self._clean_padding_history(generated_responses)
+            output = []
+            for conversation_index, conversation in enumerate(conversations):
+                conversation.mark_processed()
+                conversation.generated_responses.append(
+                    self.tokenizer.decode(
+                        cleaned_history[conversation_index][input_length:],
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
+                )
+                conversation.set_history(cleaned_history[conversation_index])
+                output.append(conversation)
+            if len(output) == 1:
+                return output[0]
+            else:
+                return output
+
+    def _parse_and_tokenize(self, *args, **kwargs):
+        """
+        Parse arguments and tokenize, adding an EOS token at the end of the user input
+        """
+        # Parse arguments
+        inputs = self._args_parser(*args, **kwargs)
+        inputs = self.tokenizer.batch_encode_plus(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
+        for input in inputs:
+            input.append(self.tokenizer.eos_token_id)
+        return inputs
+
+    def _clean_padding_history(self, generated_tensor) -> List[List[int]]:
+        """
+        Cleans the padding history. Padding may be generated in two places when multiple conversations are provided as
+        an input:
+            - at the end of the concatenated history and new user input, so that all input to the model have the same
+                length
+            - at the end of the generated response, as some responses will be longer than others
+        This method cleans up these padding token so that the history for each conversation is not impacted by the
+        batching process.
+        """
+        outputs = []
+        for sequence in generated_tensor:
+            sequence_tokens = []
+            is_previous_pad = False
+            for token in sequence:
+                if token == self.pad_token_id:
+                    if is_previous_pad:
+                        continue
+                    else:
+                        is_previous_pad = True
+                else:
+                    is_previous_pad = False
+                if self.framework == "pt":
+                    sequence_tokens.append(token.item())
+                else:
+                    sequence_tokens.append(int(token.numpy()))
+
+            outputs.append(sequence_tokens)
+        return outputs
+
+    def _concat_inputs_history(self, inputs: List[List[int]], histories: List[Optional[List[int]]], max_length: int):
+        """
+        Builds an input prepended by the history for this conversation, allowing multi-turn conversation with context
+        """
+        outputs = []
+        for new_input, history in zip(inputs, histories):
+            if history is not None:
+                new_input = history + new_input
+            if len(new_input) > max_length - self.min_length_for_response:
+                cutoff_eos_index = 0
+                while len(new_input) - cutoff_eos_index > max_length - self.min_length_for_response:
+                    if cutoff_eos_index >= len(new_input):
+                        break
+                    cutoff_eos_index = new_input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
+                    if cutoff_eos_index == 0 or cutoff_eos_index == len(new_input) - 1:
+                        break
+                    else:
+                        new_input = new_input[cutoff_eos_index + 1 :]
+            outputs.append(new_input)
+        max_len = max([len(item) for item in outputs])
+        outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
+        outputs = BatchEncoding(
+            {"input_ids": outputs, "attention_mask": [1] * len(outputs)}, tensor_type=self.framework
+        )
+        return outputs
+
+
 # Register all the supported tasks here
 SUPPORTED_TASKS = {
     "feature-extraction": {
@@ -1778,7 +2254,7 @@ SUPPORTED_TASKS = {
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForMaskedLM if is_torch_available() else None,
         "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
     },
     "summarization": {
@@ -1790,26 +2266,42 @@ SUPPORTED_TASKS = {
     "translation_en_to_fr": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_de": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_ro": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
-        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "pt": AutoModelForCausalLM if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
+    },
+    "zero-shot-classification": {
+        "impl": ZeroShotClassificationPipeline,
+        "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
+        "pt": AutoModelForSequenceClassification if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "config": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+            "tokenizer": {"pt": "facebook/bart-large-mnli", "tf": "roberta-large-mnli"},
+        },
+    },
+    "conversational": {
+        "impl": ConversationalPipeline,
+        "tf": TFAutoModelForCausalLM if is_tf_available() else None,
+        "pt": AutoModelForCausalLM if is_torch_available() else None,
+        "default": {"model": {"pt": "microsoft/DialoGPT-medium", "tf": "microsoft/DialoGPT-medium"}},
     },
 }
 

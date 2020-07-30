@@ -18,8 +18,6 @@
 import logging
 from collections import OrderedDict
 
-from transformers.configuration_mobilebert import MobileBertConfig
-
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -44,6 +42,7 @@ from .configuration_auto import (
     XLNetConfig,
 )
 from .configuration_marian import MarianConfig
+from .configuration_mobilebert import MobileBertConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer, MBartTokenizer
