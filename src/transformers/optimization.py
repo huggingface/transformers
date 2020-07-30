@@ -87,6 +87,9 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
     """
 
     def lr_lambda(current_step: int):
+        #import ipdb; ipdb.set_trace()
+        # if current_step > 0:
+        #     import ipdb; ipdb.set_trace()
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
         return max(
