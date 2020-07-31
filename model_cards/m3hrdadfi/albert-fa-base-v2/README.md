@@ -1,7 +1,6 @@
 ---
 language: fa
 tags:
-- albert
 - albert-persian
 - persian-lm
 license: apache-2.0
