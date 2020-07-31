@@ -167,7 +167,7 @@ MODEL_CLASSES = {
         XLMConfig,
         TFXLMWithLMHeadModel,
         XLMWithLMHeadModel,
-        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "xlm-roberta": (
