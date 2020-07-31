@@ -1,7 +1,6 @@
 ---
 language: en
 tags:
-- bart
 - text-classification
 - pytorch
 datasets:
@@ -71,4 +70,3 @@ Since this method studies the ability to classify unseen labels after being trai
 ## Evaluation Results
 
 This model was evaluated with the label-weighted F1 of the _seen_ and _unseen_ labels. That is, for each example the model must predict from one of the 10 corpus labels. The F1 is reported for the labels seen during training as well as the labels unseen during training. We found an F1 score of `.68` and `.72` for the unseen and seen labels, respectively. In order to adjust for the in-vs-out of distribution labels, we subtract a fixed amount of 30% from the normalized probabilities of the _seen_ labels, as described in [Yin et al. 2019](https://arxiv.org/abs/1909.00161) and [our blog post](https://joeddav.github.io/blog/2020/05/29/ZSL.html).
-
