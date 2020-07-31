@@ -238,18 +238,7 @@ and for the examples:
 $ pip install -r examples/requirements.txt  # only needed the first time
 $ python -m pytest -n auto --dist=loadfile -s -v ./examples/
 ```
-
-and for the slow tests:
-
-```bash
-RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/
-```
-or 
-```python
-RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/
-```
-
-In fact, that's how `make test` and `make test-examples` are implemented!
+In fact, that's how `make test` and `make test-examples` are implemented (sans the `pip install` line)!
 
 You can specify a smaller set of tests in order to test only the feature
 you're working on.
