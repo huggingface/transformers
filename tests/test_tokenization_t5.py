@@ -132,10 +132,10 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
         batch = tokenizer.prepare_seq2seq_batch(src_text, return_tensors=FRAMEWORK)
         # check if input_ids are returned and no decoder_input_ids
-        self.assertIn("input_ids", batch.keys())
-        self.assertIn("attention_mask", batch.keys())
-        self.assertNotIn("decoder_input_ids", batch.keys())
-        self.assertNotIn("decoder_attention_mask", batch.keys())
+        self.assertIn("input_ids", batch)
+        self.assertIn("attention_mask", batch)
+        self.assertNotIn("decoder_input_ids", batch)
+        self.assertNotIn("decoder_attention_mask", batch)
 
     def test_max_target_length(self):
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
