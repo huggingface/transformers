@@ -190,9 +190,10 @@ class TokenizerTesterMixin:
                 tmpdirname = tempfile.mkdtemp()
 
                 sample_text = " He is very happy, UNwant\u00E9d,running"
-                tokenizer.add_tokens(["bim", "bambam"])
+                tokenizer.add_tokens(["bim", "bambam", AddedToken("baz")])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
+                additional_special_tokens.append(AddedToken("added_special_token", single_word=True))
                 tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens})
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
@@ -205,7 +206,9 @@ class TokenizerTesterMixin:
                 self.assertDictEqual(before_vocab, after_vocab)
                 self.assertIn("bim", after_vocab)
                 self.assertIn("bambam", after_vocab)
+                self.assertIn("baz", after_vocab)
                 self.assertIn("new_additional_special_token", after_tokenizer.additional_special_tokens)
+                self.assertIn("added_special_token", after_tokenizer.additional_special_tokens)
                 self.assertEqual(after_tokenizer.model_max_length, 42)
 
                 tokenizer = tokenizer.__class__.from_pretrained(tmpdirname, model_max_length=43)
