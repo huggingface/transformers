@@ -9,8 +9,17 @@ Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction an
 There are two categories of pipeline abstractions to be aware about:
 
 - The :func:`~transformers.pipeline` which is the most powerful object encapsulating all other pipelines.
-- The other task-specific pipelines, such as :class:`~transformers.TokenClassificationPipeline`
-  or :class:`~transformers.QuestionAnsweringPipeline`.
+- The other task-specific pipelines:
+
+    - :class:`~transformers.ConversationalPipeline`
+    - :class:`~transformers.FeatureExtractionPipeline`
+    - :class:`~transformers.FillMaskPipeline`
+    - :class:`~transformers.QuestionAnsweringPipeline`
+    - :class:`~transformers.SummarizationPipeline`
+    - :class:`~transformers.TextClassificationPipeline`
+    - :class:`~transformers.TextGenerationPipeline`
+    - :class:`~transformers.TokenClassificationPipeline`
+    - :class:`~transformers.TranslationPipeline`
 
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -22,58 +31,7 @@ other pipeline but requires an additional argument which is the `task`.
 
 
 The task specific pipelines
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Parent class: Pipeline
-=========================================
-
-.. autoclass:: transformers.Pipeline
-    :special-members: __call__
-    :members:
-
-TokenClassificationPipeline
-==========================================
-
-.. autoclass:: transformers.TokenClassificationPipeline
-
-NerPipeline
-==========================================
-
-This class is an alias of the :class:`~transformers.TokenClassificationPipeline` defined above. Please refer to that
-pipeline for documentation and usage examples.
-
-FillMaskPipeline
-==========================================
-
-.. autoclass:: transformers.FillMaskPipeline
-
-FeatureExtractionPipeline
-==========================================
-
-.. autoclass:: transformers.FeatureExtractionPipeline
-
-TextClassificationPipeline
-==========================================
-
-.. autoclass:: transformers.TextClassificationPipeline
-
-QuestionAnsweringPipeline
-==========================================
-
-.. autoclass:: transformers.QuestionAnsweringPipeline
-
-
-SummarizationPipeline
-==========================================
-
-.. autoclass:: transformers.SummarizationPipeline
-
-
-TextGenerationPipeline
-==========================================
-
-.. autoclass:: transformers.TextGenerationPipeline
-
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ConversationalPipeline
 ==========================================
@@ -81,3 +39,67 @@ ConversationalPipeline
 .. autoclass:: transformers.Conversation
 
 .. autoclass:: transformers.ConversationalPipeline
+    :special-members: __call__
+    :members:
+
+FeatureExtractionPipeline
+==========================================
+
+.. autoclass:: transformers.FeatureExtractionPipeline
+    :special-members: __call__
+    :members:
+
+FillMaskPipeline
+==========================================
+
+.. autoclass:: transformers.FillMaskPipeline
+    :special-members: __call__
+    :members:
+
+NerPipeline
+==========================================
+
+This class is an alias of the :class:`~transformers.TokenClassificationPipeline` defined below. Please refer to that
+pipeline for documentation and usage examples.
+
+QuestionAnsweringPipeline
+==========================================
+
+.. autoclass:: transformers.QuestionAnsweringPipeline
+    :special-members: __call__
+    :members:
+
+SummarizationPipeline
+==========================================
+
+.. autoclass:: transformers.SummarizationPipeline
+    :special-members: __call__
+    :members:
+
+TextClassificationPipeline
+==========================================
+
+.. autoclass:: transformers.TextClassificationPipeline
+    :special-members: __call__
+    :members:
+
+TextGenerationPipeline
+==========================================
+
+.. autoclass:: transformers.TextGenerationPipeline
+    :special-members: __call__
+    :members:
+
+TokenClassificationPipeline
+==========================================
+
+.. autoclass:: transformers.TokenClassificationPipeline
+    :special-members: __call__
+    :members:
+
+
+Parent class: :obj:`Pipeline`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Pipeline
+    :members:

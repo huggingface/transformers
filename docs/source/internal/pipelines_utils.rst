@@ -5,15 +5,16 @@ This page lists all the utility functions the library provides for pipelines.
 
 Most of those are only useful if you are studying the code of the models in the library.
 
-.. autofunction:: transformers.pipelines.get_framework
 
-.. autoclass:: transformers.pipelines.PipelineException
+Argument handling
+~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.pipelines.ArgumentHandler
 
-ZeroShotClassificationArgumentHandler
+.. autoclass:: transformers.pipelines.ZeroShotClassificationArgumentHandler
 
-QuestionAnsweringArgumentHandler
+.. autoclass:: transformers.pipelines.QuestionAnsweringArgumentHandler
+
 
 Data format
 ~~~~~~~~~~~
@@ -29,3 +30,11 @@ Data format
 
 .. autoclass:: transformers.pipelines.PipedPipelineDataFormat
     :members:
+
+
+Utilities
+~~~~~~~~~
+
+.. autofunction:: transformers.pipelines.get_framework
+
+.. autoclass:: transformers.pipelines.PipelineException
