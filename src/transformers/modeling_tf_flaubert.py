@@ -193,6 +193,8 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
+        #print(shape_list(lengths))
+        #print(bs)
         tf.debugging.assert_equal(shape_list(lengths)[0], bs)
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
@@ -268,7 +270,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             # self attention
             if not self.pre_norm:
                 attn_outputs = self.attentions[i](
-                    [tensor, attn_mask, None, cache, head_mask[i], output_attentions], training=training
+                    tensor, attn_mask, None, cache, head_mask[i], output_attentions, training=training
                 )
                 attn = attn_outputs[0]
                 if output_attentions:
@@ -279,7 +281,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             else:
                 tensor_normalized = self.layer_norm1[i](tensor)
                 attn_outputs = self.attentions[i](
-                    [tensor_normalized, attn_mask, None, cache, head_mask[i]], training=training
+                    tensor_normalized, attn_mask, None, cache, head_mask[i], training=training
                 )
                 attn = attn_outputs[0]
                 if output_attentions:
