@@ -959,7 +959,7 @@ class ZeroShotClassificationPipeline(Pipeline):
             top_inds = list(reversed(scores[iseq].argsort()))
             result.append(
                 {
-                    "sequence": sequences if num_sequences == 1 else sequences[iseq],
+                    "sequence": sequences if isinstance(sequences, str) else sequences[iseq],
                     "labels": [candidate_labels[i] for i in top_inds],
                     "scores": scores[iseq][top_inds].tolist(),
                 }
@@ -2122,6 +2122,6 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
-        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+        model = model_class.from_pretrained(model, config=config, return_tuple=True, **model_kwargs)
 
     return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)

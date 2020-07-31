@@ -646,7 +646,7 @@ class Trainer:
         if iterator is not None:
             iterator.write(output)
         else:
-            logger.info(output)
+            print(output)
 
     def _prepare_inputs(
         self, inputs: Dict[str, Union[torch.Tensor, Any]], model: nn.Module
