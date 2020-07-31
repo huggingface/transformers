@@ -122,10 +122,10 @@ logging.basicConfig(level=logging.INFO)
 
 MODEL_CLASSES = {
     "bert": (
-        BertConfig, 
-        TFBertForPreTraining, 
-        BertForPreTraining, 
-        BERT_PRETRAINED_MODEL_ARCHIVE_LIST, 
+        BertConfig,
+        TFBertForPreTraining,
+        BertForPreTraining,
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "bert-large-uncased-whole-word-masking-finetuned-squad": (
@@ -150,23 +150,26 @@ MODEL_CLASSES = {
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "gpt2": (
-        GPT2Config, 
-        TFGPT2LMHeadModel, 
-        GPT2LMHeadModel, 
+        GPT2Config,
+        TFGPT2LMHeadModel,
+        GPT2LMHeadModel,
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "xlnet": (
-        XLNetConfig, 
-        TFXLNetLMHeadModel, 
+        XLNetConfig,
+        TFXLNetLMHeadModel,
         XLNetLMHeadModel,
         XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "xlm": (
-        XLMConfig, 
-        TFXLMWithLMHeadModel, 
-        XLMWithLMHeadModel, 
+        XLMConfig,
+        TFXLMWithLMHeadModel,
+        XLMWithLMHeadModel,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "xlm-roberta": (
         XLMRobertaConfig,
         TFXLMRobertaForMaskedLM,
@@ -188,7 +191,12 @@ MODEL_CLASSES = {
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "roberta": (RobertaConfig, TFRobertaForMaskedLM, RobertaForMaskedLM, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "roberta": (
+        RobertaConfig,
+        TFRobertaForMaskedLM,
+        RobertaForMaskedLM,
+        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
@@ -225,43 +233,64 @@ MODEL_CLASSES = {
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "ctrl": (
-        CTRLConfig, 
-        TFCTRLLMHeadModel, 
-        CTRLLMHeadModel, 
+        CTRLConfig,
+        TFCTRLLMHeadModel,
+        CTRLLMHeadModel,
         CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
-        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "albert": (
-        AlbertConfig, 
-        TFAlbertForPreTraining, 
+        AlbertConfig,
+        TFAlbertForPreTraining,
         AlbertForPreTraining,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "t5": (
-        T5Config, 
-        TFT5ForConditionalGeneration, 
-        T5ForConditionalGeneration, 
+        T5Config,
+        TFT5ForConditionalGeneration,
+        T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "electra": (
-        ElectraConfig, 
-        TFElectraForPreTraining, 
-        ElectraForPreTraining, 
+        ElectraConfig,
+        TFElectraForPreTraining,
+        ElectraForPreTraining,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
 }
 
 
 def convert_pt_checkpoint_to_tf(
-    model_type, pytorch_checkpoint_path, config_file, tf_dump_path, compare_with_pt_model=False, use_cached_models=True
+    model_type,
+    pytorch_checkpoint_path,
+    config_file,
+    tf_dump_path,
+    compare_with_pt_model=False,
+    use_cached_models=True,
 ):
     if model_type not in MODEL_CLASSES:
-        raise ValueError("Unrecognized model type, should be one of {}.".format(list(MODEL_CLASSES.keys())))
+        raise ValueError(
+            "Unrecognized model type, should be one of {}.".format(
+                list(MODEL_CLASSES.keys())
+            )
+        )
 
-    config_class, model_class, pt_model_class, aws_model_maps, aws_config_map = MODEL_CLASSES[model_type]
+    (
+        config_class,
+        model_class,
+        pt_model_class,
+        aws_model_maps,
+        aws_config_map,
+    ) = MODEL_CLASSES[model_type]
 
     # Initialise TF model
     if config_file in aws_config_map:
-        config_file = cached_path(aws_config_map[config_file], force_download=not use_cached_models)
+        config_file = cached_path(
+            aws_config_map[config_file], force_download=not use_cached_models
+        )
     config = config_class.from_json_file(config_file)
     config.output_hidden_states = True
     config.output_attentions = True
@@ -270,8 +299,12 @@ def convert_pt_checkpoint_to_tf(
 
     # Load weights from tf checkpoint
     if pytorch_checkpoint_path in aws_config_map.keys():
-        pytorch_checkpoint_url = hf_bucket_url(pytorch_checkpoint_path, filename=WEIGHTS_NAME)
-        pytorch_checkpoint_path = cached_path(pytorch_checkpoint_url, force_download=not use_cached_models)
+        pytorch_checkpoint_url = hf_bucket_url(
+            pytorch_checkpoint_path, filename=WEIGHTS_NAME
+        )
+        pytorch_checkpoint_path = cached_path(
+            pytorch_checkpoint_url, force_download=not use_cached_models
+        )
     # Load PyTorch checkpoint in tf2 model:
     tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
 
@@ -290,7 +323,9 @@ def convert_pt_checkpoint_to_tf(
         np_tf = tfo[0].numpy()
         diff = np.amax(np.abs(np_pt - np_tf))
         print("Max absolute difference between models outputs {}".format(diff))
-        assert diff <= 2e-2, "Error, model absolute difference is >2e-2: {}".format(diff)
+        assert diff <= 2e-2, "Error, model absolute difference is >2e-2: {}".format(
+            diff
+        )
 
     # Save pytorch-model
     print("Save TensorFlow model to {}".format(tf_dump_path))
@@ -315,14 +350,24 @@ def convert_all_pt_checkpoints_to_tf(
 
     for j, model_type in enumerate(model_types, start=1):
         print("=" * 100)
-        print(" Converting model type {}/{}: {}".format(j, len(model_types), model_type))
+        print(
+            " Converting model type {}/{}: {}".format(j, len(model_types), model_type)
+        )
         print("=" * 100)
         if model_type not in MODEL_CLASSES:
             raise ValueError(
-                "Unrecognized model type {}, should be one of {}.".format(model_type, list(MODEL_CLASSES.keys()))
+                "Unrecognized model type {}, should be one of {}.".format(
+                    model_type, list(MODEL_CLASSES.keys())
+                )
             )
 
-        config_class, model_class, pt_model_class, aws_model_maps, aws_config_map = MODEL_CLASSES[model_type]
+        (
+            config_class,
+            model_class,
+            pt_model_class,
+            aws_model_maps,
+            aws_config_map,
+        ) = MODEL_CLASSES[model_type]
 
         if model_shortcut_names_or_path is None:
             model_shortcut_names_or_path = list(aws_model_maps.keys())
@@ -333,13 +378,25 @@ def convert_all_pt_checkpoints_to_tf(
             zip(model_shortcut_names_or_path, config_shortcut_names_or_path), start=1
         ):
             print("-" * 100)
-            if "-squad" in model_shortcut_name or "-mrpc" in model_shortcut_name or "-mnli" in model_shortcut_name:
+            if (
+                "-squad" in model_shortcut_name
+                or "-mrpc" in model_shortcut_name
+                or "-mnli" in model_shortcut_name
+            ):
                 if not only_convert_finetuned_models:
-                    print("    Skipping finetuned checkpoint {}".format(model_shortcut_name))
+                    print(
+                        "    Skipping finetuned checkpoint {}".format(
+                            model_shortcut_name
+                        )
+                    )
                     continue
                 model_type = model_shortcut_name
             elif only_convert_finetuned_models:
-                print("    Skipping not finetuned checkpoint {}".format(model_shortcut_name))
+                print(
+                    "    Skipping not finetuned checkpoint {}".format(
+                        model_shortcut_name
+                    )
+                )
                 continue
             print(
                 "    Converting checkpoint {}/{}: {} - model_type {}".format(
@@ -349,14 +406,24 @@ def convert_all_pt_checkpoints_to_tf(
             print("-" * 100)
 
             if config_shortcut_name in aws_config_map:
-                config_file = cached_path(aws_config_map[config_shortcut_name], force_download=not use_cached_models)
+                config_file = cached_path(
+                    aws_config_map[config_shortcut_name],
+                    force_download=not use_cached_models,
+                )
             else:
-                config_file = cached_path(config_shortcut_name, force_download=not use_cached_models)
+                config_file = cached_path(
+                    config_shortcut_name, force_download=not use_cached_models
+                )
 
             if model_shortcut_name in aws_model_maps:
-                model_file = cached_path(aws_model_maps[model_shortcut_name], force_download=not use_cached_models)
+                model_file = cached_path(
+                    aws_model_maps[model_shortcut_name],
+                    force_download=not use_cached_models,
+                )
             else:
-                model_file = cached_path(model_shortcut_name, force_download=not use_cached_models)
+                model_file = cached_path(
+                    model_shortcut_name, force_download=not use_cached_models
+                )
 
             if os.path.isfile(model_shortcut_name):
                 model_shortcut_name = "converted_model"
@@ -365,7 +432,9 @@ def convert_all_pt_checkpoints_to_tf(
                 model_type=model_type,
                 pytorch_checkpoint_path=model_file,
                 config_file=config_file,
-                tf_dump_path=os.path.join(tf_dump_path, model_shortcut_name + "-tf_model.h5"),
+                tf_dump_path=os.path.join(
+                    tf_dump_path, model_shortcut_name + "-tf_model.h5"
+                ),
                 compare_with_pt_model=compare_with_pt_model,
             )
             if remove_cached_files:
@@ -377,7 +446,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--tf_dump_path", default=None, type=str, required=True, help="Path to the output Tensorflow dump file."
+        "--tf_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output Tensorflow dump file.",
     )
     parser.add_argument(
         "--model_type",
@@ -404,7 +477,9 @@ if __name__ == "__main__":
         "use the configuration associated to the shortcut name on the AWS",
     )
     parser.add_argument(
-        "--compare_with_pt_model", action="store_true", help="Compare Tensorflow and PyTorch model predictions."
+        "--compare_with_pt_model",
+        action="store_true",
+        help="Compare Tensorflow and PyTorch model predictions.",
     )
     parser.add_argument(
         "--use_cached_models",
@@ -416,7 +491,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Remove pytorch models after conversion (save memory when converting in batches).",
     )
-    parser.add_argument("--only_convert_finetuned_models", action="store_true", help="Only convert finetuned models.")
+    parser.add_argument(
+        "--only_convert_finetuned_models",
+        action="store_true",
+        help="Only convert finetuned models.",
+    )
     args = parser.parse_args()
 
     # if args.pytorch_checkpoint_path is not None:
@@ -433,7 +512,9 @@ if __name__ == "__main__":
         model_shortcut_names_or_path=[args.pytorch_checkpoint_path]
         if args.pytorch_checkpoint_path is not None
         else None,
-        config_shortcut_names_or_path=[args.config_file] if args.config_file is not None else None,
+        config_shortcut_names_or_path=[args.config_file]
+        if args.config_file is not None
+        else None,
         compare_with_pt_model=args.compare_with_pt_model,
         use_cached_models=args.use_cached_models,
         remove_cached_files=args.remove_cached_files,
