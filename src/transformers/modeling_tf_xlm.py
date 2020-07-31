@@ -826,7 +826,6 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        # config.summary_proj_to_labels = False
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
         self.logits_proj = tf.keras.layers.Dense(
@@ -842,8 +841,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         """
         return {
             "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-            "token_type_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-            "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)
+            "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
         }
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)

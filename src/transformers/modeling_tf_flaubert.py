@@ -193,8 +193,6 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        #print(shape_list(lengths))
-        #print(bs)
         tf.debugging.assert_equal(shape_list(lengths)[0], bs)
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
