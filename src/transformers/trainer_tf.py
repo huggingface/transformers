@@ -78,7 +78,10 @@ class TFTrainer:
             None,
         ),
     ):
-        assert parse(tf.__version__).release >= (2, 2, 0), "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r " % tf.__version__
+        assert parse(tf.__version__).release >= (2, 2, 0), (
+            "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
+            % tf.__version__
+        )
 
         self.model = model
         self.args = args
