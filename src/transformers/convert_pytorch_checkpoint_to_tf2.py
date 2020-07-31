@@ -21,21 +21,36 @@ import os
 
 from transformers import (
     ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
     DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
     FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
     OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
     ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    T5_PRETRAINED_MODEL_ARCHIVE_LIST,
     TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
     WEIGHTS_NAME,
     XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
     AlbertConfig,
     BertConfig,
     CamembertConfig,
@@ -106,44 +121,71 @@ if is_torch_available():
 logging.basicConfig(level=logging.INFO)
 
 MODEL_CLASSES = {
-    "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "bert": (
+        BertConfig, 
+        TFBertForPreTraining, 
+        BertForPreTraining, 
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST, 
+        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
         BertForQuestionAnswering,
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "bert-large-cased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
         BertForQuestionAnswering,
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "bert-base-cased-finetuned-mrpc": (
         BertConfig,
         TFBertForSequenceClassification,
         BertForSequenceClassification,
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "gpt2": (GPT2Config, TFGPT2LMHeadModel, GPT2LMHeadModel, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "xlnet": (XLNetConfig, TFXLNetLMHeadModel, XLNetLMHeadModel, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "xlm": (XLMConfig, TFXLMWithLMHeadModel, XLMWithLMHeadModel, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "gpt2": (
+        GPT2Config, 
+        TFGPT2LMHeadModel, 
+        GPT2LMHeadModel, 
+        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "xlnet": (
+        XLNetConfig, 
+        TFXLNetLMHeadModel, 
+        XLNetLMHeadModel,
+        XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "xlm": (
+        XLMConfig, 
+        TFXLMWithLMHeadModel, 
+        XLMWithLMHeadModel, 
+        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "xlm-roberta": (
         XLMRobertaConfig,
         TFXLMRobertaForMaskedLM,
         XLMRobertaForMaskedLM,
+        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "transfo-xl": (
         TransfoXLConfig,
         TFTransfoXLLMHeadModel,
         TransfoXLLMHeadModel,
+        TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "openai-gpt": (
         OpenAIGPTConfig,
         TFOpenAIGPTLMHeadModel,
         OpenAIGPTLMHeadModel,
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "roberta": (RobertaConfig, TFRobertaForMaskedLM, RobertaForMaskedLM, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
@@ -151,36 +193,61 @@ MODEL_CLASSES = {
         RobertaConfig,
         TFRobertaForSequenceClassification,
         RobertaForSequenceClassification,
+        ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "camembert": (
         CamembertConfig,
         TFCamembertForMaskedLM,
         CamembertForMaskedLM,
+        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "flaubert": (
         FlaubertConfig,
         TFFlaubertWithLMHeadModel,
         FlaubertWithLMHeadModel,
+        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "distilbert": (
         DistilBertConfig,
         TFDistilBertForMaskedLM,
         DistilBertForMaskedLM,
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "distilbert-base-distilled-squad": (
         DistilBertConfig,
         TFDistilBertForQuestionAnswering,
         DistilBertForQuestionAnswering,
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "ctrl": (CTRLConfig, TFCTRLLMHeadModel, CTRLLMHeadModel, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "albert": (AlbertConfig, TFAlbertForPreTraining, AlbertForPreTraining, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "t5": (T5Config, TFT5ForConditionalGeneration, T5ForConditionalGeneration, T5_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "electra": (ElectraConfig, TFElectraForPreTraining, ElectraForPreTraining, ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "ctrl": (
+        CTRLConfig, 
+        TFCTRLLMHeadModel, 
+        CTRLLMHeadModel, 
+        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "albert": (
+        AlbertConfig, 
+        TFAlbertForPreTraining, 
+        AlbertForPreTraining,
+        ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "t5": (
+        T5Config, 
+        TFT5ForConditionalGeneration, 
+        T5ForConditionalGeneration, 
+        T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "electra": (
+        ElectraConfig, 
+        TFElectraForPreTraining, 
+        ElectraForPreTraining, 
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
 }
 
 
@@ -190,7 +257,7 @@ def convert_pt_checkpoint_to_tf(
     if model_type not in MODEL_CLASSES:
         raise ValueError("Unrecognized model type, should be one of {}.".format(list(MODEL_CLASSES.keys())))
 
-    config_class, model_class, pt_model_class, aws_config_map = MODEL_CLASSES[model_type]
+    config_class, model_class, pt_model_class, aws_model_maps, aws_config_map = MODEL_CLASSES[model_type]
 
     # Initialise TF model
     if config_file in aws_config_map:
