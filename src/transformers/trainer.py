@@ -193,7 +193,7 @@ class Trainer:
         self.prediction_loss_only = prediction_loss_only
         self.optimizer, self.lr_scheduler = optimizers
         self.tb_writer = tb_writer
-        if tb_writer is None and is_tensorboard_available() and self.is_world_main_process():
+        if tb_writer is None and is_tensorboard_available() and self.is_world_process_zero():
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         if not is_tensorboard_available():
             logger.warning(
@@ -208,7 +208,7 @@ class Trainer:
             )
         set_seed(self.args.seed)
         # Create output directory if needed
-        if self.is_world_main_process():
+        if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
         if is_torch_tpu_available():
             # Set an xla_device flag on the model's config.
@@ -375,7 +375,7 @@ class Trainer:
             )
             return self._setup_wandb()
 
-        if self.is_world_main_process():
+        if self.is_world_process_zero():
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
@@ -491,7 +491,7 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_main_process()
+            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_process_zero()
         )
         for epoch in train_iterator:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
@@ -501,9 +501,9 @@ class Trainer:
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_main_process())
+                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_process_zero())
             else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_main_process())
+                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_process_zero())
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if self.args.past_index >= 0:
@@ -524,7 +524,7 @@ class Trainer:
                     and (step + 1) == len(epoch_iterator)
                 ):
                     if self.args.fp16 and _use_native_amp:
-                        self.scaler.unscale_(optimizer)
+                        self.scaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
                     elif self.args.fp16 and _use_apex:
                         torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer), self.args.max_grad_norm)
@@ -574,14 +574,14 @@ class Trainer:
 
                         self.save_model(output_dir)
 
-                        if self.is_world_main_process():
+                        if self.is_world_process_zero():
                             self._rotate_checkpoints()
 
                         if is_torch_tpu_available():
                             xm.rendezvous("saving_optimizer_states")
                             xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                        elif self.is_world_main_process():
+                        elif self.is_world_process_zero():
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
@@ -644,7 +644,7 @@ class Trainer:
                     )
             self.tb_writer.flush()
         if is_wandb_available():
-            if self.is_world_main_process():
+            if self.is_world_process_zero():
                 wandb.log(logs, step=self.global_step)
         output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
@@ -731,12 +731,12 @@ class Trainer:
 
         .. warning::
 
-            This method is deprecated, use :meth:`~transformers.Trainer.is_local_main_process` instead.
+            This method is deprecated, use :meth:`~transformers.Trainer.is_local_process_zero` instead.
         """
-        warnings.warn("This method is deprecated, use `Trainer.is_local_main_process()` instead.", FutureWarning)
-        return self.is_local_main_process()
+        warnings.warn("This method is deprecated, use `Trainer.is_local_process_zero()` instead.", FutureWarning)
+        return self.is_local_process_zero()
 
-    def is_local_main_process(self) -> bool:
+    def is_local_process_zero(self) -> bool:
         """
         Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
         several machines) main process.
@@ -753,12 +753,12 @@ class Trainer:
 
         .. warning::
 
-            This method is deprecated, use :meth:`~transformers.Trainer.is_world_main_process` instead.
+            This method is deprecated, use :meth:`~transformers.Trainer.is_world_process_zero` instead.
         """
-        warnings.warn("This method is deprecated, use `Trainer.is_world_main_process()` instead.", FutureWarning)
-        return self.is_world_main_process()
+        warnings.warn("This method is deprecated, use `Trainer.is_world_process_zero()` instead.", FutureWarning)
+        return self.is_world_process_zero()
 
-    def is_world_main_process(self) -> bool:
+    def is_world_process_zero(self) -> bool:
         """
         Whether or not this process is the global main process (when training in a distributed fashion on
         several machines, this is only going to be :obj:`True` for one process).
@@ -777,7 +777,7 @@ class Trainer:
 
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
-        elif self.is_world_main_process():
+        elif self.is_world_process_zero():
             self._save(output_dir)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
