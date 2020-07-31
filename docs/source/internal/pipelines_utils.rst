@@ -8,3 +8,24 @@ Most of those are only useful if you are studying the code of the models in the 
 .. autofunction:: transformers.pipelines.get_framework
 
 .. autoclass:: transformers.pipelines.PipelineException
+
+.. autoclass:: transformers.pipelines.ArgumentHandler
+
+ZeroShotClassificationArgumentHandler
+
+QuestionAnsweringArgumentHandler
+
+Data format
+~~~~~~~~~~~
+
+.. autoclass:: transformers.pipelines.PipelineDataFormat
+    :members:
+
+.. autoclass:: transformers.pipelines.CsvPipelineDataFormat
+    :members:
+
+.. autoclass:: transformers.pipelines.JsonPipelineDataFormat
+    :members:
+
+.. autoclass:: transformers.pipelines.PipedPipelineDataFormat
+    :members:

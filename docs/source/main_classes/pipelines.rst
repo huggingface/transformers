@@ -28,7 +28,8 @@ Parent class: Pipeline
 =========================================
 
 .. autoclass:: transformers.Pipeline
-    :members: predict, transform, save_pretrained
+    :special-members: __call__
+    :members:
 
 TokenClassificationPipeline
 ==========================================
