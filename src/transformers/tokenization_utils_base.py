@@ -25,8 +25,9 @@ import os
 import warnings
 from collections import UserDict
 from enum import Enum
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Text, Tuple, Union
 
+import jsonpickle
 import numpy as np
 from tokenizers import AddedToken
 from tokenizers import Encoding as EncodingFast
@@ -1624,22 +1625,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
+        def convert_values(values_dict: Dict[Text, Any]) -> Dict[Text, Any]:
+            """Converts a dictionary with arbitrary python objects
+            to a deserializable JSON object that can be saved to file."""
+            return {key: jsonpickle.encode(value) for key, value in values_dict.items()}
+
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(tokenizer_config, ensure_ascii=False))
+            f.write(json.dumps(convert_values(tokenizer_config), ensure_ascii=False))
 
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            write_dict = {}
-            for key, value in self.special_tokens_map_extended.items():
-                if isinstance(value, AddedToken):
-                    write_dict[key] = value.__getstate__()
-                else:
-                    write_dict[key] = value
+            write_dict = convert_values(self.special_tokens_map_extended)
             f.write(json.dumps(write_dict, ensure_ascii=False))
 
         added_vocab = self.get_added_vocab()
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
-                out_str = json.dumps(added_vocab, ensure_ascii=False)
+                out_str = json.dumps(convert_values(added_vocab), ensure_ascii=False)
                 f.write(out_str)
 
         vocab_files = self.save_vocabulary(save_directory)
