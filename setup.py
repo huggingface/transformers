@@ -131,6 +131,8 @@ setup(
         "sentencepiece != 0.1.92",
         # for XLM
         "sacremoses",
+        # for JSON objects (de)serialization
+        "jsonpickle",
     ],
     extras_require=extras,
     entry_points={
