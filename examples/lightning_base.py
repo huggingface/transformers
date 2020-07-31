@@ -70,6 +70,13 @@ class BaseTransformer(pl.LightningModule):
             )
         else:
             self.config: PretrainedConfig = config
+
+        extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
+        for p in extra_model_params:
+            if getattr(self.hparams, p, None):
+                assert hasattr(self.config, p), f"model config doesn't have a `{p}` attribute"
+                setattr(self.config, p, getattr(self.hparams, p))
+
         if tokenizer is None:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
@@ -181,6 +188,22 @@ class BaseTransformer(pl.LightningModule):
             default="",
             type=str,
             help="Where do you want to store the pre-trained models downloaded from s3",
+        )
+        parser.add_argument(
+            "--encoder_layerdrop",
+            type=float,
+            help="Encoder layer dropout probability (Optional). Goes into model.config",
+        )
+        parser.add_argument(
+            "--decoder_layerdrop",
+            type=float,
+            help="Decoder layer dropout probability (Optional). Goes into model.config",
+        )
+        parser.add_argument(
+            "--dropout", type=float, help="Dropout probability (Optional). Goes into model.config",
+        )
+        parser.add_argument(
+            "--attention_dropout", type=float, help="Attention dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")

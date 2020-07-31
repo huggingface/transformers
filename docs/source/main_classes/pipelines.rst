@@ -71,3 +71,11 @@ TextGenerationPipeline
 ==========================================
 
 .. autoclass:: transformers.TextGenerationPipeline
+
+
+ConversationalPipeline
+==========================================
+
+.. autoclass:: transformers.Conversation
+
+.. autoclass:: transformers.ConversationalPipeline
