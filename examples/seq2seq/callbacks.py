@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 class Seq2SeqLoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
         lrs = {f"lr_group_{i}": lr for i, lr in enumerate(pl_module.lr_scheduler.get_lr())}
-        #import ipdb; ipdb.set_trace()
         pl_module.logger.log_metrics(lrs)
 
     @rank_zero_only
