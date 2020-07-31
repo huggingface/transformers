@@ -76,7 +76,7 @@ class GLUETransformer(BaseTransformer):
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-    def get_dataloader(self, mode, batch_size):
+    def get_dataloader(self, mode: int, batch_size: int, shuffle: bool) -> DataLoader:
         "Load datasets. Called after prepare data."
 
         # We test on dev set to compare to benchmarks without having to submit to GLUE server
