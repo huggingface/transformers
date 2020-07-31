@@ -114,13 +114,14 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
+            return_dict=True,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
+        result = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
+        self.assertEqual(result["logits"].shape, expected_shape)
 
 
 @require_torch
