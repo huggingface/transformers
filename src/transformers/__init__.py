@@ -106,6 +106,8 @@ from .modeling_tf_pytorch_utils import (
 
 # Pipelines
 from .pipelines import (
+    Conversation,
+    ConversationalPipeline,
     CsvPipelineDataFormat,
     FeatureExtractionPipeline,
     FillMaskPipeline,

@@ -143,8 +143,9 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -208,7 +209,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -227,7 +228,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.roberta(
             input_ids,
@@ -238,7 +239,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -248,7 +249,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -321,7 +322,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -330,7 +331,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.roberta(
             input_ids,
@@ -341,7 +342,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -356,7 +357,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -401,7 +402,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -409,7 +410,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -431,7 +432,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         pooled_output = outputs[1]
 
@@ -444,7 +445,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if return_tuple:
+        if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -490,14 +491,14 @@ class RobertaForTokenClassification(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.roberta(
             input_ids,
@@ -508,7 +509,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -530,7 +531,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -595,7 +596,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -607,7 +608,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.roberta(
             input_ids,
@@ -618,7 +619,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -645,7 +646,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
