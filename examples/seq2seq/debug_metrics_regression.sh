@@ -16,6 +16,5 @@ python finetune.py \
     --task translation \
     --warmup_steps 500 \
     --freeze_embeds \
-    --model_name_or_path=facebook/mbart-large-cc25 \
-	--label_smoothing 0.1  --freeze_embeds --gpus 1 --logger_name wandb --sortish_sampler \
+    --model_name_or_path=facebook/mbart-large-cc25 --gpus 1 --logger_name wandb \
 	$@
