@@ -249,6 +249,7 @@ class TFTrainer:
         """
         comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
         args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
+        experiment = None
         if comet_mode == "ONLINE":
             experiment = comet_ml.Experiment(**args)
             logger.info(
@@ -260,6 +261,8 @@ class TFTrainer:
             logger.info(
                 'Automatic Comet.ml offline logging enabled; use `comet upload` when finished'
             )
+        if experiment is not None:
+            experiment.set_model_graph(self.model)
 
     def _prediction_loop(
         self,
