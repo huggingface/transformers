@@ -423,7 +423,6 @@ if __name__ == "__main__":
             args.pipeline,
         )
 
-        print("\n====== Optimizing ONNX model ======")
         if args.quantize:
             # Ensure requirements for quantization on onnxruntime is met
             check_onnxruntime_requirements(ORT_QUANTIZE_MINIMUM_VERSION)
@@ -436,6 +435,8 @@ if __name__ == "__main__":
                     "\t For more information, please refer to the onnxruntime documentation:\n"
                     "\t\thttps://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers\n"
                 )
+
+            print("\n====== Optimizing ONNX model ======")
 
             # Quantization works best when using the optimized version of the model
             args.optimized_output = optimize(args.output)
