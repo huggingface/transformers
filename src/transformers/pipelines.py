@@ -617,7 +617,7 @@ class Pipeline(_ScikitCompat):
         inputs = self._parse_and_tokenize(*args, **kwargs)
         return self._forward(inputs)
 
-    def _forward(self, inputs, return_tensors=True):
+    def _forward(self, inputs, return_tensors=False):
         """
         Internal framework specific forward dispatching.
         Args:
