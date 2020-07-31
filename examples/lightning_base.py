@@ -37,7 +37,8 @@ MODEL_MODES = {
     "summarization": AutoModelForSeq2SeqLM,
     "translation": AutoModelForSeq2SeqLM,
 }
-
+from typing import Optional, Callable
+from torch.optim import Optimizer
 
 class BaseTransformer(pl.LightningModule):
     def __init__(
@@ -120,6 +121,27 @@ class BaseTransformer(pl.LightningModule):
         scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
         return [optimizer], [scheduler]
 
+    def optimizer_step(
+            self,
+            epoch: int,
+            batch_idx: int,
+            optimizer: Optimizer,
+            optimizer_idx: int,
+            second_order_closure: Optional[Callable] = None,
+            on_tpu: bool = False,
+            using_native_amp: bool = False,
+            using_lbfgs: bool = False,
+    ) -> None:
+        if self.trainer.use_tpu:
+            raise NotImplementedError('wip')
+            #xm.optimizer_step(optimizer)
+        else:
+            optimizer.step()
+        optimizer.zero_grad()
+        # self.lr_scheduler.step()  # By default, PL will only step every epoch.
+        #lrs = {f"lr_group_{i}": lr for i, lr in enumerate(self.lr_scheduler.get_lr())}
+        #self.logger.log_metrics(lrs)
+
     def test_step(self, batch, batch_nb):
         return self.validation_step(batch, batch_nb)
 
@@ -135,7 +157,7 @@ class BaseTransformer(pl.LightningModule):
             // self.hparams.accumulate_grad_batches
             * float(self.hparams.max_epochs)
         )
-        self.logger.log
+        #self.logger.log
 
     def train_dataloader(self):
         return self.train_loader
