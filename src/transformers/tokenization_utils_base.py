@@ -1511,12 +1511,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             else:
                 logger.info("loading file {} from cache at {}".format(file_path, resolved_vocab_files[file_id]))
 
+        def decode_pickled_json(json_obj: Dict[Text, Any]) -> Dict[Text, Any]:
+            """Converts pickled JSON values into restored Python objects."""
+            return {key: jsonpickle.decode(value) for key, value in json_obj.items()}
+
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
-                init_kwargs = json.load(tokenizer_config_handle)
+                init_kwargs = json.load(tokenizer_config_handle, object_hook=decode_pickled_json)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -1557,19 +1561,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         if special_tokens_map_file is not None:
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = json.load(special_tokens_map_handle)
+                special_tokens_map = json.load(special_tokens_map_handle, object_hook=decode_pickled_json)
 
             for key, value in special_tokens_map.items():
-                if isinstance(value, dict):
-                    value = AddedToken(**value)
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
         special_tokens = tokenizer.all_special_tokens
         if added_tokens_file is not None:
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                added_tok_encoder = json.load(added_tokens_handle)
-
+                added_tok_encoder = json.load(added_tokens_handle, object_hook=decode_pickled_json)
             # Sort added tokens by index
             added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
 
