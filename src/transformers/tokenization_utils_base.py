@@ -1511,7 +1511,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 logger.info("loading file {} from cache at {}".format(file_path, resolved_vocab_files[file_id]))
 
         def decode_pickled_json(json_obj: Text) -> Dict[Text, Any]:
-            """Converts pickled JSON values into restored Python objects."""
+            """
+            Decode a pickled JSON object into a dictionary.
+
+            Args:
+                json_obj (:obj:`Text`): A pickled JSON object read from file.
+
+            Returns:
+                :obj:`Dict[Text, Any]`: A dictionary with JSON values.
+            """
             return jsonpickle.decode(json_obj)
 
         # Prepare tokenizer initialization kwargs
