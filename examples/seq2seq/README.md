@@ -72,7 +72,7 @@ A new dataset is needed to support multilingual tasks.
 To see all the possible command line options, run:
 
 ```bash
-./finetune.sh --help
+./finetune.sh --help  # this calls python finetune.py --help
 ```
 
 ### Finetuning Training Params
