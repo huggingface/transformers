@@ -253,7 +253,7 @@ def main():
         special_tok_ids[tok_name] = tokenizer.all_special_ids[idx]
     logger.info(f"Special tokens {special_tok_ids}")
     args.special_tok_ids = special_tok_ids
-    args.max_model_input_size = tokenizer.max_model_input_sizes[args.teacher_name]
+    args.max_model_input_size = teacher_config_class.from_pretrained(args.teacher_name).max_position_embeddings
 
     # DATA LOADER #
     logger.info(f"Loading data from {args.data_file}")
