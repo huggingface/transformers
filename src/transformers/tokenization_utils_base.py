@@ -1633,21 +1633,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
-        def convert_values(values_dict: Dict[Text, Any]) -> Dict[Text, Any]:
-            """Converts a dictionary with arbitrary python objects
-            to a deserializable JSON object that can be saved to file."""
-            return jsonpickle.encode(values_dict)
+        def encode_json_values(values: Dict[Text, Any]) -> Text:
+            """
+            Encode a dictionary with JSON values into a pickled object.
+
+            Args:
+                values (:obj:`Dict[Text, Any]`): A dictionary with JSON values.
+
+            Returns:
+                :obj:`Text`: The pickled object to save.
+            """
+            return jsonpickle.encode(values)
 
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
-            f.write(convert_values(tokenizer_config))
+            f.write(encode_json_values(tokenizer_config))
 
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            f.write(convert_values(self.special_tokens_map_extended))
+            f.write(encode_json_values(self.special_tokens_map_extended))
 
         added_vocab = self.get_added_vocab()
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
-                f.write(convert_values(added_vocab))
+                f.write(encode_json_values(added_vocab))
 
         vocab_files = self.save_vocabulary(save_directory)
 
