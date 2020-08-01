@@ -268,7 +268,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         """
         if max_length is None:
             max_length = self.max_len
-        self.set_src_special_tokens()
+        self.prefix_tokens = []
         model_inputs: BatchEncoding = self(
             src_texts,
             add_special_tokens=True,
@@ -283,7 +283,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
-        self.set_tgt_special_tokens()
+        # set prefix_tokens for target text
+        self.prefix_tokens = [self.pad_token_id]
         decoder_inputs: BatchEncoding = self(
             tgt_texts,
             add_special_tokens=True,
@@ -296,11 +297,6 @@ class T5Tokenizer(PreTrainedTokenizer):
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
 
-        self.set_src_special_tokens()
+        self.prefix_tokens = []
         return model_inputs
 
-    def set_src_special_tokens(self) -> None:
-        self.prefix_tokens = []
-
-    def set_tgt_special_tokens(self) -> None:
-        self.prefix_tokens = [self.pad_token_id]
