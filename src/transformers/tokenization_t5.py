@@ -216,7 +216,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens. The special tokens depend on calling source text or target text.
-        An T5 sequence has the following format, where ``X`` represents the sequence:
+        A T5 sequence has the following format, where ``X`` represents the sequence:
         - ``input_ids`` (for encoder) ``X [eos]``
         - ``decoder_input_ids``: (for decoder) ``[pad] X [eos]``
         Pairs of sequences are not the expected use case, but they will be handled without a separator.
@@ -224,11 +224,11 @@ class T5Tokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+            token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0
@@ -246,15 +246,25 @@ class T5Tokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> BatchEncoding:
         """Prepare a batch that can be passed directly to an instance of T5Model.
-        Arguments:
-            src_texts: list of src language texts
-            tgt_texts: list of tgt language texts
-            max_length: (default=None, which defers to the config value of 512 for t5*
-            padding: strategy for padding input_ids and decoder_input_ids. Should be max_length or longest.
-            **kwargs: passed to self.__call__
+        
+        Args:
+            src_texts (:obj:`List[str]`):
+                list of src texts
+            tgt_texts (:obj:`List[str]`, `optional`):
+                list of tgt texts
+            max_length (:obj:`int`, `optional`):
+                maximum length for the source text which defers to the config value of 512 for t5*
+            max_target_length (:obj:`int`, `optional`):
+                maximum length for the target text which defers to the config value of 512 for t5*
+            padding (:obj:`str`, `optional`, defaults to "longest"):
+                strategy for padding `input_ids` and `decoder_input_ids`. Should be "max_length" or "longest".
+            return_tensors (:obj:`str`, `optional`):
+                Can be set to ‘tf’, ‘pt’ or ‘np’ to return respectively TensorFlow `tf.constant`, PyTorch `torch.Tensor` or Numpy :oj: np.ndarray instead of a list of python integers.
+            **kwargs:
+                passed to self.__call__
 
         Returns:
-            :obj:`BatchEncoding`: with keys input_ids, attention_mask, decoder_input_ids, decoder_attention_mask.
+            :class:`~transformers.BatchEncoding`: with keys input_ids, attention_mask, decoder_input_ids, decoder_attention_mask.
         """
         if max_length is None:
             max_length = self.max_len
