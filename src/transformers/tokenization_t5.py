@@ -246,7 +246,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> BatchEncoding:
         """Prepare a batch that can be passed directly to an instance of T5Model.
-        
+
         Args:
             src_texts (:obj:`List[str]`):
                 list of src texts
@@ -299,4 +299,3 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         self.prefix_tokens = []
         return model_inputs
-
