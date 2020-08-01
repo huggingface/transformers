@@ -40,6 +40,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    ProphetNetConfig,
 )
 from .configuration_marian import MarianConfig
 from .configuration_mobilebert import MobileBertConfig
@@ -66,6 +67,7 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (ProphetNetConfig, (ProphetNetTokenizer, None)),
     ]
 )
 

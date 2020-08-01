@@ -46,6 +46,7 @@ from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
 from .data import (
     DataProcessor,
     InputExample,
@@ -164,6 +165,7 @@ from .tokenization_utils_fast import PreTrainedTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 
 # Trainer
 from .trainer_utils import EvalPrediction, set_seed
@@ -410,6 +412,11 @@ if is_torch_available():
         RetriBertPreTrainedModel,
         RetriBertModel,
         RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
+    from .modeling_prophetnet import (
+        ProphetNetPreTrainedModel,
+        ProphetNetModel,
+        ProphetNetForConditionalGeneration
     )
 
     # Optimization

@@ -42,6 +42,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    ProphetNetConfig,
 )
 from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
@@ -166,6 +167,10 @@ from .modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
+from .modeling_prophetnet import (
+    ProphetNetModel,
+    ProphetNetForConditionalGeneration
+)
 
 
 logger = logging.getLogger(__name__)
@@ -193,6 +198,7 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
+        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 
@@ -243,6 +249,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
+        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 
@@ -286,6 +293,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, MarianMTModel),
         (BartConfig, BartForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
+        (ProphetNetConfig, ProphetNetForConditionalGeneration)
     ]
 )
 
