@@ -46,6 +46,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    ProphetNetConfig,
     replace_list_option_in_docstrings,
 )
 from .configuration_utils import PretrainedConfig
@@ -76,6 +77,7 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
+from .tokenization_prophetnet import ProphetNetTokenizer
 from .utils import logging
 
 
@@ -110,6 +112,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
+        (ProphetNetConfig, (ProphetNetTokenizer, None)),
     ]
 )
 

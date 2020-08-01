@@ -46,6 +46,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    ProphetNetConfig,
     replace_list_option_in_docstrings,
 )
 from .configuration_marian import MarianConfig
@@ -187,7 +188,15 @@ from .modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
+from .modeling_prophetnet import (
+    ProphetNetModel,
+    ProphetNetForConditionalGeneration
+)
+
 from .utils import logging
+
+
+
 
 
 logger = logging.get_logger(__name__)
@@ -218,6 +227,7 @@ MODEL_MAPPING = OrderedDict(
         (FunnelConfig, FunnelModel),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
+        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 
@@ -320,6 +330,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (MBartConfig, MBartForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
+        (ProphetNetConfig, ProphetNetForConditionalGeneration)
     ]
 )
 

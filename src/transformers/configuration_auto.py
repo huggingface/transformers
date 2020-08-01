@@ -45,6 +45,7 @@ from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
 
 
 ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
@@ -71,6 +72,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -105,6 +107,7 @@ CONFIG_MAPPING = OrderedDict(
         ("encoder-decoder", EncoderDecoderConfig),
         ("funnel", FunnelConfig),
         ("lxmert", LxmertConfig),
+        ("prophetnet", ProphetNetConfig),
     ]
 )
 
