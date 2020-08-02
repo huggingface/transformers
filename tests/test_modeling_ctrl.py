@@ -108,9 +108,6 @@ class CTRLModelTester:
             choice_labels,
         )
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = CTRLModel(config=config)
         model.to(torch_device)
@@ -119,9 +116,7 @@ class CTRLModelTester:
         model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
         model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertListEqual(
-            list(result["last_hidden_state"].size()), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result["past_key_values"]), config.n_layer)
 
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
@@ -131,7 +126,7 @@ class CTRLModelTester:
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

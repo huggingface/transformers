@@ -103,9 +103,6 @@ class OpenAIGPTModelTester:
             choice_labels,
         )
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def create_and_check_openai_gpt_model(self, config, input_ids, head_mask, token_type_ids, *args):
         model = OpenAIGPTModel(config=config)
         model.to(torch_device)

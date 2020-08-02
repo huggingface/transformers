@@ -142,9 +142,6 @@ class GPT2ModelTester:
             choice_labels,
         )
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
         model.to(torch_device)
@@ -269,7 +266,7 @@ class GPT2ModelTester:
         self.parent.assertListEqual(
             list(result["lm_logits"].size()), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size],
         )
-        self.parent.assertListEqual(list(result["mc_logits"].size()), [self.batch_size, self.num_choices])
+        self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
