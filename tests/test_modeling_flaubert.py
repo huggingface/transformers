@@ -228,7 +228,7 @@ class FlaubertModelTester(object):
 
         (total_loss,) = result_with_labels.to_tuple()
 
-        self.parent.assertListEqual(list(result_with_labels["loss"].size()), [])
+        self.parent.assertEqual(result_with_labels.loss.shape, ())
         self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
         self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
         self.parent.assertListEqual(

@@ -311,7 +311,7 @@ class XLNetModelTester:
 
         _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
 
-        self.parent.assertListEqual(list(result1["loss"].size()), [])
+        self.parent.assertEqual(result1.loss.shape, ())
         self.parent.assertListEqual(
             list(result1["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
         )
@@ -320,7 +320,7 @@ class XLNetModelTester:
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
-        self.parent.assertListEqual(list(result2["loss"].size()), [])
+        self.parent.assertEqual(result2.loss.shape, ())
         self.parent.assertListEqual(
             list(result2["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
         )
@@ -373,7 +373,7 @@ class XLNetModelTester:
 
         total_loss, mems = result_with_labels.to_tuple()
 
-        self.parent.assertListEqual(list(result_with_labels["loss"].size()), [])
+        self.parent.assertEqual(result_with_labels.loss.shape, ())
         self.parent.assertListEqual(
             list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top],
         )
