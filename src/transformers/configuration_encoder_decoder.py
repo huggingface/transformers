@@ -56,6 +56,13 @@ class EncoderDecoderConfig(PretrainedConfig):
             >>> # Accessing the model configuration
             >>> config_encoder = model.config.encoder
             >>> config_decoder  = model.config.decoder
+            
+            >>> Saving the model, including its configuration
+            >>> model.save_pretrained('my-model')
+
+            >>> # loading model and config from pretrained folder
+            >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained('my-model')
+            >>> model = EncoderDecoderModel.from_pretrained('my-model', config=encoder_decoder_config)
     """
     model_type = "encoder_decoder"
 
