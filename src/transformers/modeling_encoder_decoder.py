@@ -128,6 +128,15 @@ class EncoderDecoderModel(PreTrainedModel):
 
             >>> from transformers import EncoderDecoderModel
             >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+
+        Example loading pretrained configs separately::
+            >>> from transformers import BertConfig, EncoderDecoderModel
+
+            >>> pretrained_model_name_or_path = 'bert-base-multilingual-cased'
+            >>> encoder_config = BertConfig.from_pretrained(pretrained_model_name_or_path)
+            >>> decoder_config = BertConfig.from_pretrained(pretrained_model_name_or_path, is_decoder=True)
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(pretrained_model_name_or_path, pretrained_model_name_or_path, encoder_config=encoder_config, decoder_config=decoder_config)
+
         """
 
         kwargs_encoder = {
