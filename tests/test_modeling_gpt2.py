@@ -259,7 +259,9 @@ class GPT2ModelTester:
 
         result = model(**inputs)
         self.parent.assertEqual(result.lm_loss.shape, ())
-        self.parent.assertEqual(result.lm_logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.lm_logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
+        )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):

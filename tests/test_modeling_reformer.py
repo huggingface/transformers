@@ -183,7 +183,9 @@ class ReformerModelTester:
         result = model(input_ids)
 
         # 2 * hidden_size because we use reversible resnet layers
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, 2 * self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.seq_length, 2 * self.hidden_size)
+        )
 
     def create_and_check_reformer_model_with_lm_backward(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = False

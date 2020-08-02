@@ -370,8 +370,12 @@ class XLNetModelTester:
         self.parent.assertEqual(result_with_labels.loss.shape, ())
         self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
         self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
-        self.parent.assertEqual(result.end_top_log_probs.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top))
-        self.parent.assertEqual(result.end_top_index.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top))
+        self.parent.assertEqual(
+            result.end_top_log_probs.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
+        )
+        self.parent.assertEqual(
+            result.end_top_index.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
+        )
         self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
         self.parent.assertListEqual(
             list(list(mem.size()) for mem in result["mems"]),
