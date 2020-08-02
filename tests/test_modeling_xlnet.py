@@ -387,7 +387,7 @@ class XLNetModelTester:
         self.parent.assertListEqual(
             list(result["end_top_index"].size()), [self.batch_size, model.config.start_n_top * model.config.end_n_top],
         )
-        self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
+        self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
         self.parent.assertListEqual(
             list(list(mem.size()) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,

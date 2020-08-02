@@ -125,9 +125,6 @@ class FlaubertModelTester(object):
             input_mask,
         )
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def create_and_check_flaubert_model(
         self,
         config,
@@ -146,9 +143,7 @@ class FlaubertModelTester(object):
         result = model(input_ids, lengths=input_lengths, langs=token_type_ids)
         result = model(input_ids, langs=token_type_ids)
         result = model(input_ids)
-        self.parent.assertListEqual(
-            list(result["last_hidden_state"].size()), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_flaubert_lm_head(
         self,
@@ -168,7 +163,7 @@ class FlaubertModelTester(object):
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_flaubert_simple_qa(
         self,
@@ -189,9 +184,8 @@ class FlaubertModelTester(object):
         result = model(input_ids)
 
         result = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.check_loss_output(result)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_flaubert_qa(
         self,
@@ -235,12 +229,8 @@ class FlaubertModelTester(object):
         (total_loss,) = result_with_labels.to_tuple()
 
         self.parent.assertListEqual(list(result_with_labels["loss"].size()), [])
-        self.parent.assertListEqual(
-            list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
-        )
-        self.parent.assertListEqual(
-            list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
-        )
+        self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
         self.parent.assertListEqual(
             list(result["end_top_log_probs"].size()),
             [self.batch_size, model.config.start_n_top * model.config.end_n_top],
@@ -248,7 +238,7 @@ class FlaubertModelTester(object):
         self.parent.assertListEqual(
             list(result["end_top_index"].size()), [self.batch_size, model.config.start_n_top * model.config.end_n_top],
         )
-        self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
+        self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
 
     def create_and_check_flaubert_sequence_classif(
         self,
@@ -270,7 +260,7 @@ class FlaubertModelTester(object):
         result = model(input_ids, labels=sequence_labels)
 
         self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def create_and_check_flaubert_token_classif(
         self,
@@ -290,8 +280,7 @@ class FlaubertModelTester(object):
         model.eval()
 
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
-        self.check_loss_output(result)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_flaubert_multiple_choice(
         self,
@@ -318,8 +307,7 @@ class FlaubertModelTester(object):
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
-        self.check_loss_output(result)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
