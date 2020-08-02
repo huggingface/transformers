@@ -183,9 +183,7 @@ class ReformerModelTester:
         result = model(input_ids)
 
         # 2 * hidden_size because we use reversible resnet layers
-        self.parent.assertListEqual(
-            list(result["last_hidden_state"].size()), [self.batch_size, self.seq_length, 2 * self.hidden_size],
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, 2 * self.hidden_size))
 
     def create_and_check_reformer_model_with_lm_backward(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = False
@@ -203,9 +201,7 @@ class ReformerModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=input_ids)
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_reformer_with_mlm(self, config, input_ids, input_mask, choice_labels):
         config.is_decoder = False
@@ -213,9 +209,7 @@ class ReformerModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=input_ids)
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_reformer_model_with_attn_mask(
         self, config, input_ids, input_mask, choice_labels, is_decoder=False

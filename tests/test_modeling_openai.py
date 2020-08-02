@@ -112,9 +112,7 @@ class OpenAIGPTModelTester:
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
-        self.parent.assertListEqual(
-            list(result["last_hidden_state"].size()), [self.batch_size, self.seq_length, self.hidden_size],
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
         model = OpenAIGPTLMHeadModel(config)
@@ -123,9 +121,7 @@ class OpenAIGPTModelTester:
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_double_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
         model = OpenAIGPTDoubleHeadsModel(config)
@@ -134,9 +130,7 @@ class OpenAIGPTModelTester:
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.lm_loss.shape, ())
-        self.parent.assertListEqual(
-            list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
+        self.parent.assertEqual(result.lm_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
