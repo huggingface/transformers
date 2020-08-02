@@ -165,7 +165,7 @@ class XLMModelTester:
         model.eval()
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_xlm_simple_qa(
@@ -262,7 +262,7 @@ class XLMModelTester:
 
         result = model(input_ids)
         result = model(input_ids, labels=sequence_labels)
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def create_and_check_xlm_token_classif(

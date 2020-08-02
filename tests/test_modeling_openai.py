@@ -122,7 +122,7 @@ class OpenAIGPTModelTester:
         model.eval()
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertListEqual(
             list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
         )
@@ -133,7 +133,7 @@ class OpenAIGPTModelTester:
         model.eval()
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
-        self.parent.assertListEqual(list(result["lm_loss"].size()), [])
+        self.parent.assertEqual(result.lm_loss.shape, ())
         self.parent.assertListEqual(
             list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
         )

@@ -415,7 +415,7 @@ class XLNetModelTester:
         result = model(input_ids_1)
         result = model(input_ids_1, labels=token_labels)
 
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertListEqual(
             list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size],
         )
@@ -446,7 +446,7 @@ class XLNetModelTester:
         result = model(input_ids_1)
         result = model(input_ids_1, labels=sequence_labels)
 
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertListEqual(
             list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size],
         )
