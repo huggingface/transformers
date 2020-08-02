@@ -28,13 +28,13 @@ if is_torch_available():
 class CamembertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_output_embeds_base_model(self):
-        model = CamembertModel.from_pretrained("camembert-base")
+        model = CamembertModel.from_pretrained("camembert-base", return_dict=True)
         model.to(torch_device)
 
         input_ids = torch.tensor(
             [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]], device=torch_device, dtype=torch.long,
         )  # J'aime le camembert !
-        output = model(input_ids)[0]
+        output = model(input_ids)["last_hidden_state"]
         expected_shape = torch.Size((1, 10, 768))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
