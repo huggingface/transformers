@@ -59,7 +59,7 @@ class EncoderDecoderConfig(PretrainedConfig):
             >>> # set decoder config to causal lm
             >>> config_decoder.is_decoder = True
 
-            >>> Saving the model, including its configuration
+            >>> # Saving the model, including its configuration
             >>> model.save_pretrained('my-model')
 
             >>> # loading model and config from pretrained folder
