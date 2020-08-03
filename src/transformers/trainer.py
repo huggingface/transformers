@@ -555,9 +555,15 @@ class Trainer:
                     model.zero_grad()
                     self.global_step += 1
                     self.epoch = epoch + (step + 1) / len(epoch_iterator)
-                    self.non_embedding_flos += 6 * model.floating_point_ops(
-                        *estimate_tokens(inputs), no_embeddings=True
-                    )
+                    try:
+                        self.non_embedding_flos += 6 * model.floating_point_ops(
+                            *estimate_tokens(inputs), no_embeddings=True
+                        )
+                    except AttributeError:
+                        # in case this is a DataParallel
+                        self.non_embedding_flos += 6 * model.module.floating_point_ops(
+                            *estimate_tokens(inputs), no_embeddings=True
+                        )
                     print(self.non_embedding_flos)
 
                     if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
