@@ -4,15 +4,20 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, MULTIPLE_CHOICE_DUMMY_INPUTS
+from .file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFQuestionAnsweringLoss,
-    TFTokenClassificationLoss,
     TFSequenceClassificationLoss,
     TFSequenceSummary,
+    TFTokenClassificationLoss,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -76,13 +81,7 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(
-        self,
-        input_ids,
-        position_ids=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        mode="embedding",
-        training=False,
+        self, input_ids, position_ids=None, token_type_ids=None, inputs_embeds=None, mode="embedding", training=False,
     ):
         """Get token embeddings of inputs.
         Args:
@@ -618,22 +617,24 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         self.num_labels = config.num_labels
         config.summary_proj_to_labels = True
         self.electra = TFElectraMainLayer(config, name="electra")
-        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name="sequence_summary")
+        self.sequence_summary = TFSequenceSummary(
+            config, initializer_range=config.initializer_range, name="sequence_summary"
+        )
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(
-            self,
-            input_ids,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            labels=None,
-            training=False,
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
     ):
         r"""
     Returns:
@@ -681,7 +682,9 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
 
         self.electra = TFElectraMainLayer(config, name="electra")
         config.summary_proj_to_labels = True
-        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name="sequence_summary")
+        self.sequence_summary = TFSequenceSummary(
+            config, initializer_range=config.initializer_range, name="sequence_summary"
+        )
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )

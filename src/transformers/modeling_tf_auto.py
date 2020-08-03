@@ -297,7 +297,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetForMultipleChoice),
         (FlaubertConfig, TFFlaubertForMultipleChoice),
         (AlbertConfig, TFAlbertForMultipleChoice),
-        (ElectraConfig, TFElectraForMultipleChoice)
+        (ElectraConfig, TFElectraForMultipleChoice),
     ]
 )
 
