@@ -23,18 +23,6 @@ language processing tasks, including pushing the GLUE score to 80.5% (7.7% point
 accuracy to 86.7% (4.6% absolute improvement), SQuAD v1.1 question answering Test F1 to 93.2 (1.5 point absolute
 improvement) and SQuAD v2.0 Test F1 to 83.1 (5.1 point absolute improvement).*
 
-Tips:
-
-- BERT is a model with absolute position embeddings so it's usually advised to pad the inputs on
-  the right rather than the left.
-- BERT was trained with a masked language modeling (MLM) objective. It is therefore efficient at predicting masked
-  tokens and at NLU in general, but is not optimal for text generation. Models trained with a causal language
-  modeling (CLM) objective are better in that regard.
-- Alongside MLM, BERT was trained using a next sentence prediction (NSP) objective using the [CLS] token as a sequence
-  approximate. The user may use this token (the first token in a sequence built with special tokens) to get a sequence
-  prediction rather than a token prediction. However, averaging over the sequence may yield better results than using
-  the [CLS] token.
-
 The original code can be found `here <https://github.com/google-research/bert>`_.
 
 BertConfig
