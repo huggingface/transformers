@@ -93,9 +93,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         attention_mask = tf.squeeze(tf.squeeze(attention_mask, axis=2), axis=1)
         # is index masked or global attention
+
         is_index_masked = attention_mask < 0
-        #        is_index_global_attn = attention_mask > 0
-        #        is_global_attn = any(is_index_global_attn.flatten())
+        is_index_global_attn = attention_mask > 0
+        is_global_attn = tf.math.reduce_any(is_index_global_attn)
 
         hidden_states = tf.transpose(hidden_states, (1, 0, 2))
 
@@ -493,7 +494,7 @@ class TFLongformerAttention(tf.keras.layers.Layer):
         input_tensor, attention_mask, output_attentions = inputs
 
         self_outputs = self.self_attention([input_tensor, attention_mask, output_attentions], training=training)
-        attention_output = self.dense_output([self_outputs[0], input_tensor], training=training)
+        attention_output = self.dense_output(self_outputs[0], input_tensor, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -511,7 +512,7 @@ class TFLongformerLayer(tf.keras.layers.Layer):
         attention_outputs = self.attention([hidden_states, attention_mask, output_attentions], training=training)
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.longformer_output([intermediate_output, attention_output], training=training)
+        layer_output = self.longformer_output(intermediate_output, attention_output, training=training)
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -673,7 +674,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-        embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
+        embedding_output = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         encoder_outputs = self.encoder(
             [embedding_output, extended_attention_mask, output_attentions, output_hidden_states], training=training,
         )
