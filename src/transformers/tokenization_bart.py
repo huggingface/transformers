@@ -55,7 +55,9 @@ class BartTokenizer(RobertaTokenizer):
         return_tensors: str = "None",
         **kwargs,
     ) -> BatchEncoding:
-        """Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
+        r"""
+        Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
+
         Args:
             src_texts (:obj:`List[str]`):
                 List of input texts.
