@@ -191,6 +191,10 @@ class MarianTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
+    @property
+    def vocab_size(self):
+        return self.sp_model.get_piece_size() + self.offset
+    
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
         state.update({k: None for k in ["spm_source", "spm_target", "current_spm", "punc_normalizer"]})
