@@ -3,9 +3,9 @@ local tpus = import 'templates/tpus.libsonnet';
 local utils = import "templates/utils.libsonnet";
 local volumes = import "templates/volumes.libsonnet";
 
-local bertBasedCase = base.BaseTest {
+local bertBaseCased = base.BaseTest {
   frameworkPrefix: "hf",
-  modelName: "bert-based-case",
+  modelName: "bert-base-cased",
   mode: "example",
   configMaps: [],
 
