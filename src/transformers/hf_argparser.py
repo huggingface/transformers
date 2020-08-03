@@ -191,7 +191,7 @@ class HfArgumentParser(ArgumentParser):
             outputs.append(obj)
         return (*outputs,)
 
-    def parse_dict(self, args: dict) -> Tuple[DataClass, ...]:
+    def parse_dict(self, args: dict) -> Tuple[DataClassProtocol, ...]:
         """
         Alternative helper method that does not use `argparse` at all,
         instead uses a dict and populating the dataclass types.

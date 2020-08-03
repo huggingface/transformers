@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import abc
 import csv
 import dataclasses
 import json
@@ -44,7 +45,7 @@ class InputExample:
             specified for train and dev examples, but not for test examples.
     """
 
-    guid: str
+    guid: Optional[str]
     text_a: str
     text_b: Optional[str] = None
     label: Optional[str] = None
@@ -81,9 +82,10 @@ class InputFeatures:
         return json.dumps(dataclasses.asdict(self)) + "\n"
 
 
-class DataProcessor:
+class DataProcessor(abc.ABC):
     """Base class for data converters for sequence classification data sets."""
 
+    @abc.abstractmethod
     def get_example_from_tensor_dict(self, tensor_dict: Mapping[Any, Any]) -> InputExample:
         """Gets an example from a dict with tensorflow tensors.
 
@@ -91,23 +93,26 @@ class DataProcessor:
             tensor_dict: Keys and values should match the corresponding Glue
                 tensorflow_dataset examples.
         """
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def get_train_examples(self, data_dir: str) -> List[InputExample]:
         """Gets a collection of :class:`InputExample` for the train set."""
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def get_dev_examples(self, data_dir: str) -> List[InputExample]:
         """Gets a collection of :class:`InputExample` for the dev set."""
-        raise NotImplementedError()
+        pass
 
     def get_test_examples(self, data_dir: str) -> List[InputExample]:
         """Gets a collection of :class:`InputExample` for the test set."""
-        raise NotImplementedError()
+        pass
 
+    @abc.abstractmethod
     def get_labels(self) -> List[str]:
         """Gets the list of labels for this data set."""
-        raise NotImplementedError()
+        pass
 
     def tfds_map(self, example: InputExample) -> InputExample:
         """Some tensorflow_datasets datasets are not formatted the same way the GLUE datasets are.
@@ -117,8 +122,8 @@ class DataProcessor:
             example.label = self.get_labels()[int(example.label)]
         return example
 
-    @classmethod
-    def _read_tsv(cls, input_file: str, quotechar: Optional[str] = None) -> List[List[str]]:
+    @staticmethod
+    def _read_tsv(input_file: str, quotechar: Optional[str] = None) -> List[List[str]]:
         """Reads a tab separated value file."""
         with open(input_file, "r", encoding="utf-8-sig") as f:
             return list(csv.reader(f, delimiter="\t", quotechar=quotechar))
