@@ -60,3 +60,27 @@ python run_language_modeling.py \
     --mlm
 ```
 
+### XLNet and permutation language modeling
+
+XLNet uses a different training objective, which is permutation language modeling. It is an autoregressive method 
+to learn bidirectional contexts by maximizing the expected likelihood over all permutations of the input 
+sequence factorization order.
+
+We use the `--plm_probability` flag to define the ratio of length of a span of masked tokens to surrounding 
+context length for permutation language modeling.
+
+The `--max_span_length` flag may also be used to limit the length of a span of masked tokens used 
+for permutation language modeling.
+
+```bash
+export TRAIN_FILE=/path/to/dataset/wiki.train.raw
+export TEST_FILE=/path/to/dataset/wiki.test.raw
+
+python run_language_modeling.py \
+    --output_dir=output \
+    --model_name_or_path=xlnet-base-cased \
+    --do_train \
+    --train_data_file=$TRAIN_FILE \
+    --do_eval \
+    --eval_data_file=$TEST_FILE \
+```

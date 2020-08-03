@@ -115,6 +115,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.is_decoder = config.is_decoder
         self.use_cache = config.use_cache
         self.has_relative_attention_bias = has_relative_attention_bias
+        self.output_attentions = config.output_attentions
 
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.d_model = config.d_model
@@ -296,7 +297,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         outputs = (context,) + present_key_value_state
 
-        if cast_bool_to_primitive(output_attentions, True) is True:
+        if output_attentions:
             outputs = outputs + (weights,)
         if self.has_relative_attention_bias:
             outputs = outputs + (position_bias,)
@@ -699,7 +700,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(inputs_embeds, training=training)
 
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
@@ -727,23 +728,23 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
 
         # Add last layer
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         # need to check if is decoder here as well for special cases when using keras compile
         if cast_bool_to_primitive(use_cache, self.use_cache) is True and self.is_decoder:
             outputs = outputs + (present_key_value_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
@@ -782,8 +783,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             decoder_start_token_id is not None
         ), "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
 
-        # shift inputs to the right
-        shifted_input_ids = tf.zeros_like(input_ids, dtype=tf.int32)
+        shifted_input_ids = tf.cast(input_ids, tf.int32)
         shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
         start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
         shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
@@ -794,9 +794,12 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
         )
 
-        assert tf.math.reduce_any(
-            shifted_input_ids >= 0
-        ).numpy(), "Verify that `labels` has only positive values and -100"
+        # "Verify that `labels` has only positive values and -100"
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+
+        # Make sure the assertion op is called by wrapping the result in an identity no-op
+        with tf.control_dependencies([assert_gte0]):
+            shifted_input_ids = tf.identity(shifted_input_ids)
 
         return shifted_input_ids
 

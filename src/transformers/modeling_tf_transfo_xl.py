@@ -24,13 +24,7 @@ import tensorflow as tf
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
-from .modeling_tf_utils import (
-    TFPreTrainedModel,
-    cast_bool_to_primitive,
-    get_initializer,
-    keras_serializable,
-    shape_list,
-)
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 from .tokenization_utils import BatchEncoding
 
 
@@ -119,6 +113,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         r_w_bias=None,
         layer_norm_epsilon=1e-5,
         init_std=0.02,
+        output_attentions=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -127,6 +122,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         self.d_model = d_model
         self.d_head = d_head
         self.dropout = dropout
+        self.output_attentions = output_attentions
 
         self.qkv_net = tf.keras.layers.Dense(
             3 * n_head * d_head, kernel_initializer=get_initializer(init_std), use_bias=False, name="qkv_net"
@@ -175,8 +171,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
 
         return x
 
-    def call(self, inputs, training=False):
-        w, r, attn_mask, mems, head_mask, output_attentions = inputs
+    def call(self, w, r, attn_mask, mems, head_mask, output_attentions, training=False):
         qlen, rlen, bsz = shape_list(w)[0], shape_list(r)[0], shape_list(w)[1]
 
         if mems is not None:
@@ -249,7 +244,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             # residual connection + layer normalization
             outputs = [self.layer_norm(w + attn_out)]
 
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs.append(attn_prob)
 
         return outputs
@@ -272,6 +267,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
         r_r_bias=None,
         layer_norm_epsilon=1e-5,
         init_std=0.02,
+        output_attentions=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -290,6 +286,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
             r_r_bias=r_r_bias,
             init_std=init_std,
             layer_norm_epsilon=layer_norm_epsilon,
+            output_attentions=output_attentions,
             name="dec_attn",
         )
         self.pos_ff = TFPositionwiseFF(
@@ -302,11 +299,8 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
             name="pos_ff",
         )
 
-    def call(self, inputs, training=False):
-        dec_inp, r, dec_attn_mask, mems, head_mask, output_attentions = inputs
-        attn_outputs = self.dec_attn(
-            [dec_inp, r, dec_attn_mask, mems, head_mask, output_attentions], training=training
-        )
+    def call(self, dec_inp, r, dec_attn_mask, mems, head_mask, output_attentions, training=False):
+        attn_outputs = self.dec_attn(dec_inp, r, dec_attn_mask, mems, head_mask, output_attentions, training=training)
         ff_output = self.pos_ff(attn_outputs[0], training=training)
 
         outputs = [ff_output] + attn_outputs[1:]
@@ -443,6 +437,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                         r_r_bias=None if self.untie_r else self.r_r_bias,
                         layer_norm_epsilon=config.layer_norm_epsilon,
                         init_std=config.init_std,
+                        output_attentions=self.output_attentions,
                         name="layers_._{}".format(i),
                     )
                 )
@@ -625,10 +620,10 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                 hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
                 layer_outputs = layer(
-                    [core_out, pos_emb, dec_attn_mask, mems_i, head_mask[i], output_attentions], training=training,
+                    core_out, pos_emb, dec_attn_mask, mems_i, head_mask[i], output_attentions, training=training,
                 )
                 core_out = layer_outputs[0]
-                if cast_bool_to_primitive(output_attentions) is True:
+                if output_attentions:
                     attentions.append(layer_outputs[1])
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
@@ -639,12 +634,12 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         # We transpose back here to shape [bsz, len, hidden_dim]
         outputs = [tf.transpose(core_out, perm=(1, 0, 2)), new_mems]
-        if cast_bool_to_primitive(output_hidden_states):
+        if output_hidden_states:
             # Add last layer and transpose to library standard shape [bsz, len, hidden_dim]
             hids.append(core_out)
             hids = list(tf.transpose(t, perm=(1, 0, 2)) for t in hids)
             outputs.append(hids)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
             attentions = list(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
             outputs.append(attentions)
@@ -860,14 +855,14 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             bsz, tgt_len = shape_list(inputs_embeds)[:2]
 
         transformer_outputs = self.transformer(
-            [input_ids, mems, head_mask, inputs_embeds, output_attentions, output_hidden_states], training=training
+            input_ids, mems, head_mask, inputs_embeds, output_attentions, output_hidden_states, training=training
         )
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
         outputs = transformer_outputs[1:]
 
-        softmax_output = self.crit([pred_hid, labels], training=training)
+        softmax_output = self.crit(pred_hid, labels, training=training)
         outputs = [softmax_output] + outputs
 
         return outputs  # logits, new_mems, (all hidden states), (all attentions)
