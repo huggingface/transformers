@@ -125,7 +125,7 @@ class PipelineException(Exception):
 
 class ArgumentHandler(ABC):
     """
-    Base interface for handling varargs for each :class:`~transformers.pipelines.Pipeline`.
+    Base interface for handling arguments for each :class:`~transformers.pipelines.Pipeline`.
     """
 
     @abstractmethod
@@ -1425,7 +1425,7 @@ NerPipeline = TokenClassificationPipeline
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
     """
     QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped
-    to internal :class:`~transformers.quadExample`.
+    to internal :class:`~transformers.SquadExample`.
 
     QuestionAnsweringArgumentHandler manages all the possible to create a :class:`~transformers.SquadExample` from
     the command-line supplied arguments.
