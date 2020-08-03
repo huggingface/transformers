@@ -344,6 +344,8 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             (GPT2 tokenizer detect beginning of words by the preceeding space)
         trim_offsets (:obj:`bool`, `optional`, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to lowercase the input when tokenizing.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -360,6 +362,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         eos_token="<|endoftext|>",
         add_prefix_space=False,
         trim_offsets=True,
+        do_lower_case=False,
         **kwargs
     ):
         super().__init__(
@@ -368,6 +371,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
                 merges_file=merges_file,
                 add_prefix_space=add_prefix_space,
                 trim_offsets=trim_offsets,
+                lowercase=do_lower_case,
             ),
             bos_token=bos_token,
             eos_token=eos_token,

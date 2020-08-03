@@ -307,6 +307,8 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             (GPT2 tokenizer detect beginning of words by the preceeding space)
         trim_offsets (:obj:`bool`, `optional`, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to lowercase the input when tokenizing.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -328,6 +330,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         mask_token="<mask>",
         add_prefix_space=False,
         trim_offsets=True,
+        do_lower_case=False,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -346,6 +349,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             eos_token=eos_token,
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
+            do_lower_case=do_lower_case,
             **kwargs,
         )
 
