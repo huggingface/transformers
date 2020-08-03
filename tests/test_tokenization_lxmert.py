@@ -17,7 +17,8 @@
 import os
 import unittest
 
-from transformers.tokenization_bert import VOCAB_FILES_NAMES, LxmertTokenizer
+from transformers.tokenization_lxmert import LxmertTokenizer
+from transformers.tokenization_bert import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 

@@ -26,19 +26,12 @@ from torch.nn import CrossEntropyLoss, SmoothL1Loss
 from .configuration_lxmert import LxmertConfig
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
-
+from .activations import gelu, swish
 
 logger = logging.getLogger(__name__)
 
-
 LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased.tar.gz",
-    "bert-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased.tar.gz",
-    "bert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased.tar.gz",
-    "bert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased.tar.gz",
-    "bert-base-multilingual-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased.tar.gz",
-    "bert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased.tar.gz",
-    "bert-base-chinese": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese.tar.gz",
+    "lxmert-base-uncased": "",
 }
 
 
@@ -112,33 +105,6 @@ def load_tf_weights_in_lxmert(model, config, tf_checkpoint_path):
         logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
     return model
-
-
-def gelu(x):
-    """Implementation of the gelu activation function.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
-
-
-class GeLU(nn.Module):
-    """Implementation of the gelu activation function.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        return gelu(x)
-
-
-def swish(x):
-    return x * torch.sigmoid(x)
 
 
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
@@ -491,7 +457,7 @@ class LxmertVisualAnswerHead(nn.Module):
         hid_dim = config.hidden_size
         self.logit_fc = nn.Sequential(
             nn.Linear(hid_dim, hid_dim * 2),
-            GeLU(),
+            gelu,
             LxmertLayerNorm(hid_dim * 2, eps=1e-12),
             nn.Linear(hid_dim * 2, num_answers),
         )

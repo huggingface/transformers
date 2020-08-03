@@ -23,13 +23,12 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "lxmert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/lxmert-base-uncased-config.json",
-    "lxmert-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/lxmert-large-uncased-config.json",
+    "lxmert-base-uncased": "",
 }
 
 
-class LXMERTConfig(PretrainedConfig):
-    model_type = "LXMERT"
+class LxmertConfig(PretrainedConfig):
+    model_type = "lxmert"
 
     def __init__(
         self,
