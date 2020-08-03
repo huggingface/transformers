@@ -77,7 +77,9 @@ class TFAttention(tf.keras.layers.Layer):
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
-        assert n_state % config.n_head == 0
+        assert (
+            n_state % config.n_head == 0
+        ), f"Hidden dimension {n_state} not dividable by number of heads {config.n_head}"
         self.n_ctx = n_ctx
         self.n_head = config.n_head
         self.split_size = n_state

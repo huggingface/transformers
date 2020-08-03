@@ -170,7 +170,9 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
             )
 
         self.num_attention_heads = config.num_attention_heads
-        assert config.hidden_size % config.num_attention_heads == 0
+        assert (
+            config.hidden_size % config.num_attention_heads == 0
+        ), f"Hidden size {config.hidden_size} not dividable by number of heads {config.num_attention_heads}"
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
