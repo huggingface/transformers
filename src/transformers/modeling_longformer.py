@@ -417,10 +417,6 @@ class LongformerSelfAttention(nn.Module):
             :, -1, window_overlap:, : window_overlap + 1
         ]
         # - copying the lower triangle
-
-        import ipdb
-        ipdb.set_trace()
-
         diagonal_attention_scores[:, 1:, :, :window_overlap] = diagonal_chunked_attention_scores[
             :, :, -(window_overlap + 1) : -1, window_overlap + 1 :
         ]
@@ -443,6 +439,7 @@ class LongformerSelfAttention(nn.Module):
         """Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors.
            Returned tensor will be of the same shape as `attn_probs`"""
         batch_size, seq_len, num_heads, head_dim = value.size()
+
         assert seq_len % (window_overlap * 2) == 0
         assert attn_probs.size()[:3] == value.size()[:3]
         assert attn_probs.size(3) == 2 * window_overlap + 1

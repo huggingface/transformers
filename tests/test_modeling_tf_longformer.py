@@ -435,7 +435,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         output_hidden_states = layer([hidden_states, attention_mask, None])[0]
 
         expected_slice = tf.convert_to_tensor(
-            [0.0019, 0.0122, -0.0171, -0.0256, -0.0300, 0.0173, -0.0115, 0.0048], dtype=tf.dtypes.float32
+            [0.00188, 0.012196, -0.017051, -0.025571, -0.02996, 0.017297, -0.011521, 0.004848], dtype=tf.dtypes.float32
         )
 
         self.assertTrue(output_hidden_states.shape, (1, 4, 8))

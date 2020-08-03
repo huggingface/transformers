@@ -93,7 +93,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         attention_mask = tf.squeeze(tf.squeeze(attention_mask, axis=2), axis=1)
         # is index masked or global attention
-        #       TODO: is_index_masked = attention_mask < 0
+        is_index_masked = attention_mask < 0
         #        is_index_global_attn = attention_mask > 0
         #        is_global_attn = any(is_index_global_attn.flatten())
 
@@ -125,15 +125,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # values to pad for attention probs
-        float_mask = tf.cast((attention_mask != 0)[:, :, None, None], dtype=tf.float32)
-        #       TODO: remove_from_windowed_attention_mask = tf.expand_dims(tf.expand_dims((attention_mask != 0), axis=-1), axis=-1)
+        float_mask = tf.cast((attention_mask != 0)[:, :, None, None], dtype=tf.float32) * -10000.0
 
-        # cast to fp32/fp16 then replace 1's with -inf
-        #        float_mask = remove_from_windowed_attention_mask.type_as(query_vectors).masked_fill(
-        #            remove_from_windowed_attention_mask, -10000.0
-        #        )
         # diagonal mask with zeros everywhere and -inf inplace of padding
-
         diagonal_mask = self._sliding_chunks_query_key_matmul(
             tf.ones(shape_list(float_mask), dtype=tf.float32), float_mask, self.one_sided_attn_window_size
         )
@@ -177,6 +171,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         # TODO:(PVP) attn_probs = torch.masked_fill(attn_probs, is_index_masked.unsqueeze(-1).unsqueeze(-1), 0.0)
+
+        # mask probs according to attention_mask
+        attn_probs = tf.where(is_index_masked[:, :, None, None], 0.0, attn_probs)
 
         # apply dropout
         attn_probs = self.dropout(attn_probs, training=training)
@@ -293,10 +290,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # - copying the lower triangle
-
-        import ipdb
-        ipdb.set_trace()
-
         diagonal_attn_scores_low_triang = tf.concat(
             [
                 tf.zeros((batch_size * num_heads, 1, window_overlap, window_overlap)),
@@ -306,7 +299,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
         diagonal_attn_scores_first_chunk = tf.concat(
             [
-                tf.roll(diagonal_chunked_attention_scores, shift=[1, -window_overlap], axis=[2, 3])[
+                tf.roll(diagonal_chunked_attention_scores, shift=[1, window_overlap], axis=[2, 3])[
                     :, :, :window_overlap, :window_overlap
                 ],
                 tf.zeros((batch_size * num_heads, 1, window_overlap, window_overlap)),
@@ -337,14 +330,35 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             (0, 2, 1, 3),
         )
 
-        # TODO:(PVP)
-        #        self._mask_invalid_locations(diagonal_attention_scores, window_overlap)
+        diagonal_attention_scores = self._mask_invalid_locations(diagonal_attention_scores, window_overlap)
         return diagonal_attention_scores
+
+    @staticmethod
+    def _mask_invalid_locations(input_tensor_4d, window_overlap):
+        # retrieve correct shape of dims to mask
+        mask_2d_shape = (shape_list(input_tensor_4d)[1], shape_list(input_tensor_4d)[-1])
+
+        # create correct subband triangle bool mask to filter
+        mask_2d = tf.reverse(
+            tf.linalg.band_part(tf.ones(shape=mask_2d_shape), window_overlap - 1, window_overlap), axis=[0]
+        )
+
+        # broadcast to full matrix
+        mask_4d = tf.broadcast_to(mask_2d[None, :, None, :], shape_list(input_tensor_4d))
+
+        # inf tensor used for masking
+        inf_tensor = -float("inf") * tf.ones_like(input_tensor_4d, dtype=tf.dtypes.float32)
+
+        # mask
+        input_tensor_4d = tf.where(mask_4d < 1, inf_tensor, input_tensor_4d)
+
+        return input_tensor_4d
 
     def _sliding_chunks_matmul_attn_probs_value(self, attn_probs, value, window_overlap):
 
         """Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors.
            Returned tensor will be of the same shape as `attn_probs`"""
+
         batch_size, seq_len, num_heads, head_dim = shape_list(value)
         assert seq_len % (window_overlap * 2) == 0
         assert shape_list(attn_probs)[:3] == shape_list(value)[:3]
@@ -464,17 +478,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         return chunked_hidden_states
-
-    def _mask_invalid_locations(self, input_tensor, affected_seq_len):
-        beginning_mask_2d = input_tensor.new_ones(affected_seq_len, affected_seq_len + 1).tril().flip(dims=[0])
-        beginning_mask = beginning_mask_2d[None, :, None, :]
-        ending_mask = beginning_mask.flip(dims=(1, 3))
-        beginning_input = input_tensor[:, :affected_seq_len, :, : affected_seq_len + 1]
-        beginning_mask = beginning_mask.expand(beginning_input.size())
-        beginning_input.masked_fill_(beginning_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
-        ending_input = input_tensor[:, -affected_seq_len:, :, -(affected_seq_len + 1) :]
-        ending_mask = ending_mask.expand(ending_input.size())
-        ending_input.masked_fill_(ending_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
 
 
 class TFLongformerAttention(tf.keras.layers.Layer):
