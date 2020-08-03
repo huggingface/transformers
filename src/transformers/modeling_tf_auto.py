@@ -298,7 +298,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 )
 
 
-class TFAutoModel(object):
+class TFAutoModel:
     r"""
         :class:`~transformers.TFAutoModel` is a generic model class
         that will be instantiated as one of the base model classes of the library
