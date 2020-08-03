@@ -4,7 +4,6 @@
 import logging
 
 from .configuration_bart import BartConfig
-from .configuration_utils import PretrainedConfig
 
 
 logger = logging.getLogger(__name__)

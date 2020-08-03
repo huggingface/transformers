@@ -16,44 +16,72 @@ if is_tf_available():
     import tensorflow as tf
     from transformers import TFPegasusPreTrainedModel
     from transformers.modeling_tf_pegasus import encode, decode
-
+    from .test_modeling_bart import ModelTester
+    from transformers.configuration_pegasus import PegasusConfig
+    from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 class TFPegasusModelTester:
     def __init__(
-        self,
-        parent,
-        batch_size=13,
-        is_training=True,
-        vocab_size=99,
-        seq_length=14,
-        hidden_size=32,
-        ffn_dim=128,
-        num_heads=4,
-        num_hidden_layers=5,
-        dropout=0.1,
-        pad_token_id=0,
-        eos_token_id=1,
-        scope=None,
+            self, parent,
     ):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.seq_length = seq_length
-        self.hidden_size = hidden_size
-        self.ffn_dim = ffn_dim
-        self.num_heads = num_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.dropout = dropout
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.scope = scope
+        self.batch_size = 13
+        self.seq_length = 7
+        self.is_training = True
+        self.use_labels = False
+        self.vocab_size = 99
+        self.hidden_size = 16
+        self.num_hidden_layers = 2
+        self.num_attention_heads = 4
+        self.intermediate_size = 4
+        self.hidden_act = "gelu"
+        self.hidden_dropout_prob = 0.1
+        self.attention_probs_dropout_prob = 0.1
+        self.max_position_embeddings = 20
+        self.eos_token_id = 2
+        self.pad_token_id = 1
+        self.bos_token_id = 0
+
+    def prepare_config_and_inputs_for_common(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)#.clamp(3,)
+
+        input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        config = PegasusConfig(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            eos_token_id=1,
+            bos_token_id=None,
+            pad_token_id=0,
+        )
+        #inputs_dict = prepare_bart_inputs_dict(config, input_ids)
+        #input_ids[:, -1] = config.eos_token_id
+        return config, {'inputs': input_ids, 'attention_mask': input_mask, 'training': True}
 
 
+
+
+
+class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
+    is_encoder_decoder = True
+    all_model_classes = (TFPegasusPreTrainedModel,) if is_tf_available() else ()
+
+    def setUp(self):
+        self.model_tester = TFPegasusModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=PegasusConfig, d_model=32)
 
 
 @require_tf
-class TFPegasusModelTest(unittest.TestCase):
+class TFPegasusModelIntegrationTest(unittest.TestCase):
 
     is_encoder_decoder = True
     all_model_classes = (TFPegasusPreTrainedModel,) if is_tf_available() else ()

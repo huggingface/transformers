@@ -560,7 +560,7 @@ class SelfAttention(Attention):
     """Multihead scaled dot product self-attention."""
 
     def __call__(self, x, bias, training, cache=None, decode_i=None):
-        return super(SelfAttention, self).__call__(x, x, bias, training, cache=cache, decode_i=decode_i)
+        return super().__call__(x, x, bias, training, cache=cache, decode_i=decode_i)
 
 
 def ids_to_bias(ids_BxI, dtype=tf.float32, padding_id=0):
@@ -577,7 +577,7 @@ def upper_triangle_bias(D, dtype=tf.float32):
     return tensor_1xDxD
 
 
-class TransformerBlock(object):
+class TransformerBlock:
     """Transformer block.
 
     Attention block of self-attention, attention over external memory, and
@@ -642,15 +642,7 @@ def stack(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, 
     return s_BxIxD
 
 
-####################################################
-# TFPegasusPreTrainedModel is a sub-class of tf.keras.Model
-# which take care of loading and saving pre-trained weights
-# and various common utilities.
-# Here you just need to specify a few (self-explanatory)
-# pointers for your model.
-####################################################
-# TODO: object -> TFPreTrainedModel
-class TFPegasusPreTrainedModel:
+class TFPegasusPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pre-trained models.
     """
@@ -660,29 +652,32 @@ class TFPegasusPreTrainedModel:
 
     def __init__(
         self,
-        vocab_size,
-        hidden_size,
-        filter_size,
-        num_heads,
-        num_encoder_layers,
-        num_decoder_layers,
-        label_smoothing,
-        dropout,
+        config: PegasusConfig,
+
     ):
+        super().__init__(config)
+        # vocab_size,
+        # hidden_size,
+        # filter_size,
+        # num_heads,
+        # num_encoder_layers,
+        # num_decoder_layers,
+        # label_smoothing,
+        # dropout,
         # FIXME(SS): should take config
         self._dtype = tf.float32
-        self._embedding_layer = Embedding(vocab_size, hidden_size, "weights", self._dtype)
-        block_fn = lambda: TransformerBlock(hidden_size, filter_size, num_heads, dropout)
-        self._encoder_layers = [block_fn() for _ in range(num_encoder_layers)]
-        self._decoder_layers = [block_fn() for _ in range(num_decoder_layers)]
+        self._embedding_layer = Embedding(config.vocab_size, config.d_model, "weights", self._dtype)
+        #block_fn = lambda: TransformerBlock(c.d_model, c.encoder_ffn_dim, c.encoder_attention_heads, c.dropout)
+        self._encoder_layers = [TransformerBlock(config.d_model, config.encoder_ffn_dim, config.encoder_attention_heads, config.dropout) for _ in range(config.encoder_layers)]
+        self._decoder_layers = [TransformerBlock(config.d_model, config.decoder_ffn_dim, config.decoder_attention_heads, config.dropout) for _ in range(config.decoder_layers)]
         self._dropout_fn = (
-            lambda x, training: tf.compat.v2.nn.dropout(x, dropout, noise_shape=[x.shape[0], 1, x.shape[2]])
+            lambda x, training: tf.compat.v2.nn.dropout(x, config.dropout, noise_shape=[x.shape[0], 1, x.shape[2]])
             if training
             else x
         )
-        self._vocab_size = vocab_size
-        self._num_heads = num_heads
-        self._label_smoothing = label_smoothing
+        self._vocab_size = config.vocab_size
+        self._num_heads = config.encoder_attention_heads
+        #self._label_smoothing = label_smoothing
         self._decoder_scope_name = "decoder"
         self._layer_norm_encoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         self._layer_norm_decoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
@@ -771,21 +766,3 @@ class TFPegasusPreTrainedModel:
 
         decodes_BxT = left2right_decode(symbols_to_logits_fn, cache, B, T, V, beam_size, **beam_kwargs)
         return {"outputs": decodes_BxT}
-
-
-# TODO: add docstring
-PEGASUS_START_DOCSTRING = r"""PEGASUS start"""
-
-PEGASUS_INPUTS_DOCSTRING = r"""PEGASUS inputs"""
-
-
-@add_start_docstrings(
-    "The PEGASUS Model transformer", PEGASUS_START_DOCSTRING,
-)
-class TFPegasusModel(TFPegasusPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-    @add_start_docstrings_to_callable(PEGASUS_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
-        raise NotImplementedError

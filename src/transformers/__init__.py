@@ -588,7 +588,6 @@ if is_tf_available():
 
     from .modeling_tf_pegasus import (
         TF_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFPegasusModel,
         TFPegasusPreTrainedModel,
     )
 
