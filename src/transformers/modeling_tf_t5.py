@@ -782,11 +782,9 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             decoder_start_token_id is not None
         ), "self.model.config.decoder_start_token_id has to be defined. In TF T5 it is usually set to the pad_token_id. See T5 docs for more information"
 
-        # shift inputs to the right
-        shifted_input_ids = tf.zeros_like(input_ids, dtype=tf.int32)
-        shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
-        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
-        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+        shifted_input_ids = tf.roll(input_ids, 1, axis=-1)
+        start_tokens = tf.fill([shape_list(input_ids)[0], 1], tokenizer.pad_token_id)
+        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], axis=-1)
 
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in labels by `pad_token_id`
