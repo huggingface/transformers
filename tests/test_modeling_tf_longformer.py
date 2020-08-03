@@ -441,24 +441,21 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(output_hidden_states.shape, (1, 4, 8))
         tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)
 
-    def _test_layer_global_attn(self):
+    def test_layer_global_attn(self):
         model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
-        layer = model.encoder.layer[0].attention.self.to(torch_device)
+        layer = model.longformer.encoder.layer[0].attention.self_attention
         hidden_states = self._get_hidden_states()
-        batch_size, seq_length, hidden_size = hidden_states.size()
-        attention_mask = torch.zeros((batch_size, 1, 1, seq_length), dtype=torch.float32, device=torch_device)
-        attention_mask[:, :, :, -2:] = 10000
-        output_hidden_states = layer(hidden_states, attention_mask)[0]
+
+        batch_size, seq_length, hidden_size = hidden_states.shape
+
+        attention_mask = tf.zeros((batch_size, 1, 1, seq_length), dtype=tf.dtypes.float32)
+        attention_mask = tf.where(tf.range(4)[None, None, None, :] > 1, 10000.0, attention_mask)
+        attention_mask = tf.where(tf.range(4)[None, None, None, :] > 2, -10000.0, attention_mask)
+        output_hidden_states = layer([hidden_states, attention_mask, None])[0]
+
+        expected_slice = tf.convert_to_tensor(
+            [0.00188, 0.012196, -0.017051, -0.025571, -0.02996, 0.017297, -0.011521, 0.004848], dtype=tf.dtypes.float32
+        )
 
         self.assertTrue(output_hidden_states.shape, (1, 4, 8))
-        self.assertTrue(
-            torch.allclose(
-                output_hidden_states[0, -1],
-                torch.tensor(
-                    [-0.0429, -0.0341, 0.0231, -0.0335, -0.0111, -0.0131, -0.0186, -0.0403],
-                    dtype=torch.float32,
-                    device=torch_device,
-                ),
-                atol=1e-3,
-            )
-        )
+        tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)

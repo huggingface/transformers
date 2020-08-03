@@ -144,29 +144,34 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         ], f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
 
         # compute local attention probs from global attention keys and contact over window dim
-        #        if is_global_attn:
-        # compute global attn indices required through out forward fn
-        #            (
-        #                max_num_global_attn_indices,
-        #                is_index_global_attn_nonzero,
-        #                is_local_index_global_attn_nonzero,
-        #                is_local_index_no_global_attn_nonzero,
-        #            ) = self._get_global_attn_indices(is_index_global_attn)
-        # calculate global attn probs from global key
-        #            global_key_attn_scores = self._concat_with_global_key_attn_probs(
-        #                query_vectors=query_vectors,
-        #                key_vectors=key_vectors,
-        #                max_num_global_attn_indices=max_num_global_attn_indices,
-        #                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
-        #                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
-        #                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
-        #            )
-        # concat to attn_probs
-        # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
-        #            attn_scores = torch.cat((global_key_attn_scores, attn_scores), dim=-1)
-        #
-        # free memory
-        #            del global_key_attn_scores
+        if is_global_attn:
+            # compute global attn indices required through out forward fn
+            (
+                max_num_global_attn_indices,
+                is_index_global_attn_nonzero,
+                is_local_index_global_attn_nonzero,
+                is_local_index_no_global_attn_nonzero,
+            ) = self._get_global_attn_indices(is_index_global_attn)
+            # calculate global attn probs from global key
+
+            import ipdb
+
+            ipdb.set_trace()
+
+            global_key_attn_scores = self._concat_with_global_key_attn_probs(
+                query_vectors=query_vectors,
+                key_vectors=key_vectors,
+                max_num_global_attn_indices=max_num_global_attn_indices,
+                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
+                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
+                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
+            )
+            # concat to attn_probs
+            # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
+            attn_scores = tf.concat((global_key_attn_scores, attn_scores), axis=-1)
+
+            # free memory
+            del global_key_attn_scores
 
         attn_probs = tf.nn.softmax(attn_scores, axis=-1)
 
@@ -479,6 +484,36 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         return chunked_hidden_states
+
+    @staticmethod
+    def _get_global_attn_indices(is_index_global_attn):
+        """ compute global attn indices required throughout forward pass """
+        # helper variable
+        num_global_attn_indices = tf.reduce_sum(tf.cast(is_index_global_attn, dtype=tf.dtypes.int32), axis=1)
+
+        # max number of global attn indices in batch
+        max_num_global_attn_indices = tf.reduce_max(num_global_attn_indices)
+
+        # indices of global attn
+        is_index_global_attn_nonzero = tf.where(is_index_global_attn)
+
+        # helper variable
+        is_local_index_global_attn = tf.expand_dims(
+            tf.range(max_num_global_attn_indices) < num_global_attn_indices, axis=-1
+        )
+
+        # location of the non-padding values within global attention indices
+        is_local_index_global_attn_nonzero = tf.where(is_local_index_global_attn)
+
+        # location of the padding values within global attention indices
+        is_local_index_no_global_attn_nonzero = tf.where(tf.math.logical_not(is_local_index_global_attn))
+
+        return (
+            max_num_global_attn_indices,
+            is_index_global_attn_nonzero,
+            is_local_index_global_attn_nonzero,
+            is_local_index_no_global_attn_nonzero,
+        )
 
 
 class TFLongformerAttention(tf.keras.layers.Layer):
