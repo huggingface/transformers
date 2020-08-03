@@ -53,17 +53,6 @@ class TFTrainer:
             an instance of :class:`~transformers.WarmUp`.
     """
 
-    model: TFPreTrainedModel
-    args: TFTrainingArguments
-    train_dataset: Optional[tf.data.Dataset]
-    eval_dataset: Optional[tf.data.Dataset]
-    compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
-    prediction_loss_only: bool
-    tb_writer: Optional[tf.summary.SummaryWriter] = None
-    optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = (None, None)
-    global_step: Optional[int] = None
-    epoch_logging: Optional[float] = None
-
     def __init__(
         self,
         model: TFPreTrainedModel,
@@ -320,6 +309,15 @@ class TFTrainer:
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def log(self, logs: Dict[str, float]) -> None:
+        """
+        Log :obj:`logs` on the various objects watching training.
+
+        Subclass and override this method to inject custom behavior.
+
+        Args:
+            logs (:obj:`Dict[str, float]`):
+                The values to log.
+        """
         if hasattr(self, "_log"):
             warnings.warn(
                 "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
@@ -351,6 +349,7 @@ class TFTrainer:
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
@@ -572,9 +571,12 @@ class TFTrainer:
         Subclass and override this method if you want to inject some custom behavior.
 
         Args:
-          features: the batched features.
-          labels: the batched labels.
-          training: run the model in training mode or not
+            features (:obj:`tf.Tensor`): A batch of input features.
+            labels (:obj:`tf.Tensor`): A batch of labels.
+            training (:obj:`bool`): Whether or not to run the model in training mode.
+
+        Returns:
+            A tuple of two :obj:`tf.Tensor`: The loss and logits.
         """
         if hasattr(self, "_run_model"):
             warnings.warn(

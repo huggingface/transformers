@@ -19,7 +19,7 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
-from .file_utils import is_apex_available, is_torch_tpu_available
+from .file_utils import is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import (
@@ -33,8 +33,19 @@ from .trainer_utils import (
 from .training_args import TrainingArguments
 
 
-if is_apex_available():
-    from apex import amp
+_use_native_amp = False
+_use_apex = False
+
+# Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
+if version.parse(torch.__version__) < version.parse("1.6"):
+    from transformers.file_utils import is_apex_available
+
+    if is_apex_available():
+        from apex import amp
+    _use_apex = True
+else:
+    _use_native_amp = True
+    from torch.cuda.amp import autocast
 
 
 if is_torch_tpu_available():
@@ -113,11 +124,15 @@ class SequentialDistributedSampler(Sampler):
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
-        assert len(indices) == self.total_size
+        assert (
+            len(indices) == self.total_size
+        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert len(indices) == self.num_samples
+        assert (
+            len(indices) == self.num_samples
+        ), f"Indices length {len(indices)} and and sample number {self.num_samples} mismatched"
 
         return iter(indices)
 
@@ -161,18 +176,6 @@ class Trainer:
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
     """
 
-    model: PreTrainedModel
-    args: TrainingArguments
-    data_collator: DataCollator
-    train_dataset: Optional[Dataset]
-    eval_dataset: Optional[Dataset]
-    compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
-    prediction_loss_only: bool
-    tb_writer: Optional["SummaryWriter"] = None
-    optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
-    global_step: Optional[int] = None
-    epoch: Optional[float] = None
-
     def __init__(
         self,
         model: PreTrainedModel,
@@ -183,7 +186,7 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
         tb_writer: Optional["SummaryWriter"] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None,
+        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
     ):
         self.model = model.to(args.device)
         self.args = args
@@ -192,10 +195,9 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
-        self.optimizers = optimizers
-        if tb_writer is not None:
-            self.tb_writer = tb_writer
-        elif is_tensorboard_available() and self.is_world_master():
+        self.optimizer, self.lr_scheduler = optimizers
+        self.tb_writer = tb_writer
+        if tb_writer is None and is_tensorboard_available() and self.is_world_process_zero():
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         if not is_tensorboard_available():
             logger.warning(
@@ -210,7 +212,7 @@ class Trainer:
             )
         set_seed(self.args.seed)
         # Create output directory if needed
-        if self.is_world_master():
+        if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
         if is_torch_tpu_available():
             # Set an xla_device flag on the model's config.
@@ -225,6 +227,10 @@ class Trainer:
                 ),
                 FutureWarning,
             )
+        self.global_step = None
+        self.epoch = None
+        if self.args.fp16 and _use_native_amp:
+            self.scaler = torch.cuda.amp.GradScaler()
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -320,39 +326,35 @@ class Trainer:
             drop_last=self.args.dataloader_drop_last,
         )
 
-    def get_optimizers(
-        self, num_training_steps: int
-    ) -> Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]:
+    def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
-        if self.optimizers is not None:
-            return self.optimizers
-        # Prepare optimizer and schedule (linear warmup and decay)
-        no_decay = ["bias", "LayerNorm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
-                "weight_decay": self.args.weight_decay,
-            },
-            {
-                "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
-                "weight_decay": 0.0,
-            },
-        ]
-        optimizer = AdamW(
-            optimizer_grouped_parameters,
-            lr=self.args.learning_rate,
-            betas=(self.args.adam_beta1, self.args.adam_beta2),
-            eps=self.args.adam_epsilon,
-        )
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
-        )
-        return optimizer, scheduler
+        if self.optimizer is None:
+            no_decay = ["bias", "LayerNorm.weight"]
+            optimizer_grouped_parameters = [
+                {
+                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "weight_decay": self.args.weight_decay,
+                },
+                {
+                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "weight_decay": 0.0,
+                },
+            ]
+            self.optimizer = AdamW(
+                optimizer_grouped_parameters,
+                lr=self.args.learning_rate,
+                betas=(self.args.adam_beta1, self.args.adam_beta2),
+                eps=self.args.adam_epsilon,
+            )
+        if self.lr_scheduler is None:
+            self.lr_scheduler = get_linear_schedule_with_warmup(
+                self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
+            )
 
     def setup_wandb(self):
         """
@@ -377,7 +379,7 @@ class Trainer:
             )
             return self._setup_wandb()
 
-        if self.is_world_master():
+        if self.is_world_process_zero():
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
@@ -413,7 +415,7 @@ class Trainer:
             t_total = int(len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.num_train_epochs)
             num_train_epochs = self.args.num_train_epochs
 
-        optimizer, scheduler = self.get_optimizers(num_training_steps=t_total)
+        self.create_optimizer_and_scheduler(num_training_steps=t_total)
 
         # Check if saved optimizer or scheduler states exist
         if (
@@ -422,16 +424,16 @@ class Trainer:
             and os.path.isfile(os.path.join(model_path, "scheduler.pt"))
         ):
             # Load in optimizer and scheduler states
-            optimizer.load_state_dict(
+            self.optimizer.load_state_dict(
                 torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
             )
-            scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
+            self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
 
         model = self.model
-        if self.args.fp16:
+        if self.args.fp16 and _use_apex:
             if not is_apex_available():
                 raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-            model, optimizer = amp.initialize(model, optimizer, opt_level=self.args.fp16_opt_level)
+            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # multi-gpu training (should be after apex fp16 initialization)
         if self.args.n_gpu > 1:
@@ -493,7 +495,7 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_master()
+            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_process_zero()
         )
         for epoch in train_iterator:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
@@ -503,9 +505,9 @@ class Trainer:
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_master())
+                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_process_zero())
             else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
+                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_process_zero())
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if self.args.past_index >= 0:
@@ -518,24 +520,30 @@ class Trainer:
                     steps_trained_in_current_epoch -= 1
                     continue
 
-                tr_loss += self.training_step(model, inputs, optimizer)
+                tr_loss += self.training_step(model, inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     len(epoch_iterator) <= self.args.gradient_accumulation_steps
                     and (step + 1) == len(epoch_iterator)
                 ):
-                    if self.args.fp16:
-                        torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), self.args.max_grad_norm)
+                    if self.args.fp16 and _use_native_amp:
+                        self.scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+                    elif self.args.fp16 and _use_apex:
+                        torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer), self.args.max_grad_norm)
                     else:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
                     if is_torch_tpu_available():
-                        xm.optimizer_step(optimizer)
+                        xm.optimizer_step(self.optimizer)
+                    if self.args.fp16 and _use_native_amp:
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
                     else:
-                        optimizer.step()
+                        self.optimizer.step()
 
-                    scheduler.step()
+                    self.lr_scheduler.step()
                     model.zero_grad()
                     self.global_step += 1
                     self.epoch = epoch + (step + 1) / len(epoch_iterator)
@@ -547,9 +555,9 @@ class Trainer:
                         logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
                         # backward compatibility for pytorch schedulers
                         logs["learning_rate"] = (
-                            scheduler.get_last_lr()[0]
+                            self.lr_scheduler.get_last_lr()[0]
                             if version.parse(torch.__version__) >= version.parse("1.4")
-                            else scheduler.get_lr()[0]
+                            else self.lr_scheduler.get_lr()[0]
                         )
                         logging_loss = tr_loss
 
@@ -562,24 +570,26 @@ class Trainer:
                         # In all cases (even distributed/parallel), self.model is always a reference
                         # to the model we want to save.
                         if hasattr(model, "module"):
-                            assert model.module is self.model
+                            assert (
+                                model.module is self.model
+                            ), f"Module {model.module} should be a reference to self.model"
                         else:
-                            assert model is self.model
+                            assert model is self.model, f"Model {model} should be a reference to self.model"
                         # Save model checkpoint
                         output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
 
                         self.save_model(output_dir)
 
-                        if self.is_world_master():
+                        if self.is_world_process_zero():
                             self._rotate_checkpoints()
 
                         if is_torch_tpu_available():
                             xm.rendezvous("saving_optimizer_states")
-                            xm.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                            xm.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                        elif self.is_world_master():
-                            torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                            torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                            xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                            xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                        elif self.is_world_process_zero():
+                            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                            torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
                 if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                     epoch_iterator.close()
@@ -640,7 +650,7 @@ class Trainer:
                     )
             self.tb_writer.flush()
         if is_wandb_available():
-            if self.is_world_master():
+            if self.is_world_process_zero():
                 wandb.log(logs, step=self.global_step)
         output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
@@ -664,11 +674,9 @@ class Trainer:
 
         return inputs
 
-    def training_step(
-        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], optimizer: torch.optim.Optimizer
-    ) -> float:
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> float:
         """
-        Perform a training step on :obj:`model` using obj:`inputs` and :obj:`optimizer`.
+        Perform a training step on a batch of inputs.
 
         Subclass and override to inject custom behavior.
 
@@ -680,37 +688,42 @@ class Trainer:
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
                 argument :obj:`labels`. Check your model's documentation for all accepted arguments.
-            optimizer (:obj:`torch.optim.Optimizer`):
-                The optimizer to use to make a step.
 
         Return:
-            `float`:
-            The training loss on this batch.
+            :obj:`float`: The training loss on this batch.
         """
         if hasattr(self, "_training_step"):
             warnings.warn(
                 "The `_training_step` method is deprecated and won't be called in a future version, define `training_step` in your subclass.",
                 FutureWarning,
             )
-            return self._training_step(model, inputs, optimizer)
+            return self._training_step(model, inputs, self.optimizer)
 
         model.train()
         inputs = self._prepare_inputs(inputs, model)
 
-        outputs = model(**inputs)
-        # We don't use .loss here since the model may return tuples instead of ModelOutput.
-        loss = outputs[0]
+        if self.args.fp16 and _use_native_amp:
+            with autocast():
+                outputs = model(**inputs)
+                loss = outputs[0]
+        else:
+            outputs = model(**inputs)
+            # We don't use .loss here since the model may return tuples instead of ModelOutput.
+            loss = outputs[0]
 
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
+
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
 
-        if self.args.fp16:
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
+        if self.args.fp16 and _use_native_amp:
+            self.scaler.scale(loss).backward()
+        elif self.args.fp16 and _use_apex:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
             loss.backward()
@@ -718,6 +731,22 @@ class Trainer:
         return loss.item()
 
     def is_local_master(self) -> bool:
+        """
+        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
+        several machines) main process.
+
+        .. warning::
+
+            This method is deprecated, use :meth:`~transformers.Trainer.is_local_process_zero` instead.
+        """
+        warnings.warn("This method is deprecated, use `Trainer.is_local_process_zero()` instead.", FutureWarning)
+        return self.is_local_process_zero()
+
+    def is_local_process_zero(self) -> bool:
+        """
+        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
+        several machines) main process.
+        """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
         else:
@@ -725,8 +754,20 @@ class Trainer:
 
     def is_world_master(self) -> bool:
         """
-        This will be True only in one process, even in distributed mode,
-        even when training on multiple machines.
+        Whether or not this process is the global main process (when training in a distributed fashion on
+        several machines, this is only going to be :obj:`True` for one process).
+
+        .. warning::
+
+            This method is deprecated, use :meth:`~transformers.Trainer.is_world_process_zero` instead.
+        """
+        warnings.warn("This method is deprecated, use `Trainer.is_world_process_zero()` instead.", FutureWarning)
+        return self.is_world_process_zero()
+
+    def is_world_process_zero(self) -> bool:
+        """
+        Whether or not this process is the global main process (when training in a distributed fashion on
+        several machines, this is only going to be :obj:`True` for one process).
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
@@ -742,7 +783,7 @@ class Trainer:
 
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
-        elif self.is_world_master():
+        elif self.is_world_process_zero():
             self._save(output_dir)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
@@ -818,6 +859,7 @@ class Trainer:
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
@@ -843,6 +885,7 @@ class Trainer:
         Args:
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on.
+
         Returns:
             `NamedTuple`:
             predictions (:obj:`np.ndarray`):

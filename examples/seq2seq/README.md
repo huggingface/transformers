@@ -66,6 +66,15 @@ Summarization Tips:
 Datasets: Seq2SeqDataset will be used for all models besides MBart, for which MBartDataset will be used.**
 A new dataset is needed to support multilingual tasks.
 
+
+### Command Line Options
+
+To see all the possible command line options, run:
+
+```bash
+./finetune.sh --help  # this calls python finetune.py --help
+```
+
 ### Finetuning Training Params
 
 To override the pretrained model's training params, you can pass them to `./finetune.sh`:

@@ -577,10 +577,6 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         mask_token (:obj:`string`, `optional`, defaults to "[MASK]"):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to tokenize Chinese characters.
-            This should likely be deactivated for Japanese:
-            see: https://github.com/huggingface/transformers/issues/328
         clean_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to clean the text before tokenization by removing any control characters and
             replacing all whitespaces by the classic one.
@@ -588,6 +584,11 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
             Whether to tokenize Chinese characters.
             This should likely be deactivated for Japanese:
             see: https://github.com/huggingface/transformers/issues/328
+        strip_accents: (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            Whether to strip all accents. If this option is not specified (ie == None),
+            then it will be determined by the value for `lowercase` (as in the original Bert).
+        wordpieces_prefix: (:obj:`string`, `optional`, defaults to "##"):
+            The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

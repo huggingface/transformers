@@ -121,7 +121,9 @@ def load_tf_weights_in_xxx(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer and array have mismatched shapes {pointer.shape} and {array.shape}"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
