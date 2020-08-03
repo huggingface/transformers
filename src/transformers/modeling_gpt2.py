@@ -106,7 +106,9 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -323,10 +325,10 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    lm_loss: Optional[torch.FloatTensor]
-    mc_loss: Optional[torch.FloatTensor]
-    lm_logits: torch.FloatTensor
-    mc_logits: torch.FloatTensor
+    lm_loss: Optional[torch.FloatTensor] = None
+    mc_loss: Optional[torch.FloatTensor] = None
+    lm_logits: torch.FloatTensor = None
+    mc_logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -395,8 +397,9 @@ GPT2_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -448,7 +451,7 @@ class GPT2Model(GPT2PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs,
     ):
         if "past" in kwargs:
@@ -464,7 +467,7 @@ class GPT2Model(GPT2PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -560,7 +563,7 @@ class GPT2Model(GPT2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutputWithPast(
@@ -616,7 +619,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs,
     ):
         r"""
@@ -634,7 +637,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             )
             past_key_values = kwargs.pop("past")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -647,7 +650,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
 
@@ -662,7 +665,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -713,7 +716,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs,
     ):
         r"""
@@ -741,7 +744,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
 
         >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+        >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2, return_dict=True)
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
         >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
@@ -773,7 +776,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             )
             past_key_values = kwargs.pop("past")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -786,7 +789,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         hidden_states = transformer_outputs[0]
@@ -805,7 +808,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             loss_fct = CrossEntropyLoss()
             lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (lm_logits, mc_logits) + transformer_outputs[1:]
             if mc_loss is not None:
                 output = (mc_loss,) + output
