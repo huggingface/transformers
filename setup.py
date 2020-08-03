@@ -65,19 +65,19 @@ if stale_egg_info.exists():
 
 extras = {}
 
-extras["mecab"] = ["mecab-python3<1"]
+extras["ja"] = ["fugashi>=1.0", "ipadic>=1.0,<2.0"]
 extras["sklearn"] = ["scikit-learn"]
 
 # keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
 extras["tf"] = [
-    "tensorflow<=2.2",
+    "tensorflow",
     # "onnxconverter-common",
     # "keras2onnx"
     "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
     "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx"
 ]
 extras["tf-cpu"] = [
-    "tensorflow-cpu<=2.2",
+    "tensorflow-cpu",
     # "onnxconverter-common",
     # "keras2onnx"
     "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
@@ -86,7 +86,7 @@ extras["tf-cpu"] = [
 extras["torch"] = ["torch"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
-extras["all"] = extras["serving"] + ["tensorflow<=2.2", "torch"]
+extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
 extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "psutil"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -97,7 +97,7 @@ extras["quality"] = [
     "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
     "flake8",
 ]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3<1", "scikit-learn", "tensorflow<=2.2", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",

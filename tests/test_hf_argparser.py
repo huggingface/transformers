@@ -152,6 +152,20 @@ class HfArgumentParserTest(unittest.TestCase):
         args = parser.parse_args("--foo 12 --bar 3.14 --baz 42 --ces a b c --des 1 2 3".split())
         self.assertEqual(args, Namespace(foo=12, bar=3.14, baz="42", ces=["a", "b", "c"], des=[1, 2, 3]))
 
+    def test_parse_dict(self):
+        parser = HfArgumentParser(BasicExample)
+
+        args_dict = {
+            "foo": 12,
+            "bar": 3.14,
+            "baz": "42",
+            "flag": True,
+        }
+
+        parsed_args = parser.parse_dict(args_dict)[0]
+        args = BasicExample(**args_dict)
+        self.assertEqual(parsed_args, args)
+
     def test_integration_training_args(self):
         parser = HfArgumentParser(TrainingArguments)
         self.assertIsNotNone(parser)

@@ -30,6 +30,7 @@ from .modeling_tf_xlm import (
     TFXLMForTokenClassification,
     TFXLMMainLayer,
     TFXLMModel,
+    TFXLMPredLayer,
     TFXLMWithLMHeadModel,
     get_masks,
 )
@@ -123,6 +124,8 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         super().__init__(config, *inputs, **kwargs)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
 
     def call(
         self,
@@ -135,9 +138,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
         training=False,
-        output_attentions=False,
-        output_hidden_states=False,
     ):
         # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
@@ -150,7 +153,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             cache = inputs[6] if len(inputs) > 6 else cache
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
-            assert len(inputs) <= 9, "Too many inputs."
+            output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
+            output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -161,9 +166,14 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             cache = inputs.get("cache", cache)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 9, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -183,7 +193,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        tf.debugging.assert_equal(shape_list(lengths)[0], bs)
+        tf.debugging.assert_equal(
+            shape_list(lengths)[0], bs
+        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -201,13 +213,17 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             position_ids = tf.expand_dims(tf.range(slen), axis=0)
         else:
             # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(shape_list(position_ids), [bs, slen])
+            tf.debugging.assert_equal(
+                shape_list(position_ids), [bs, slen]
+            ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
             # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(shape_list(langs), [bs, slen])
+            tf.debugging.assert_equal(
+                shape_list(langs), [bs, slen]
+            ), f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched"
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
@@ -257,16 +273,19 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 
             # self attention
             if not self.pre_norm:
-                attn_outputs = self.attentions[i]([tensor, attn_mask, None, cache, head_mask[i]], training=training)
+                attn_outputs = self.attentions[i](
+                    tensor, attn_mask, None, cache, head_mask[i], output_attentions, training=training
+                )
                 attn = attn_outputs[0]
-                attentions = attentions + (attn_outputs[1],)
+                if output_attentions:
+                    attentions = attentions + (attn_outputs[1],)
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
                 tensor = self.layer_norm1[i](tensor)
             else:
                 tensor_normalized = self.layer_norm1[i](tensor)
                 attn_outputs = self.attentions[i](
-                    [tensor_normalized, attn_mask, None, cache, head_mask[i]], training=training
+                    tensor_normalized, attn_mask, None, cache, head_mask[i], training=training
                 )
                 attn = attn_outputs[0]
                 if output_attentions:
@@ -321,6 +340,7 @@ class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
+        self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
 
 
 @add_start_docstrings(

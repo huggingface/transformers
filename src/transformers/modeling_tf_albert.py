@@ -35,7 +35,6 @@ from .modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -99,7 +98,15 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
             )
         super().build(input_shape)
 
-    def call(self, inputs, mode="embedding", training=False):
+    def call(
+        self,
+        input_ids=None,
+        position_ids=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        mode="embedding",
+        training=False,
+    ):
         """Get token embeddings of inputs.
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
@@ -115,15 +122,15 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
-            return self._embedding(inputs, training=training)
+            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         elif mode == "linear":
-            return self._linear(inputs)
+            return self._linear(input_ids)
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
-    def _embedding(self, inputs, training=False):
+    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
+        assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
             input_shape = shape_list(input_ids)
@@ -170,9 +177,12 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
             )
 
         self.num_attention_heads = config.num_attention_heads
-        assert config.hidden_size % config.num_attention_heads == 0
+        assert (
+            config.hidden_size % config.num_attention_heads == 0
+        ), f"Hidden size {config.hidden_size} not dividable by number of heads {config.num_attention_heads}"
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.output_attentions = config.output_attentions
 
         self.query = tf.keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
@@ -190,9 +200,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions = inputs
-
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
@@ -231,9 +239,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
 
-        outputs = (
-            (context_layer, attention_probs) if cast_bool_to_primitive(output_attentions) is True else (context_layer,)
-        )
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
 
 
@@ -246,9 +252,7 @@ class TFAlbertSelfOutput(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, inputs, training=False):
-        hidden_states, input_tensor = inputs
-
+    def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -260,6 +264,7 @@ class TFAlbertAttention(TFBertSelfAttention):
         super().__init__(config, **kwargs)
 
         self.hidden_size = config.hidden_size
+        self.output_attentions = config.output_attentions
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -269,9 +274,7 @@ class TFAlbertAttention(TFBertSelfAttention):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
-        input_tensor, attention_mask, head_mask, output_attentions = inputs
-
+    def call(self, input_tensor, attention_mask, head_mask, output_attentions, training=False):
         batch_size = shape_list(input_tensor)[0]
         mixed_query_layer = self.query(input_tensor)
         mixed_key_layer = self.key(input_tensor)
@@ -310,9 +313,7 @@ class TFAlbertAttention(TFBertSelfAttention):
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
 
-        self_outputs = (
-            (context_layer, attention_probs) if cast_bool_to_primitive(output_attentions) is True else (context_layer,)
-        )
+        self_outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         hidden_states = self_outputs[0]
 
@@ -347,11 +348,9 @@ class TFAlbertLayer(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions = inputs
-
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         attention_outputs = self.attention(
-            [hidden_states, attention_mask, head_mask, output_attentions], training=training
+            hidden_states, attention_mask, head_mask, output_attentions, training=training
         )
         ffn_output = self.ffn(attention_outputs[0])
         ffn_output = self.activation(ffn_output)
@@ -369,32 +368,32 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
         self.albert_layers = [
             TFAlbertLayer(config, name="albert_layers_._{}".format(i)) for i in range(config.inner_group_num)
         ]
 
-    def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
-
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states, training=False):
         layer_hidden_states = ()
         layer_attentions = ()
 
         for layer_index, albert_layer in enumerate(self.albert_layers):
             layer_output = albert_layer(
-                [hidden_states, attention_mask, head_mask[layer_index], output_attentions], training=training
+                hidden_states, attention_mask, head_mask[layer_index], output_attentions, training=training
             )
             hidden_states = layer_output[0]
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 layer_attentions = layer_attentions + (layer_output[1],)
 
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 layer_hidden_states = layer_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (layer_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (layer_attentions,)
         # last-layer hidden state, (layer hidden states), (layer attentions)
         return outputs
@@ -415,13 +414,11 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             for i in range(config.num_hidden_groups)
         ]
 
-    def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
-
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states, training=False):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_attentions = ()
 
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = (hidden_states,)
 
         for i in range(self.config.num_hidden_layers):
@@ -432,27 +429,25 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             group_idx = int(i / (self.config.num_hidden_layers / self.config.num_hidden_groups))
 
             layer_group_output = self.albert_layer_groups[group_idx](
-                [
-                    hidden_states,
-                    attention_mask,
-                    head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
-                    output_attentions,
-                    output_hidden_states,
-                ],
+                hidden_states,
+                attention_mask,
+                head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
+                output_attentions,
+                output_hidden_states,
                 training=training,
             )
             hidden_states = layer_group_output[0]
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 all_attentions = all_attentions + layer_group_output[-1]
 
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
 
         # last-layer hidden state, (all hidden states), (all attentions)
@@ -617,9 +612,13 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_hidden_layers
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
-        embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
+        embedding_output = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         encoder_outputs = self.encoder(
-            [embedding_output, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            embedding_output,
+            extended_attention_mask,
+            head_mask,
+            output_attentions,
+            output_hidden_states,
             training=training,
         )
 
@@ -1272,7 +1271,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
 
-        flat_inputs = [
+        outputs = self.albert(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
@@ -1281,9 +1280,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             inputs_embeds,
             output_attentions,
             output_hidden_states,
-        ]
-
-        outputs = self.albert(flat_inputs, training=training)
+            training=training,
+        )
 
         pooled_output = outputs[1]
 

@@ -782,14 +782,16 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         return tf.gather(self.weight, input_ids)
 
     def _linear(self, inputs):
-        """Computes logits by running inputs through a linear layer.
-            Args:
-                inputs: A float32 tensor with shape [..., hidden_size]
-            Returns:
-                float32 tensor with shape [..., vocab_size].
+        """
+        Computes logits by running inputs through a linear layer.
+
+        Args:
+            inputs: A float32 tensor with shape [..., hidden_size]
+
+        Returns:
+            float32 tensor with shape [..., vocab_size].
         """
         first_dims = shape_list(inputs)[:-1]
-
         x = tf.reshape(inputs, [-1, self.hidden_size])
         logits = tf.matmul(x, self.weight, transpose_b=True)
 
@@ -797,7 +799,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
 
 
 class TFSequenceSummary(tf.keras.layers.Layer):
-    r"""
+    """
     Compute a single vector summary of a sequence hidden states.
 
     Args:
@@ -860,26 +862,9 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         if self.has_last_dropout:
             self.last_dropout = tf.keras.layers.Dropout(config.summary_last_dropout)
 
-    def call(self, inputs, training=False) -> tf.Tensor:
-        """
-        Compute a single vector summary of a sequence hidden states.
-
-        Args:
-            inputs (:obj:`Union[tf.Tensor, Tuple[tf.Tensor], List[tf.Tensor], Dict[str, tf.Tensor]]`):
-                One or two tensors representing:
-
-                - **hidden_states** (:obj:`tf.Tensor` of shape :obj:`[batch_size, seq_len, hidden_size]`) -- The hidden
-                  states of the last layer.
-                - **cls_index** :obj:`tf.Tensor` of shape :obj:`[batch_size]` or :obj:`[batch_size, ...]` where ... are
-                  optional leading dimensions of :obj:`hidden_states`. Used if :obj:`summary_type == "cls_index"` and
-                  takes the last token of the sequence as classification token.
-
-        Returns:
-            :obj:`tf.Tensor`: The summary of the sequence hidden states.
-        """
+    def call(self, inputs, cls_index=None, training=False):
         if not isinstance(inputs, (dict, tuple, list)):
             hidden_states = inputs
-            cls_index = None
         elif isinstance(inputs, (tuple, list)):
             hidden_states = inputs[0]
             cls_index = inputs[1] if len(inputs) > 1 else None

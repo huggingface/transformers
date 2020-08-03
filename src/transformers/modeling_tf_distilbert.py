@@ -37,7 +37,6 @@ from .modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
-    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -114,7 +113,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
             )
         super().build(input_shape)
 
-    def call(self, inputs, inputs_embeds=None, mode="embedding", training=False):
+    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, mode="embedding", training=False):
         """Get token embeddings of inputs.
         Args:
             inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
@@ -130,13 +129,13 @@ class TFEmbeddings(tf.keras.layers.Layer):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
-            return self._embedding(inputs, inputs_embeds=inputs_embeds, training=training)
+            return self._embedding(input_ids, position_ids, inputs_embeds, training=training)
         elif mode == "linear":
-            return self._linear(inputs)
+            return self._linear(input_ids)
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
-    def _embedding(self, inputs, inputs_embeds=None, training=False):
+    def _embedding(self, input_ids, position_ids, inputs_embeds, training=False):
         """
         Parameters
         ----------
@@ -148,11 +147,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         embeddings: tf.Tensor(bs, max_seq_length, dim)
             The embedded tokens (plus position embeddings, no token_type embeddings)
         """
-        if not isinstance(inputs, (tuple, list)):
-            input_ids = inputs
-            position_ids = None
-        else:
-            input_ids, position_ids = inputs
+        assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
             seq_length = shape_list(input_ids)[1]
@@ -194,8 +189,9 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
+        self.output_attentions = config.output_attentions
 
-        assert self.dim % self.n_heads == 0
+        assert self.dim % self.n_heads == 0, f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}"
 
         self.q_lin = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="q_lin"
@@ -215,7 +211,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
+    def call(self, query, key, value, mask, head_mask, output_attentions, training=False):
         """
         Parameters
         ----------
@@ -231,7 +227,6 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         context: tf.Tensor(bs, seq_length, dim)
             Contextualized layer. Optional: only if `output_attentions=True`
         """
-        query, key, value, mask, head_mask, output_attentions = inputs
         bs, q_length, dim = shape_list(query)
         k_length = shape_list(key)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
@@ -270,7 +265,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             return (context, weights)
         else:
             return (context,)
@@ -310,8 +305,11 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.hidden_dim = config.hidden_dim
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation = config.activation
+        self.output_attentions = config.output_attentions
 
-        assert config.dim % config.n_heads == 0
+        assert (
+            config.dim % config.n_heads == 0
+        ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
 
         self.attention = TFMultiHeadSelfAttention(config, name="attention")
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
@@ -319,7 +317,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.ffn = TFFFN(config, name="ffn")
         self.output_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="output_layer_norm")
 
-    def call(self, inputs, training=False):  # removed: src_enc=None, src_len=None
+    def call(self, x, attn_mask, head_mask, output_attentions, training=False):  # removed: src_enc=None, src_len=None
         """
         Parameters
         ----------
@@ -333,11 +331,9 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ffn_output: tf.Tensor(bs, seq_length, dim)
             The output of the transformer block contextualization.
         """
-        x, attn_mask, head_mask, output_attentions = inputs
-
         # Self-Attention
-        sa_output = self.attention([x, x, x, attn_mask, head_mask, output_attentions], training=training)
-        if cast_bool_to_primitive(output_attentions) is True:
+        sa_output = self.attention(x, x, x, attn_mask, head_mask, output_attentions, training=training)
+        if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attention` or `output_hidden_states` cases returning tuples
             # assert type(sa_output) == tuple
@@ -349,7 +345,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ffn_output = self.output_layer_norm(ffn_output + sa_output)  # (bs, seq_length, dim)
 
         output = (ffn_output,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             output = (sa_weights,) + output
         return output
 
@@ -358,10 +354,12 @@ class TFTransformer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.n_layers = config.n_layers
+        self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
 
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
 
-    def call(self, inputs, training=False):
+    def call(self, x, attn_mask, head_mask, output_attentions, output_hidden_states, training=False):
         """
         Parameters
         ----------
@@ -381,34 +379,32 @@ class TFTransformer(tf.keras.layers.Layer):
             Tuple of length n_layers with the attention weights from each layer
             Optional: only if output_attentions=True
         """
-        x, attn_mask, head_mask, output_attentions, output_hidden_states = inputs
-
         all_hidden_states = ()
         all_attentions = ()
 
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i], output_attentions], training=training)
+            layer_outputs = layer_module(hidden_state, attn_mask, head_mask[i], output_attentions, training=training)
             hidden_state = layer_outputs[-1]
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 assert len(layer_outputs) == 2
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1
+                assert len(layer_outputs) == 1, f"Incorrect number of outputs {len(layer_outputs)} instead of 1"
 
         # Add last layer
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
 
         outputs = (hidden_state,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
@@ -479,6 +475,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
         if attention_mask is None:
             attention_mask = tf.ones(input_shape)  # (bs, seq_length)
+
         attention_mask = tf.cast(attention_mask, dtype=tf.float32)
 
         # Prepare head mask if needed
@@ -489,11 +486,12 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         if head_mask is not None:
             raise NotImplementedError
         else:
+
             head_mask = [None] * self.num_hidden_layers
 
         embedding_output = self.embeddings(input_ids, inputs_embeds=inputs_embeds)  # (bs, seq_length, dim)
         tfmr_output = self.transformer(
-            [embedding_output, attention_mask, head_mask, output_attentions, output_hidden_states], training=training
+            embedding_output, attention_mask, head_mask, output_attentions, output_hidden_states, training=training
         )
 
         return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)
@@ -984,24 +982,21 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             if inputs_embeds is not None
             else None
         )
-
-        flat_inputs = [
+        distilbert_output = self.distilbert(
             flat_input_ids,
             flat_attention_mask,
             head_mask,
             flat_inputs_embeds,
             output_attentions,
             output_hidden_states,
-        ]
-
-        distilbert_output = self.distilbert(flat_inputs, training=training)
+            training=training,
+        )
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = self.dropout(pooled_output, training=training)  # (bs, dim)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
         outputs = (reshaped_logits,) + distilbert_output[1:]  # add hidden states and attention if they are here
 
         if labels is not None:
@@ -1024,7 +1019,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
-        assert config.num_labels == 2
+        assert config.num_labels == 2, f"Incorrect number of labels {config.num_labels} instead of 2"
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
