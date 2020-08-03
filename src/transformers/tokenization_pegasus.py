@@ -13,6 +13,7 @@ EOS_ID = 1
 
 class PegasusTokenizer(ReformerTokenizer):
     offset = 103  # to make embedding size a multiple of 128 I think
+    vocab_files_names = {'vocab_file': 'spiece.model'}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -100,16 +101,18 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
         return vocab
 
 
-    def num_special_tokens_to_add(self, **unused):
+    def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
         return 1
 
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
         all_special_ids.remove(self.unk_token_id)  # <unk> is only sometimes special
+        assert all_special_ids == set([0, 1])
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
@@ -122,3 +125,10 @@ class PegasusTokenizer(ReformerTokenizer):
             return self._special_token_mask(token_ids_0) + [1]
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+        """Build model inputs from a sequence by appending eos_token_id."""
+        if token_ids_1 is None:
+            return token_ids_0 + [self.eos_token_id]
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return token_ids_0 + token_ids_1 + [self.eos_token_id]

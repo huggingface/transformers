@@ -17,12 +17,12 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         #vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
         spm_file = PegasusTokenizer.vocab_files_names["vocab_file"]
-        if not (save_dir / spm_file).exists():
-            copyfile(SAMPLE_SP, save_dir / spm_file)
-        tokenizer = PegasusTokenizer(spm_file)
+        #if not (save_dir / spm_file).exists():
+        #copyfile(SAMPLE_SP, save_dir / spm_file)
+        tokenizer = PegasusTokenizer(SAMPLE_SP)
 
-        #tokenizer = PegasusTokenizer.from_pretrained('sshleifer/pegasus')
-        #assert tokenizer.vocab_size == 96103
+        #
+        #
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PegasusTokenizer:
@@ -33,3 +33,8 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "This is a test",
             "This is a test",
         )
+
+
+    def test_full_tokenizer(self):
+        tokenizer = PegasusTokenizer.from_pretrained('sshleifer/pegasus')
+        assert tokenizer.vocab_size == 96103
