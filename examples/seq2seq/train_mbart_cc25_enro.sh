@@ -5,7 +5,6 @@ python finetune.py \
     --learning_rate=3e-5 \
     --fp16 \
     --do_train \
-    --do_predict \
     --val_check_interval=0.25 \
     --adam_eps 1e-06 \
     --num_train_epochs 6 --src_lang en_XX --tgt_lang ro_RO \
@@ -15,6 +14,5 @@ python finetune.py \
     --task translation \
     --warmup_steps 500 \
     --freeze_embeds \
-    --early_stopping_patience 4 \
     --model_name_or_path=facebook/mbart-large-cc25 \
     $@
