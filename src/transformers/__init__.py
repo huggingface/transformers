@@ -568,6 +568,11 @@ if is_tf_available():
         TFGPT2PreTrainedModel,
     )
 
+    from .modeling_tf_longformer import (
+        TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFLongformerModel,
+    )
+
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFMobileBertModel,
