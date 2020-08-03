@@ -56,7 +56,7 @@ jobs:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
-            - run: sudo pip install .[mecab,testing]
+            - run: sudo pip install .[ja,testing]
             - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
             - store_artifacts:
                 path: ~/transformers/output.txt
@@ -73,7 +73,7 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install -r examples/requirements.txt
-            - run: python -m pytest -n 8 --dist=loadfile -s ./examples/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./examples/ | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt

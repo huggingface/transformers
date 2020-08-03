@@ -56,12 +56,12 @@ class EncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            from transformers import AutoModel
+            from .modeling_auto import AutoModel
 
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            from transformers import AutoModelForCausalLM
+            from .modeling_auto import AutoModelForCausalLM
 
             decoder = AutoModelForCausalLM.from_config(config.decoder)
 
@@ -159,7 +159,7 @@ class EncoderDecoderModel(PreTrainedModel):
             from .modeling_auto import AutoModelForCausalLM
 
             if "config" not in kwargs_decoder:
-                from transformers import AutoConfig
+                from .configuration_auto import AutoConfig
 
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False:
@@ -273,7 +273,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
-                return_tuple=True,
+                return_dict=False,
                 **kwargs_encoder,
             )
 
@@ -288,7 +288,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             labels=labels,
-            return_tuple=True,
+            return_dict=False,
             **kwargs_decoder,
         )
 

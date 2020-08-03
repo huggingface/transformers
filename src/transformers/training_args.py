@@ -85,7 +85,7 @@ class TrainingArguments:
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wherher to not use CUDA even when it is available or not.
+            Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
             Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -160,6 +160,8 @@ class TrainingArguments:
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for Adam optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for Adam optimizer"})
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
@@ -308,7 +310,10 @@ class TrainingArguments:
         Sanitized serialization to use with TensorBoard’s hparams
         """
         d = dataclasses.asdict(self)
+        d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
+
         valid_types = [bool, int, float, str]
         if is_torch_available():
             valid_types.append(torch.Tensor)
+
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}

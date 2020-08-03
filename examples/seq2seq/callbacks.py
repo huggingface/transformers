@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.utilities import rank_zero_only
 
 
@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 class Seq2SeqLoggingCallback(pl.Callback):
+    def on_batch_end(self, trainer, pl_module):
+        lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
+        pl_module.logger.log_metrics(lrs)
+
     @rank_zero_only
     def _write_logs(
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
@@ -90,3 +94,7 @@ def get_checkpoint_callback(output_dir, metric):
         period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.
     )
     return checkpoint_callback
+
+
+def get_early_stopping_callback(metric, patience):
+    return EarlyStopping(monitor=f"val_{metric}", mode="max", patience=patience, verbose=True,)

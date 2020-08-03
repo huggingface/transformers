@@ -147,7 +147,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose:
             logger.info("counting file {} ...".format(path))
-        assert os.path.exists(path)
+        assert os.path.exists(path), f"Input file {path} not found"
 
         sents = []
         with open(path, "r", encoding="utf-8") as f:
@@ -233,7 +233,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):
         if verbose:
             logger.info("encoding file {} ...".format(path))
-        assert os.path.exists(path)
+        assert os.path.exists(path), f"Output file {path} not found"
         encoded = []
         with open(path, "r", encoding="utf-8") as f:
             for idx, line in enumerate(f):
