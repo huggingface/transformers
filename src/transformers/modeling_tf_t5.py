@@ -1269,6 +1269,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         if labels is not None:
             loss = self.compute_loss(labels, logits)
+            loss = tf.reduce_mean(loss)
             decoder_outputs = (loss,) + decoder_outputs
 
         return decoder_outputs + encoder_outputs
