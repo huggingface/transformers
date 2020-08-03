@@ -133,7 +133,7 @@ class SequentialDistributedSampler(Sampler):
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
         assert (
             len(indices) == self.num_samples
-        ), f"Indices length {len(indices)} and and sample number {self.num_samples} mismatched"
+        ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
 
         return iter(indices)
 
