@@ -16,7 +16,7 @@ if is_tf_available():
     from transformers.modeling_tf_pegasus import encode, decode
 
 
-class TFPegasusModelTester(object):
+class TFPegasusModelTester:
     def __init__(
         self,
         parent,

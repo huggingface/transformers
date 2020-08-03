@@ -223,6 +223,9 @@ class MarianTokenizer(PreTrainedTokenizer):
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
 
+_SHIFT_RESERVED_TOKENS = 103
+
+
 def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor()
     spm.Load(path)

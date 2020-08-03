@@ -7,7 +7,7 @@ import logging
 import math
 
 import tensorflow as tf
-import tensorflow_text as tf_text
+#import tensorflow_text as tf_text
 
 from .configuration_pegasus import PegasusConfig
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
