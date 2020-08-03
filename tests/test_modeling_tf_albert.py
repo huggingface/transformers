@@ -116,6 +116,7 @@ class TFAlbertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -129,21 +130,17 @@ class TFAlbertModelTester:
         #           'token_type_ids': token_type_ids}
         # sequence_output, pooled_output = model(**inputs)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        sequence_output, pooled_output = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids, input_mask]
-        sequence_output, pooled_output = model(inputs)
+        result = model(inputs)
 
-        sequence_output, pooled_output = model(input_ids)
+        result = model(input_ids)
 
-        result = {
-            "sequence_output": sequence_output.numpy(),
-            "pooled_output": pooled_output.numpy(),
-        }
         self.parent.assertListEqual(
-            list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            list(result["last_hidden_state"].shape), [self.batch_size, self.seq_length, self.hidden_size]
         )
-        self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
+        self.parent.assertListEqual(list(result["pooler_output"].shape), [self.batch_size, self.hidden_size])
 
     def create_and_check_albert_for_pretraining(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -151,28 +148,19 @@ class TFAlbertModelTester:
         config.num_labels = self.num_labels
         model = TFAlbertForPreTraining(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        prediction_scores, sop_scores = model(inputs)
-        result = {
-            "prediction_scores": prediction_scores.numpy(),
-            "sop_scores": sop_scores.numpy(),
-        }
+        result = model(inputs)
         self.parent.assertListEqual(
-            list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            list(result["prediction_logits"].shape), [self.batch_size, self.seq_length, self.vocab_size]
         )
-        self.parent.assertListEqual(list(result["sop_scores"].shape), [self.batch_size, self.num_labels])
+        self.parent.assertListEqual(list(result["sop_logits"].shape), [self.batch_size, self.num_labels])
 
     def create_and_check_albert_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFAlbertForMaskedLM(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        (prediction_scores,) = model(inputs)
-        result = {
-            "prediction_scores": prediction_scores.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        result = model(inputs)
+        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.vocab_size])
 
     def create_and_check_albert_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -180,10 +168,7 @@ class TFAlbertModelTester:
         config.num_labels = self.num_labels
         model = TFAlbertForSequenceClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = model(inputs)
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
     def create_and_check_albert_for_question_answering(
@@ -191,11 +176,7 @@ class TFAlbertModelTester:
     ):
         model = TFAlbertForQuestionAnswering(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        start_logits, end_logits = model(inputs)
-        result = {
-            "start_logits": start_logits.numpy(),
-            "end_logits": end_logits.numpy(),
-        }
+        result = model(inputs)
         self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
