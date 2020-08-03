@@ -114,8 +114,7 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
         idx = tf.stack([r, target], 1)
         return tf.gather_nd(logprob, idx)
 
-    def call(self, inputs, return_mean=True, training=False):
-        hidden, target = inputs
+    def call(self, hidden, target, return_mean=True, training=False):
         head_logprob = 0
         if self.n_clusters == 0:
             output = self._logit(hidden, self.out_layers[0][0], self.out_layers[0][1], self.out_projs[0])
