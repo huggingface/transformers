@@ -14,27 +14,44 @@ EOS_ID = 1
 class PegasusTokenizer(ReformerTokenizer):
     offset = 103  # to make embedding size a multiple of 128 I think
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    def _convert_token_to_id(self, token):
+        #import ipdb; ipdb.set_trace()
+
+        # Dont use reserved words added_token_encoder, added_tokens_decoder because they
+        # get checked in from_pretrained
+        assert len(self.added_tokens_decoder) == 0
+        self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
+        self.encoder.update({i: f'unk_{i}' for i in range(2, self.offset + 2)})
+        #self.added_tokens_decoder = self._added_toks
+        self.decoder: Dict[str, int] = {v: k for k,v in self.encoder.items()}
+        assert 104 in self.encoder
+        assert 105 not in self.encoder
+        assert self.pad_token_id == 0, 'pad should be 0'
+        assert self.eos_token_id == 1, 'eos should be 1'
+        assert self.unk_token_id != 2
+
+    # def build_inputs_with_special_tokens(
+    #     self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    # ) -> List[int]:
+
+    def _convert_token_to_id(self, token: str) -> int:
         """ Converts a token (str) in an id using the vocab. """
-        sp_id = self.sp_model.piece_to_id(token)
-        if sp_id > 1:
-            return sp_id + self.offset
-        else:
-            return sp_id
+        if token in self.decoder:
+            return self.decoder[token]
 
-    def _convert_id_to_token(self, index):
+        sp_id = self.sp_model.piece_to_id(token)
+        return sp_id + self.offset
+
+    def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index <= 1:
-            return {0: self.pad_token, 1: self.eos_token}[index]
-        elif index <= self.offset:
-            return self.unk_token
+        if index in self.encoder:
+            return self.encoder[index]
         else:
-            assert index > self.offset, f"cannot decode ids between 2 and {self.offset}. Got {index}"
+            # assert index > self.offset, f"cannot decode ids between 2 and {self.offset}. Got {index}"
             token = self.sp_model.IdToPiece(index-self.offset)
         return token
-
-
 
     def prepare_seq2seq_batch(
         self,
@@ -61,7 +78,6 @@ class PegasusTokenizer(ReformerTokenizer):
         """
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
-        src_texts = [self.normalize(t) for t in src_texts]  # this does not appear to do much
         tokenizer_kwargs = dict(
             add_special_tokens=True,
             return_tensors=return_tensors,
@@ -76,12 +92,15 @@ class PegasusTokenizer(ReformerTokenizer):
         decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
-        self.current_spm = self.spm_source
         return model_inputs
 
     @property
     def vocab_size(self) -> int:
-        return len(self.sp_model) +_SHIFT_RESERVED_TOKENS
+        return len(self.sp_model) + self.offset
+
+    def get_vocab(self) -> Dict[str, int]:
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        return vocab
 
 
     def num_special_tokens_to_add(self, **unused):

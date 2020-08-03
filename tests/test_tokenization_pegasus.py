@@ -23,6 +23,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             copyfile(SAMPLE_SP, save_dir / spm_file)
 
         tokenizer = PegasusTokenizer.from_pretrained('sshleifer/pegasus')
+        assert tokenizer.vocab_size == 96103
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PegasusTokenizer:
