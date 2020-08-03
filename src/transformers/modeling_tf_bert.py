@@ -24,9 +24,22 @@ import tensorflow as tf
 from .configuration_bert import BertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
+from .modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFBaseModelOutputWithPooling,
+    TFCausalLMOutput,
+    TFMaskedLMOutput,
+    TFultipleChoiceModelOutput,
+    TFNextSentencePredictorOutput,
+    TFQuestionAnsweringModelOutput,
+    TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
 )
 from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
@@ -45,6 +58,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "BertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -389,9 +403,9 @@ class TFBertEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states, training=False):
-        all_hidden_states = ()
-        all_attentions = ()
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states, return_dict, training=False):
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -409,15 +423,11 @@ class TFBertEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states,)
-
-        if output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-
-        if output_attentions:
-            outputs = outputs + (all_attentions,)
-
-        return outputs  # outputs, (hidden states), (attentions)
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 class TFBertPooler(tf.keras.layers.Layer):
@@ -517,6 +527,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.return_dict = config.use_return_dict
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
         self.pooler = TFBertPooler(config, name="pooler")
@@ -545,6 +556,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -556,7 +568,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
             output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            assert len(inputs) <= 8, "Too many inputs."
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -566,12 +579,14 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 8, "Too many inputs."
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -621,16 +636,22 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             head_mask,
             output_attentions,
             output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
-        outputs = (sequence_output, pooled_output,) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
 
-        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+        if not return_dict: 
+            return (sequence_output, pooled_output,) + encoder_outputs[1:]
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_state=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class TFBertPreTrainedModel(TFPreTrainedModel):
@@ -640,6 +661,36 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
 
     config_class = BertConfig
     base_model_prefix = "bert"
+
+
+@dataclass
+class TFBertForPretrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.BertForPretrainingModel`.
+
+    Args:
+        prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        seq_relationship_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, 2)`):
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False
+            continuation before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    prediction_logits: tf.Tensor = None
+    seq_relationship_logits: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 BERT_START_DOCSTRING = r"""
@@ -712,6 +763,11 @@ BERT_INPUTS_DOCSTRING = r"""
             (if set to :obj:`False`) for evaluation.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -725,32 +781,13 @@ class TFBertModel(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name="bert")
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="bert-base-cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="bert-base-uncased",
+        output_type=TFBaseModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(self, inputs, **kwargs):
-        r"""
-    Returns:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during Bert pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
         outputs = self.bert(inputs, **kwargs)
         return outputs
 
@@ -772,25 +809,10 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         return self.bert.embeddings
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @replace_return_docstrings(output_type=TFBertForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
 
     Examples::
 
@@ -810,11 +832,15 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
         seq_relationship_score = self.nsp(pooled_output)
 
-        outputs = (prediction_scores, seq_relationship_score,) + outputs[
-            2:
-        ]  # add hidden states and attention if they are here
+        if not return_dict:
+            return (prediction_scores, seq_relationship_score) + outputs[2:]
 
-        return outputs  # prediction_scores, seq_relationship_score, (hidden_states), (attentions)
+        return BertForPretrainingOutput(
+            prediction_logits=prediction_scores,
+            seq_relationship_logits=seq_relationship_score,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
