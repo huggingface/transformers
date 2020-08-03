@@ -191,10 +191,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    @property
-    def vocab_size(self):
-        return self.sp_model.get_piece_size() + self.offset
-    
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
         state.update({k: None for k in ["spm_source", "spm_target", "current_spm", "punc_normalizer"]})
@@ -225,9 +221,6 @@ class MarianTokenizer(PreTrainedTokenizer):
             return self._special_token_mask(token_ids_0) + [1]
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
-
-
-_SHIFT_RESERVED_TOKENS = 103
 
 
 def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:

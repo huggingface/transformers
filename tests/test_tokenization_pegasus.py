@@ -19,7 +19,8 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         spm_file = PegasusTokenizer.vocab_files_names["vocab_file"]
         #if not (save_dir / spm_file).exists():
         #copyfile(SAMPLE_SP, save_dir / spm_file)
-        tokenizer = PegasusTokenizer(SAMPLE_SP)
+        #tokenizer = PegasusTokenizer(SAMPLE_SP)
+        tokenizer = PegasusTokenizer.from_pretrained('sshleifer/pegasus')
 
         #
         #
