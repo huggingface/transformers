@@ -93,9 +93,6 @@ class DataCollatorForLanguageModeling:
     def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
         length_of_first = examples[0].size(0)
         are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
-        for example in self.tokenizer.batch_decode(examples):
-            print(example)
-            print("-" * 89)
         if are_tensors_same_length:
             return torch.stack(examples, dim=0)
         else:
