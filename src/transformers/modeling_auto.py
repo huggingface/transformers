@@ -98,6 +98,7 @@ from .modeling_electra import (
 )
 from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_flaubert import (
+    FlaubertForMultipleChoice,
     FlaubertForQuestionAnsweringSimple,
     FlaubertForSequenceClassification,
     FlaubertForTokenClassification,
@@ -142,6 +143,7 @@ from .modeling_roberta import (
 from .modeling_t5 import T5ForConditionalGeneration, T5Model
 from .modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
+    XLMForMultipleChoice,
     XLMForQuestionAnsweringSimple,
     XLMForSequenceClassification,
     XLMForTokenClassification,
@@ -338,6 +340,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
+        (FlaubertConfig, FlaubertForTokenClassification),
     ]
 )
 
@@ -353,6 +356,8 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (MobileBertConfig, MobileBertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
         (AlbertConfig, AlbertForMultipleChoice),
+        (XLMConfig, XLMForMultipleChoice),
+        (FlaubertConfig, FlaubertForMultipleChoice),
     ]
 )
 
