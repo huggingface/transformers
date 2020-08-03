@@ -66,8 +66,8 @@ class BartTokenizer(RobertaTokenizer):
             max_target_length (:obj:`int`, `optional`):
                 Maximum length for the target texts. If not provided, this will use the predefined model maximum length.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
-                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                 index) among:
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
 
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
