@@ -599,7 +599,7 @@ class Trainer:
                         self.save_model(output_dir)
 
                         if self.is_world_process_zero():
-                            self._rotate_checkpoints()
+                            self._rotate_checkpoints(use_mtime=True)
 
                         if is_torch_tpu_available():
                             xm.rendezvous("saving_optimizer_states")
