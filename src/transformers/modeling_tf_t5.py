@@ -115,6 +115,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.is_decoder = config.is_decoder
         self.use_cache = config.use_cache
         self.has_relative_attention_bias = has_relative_attention_bias
+        self.output_attentions = config.output_attentions
 
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.d_model = config.d_model
@@ -296,7 +297,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         outputs = (context,) + present_key_value_state
 
-        if cast_bool_to_primitive(output_attentions, True) is True:
+        if output_attentions:
             outputs = outputs + (weights,)
         if self.has_relative_attention_bias:
             outputs = outputs + (position_bias,)
@@ -699,7 +700,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(inputs_embeds, training=training)
 
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
@@ -727,23 +728,23 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
 
         # Add last layer
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         # need to check if is decoder here as well for special cases when using keras compile
         if cast_bool_to_primitive(use_cache, self.use_cache) is True and self.is_decoder:
             outputs = outputs + (present_key_value_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 

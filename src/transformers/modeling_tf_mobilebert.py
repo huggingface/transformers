@@ -35,7 +35,6 @@ from .modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -130,7 +129,15 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             )
         super().build(input_shape)
 
-    def call(self, inputs, mode="embedding", training=False):
+    def call(
+        self,
+        input_ids=None,
+        position_ids=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        mode="embedding",
+        training=False,
+    ):
         """Get token embeddings of inputs.
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
@@ -146,15 +153,15 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
-            return self._embedding(inputs, training=training)
+            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         elif mode == "linear":
-            return self._linear(inputs)
+            return self._linear(input_ids)
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
-    def _embedding(self, inputs, training=False):
+    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
+        assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
             input_shape = shape_list(input_ids)
@@ -196,6 +203,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings, training=training)
+
         return embeddings
 
     def _linear(self, inputs):
@@ -224,6 +232,7 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
             )
 
         self.num_attention_heads = config.num_attention_heads
+        self.output_attentions = config.output_attentions
         assert config.hidden_size % config.num_attention_heads == 0
         self.attention_head_size = int(config.true_hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -244,14 +253,13 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, inputs, training=False):
-        query_tensor, key_tensor, value_tensor, attention_mask, head_mask, output_attentions = inputs
-
+    def call(
+        self, query_tensor, key_tensor, value_tensor, attention_mask, head_mask, output_attentions, training=False
+    ):
         batch_size = shape_list(attention_mask)[0]
         mixed_query_layer = self.query(query_tensor)
         mixed_key_layer = self.key(key_tensor)
         mixed_value_layer = self.value(value_tensor)
-
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
@@ -285,9 +293,7 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
 
-        outputs = (
-            (context_layer, attention_probs) if cast_bool_to_primitive(output_attentions) is True else (context_layer,)
-        )
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
 
@@ -305,8 +311,7 @@ class TFMobileBertSelfOutput(tf.keras.layers.Layer):
         if not self.use_bottleneck:
             self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, inputs, training=False):
-        hidden_states, residual_tensor = inputs
+    def call(self, hidden_states, residual_tensor, training=False):
         hidden_states = self.dense(hidden_states)
         if not self.use_bottleneck:
             hidden_states = self.dropout(hidden_states, training=training)
@@ -323,13 +328,22 @@ class TFMobileBertAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
-        query_tensor, key_tensor, value_tensor, layer_input, attention_mask, head_mask, output_attentions = inputs
-
+    def call(
+        self,
+        query_tensor,
+        key_tensor,
+        value_tensor,
+        layer_input,
+        attention_mask,
+        head_mask,
+        output_attentions,
+        training=False,
+    ):
         self_outputs = self.self(
-            [query_tensor, key_tensor, value_tensor, attention_mask, head_mask, output_attentions], training=training
+            query_tensor, key_tensor, value_tensor, attention_mask, head_mask, output_attentions, training=training
         )
-        attention_output = self.mobilebert_output([self_outputs[0], layer_input], training=training)
+
+        attention_output = self.mobilebert_output(self_outputs[0], layer_input, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -349,8 +363,7 @@ class TFOutputBottleneck(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, inputs, training=False):
-        hidden_states, residual_tensor = inputs
+    def call(self, hidden_states, residual_tensor, training=False):
         layer_outputs = self.dense(hidden_states)
         layer_outputs = self.dropout(layer_outputs, training=training)
         layer_outputs = self.LayerNorm(layer_outputs + residual_tensor)
@@ -372,16 +385,14 @@ class TFMobileBertOutput(tf.keras.layers.Layer):
         else:
             self.bottleneck = TFOutputBottleneck(config, name="bottleneck")
 
-    def call(self, inputs, training=False):
-        hidden_states, residual_tensor_1, residual_tensor_2 = inputs
-
+    def call(self, hidden_states, residual_tensor_1, residual_tensor_2, training=False):
         hidden_states = self.dense(hidden_states)
         if not self.use_bottleneck:
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = self.LayerNorm(hidden_states + residual_tensor_1)
         else:
             hidden_states = self.LayerNorm(hidden_states + residual_tensor_1)
-            hidden_states = self.bottleneck([hidden_states, residual_tensor_2])
+            hidden_states = self.bottleneck(hidden_states, residual_tensor_2)
         return hidden_states
 
 
@@ -466,7 +477,6 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.use_bottleneck = config.use_bottleneck
         self.num_feedforward_networks = config.num_feedforward_networks
-
         self.attention = TFMobileBertAttention(config, name="attention")
         self.intermediate = TFMobileBertIntermediate(config, name="intermediate")
         self.mobilebert_output = TFMobileBertOutput(config, name="output")
@@ -478,16 +488,20 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
                 TFFFNLayer(config, name="ffn.{}".format(i)) for i in range(config.num_feedforward_networks - 1)
             ]
 
-    def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions = inputs
-
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         if self.use_bottleneck:
             query_tensor, key_tensor, value_tensor, layer_input = self.bottleneck(hidden_states)
         else:
             query_tensor, key_tensor, value_tensor, layer_input = [hidden_states] * 4
 
         attention_outputs = self.attention(
-            [query_tensor, key_tensor, value_tensor, layer_input, attention_mask, head_mask, output_attentions],
+            query_tensor,
+            key_tensor,
+            value_tensor,
+            layer_input,
+            attention_mask,
+            head_mask,
+            output_attentions,
             training=training,
         )
 
@@ -500,48 +514,57 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
                 s += (attention_output,)
 
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.mobilebert_output(
-            [intermediate_output, attention_output, hidden_states], training=training
-        )
+        layer_output = self.mobilebert_output(intermediate_output, attention_output, hidden_states, training=training)
+
         outputs = (
             (layer_output,)
             + attention_outputs[1:]
-            + (0, query_tensor, key_tensor, value_tensor, layer_input, attention_output, intermediate_output)
+            + (
+                tf.constant(0),
+                query_tensor,
+                key_tensor,
+                value_tensor,
+                layer_input,
+                attention_output,
+                intermediate_output,
+            )
             + s
         )  # add attentions if we output them
+
         return outputs
 
 
 class TFMobileBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
         self.layer = [TFMobileBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
-    def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
-
+    def call(self, hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states, training=False):
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                [hidden_states, attention_mask, head_mask[i], output_attentions], training=training
+                hidden_states, attention_mask, head_mask[i], output_attentions, training=training
             )
+
             hidden_states = layer_outputs[0]
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         # Add last layer
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # outputs, (hidden states), (attentions)
 
@@ -732,11 +755,14 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
             raise NotImplementedError
         else:
             head_mask = [None] * self.num_hidden_layers
-            # head_mask = tf.constant([0] * self.num_hidden_layers)
 
-        embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
+        embedding_output = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         encoder_outputs = self.encoder(
-            [embedding_output, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            embedding_output,
+            extended_attention_mask,
+            head_mask,
+            output_attentions,
+            output_hidden_states,
             training=training,
         )
 
@@ -1360,8 +1386,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             if inputs_embeds is not None
             else None
         )
-
-        flat_inputs = [
+        outputs = self.mobilebert(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
@@ -1370,16 +1395,12 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             flat_inputs_embeds,
             output_attentions,
             output_hidden_states,
-        ]
-
-        outputs = self.mobilebert(flat_inputs, training=training)
-
+            training=training,
+        )
         pooled_output = outputs[1]
-
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
 
         if labels is not None:

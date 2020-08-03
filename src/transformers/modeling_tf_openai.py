@@ -29,7 +29,6 @@ from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
-    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -84,6 +83,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
+        self.output_attentions = config.output_attentions
 
         self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name="c_attn")
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
@@ -104,8 +104,7 @@ class TFAttention(tf.keras.layers.Layer):
         m = i >= j - ns + nd
         return tf.cast(m, dtype)
 
-    def _attn(self, inputs, training=False):
-        q, k, v, attention_mask, head_mask, output_attentions = inputs
+    def _attn(self, q, k, v, attention_mask, head_mask, output_attentions, training=False):
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
@@ -130,7 +129,7 @@ class TFAttention(tf.keras.layers.Layer):
             w = w * head_mask
 
         outputs = [tf.matmul(w, v)]
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs.append(w)
         return outputs
 
@@ -146,16 +145,14 @@ class TFAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
-    def call(self, inputs, training=False):
-        x, attention_mask, head_mask, output_attentions = inputs
-
+    def call(self, x, attention_mask, head_mask, output_attentions, training=False):
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
         query = self.split_heads(query)
         key = self.split_heads(key)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask, output_attentions], training=training)
+        attn_outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions, training=training)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -191,10 +188,8 @@ class TFBlock(tf.keras.layers.Layer):
         self.mlp = TFMLP(4 * nx, config, name="mlp")
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
-    def call(self, inputs, training=False):
-        x, attention_mask, head_mask, output_attentions = inputs
-
-        output_attn = self.attn([x, attention_mask, head_mask, output_attentions], training=training)
+    def call(self, x, attention_mask, head_mask, output_attentions, training=False):
+        output_attn = self.attn(x, attention_mask, head_mask, output_attentions, training=training)
         a = output_attn[0]  # output_attn: a, (attentions)
 
         n = self.ln_1(x + a)
@@ -341,23 +336,23 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         all_attentions = []
         all_hidden_states = ()
         for i, block in enumerate(self.h):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block([hidden_states, attention_mask, head_mask[i], output_attentions], training=training)
+            outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions, training=training)
             hidden_states = outputs[0]
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 all_attentions.append(outputs[1])
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
@@ -671,13 +666,11 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             input_shapes = shape_list(inputs_embeds)[:-1]
 
         seq_length = input_shapes[-1]
-
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-
-        flat_inputs = [
+        transformer_outputs = self.transformer(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
@@ -686,18 +679,13 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             inputs_embeds,
             output_attentions,
             output_hidden_states,
-        ]
-
-        transformer_outputs = self.transformer(flat_inputs, training=training)
+            training=training,
+        )
         hidden_states = transformer_outputs[0]
-
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
-
         lm_logits = self.transformer.tokens_embed(hidden_states, mode="linear")
-        mc_logits = self.multiple_choice_head([hidden_states, mc_token_ids], training=training)
-
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
-
         outputs = (lm_logits, mc_logits) + transformer_outputs[1:]
 
         return outputs  # lm logits, mc logits, (all hidden_states), (attentions)

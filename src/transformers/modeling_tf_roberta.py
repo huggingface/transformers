@@ -86,9 +86,9 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
         position_ids = tf.range(self.padding_idx + 1, seq_length + self.padding_idx + 1, dtype=tf.int32)[tf.newaxis, :]
         return position_ids
 
-    def _embedding(self, inputs, training=False):
+    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
+        assert not (input_ids is None and inputs_embeds is None)
 
         if position_ids is None:
             if input_ids is not None:
@@ -97,7 +97,7 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        return super()._embedding([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
+        return super()._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
 
 
 @keras_serializable
@@ -546,8 +546,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-
-        flat_inputs = [
+        outputs = self.roberta(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
@@ -556,16 +555,12 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             inputs_embeds,
             output_attentions,
             output_hidden_states,
-        ]
-
-        outputs = self.roberta(flat_inputs, training=training)
-
+            training=training,
+        )
         pooled_output = outputs[1]
-
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
 
         if labels is not None:

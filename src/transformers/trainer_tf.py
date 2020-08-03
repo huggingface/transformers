@@ -4,7 +4,6 @@ import datetime
 import logging
 import math
 import os
-import sys
 import warnings
 from typing import Callable, Dict, Optional, Tuple
 
@@ -23,15 +22,6 @@ if is_wandb_available():
 
 
 logger = logging.getLogger(__name__)
-
-
-if parse(tf.__version__).release < (2, 2, 0):
-    logger.info(
-        "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is {}".format(
-            tf.__version__
-        )
-    )
-    sys.exit(1)
 
 
 class TFTrainer:
@@ -77,6 +67,11 @@ class TFTrainer:
             None,
         ),
     ):
+        assert parse(tf.__version__).release >= (2, 2, 0), (
+            "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
+            % tf.__version__
+        )
+
         self.model = model
         self.args = args
         self.train_dataset = train_dataset
