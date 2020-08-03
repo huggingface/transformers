@@ -127,13 +127,12 @@ class EncoderDecoderModel(PreTrainedModel):
         Examples::
 
             >>> from transformers import EncoderDecoderModel
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
-
-        Example loading pretrained configs separately::
-            >>> from transformers import BertConfig, EncoderDecoderModel
-
-            >>> pretrained_model_name_or_path = 'bert-base-multilingual-cased'
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(pretrained_model_name_or_path, pretrained_model_name_or_path)
+            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') 
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert2bert")
+            >>> # load fine-tuned model
+            >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
 
         """
 
