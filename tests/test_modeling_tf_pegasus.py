@@ -47,6 +47,8 @@ class TFPegasusModelTester(object):
         self.eos_token_id = eos_token_id
         self.scope = scope
 
+from transformers.file_utils import cached_property
+import os
 
 @require_tf
 class TFPegasusModelTest(unittest.TestCase):
@@ -54,13 +56,16 @@ class TFPegasusModelTest(unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFPegasusPreTrainedModel,) if is_tf_available() else ()
 
-    def setUp(self):
-        pass
+    @cached_property
+    def model(self):
+        raise NotImplementedError('no s3 yet')
+
 
     # TODO: refactor to follow transformers' standard testing pipeline
-    def test_pegasus_model(self):
+    def test_pegasus_aeslc_model(self):
         model_dir = "../pegasus/ckpt/pegasus_ckpt/aeslc"
         spm_model = "../pegasus/ckpt/pegasus_ckpt/c4.unigram.newline.10pct.96000.model"
+        assert os.path.exists(model_dir)
 
         self.assertTrue(tf.compat.v1.train.checkpoint_exists(model_dir))
         vocab_size = 96000 + 103

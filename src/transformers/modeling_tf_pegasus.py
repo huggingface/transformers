@@ -507,7 +507,7 @@ def split_heads(tensor_BxIxD, num_heads):
     return tensor_BxHxIxD
 
 
-class Attention(object):
+class Attention:
     """Multihead scaled dot product attention."""
 
     def __init__(self, hidden_size, num_heads, attention_dropout):
@@ -647,7 +647,7 @@ def stack(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, 
 # pointers for your model.
 ####################################################
 # TODO: object -> TFPreTrainedModel
-class TFPegasusPreTrainedModel(object):
+class TFPegasusPreTrainedModel:
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pre-trained models.
     """
@@ -666,6 +666,7 @@ class TFPegasusPreTrainedModel(object):
         label_smoothing,
         dropout,
     ):
+        #FIXME(SS): should take config
         self._dtype = tf.float32
         self._embedding_layer = Embedding(vocab_size, hidden_size, "weights", self._dtype)
         block_fn = lambda: TransformerBlock(hidden_size, filter_size, num_heads, dropout)
