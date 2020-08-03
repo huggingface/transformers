@@ -124,11 +124,15 @@ class SequentialDistributedSampler(Sampler):
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
-        assert len(indices) == self.total_size
+        assert (
+            len(indices) == self.total_size
+        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert len(indices) == self.num_samples
+        assert (
+            len(indices) == self.num_samples
+        ), f"Indices length {len(indices)} and and sample number {self.num_samples} mismatched"
 
         return iter(indices)
 
@@ -566,9 +570,11 @@ class Trainer:
                         # In all cases (even distributed/parallel), self.model is always a reference
                         # to the model we want to save.
                         if hasattr(model, "module"):
-                            assert model.module is self.model
+                            assert (
+                                model.module is self.model
+                            ), f"Module {model.module} should be a reference to self.model"
                         else:
-                            assert model is self.model
+                            assert model is self.model, f"Model {model} should be a reference to self.model"
                         # Save model checkpoint
                         output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
 
