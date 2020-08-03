@@ -24,10 +24,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from .configuration_mpnet import MPNetConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
 from .modeling_bert import (
-    BertEmbeddings, 
     BertPreTrainedModel, 
     BertIntermediate, 
     BertOutput, 
@@ -46,47 +46,14 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 
-from .modeling_roberta import RobertaLMHead, RobertaClassificationHead
+from .modeling_roberta import RobertaLMHead, RobertaClassificationHead, RobertaEmbeddings
 
 
 logger = logging.getLogger(__name__)
 
 
-class MPNetEmbeddings(BertEmbeddings):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.padding_idx = 1
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
-        if position_ids is None:
-            if input_ids is not None:
-                # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx).to(input_ids.device)
-            else:
-                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
-
-        return super().forward(
-            input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds
-        )
-
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """ We are provided embeddings directly. We cannot infer which are padded so just generate
-        sequential position ids.
-        :param torch.Tensor inputs_embeds:
-        :return torch.Tensor:
-        """
-        input_shape = inputs_embeds.size()[:-1]
-        sequence_length = input_shape[1]
-
-        position_ids = torch.arange(
-            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
-        )
-        return position_ids.unsqueeze(0).expand(input_shape)
+class MPNetPreTrainedModel(PreTrainedModel):
+    config_class = MPNetConfig
 
 
 class MPNetSelfAttention(BertSelfAttention):
@@ -290,7 +257,7 @@ class MPNetModel(BertModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = MPNetEmbeddings(config)
+        self.embeddings = RobertaEmbeddings(config)
         self.encoder = MPNetEncoder(config)
 
         self.init_weights()
