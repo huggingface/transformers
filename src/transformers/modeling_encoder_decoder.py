@@ -133,7 +133,6 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> from transformers import BertConfig, EncoderDecoderModel
 
             >>> pretrained_model_name_or_path = 'bert-base-multilingual-cased'
-            >>> decoder_config = BertConfig.from_pretrained(pretrained_model_name_or_path, is_decoder=True)
             >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(pretrained_model_name_or_path, pretrained_model_name_or_path)
 
         """
