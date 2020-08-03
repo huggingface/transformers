@@ -22,7 +22,7 @@ import logging
 # Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
-from .configuration_bart import BartConfig
+from .configuration_bart import BartConfig, MBartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
@@ -104,6 +104,8 @@ from .modeling_tf_pytorch_utils import (
 
 # Pipelines
 from .pipelines import (
+    Conversation,
+    ConversationalPipeline,
     CsvPipelineDataFormat,
     FeatureExtractionPipeline,
     FillMaskPipeline,
@@ -278,6 +280,7 @@ if is_torch_available():
         XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForQuestionAnsweringSimple,
+        XLMForMultipleChoice,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_bart import (
@@ -356,6 +359,8 @@ if is_torch_available():
         FlaubertForTokenClassification,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
+        FlaubertForTokenClassification,
+        FlaubertForMultipleChoice,
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -531,8 +536,10 @@ if is_tf_available():
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFElectraForMaskedLM,
+        TFElectraForMultipleChoice,
         TFElectraForPreTraining,
         TFElectraForQuestionAnswering,
+        TFElectraForSequenceClassification,
         TFElectraForTokenClassification,
         TFElectraModel,
         TFElectraPreTrainedModel,

@@ -4,12 +4,15 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable, MULTIPLE_CHOICE_DUMMY_INPUTS
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFMultipleChoiceLoss,
     TFQuestionAnsweringLoss,
     TFTokenClassificationLoss,
+    TFSequenceClassificationLoss,
+    TFSequenceSummary,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -72,7 +75,15 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
             )
         super().build(input_shape)
 
-    def call(self, inputs, mode="embedding", training=False):
+    def call(
+        self,
+        input_ids,
+        position_ids=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        mode="embedding",
+        training=False,
+    ):
         """Get token embeddings of inputs.
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
@@ -88,15 +99,15 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
-            return self._embedding(inputs, training=training)
+            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         elif mode == "linear":
-            return self._linear(inputs)
+            return self._linear(input_ids)
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
-    def _embedding(self, inputs, training=False):
+    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
+        assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
             input_shape = shape_list(input_ids)
@@ -290,13 +301,17 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
         head_mask = self.get_head_mask(head_mask)
 
-        hidden_states = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
+        hidden_states = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
 
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states, training=training)
 
         hidden_states = self.encoder(
-            [hidden_states, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            hidden_states,
+            extended_attention_mask,
+            head_mask,
+            output_attentions,
+            output_hidden_states,
             training=training,
         )
 
@@ -426,7 +441,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids=None,
+        input_ids,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -527,7 +542,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-generator")
     def call(
         self,
-        input_ids=None,
+        input_ids,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -593,6 +608,197 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
 
 
 @add_start_docstrings(
+    """ELECTRA Model with a sequence classification/regression head on top (a linear layer on top of
+    the pooled output) e.g. for GLUE tasks. """,
+    ELECTRA_START_DOCSTRING,
+)
+class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        config.summary_proj_to_labels = True
+        self.electra = TFElectraMainLayer(config, name="electra")
+        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name="sequence_summary")
+
+    @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
+    def call(
+            self,
+            input_ids,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            labels=None,
+            training=False,
+    ):
+        r"""
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
+        logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`)
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+        """
+        outputs = self.electra(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            output_hidden_states,
+            training=training,
+        )
+        logits = self.sequence_summary(outputs[0])
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """ELECTRA Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    ELECTRA_START_DOCSTRING,
+)
+class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.electra = TFElectraMainLayer(config, name="electra")
+        config.summary_proj_to_labels = True
+        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name="sequence_summary")
+        self.classifier = tf.keras.layers.Dense(
+            1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+
+    @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        labels=None,
+        training=False,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the multiple choice classification loss.
+            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+            of the input tensors. (see `input_ids` above)
+
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
+        classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
+            `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
+
+            Classification scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        """
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            head_mask = inputs[4] if len(inputs) > 4 else head_mask
+            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            labels = inputs[8] if len(inputs) > 8 else labels
+            assert len(inputs) <= 9, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 9, "Too many inputs."
+        else:
+            input_ids = inputs
+
+        if input_ids is not None:
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
+        else:
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
+
+        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        flat_inputs_embeds = (
+            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            if inputs_embeds is not None
+            else None
+        )
+        outputs = self.electra(
+            flat_input_ids,
+            flat_attention_mask,
+            flat_token_type_ids,
+            flat_position_ids,
+            head_mask,
+            flat_inputs_embeds,
+            output_attentions,
+            output_hidden_states,
+            training=training,
+        )
+        logits = self.sequence_summary(outputs[0])
+        logits = self.classifier(logits)
+        reshaped_logits = tf.reshape(logits, (-1, num_choices))
+        outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss = self.compute_loss(labels, reshaped_logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
     """Electra model with a token classification head on top.
 
     Both the discriminator and generator may be loaded into this model.""",
@@ -612,7 +818,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(
         self,
-        inputs=None,
+        inputs,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -694,7 +900,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
     def call(
         self,
-        inputs=None,
+        inputs,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
