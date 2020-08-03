@@ -45,6 +45,65 @@ class BartTokenizer(RobertaTokenizer):
         "merges_file": {m: merges_url for m in _all_bart_models},
     }
 
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: str = "None",
+        **kwargs,
+    ) -> BatchEncoding:
+        """Prepare a batch that can be passed directly to an instance of BartModel.
+        Args:
+            src_texts (:obj:`List[str]`):
+                list of src texts
+            tgt_texts (:obj:`List[str]`, `optional`):
+                list of tgt texts
+            max_length (:obj:`int`, `optional`):
+                maximum length for the source text which defers to the config value of 1024 for facebook/bart*
+            max_target_length (:obj:`int`, `optional`):
+                maximum length for the target text which defers to the config value of 1024 for facebook/bart*
+            padding (:obj:`str`, `optional`, defaults to "longest"):
+                strategy for padding `input_ids` and `decoder_input_ids`. Should be "max_length" or "longest".
+            return_tensors (:obj:`str`, `optional`):
+                Can be set to ‘tf’, ‘pt’ or ‘np’ to return respectively TensorFlow `tf.constant`, PyTorch `torch.Tensor` or Numpy :oj: np.ndarray instead of a list of python integers.
+            **kwargs:
+                passed to self.__call__
+        Returns:
+            :class:`~transformers.BatchEncoding`: with keys input_ids, attention_mask, decoder_input_ids, decoder_attention_mask.
+        """
+        if max_length is None:
+            max_length = self.model_max_length
+        model_inputs: BatchEncoding = self(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            padding=padding,
+            truncation=True,
+            **kwargs,
+        )
+        if tgt_texts is None:
+            return model_inputs
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+        decoder_inputs: BatchEncoding = self(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_target_length,
+            truncation=True,
+            **kwargs,
+        )
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
+
+        return model_inputs
+
 
 class BartTokenizerFast(RobertaTokenizerFast):
     # merges and vocab same as Roberta
