@@ -28,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--hf_config",
-        default="facebook/mbart-large-en-ro",
+        default="facebook/mbart-large-cc25",
         type=str,
         help="Which huggingface architecture to use: bart-large-xsum",
     )
