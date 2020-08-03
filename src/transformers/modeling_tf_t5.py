@@ -1067,7 +1067,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
-class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModelingLoss):
+class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling ):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
@@ -1269,7 +1269,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         if labels is not None:
             loss = self.compute_loss(labels, logits)
-            loss = tf.reduce_mean(loss)
             decoder_outputs = (loss,) + decoder_outputs
 
         return decoder_outputs + encoder_outputs
