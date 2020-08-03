@@ -58,19 +58,31 @@ class BartTokenizer(RobertaTokenizer):
         """Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
         Args:
             src_texts (:obj:`List[str]`):
-                list of src texts
+                List of input texts.
             tgt_texts (:obj:`List[str]`, `optional`):
-                list of tgt texts
+                List of target texts.
             max_length (:obj:`int`, `optional`):
-                maximum length for the source text which defers to the config value of 1024 for facebook/bart*
+                Maximum length for the source texts. If not provided, this will use the predefined model maximum length.
             max_target_length (:obj:`int`, `optional`):
-                maximum length for the target text which defers to the config value of 1024 for facebook/bart*
-            padding (:obj:`str`, `optional`, defaults to "longest"):
-                strategy for padding `input_ids` and `decoder_input_ids`. Should be "max_length" or "longest".
-            return_tensors (:obj:`str`, `optional`):
-                Can be set to ‘tf’, ‘pt’ or ‘np’ to return respectively TensorFlow `tf.constant`, PyTorch `torch.Tensor` or Numpy :oj: np.ndarray instead of a list of python integers.
+                Maximum length for the target texts. If not provided, this will use the predefined model maximum length.
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
+
+                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                  single sequence if provided).
+                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided.
+                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                  different lengths).
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
             **kwargs:
-                passed to self.__call__
+                Additional keyword arguments passed along to :obj:`self.__call__`.
         Returns:
             :class:`~transformers.BatchEncoding`: with keys input_ids, attention_mask, decoder_input_ids, decoder_attention_mask.
         """
