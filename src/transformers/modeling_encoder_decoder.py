@@ -134,7 +134,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
             >>> pretrained_model_name_or_path = 'bert-base-multilingual-cased'
             >>> decoder_config = BertConfig.from_pretrained(pretrained_model_name_or_path, is_decoder=True)
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(pretrained_model_name_or_path, pretrained_model_name_or_path, encoder_config=encoder_config, decoder_config=decoder_config)
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(pretrained_model_name_or_path, pretrained_model_name_or_path)
 
         """
 
