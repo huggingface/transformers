@@ -810,7 +810,6 @@ class SpecialTokensMixin:
 
         if not isinstance(new_tokens, (list, tuple)):
             new_tokens = [new_tokens]
-
         return self._add_tokens(new_tokens, special_tokens=special_tokens)
 
     @property

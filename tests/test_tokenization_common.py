@@ -758,24 +758,26 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 mask = "<mask>"
                 sequence = "Encode this sequence"
-                sequence_masked_0 = "Encode <mask> sequence"
-                sequence_masked_1 = "<mask> this sequence"
-
                 # Add tokens so that masked token isn't split
                 tokenizer.add_tokens(sequence.split())
+
                 tokenizer.add_special_tokens({"mask_token": mask})
                 mask_ind = tokenizer.convert_tokens_to_ids(mask)
                 encoded = tokenizer.encode(sequence, add_special_tokens=False)
 
                 # Test first masked sequence
+                sequence_masked_0 = "Encode <mask> sequence"
                 encoded_masked = tokenizer.encode(sequence_masked_0, add_special_tokens=False)
                 mask_loc = encoded_masked.index(mask_ind)
+
                 encoded_masked[mask_loc] = encoded[mask_loc]
 
                 self.assertEqual(encoded_masked, encoded)
 
                 # Test second masked sequence
+                sequence_masked_1 = "<mask> this sequence"
                 encoded_masked = tokenizer.encode(sequence_masked_1, add_special_tokens=False)
+                self.assertEqual(len(encoded_masked), len(encoded))
                 mask_loc = encoded_masked.index(mask_ind)
                 encoded_masked[mask_loc] = encoded[mask_loc]
 

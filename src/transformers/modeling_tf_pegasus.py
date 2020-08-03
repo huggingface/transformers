@@ -7,7 +7,6 @@ import logging
 import math
 
 import tensorflow as tf
-#import tensorflow_text as tf_text
 
 from .configuration_pegasus import PegasusConfig
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
@@ -19,6 +18,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
+
+
+# import tensorflow_text as tf_text
+
 
 
 logger = logging.getLogger(__name__)
@@ -666,7 +669,7 @@ class TFPegasusPreTrainedModel:
         label_smoothing,
         dropout,
     ):
-        #FIXME(SS): should take config
+        # FIXME(SS): should take config
         self._dtype = tf.float32
         self._embedding_layer = Embedding(vocab_size, hidden_size, "weights", self._dtype)
         block_fn = lambda: TransformerBlock(hidden_size, filter_size, num_heads, dropout)

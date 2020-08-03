@@ -1,9 +1,11 @@
 """Documentation string."""
 
 
+import os
 import unittest
 
 from transformers import PegasusConfig, is_tf_available
+from transformers.file_utils import cached_property
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
@@ -47,8 +49,8 @@ class TFPegasusModelTester:
         self.eos_token_id = eos_token_id
         self.scope = scope
 
-from transformers.file_utils import cached_property
-import os
+
+
 
 @require_tf
 class TFPegasusModelTest(unittest.TestCase):
@@ -58,8 +60,7 @@ class TFPegasusModelTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        raise NotImplementedError('no s3 yet')
-
+        raise NotImplementedError("no s3 yet")
 
     # TODO: refactor to follow transformers' standard testing pipeline
     def test_pegasus_aeslc_model(self):

@@ -1,10 +1,11 @@
 from pathlib import Path
 from shutil import copyfile
-from typing import List, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple
 
 from transformers import BatchEncoding
 from transformers.tokenization_marian import load_spm, save_json
 from transformers.tokenization_reformer import ReformerTokenizer
+
 
 _SHIFT_RESERVED_TOKENS = 103
 _NEWLINE_SYMBOL = "<n>"
@@ -13,35 +14,33 @@ EOS_ID = 1
 
 class PegasusTokenizer(ReformerTokenizer):
     offset = 103  # to make embedding size a multiple of 128 I think
-    vocab_files_names = {'vocab_file': 'spiece.model'}
+    vocab_files_names = {"vocab_file": "spiece.model"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        #import ipdb; ipdb.set_trace()
+        #
 
         # Dont use reserved words added_token_encoder, added_tokens_decoder because they
         # get checked in from_pretrained
         assert len(self.added_tokens_decoder) == 0
         self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
-        self.encoder.update({i: f'unk_{i}' for i in range(2, self.offset + 2)})
-        #self.added_tokens_decoder = self._added_toks
-        self.decoder: Dict[str, int] = {v: k for k,v in self.encoder.items()}
+        self.encoder.update({i: f"unk_{i}" for i in range(2, self.offset + 2)})
+        # self.added_tokens_decoder = self._added_toks
+        self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
         assert 104 in self.encoder
         assert 105 not in self.encoder
-        assert self.pad_token_id == 0, 'pad should be 0'
-        assert self.eos_token_id == 1, 'eos should be 1'
+        assert self.pad_token_id == 0, "pad should be 0"
+        assert self.eos_token_id == 1, "eos should be 1"
         assert self.unk_token_id != 2
-
-    # def build_inputs_with_special_tokens(
-    #     self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    # ) -> List[int]:
 
     def _convert_token_to_id(self, token: str) -> int:
         """ Converts a token (str) in an id using the vocab. """
+
         if token in self.decoder:
             return self.decoder[token]
-
+        elif token in self.added_tokens_decoder:
+            return self.added_tokens_decoder[token]
         sp_id = self.sp_model.piece_to_id(token)
         return sp_id + self.offset
 
@@ -49,9 +48,11 @@ class PegasusTokenizer(ReformerTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         if index in self.encoder:
             return self.encoder[index]
+        elif index in self.added_tokens_encoder:
+            return self.added_tokens_encoder[index]
         else:
             # assert index > self.offset, f"cannot decode ids between 2 and {self.offset}. Got {index}"
-            token = self.sp_model.IdToPiece(index-self.offset)
+            token = self.sp_model.IdToPiece(index - self.offset)
         return token
 
     def prepare_seq2seq_batch(
@@ -103,7 +104,6 @@ class PegasusTokenizer(ReformerTokenizer):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
-
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
