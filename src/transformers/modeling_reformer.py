@@ -1420,7 +1420,6 @@ class ReformerLayer(nn.Module):
         """
         # randomize seeds
         # use cuda generator if available
-        # use cuda generator if available
         if len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
