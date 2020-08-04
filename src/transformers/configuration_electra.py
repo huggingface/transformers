@@ -133,7 +133,6 @@ class ElectraConfig(PretrainedConfig):
         summary_use_proj=True,
         summary_activation="gelu",
         summary_last_dropout=0.1,
-        summary_proj_to_labels=True,
         pad_token_id=0,
         **kwargs
     ):
@@ -157,4 +156,3 @@ class ElectraConfig(PretrainedConfig):
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation
         self.summary_last_dropout = summary_last_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels

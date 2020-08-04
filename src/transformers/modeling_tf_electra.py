@@ -28,6 +28,7 @@ from .tokenization_utils import BatchEncoding
 logger = logging.getLogger(__name__)
 
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
+_CONFIG_FOR_DOC = "ElectraConfig"
 
 TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-small-generator",
@@ -606,8 +607,32 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         return output  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
 
+class TFElectraClassificationHead(tf.keras.layers.Layer):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.out_proj = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
+        )
+
+    def call(self, inputs, **kwargs):
+        x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = ACT2FN["gelu"](x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        x = self.dropout(x)
+        x = self.out_proj(x)
+
+        return x
+
+
 @add_start_docstrings(
-    """ELECTRA Model with a sequence classification/regression head on top (a linear layer on top of
+    """ELECTRA Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
     ELECTRA_START_DOCSTRING,
 )
@@ -616,12 +641,10 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
         self.electra = TFElectraMainLayer(config, name="electra")
-        self.sequence_summary = TFSequenceSummary(
-            config, initializer_range=config.initializer_range, name="sequence_summary"
-        )
+        self.classifier = TFElectraClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
+    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator", config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids,
@@ -660,7 +683,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             output_hidden_states,
             training=training,
         )
-        logits = self.sequence_summary(outputs[0])
+        logits = self.classifier(outputs[0])
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
         if labels is not None:
