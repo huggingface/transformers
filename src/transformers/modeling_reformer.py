@@ -1418,8 +1418,8 @@ class ReformerLayer(nn.Module):
             call and 1 forward call in backward
             to recalculate activations.
         """
-        #
         # randomize seeds
+        # use cuda generator if available
         # use cuda generator if available
         if len(torch.cuda.default_generators) > 0:
             # GPU
