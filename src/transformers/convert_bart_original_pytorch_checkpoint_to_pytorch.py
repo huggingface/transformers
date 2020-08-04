@@ -78,19 +78,6 @@ def load_xsum_checkpoint(checkpoint_path):
     return hub_interface
 
 
-def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
-    remove_ignore_keys_(state_dict)
-    vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
-    state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-    mbart_config = BartConfig(vocab_size=vocab_size, **config_kwargs)
-    model = BartForConditionalGeneration(mbart_config)
-    model.model.load_state_dict(state_dict)
-    if hasattr(model, "lm_head"):
-        model.lm_head = _make_linear_from_emb(model.model.shared)
-    return model
-
-
 @torch.no_grad()
 def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkpoint_name=None):
     """
