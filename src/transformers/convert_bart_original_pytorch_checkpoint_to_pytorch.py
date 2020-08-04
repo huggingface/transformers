@@ -30,7 +30,6 @@ from transformers import (
     BartForSequenceClassification,
     BartModel,
     BartTokenizer,
-    MBartConfig,
 )
 from transformers.modeling_bart import _make_linear_from_emb
 
