@@ -411,5 +411,4 @@ if __name__ == "__main__":
     parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
 
     args = parser.parse_args()
-    print(args.lr_scheduler)
     main(args)
