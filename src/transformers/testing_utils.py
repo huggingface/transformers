@@ -143,6 +143,8 @@ def require_torch_and_cuda(test_case):
 
 #
 # Helper functions for dealing with testing text outputs
+# The original code came from:
+# https://github.com/fastai/fastai/blob/master/tests/utils/text.py
 
 # When any function contains print() calls that get overwritten, like progress bars,
 # a special care needs to be applied, since under pytest -s captured output (capsys
