@@ -381,9 +381,7 @@ def test_finetune_lr_shedulers(capsys):
     args = argparse.Namespace(**args_d1)
 
     model = main(args)
-    assert (
-        getattr(model.hparams, "lr_scheduler") == supported_param
-    ), f"failed to override the model config for param {p}"
+    assert getattr(model.hparams, "lr_scheduler") == supported_param, f"lr_scheduler={supported_param} shouldn't fail"
 
 
 def test_pack_dataset():
