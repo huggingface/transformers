@@ -326,6 +326,66 @@ def test_finetune_extra_model_args():
     assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
 
 
+def test_finetune_lr_shedulers(capsys):
+    args_d: dict = CHEAP_ARGS.copy()
+
+    task = "summarization"
+    tmp_dir = make_test_data_dir()
+
+    model = BART_TINY
+    output_dir = tempfile.mkdtemp(prefix="output_1_")
+
+    args_d.update(
+        data_dir=tmp_dir,
+        model_name_or_path=model,
+        output_dir=output_dir,
+        tokenizer_name=None,
+        train_batch_size=2,
+        eval_batch_size=2,
+        do_predict=False,
+        task=task,
+        src_lang="en_XX",
+        tgt_lang="ro_RO",
+        freeze_encoder=True,
+        freeze_embeds=True,
+    )
+
+    # --lr_scheduler=help test
+    args_d1 = args_d.copy()
+    args_d1["lr_scheduler"] = "help"
+    args = argparse.Namespace(**args_d1)
+
+    with pytest.raises(SystemExit) as excinfo:
+        model = main(args)
+        assert False, "--lr_scheduler=help is expected to sys.exit"
+    captured = capsys.readouterr()
+    error_msg = "--lr_scheduler=help is expected to dump the supported schedulers"
+    assert "lr_scheduler=cosine" in captured.out, error_msg
+    assert "lr_scheduler=linear" in captured.out, error_msg
+
+    # --lr_scheduler=non_existing_scheduler test
+    unsupported_param = "non_existing_scheduler"
+    args_d1 = args_d.copy()
+    args_d1["lr_scheduler"] = unsupported_param
+    args = argparse.Namespace(**args_d1)
+
+    with pytest.raises(Exception) as excinfo:
+        model = main(args)
+    assert str(excinfo.value)
+    str(excinfo.value) == f"Error: Invalid --lr_scheduler option: {unsupported_param}"
+
+    # --lr_scheduler=existing_scheduler test
+    supported_param = "cosine"
+    args_d1 = args_d.copy()
+    args_d1["lr_scheduler"] = supported_param
+    args = argparse.Namespace(**args_d1)
+
+    model = main(args)
+    assert (
+        getattr(model.hparams, "lr_scheduler") == supported_param
+    ), f"failed to override the model config for param {p}"
+
+
 def test_pack_dataset():
     tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 

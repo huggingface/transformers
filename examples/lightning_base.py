@@ -1,12 +1,14 @@
 import argparse
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
 
+import transformers.optimization
 from transformers import (
     AdamW,
     AutoConfig,
@@ -20,7 +22,6 @@ from transformers import (
     AutoTokenizer,
     PretrainedConfig,
     PreTrainedTokenizer,
-    get_linear_schedule_with_warmup,
 )
 
 
@@ -36,6 +37,18 @@ MODEL_MODES = {
     "language-modeling": AutoModelWithLMHead,
     "summarization": AutoModelForSeq2SeqLM,
     "translation": AutoModelForSeq2SeqLM,
+}
+
+
+# update this to support new schedulers from transformers.optimization
+# the listed below schedulers appear in the output of --lr_scheduler=help
+arg_to_scheduler = {
+    "linear": "get_linear_schedule_with_warmup",
+    "cosine": "get_cosine_schedule_with_warmup",
+    "cosine_w_restarts": "get_cosine_with_hard_restarts_schedule_with_warmup",
+    # 'polynomial': '',                    # TODO
+    # 'get_constant_schedule',             # not supported for now
+    # 'get_constant_schedule_with_warmup', # not supported for now
 }
 
 
@@ -71,6 +84,15 @@ class BaseTransformer(pl.LightningModule):
         else:
             self.config: PretrainedConfig = config
 
+        # usage extended helpers
+        lr_scheduler = hparams.lr_scheduler
+        if lr_scheduler not in arg_to_scheduler.keys():
+            if lr_scheduler == "help":
+                print(lr_schedulers_help())
+                sys.exit(0)
+            else:
+                assert False, f"Error: Invalid --lr_scheduler option: {lr_scheduler}\n" + lr_schedulers_help()
+
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
         for p in extra_model_params:
             if getattr(self.hparams, p, None):
@@ -98,6 +120,14 @@ class BaseTransformer(pl.LightningModule):
     def load_hf_checkpoint(self, *args, **kwargs):
         self.model = self.model_type.from_pretrained(*args, **kwargs)
 
+    def get_lr_scheduler(self):
+        get_schedule_func = getattr(transformers.optimization, arg_to_scheduler[self.hparams.lr_scheduler])
+        scheduler = get_schedule_func(
+            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps
+        )
+        scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
+        return scheduler
+
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
         model = self.model
@@ -115,10 +145,8 @@ class BaseTransformer(pl.LightningModule):
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
         self.opt = optimizer
 
-        scheduler = get_linear_schedule_with_warmup(
-            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps
-        )
-        scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
+        scheduler = self.get_lr_scheduler()
+
         return [optimizer], [scheduler]
 
     def test_step(self, batch, batch_nb):
@@ -206,6 +234,12 @@ class BaseTransformer(pl.LightningModule):
             "--attention_dropout", type=float, help="Attention dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+        parser.add_argument(
+            "--lr_scheduler",
+            default="linear",
+            type=str,
+            help="Learning rate scheduler. Use --lr_scheduler=help to see supported values",
+        )
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
         parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
@@ -276,6 +310,16 @@ def add_generic_args(parser, root_dir) -> None:
     )
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+
+
+def lr_schedulers_help():
+    return "\n".join(
+        [
+            "Available lr_schedulers:",
+            *[f"--lr_scheduler={k} ({v})" for k, v in sorted(arg_to_scheduler.items())],
+            "--lr_scheduler=help (this help)",
+        ]
+    )
 
 
 def generic_train(
