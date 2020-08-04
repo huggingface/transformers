@@ -109,7 +109,7 @@ class TrainingArguments:
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument ``mems``.
-        name (:obj:`str`, `optional`, defaults to :obj:`None`):
+        name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
     """
 
