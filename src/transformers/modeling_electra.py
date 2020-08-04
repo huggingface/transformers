@@ -188,9 +188,9 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 
 
 @dataclass
-class ElectraForPretrainingOutput(ModelOutput):
+class ElectraForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.ElectraForPretrainingModel`.
+    Output type of :class:`~transformers.ElectraForPreTrainingModel`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -496,7 +496,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ElectraForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -562,7 +562,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             output = (logits,) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ElectraForPretrainingOutput(
+        return ElectraForPreTrainingOutput(
             loss=loss,
             logits=logits,
             hidden_states=discriminator_hidden_states.hidden_states,

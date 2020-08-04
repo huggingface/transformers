@@ -62,7 +62,10 @@ BertTokenizerFast
 Bert specific outputs
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_bert.BertForPretrainingOutput
+.. autoclass:: transformers.modeling_bert.BertForPreTrainingOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_bert.TFBertForPreTrainingOutput
     :members:
 
 

@@ -575,8 +575,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             past_key_value_states = inputs[6] if len(inputs) > 6 else past_key_value_states
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
-            output_attentions = inputs[8] if len(inputs) > 7 else output_attentions
-            output_hidden_states = inputs[9] if len(inputs) > 8 else output_hidden_states
+            output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
+            output_hidden_states = inputs[9] if len(inputs) > 9 else output_hidden_states
             assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")

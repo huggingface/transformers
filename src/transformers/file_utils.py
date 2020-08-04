@@ -259,7 +259,7 @@ def _prepare_output_docstrings(output_type, config_class):
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
-    intro = PT_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else TF_RETURN_INTRODUCTION
+    intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
     intro = intro.format(full_output_type=full_output_type, config_class=config_class)
     return intro + docstrings
 
