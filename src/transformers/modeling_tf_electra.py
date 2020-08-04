@@ -72,7 +72,15 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
             )
         super().build(input_shape)
 
-    def call(self, inputs, mode="embedding", training=False):
+    def call(
+        self,
+        input_ids=None,
+        position_ids=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        mode="embedding",
+        training=False,
+    ):
         """Get token embeddings of inputs.
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
@@ -88,15 +96,15 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
-            return self._embedding(inputs, training=training)
+            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         elif mode == "linear":
-            return self._linear(inputs)
+            return self._linear(input_ids)
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
-    def _embedding(self, inputs, training=False):
+    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
         """Applies embedding based on inputs tensor."""
-        input_ids, position_ids, token_type_ids, inputs_embeds = inputs
+        assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
             input_shape = shape_list(input_ids)
@@ -290,13 +298,17 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
         head_mask = self.get_head_mask(head_mask)
 
-        hidden_states = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
+        hidden_states = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
 
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states, training=training)
 
         hidden_states = self.encoder(
-            [hidden_states, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            hidden_states,
+            extended_attention_mask,
+            head_mask,
+            output_attentions,
+            output_hidden_states,
             training=training,
         )
 

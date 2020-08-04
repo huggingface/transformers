@@ -81,7 +81,6 @@ class TrainCommand(BaseTransformersCLICommand):
         self.framework = "tf" if is_tf_available() else "torch"
 
         os.makedirs(args.output, exist_ok=True)
-        assert os.path.isdir(args.output)
         self.output = args.output
 
         self.column_label = args.column_label
