@@ -18,11 +18,13 @@
 
 
 import logging
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 from .tokenization_utils import BatchEncoding
@@ -30,6 +32,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "TransfoXLConfig"
 _TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -388,6 +391,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
+        self.return_dict = config.use_return_dict
 
         self.n_token = config.vocab_size
 
@@ -525,6 +529,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -533,8 +538,9 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
             output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
-            output_hidden_states = inputs[5] if len(inputs) > 4 else output_hidden_states
-            assert len(inputs) <= 6, "Too many inputs."
+            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
+            return_dict = inputs[6] if len(inputs) > 6 else return_dict
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
@@ -542,12 +548,14 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 6, "Too many inputs."
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -606,7 +614,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         #         word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1+mlen)[:,:,None]
 
         hids = []
-        attentions = []
+        attentions = [] if output_attentions else None
         if self.attn_type == 0:  # default
             pos_seq = tf.range(klen - 1, -1, -1.0)
             if self.clamp_len > 0:
@@ -633,17 +641,24 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         new_mems = self._update_mems(hids, mems, mlen, qlen)
 
         # We transpose back here to shape [bsz, len, hidden_dim]
-        outputs = [tf.transpose(core_out, perm=(1, 0, 2)), new_mems]
+        core_out = tf.transpose(core_out, perm=(1, 0, 2))
+
         if output_hidden_states:
             # Add last layer and transpose to library standard shape [bsz, len, hidden_dim]
             hids.append(core_out)
-            hids = list(tf.transpose(t, perm=(1, 0, 2)) for t in hids)
-            outputs.append(hids)
+            hids = tuple(tf.transpose(t, perm=(1, 0, 2)) for t in hids)
+        else:
+            hids = None
         if output_attentions:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
-            attentions = list(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
-            outputs.append(attentions)
-        return outputs  # last hidden state, new_mems, (all hidden states), (all attentions)
+            attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
+
+        if not return_dict:
+            return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
+
+        return TFTransfoXLModelOutput(
+            last_hidden_state=core_out, mems=new_mems, hidden_states=hids, attentions=attentions,
+        )
 
 
 class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
@@ -653,6 +668,70 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
 
     config_class = TransfoXLConfig
     base_model_prefix = "transformer"
+
+
+@dataclass
+class TFTransfoXLModelOutput(ModelOutput):
+    """
+    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
+
+    Args:
+        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
+            Contains pre-computed hidden-states (key and values in the attention blocks).
+            Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
+            should not be passed as input ids as they have already been computed.
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: tf.Tensor = None
+    mems: List[tf.Tensor] = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
+
+
+@dataclass
+class TFTransfoXLLMHeadModelOutput(ModelOutput):
+    """
+    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
+
+    Args:
+        losses (:obj:`tf.Tensor` of shape `(batch_size, sequence_length-1)`, `optional`, returned when ``labels`` is provided)
+            Language modeling losses (not reduced).
+        prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
+        mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
+            Contains pre-computed hidden-states (key and values in the attention blocks).
+            Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
+            should not be passed as input ids as they have already been computed.
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    prediction_scores: tf.Tensor = None
+    mems: List[tf.Tensor] = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 TRANSFO_XL_START_DOCSTRING = r"""
@@ -706,6 +785,11 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -719,29 +803,13 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="transfo-xl-wt103")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="transfo-xl-wt103",
+        output_type=TFTransfoXLModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(self, inputs, **kwargs):
-        r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
-        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the last layer of the model.
-        mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
 
@@ -797,57 +865,47 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return self.transformer.init_mems(bsz)
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="transfo-xl-wt103")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="transfo-xl-wt103",
+        output_type=TFTransfoXLLMHeadModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs,
         mems=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
+        labels=None,
         training=False,
     ):
-        r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
-        prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        mems (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             mems = inputs[1] if len(inputs) > 1 else mems
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            labels = inputs[4] if len(inputs) > 4 else labels
-            output_attentions = inputs[5] if len(inputs) > 5 else output_attentions
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
+            return_dict = inputs[6] if len(inputs) > 6 else return_dict
+            labels = inputs[7] if len(inputs) > 7 else labels
+            assert len(inputs) <= 8, "Too many inputs."
         elif isinstance(inputs, (BatchEncoding, dict)):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            labels = inputs.get("labels", labels)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 6, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
 
         if input_ids is not None:
             bsz, tgt_len = shape_list(input_ids)[:2]
@@ -855,17 +913,30 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             bsz, tgt_len = shape_list(inputs_embeds)[:2]
 
         transformer_outputs = self.transformer(
-            input_ids, mems, head_mask, inputs_embeds, output_attentions, output_hidden_states, training=training
+            input_ids,
+            mems,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            training=training,
         )
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
-        outputs = transformer_outputs[1:]
 
         softmax_output = self.crit(pred_hid, labels, training=training)
-        outputs = [softmax_output] + outputs
 
-        return outputs  # logits, new_mems, (all hidden states), (all attentions)
+        if not return_dict:
+            return (softmax_output,) + transformer_outputs[1:]
+
+        return TFTransfoXLLMHeadModelOutput(
+            prediction_scores=softmax_output,
+            mems=transformer_outputs.mems,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
         inputs = {"inputs": inputs}

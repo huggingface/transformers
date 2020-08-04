@@ -661,9 +661,9 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
 
 @dataclass
-class TFAlbertForPretrainingOutput(ModelOutput):
+class TFAlbertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.AlbertForPretrainingModel`.
+    Output type of :class:`~transformers.TFAlbertForPreTrainingModel`.
 
     Args:
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -813,7 +813,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         return self.albert.embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=TFAlbertForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -837,7 +837,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         if not return_dict:
             return (prediction_scores, sop_scores) + outputs[2:]
 
-        return TFAlbertForPretrainingOutput(
+        return TFAlbertForPreTrainingOutput(
             prediction_logits=prediction_scores,
             sop_logits=sop_scores,
             hidden_states=outputs.hidden_states,

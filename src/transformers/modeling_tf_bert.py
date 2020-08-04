@@ -675,9 +675,9 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
 
 
 @dataclass
-class TFBertForPretrainingOutput(ModelOutput):
+class TFBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.BertForPretrainingModel`.
+    Output type of :class:`~transformers.TFBertForPreTrainingModel`.
 
     Args:
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -820,7 +820,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         return self.bert.embeddings
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=TFBertForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -848,7 +848,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         if not return_dict:
             return (prediction_scores, seq_relationship_score) + outputs[2:]
 
-        return TFBertForPretrainingOutput(
+        return TFBertForPreTrainingOutput(
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
             hidden_states=outputs.hidden_states,
