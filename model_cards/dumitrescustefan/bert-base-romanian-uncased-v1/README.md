@@ -1,5 +1,5 @@
 ---
-language: romanian
+language: ro
 ---
 
 # bert-base-romanian-uncased-v1

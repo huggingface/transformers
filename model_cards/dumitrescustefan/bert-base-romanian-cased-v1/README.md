@@ -1,5 +1,5 @@
 ---
-language: romanian
+language: ro
 ---
 
 # bert-base-romanian-cased-v1

@@ -66,7 +66,7 @@ class ModelTesterMixin:
         if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
             return {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
-                if isinstance(v, torch.Tensor) and v.ndim != 0
+                if isinstance(v, torch.Tensor) and v.ndim > 1
                 else v
                 for k, v in inputs_dict.items()
             }
@@ -220,7 +220,6 @@ class ModelTesterMixin:
 
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         self._create_and_check_torchscript(config, inputs_dict)
 
     def test_torchscript_output_attentions(self):
@@ -230,7 +229,6 @@ class ModelTesterMixin:
 
     def test_torchscript_output_hidden_state(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         config.output_hidden_states = True
         self._create_and_check_torchscript(config, inputs_dict)
 

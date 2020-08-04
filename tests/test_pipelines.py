@@ -2,7 +2,7 @@ import unittest
 from typing import Iterable, List, Optional
 
 from transformers import pipeline
-from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline
+from transformers.pipelines import SUPPORTED_TASKS, Conversation, DefaultArgumentHandler, Pipeline
 from transformers.testing_utils import require_tf, require_torch, slow, torch_device
 
 
@@ -28,6 +28,8 @@ TRANSLATION_FINETUNED_MODELS = [
 ]
 TF_TRANSLATION_FINETUNED_MODELS = [("patrickvonplaten/t5-tiny-random", "translation_en_to_fr")]
 
+DIALOGUE_FINETUNED_MODELS = ["microsoft/DialoGPT-medium"]
+
 expected_fill_mask_result = [
     [
         {"sequence": "<s>My name is John</s>", "score": 0.00782308354973793, "token": 610, "token_str": "ĠJohn"},
@@ -38,6 +40,7 @@ expected_fill_mask_result = [
         {"sequence": "<s>The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
     ],
 ]
+
 SUMMARIZATION_KWARGS = dict(num_beams=2, min_length=2, max_length=5)
 
 
@@ -155,34 +158,6 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 self.assertIn(key, result)
 
         self.assertRaises(Exception, nlp, invalid_inputs)
-
-    @require_torch
-    def test_torch_ner(self):
-        mandatory_keys = {"entity", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_torch
-    def test_ner_grouped(self):
-        mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_tf
-    def test_tf_ner(self):
-        mandatory_keys = {"entity", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
-
-    @require_tf
-    def test_tf_ner_grouped(self):
-        mandatory_keys = {"entity_group", "word", "score"}
-        for model_name in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, VALID_INPUTS, mandatory_keys)
 
     @require_torch
     def test_torch_sentiment_analysis(self):
@@ -341,8 +316,230 @@ class MonoColumnInputTestCase(unittest.TestCase):
             nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, VALID_INPUTS, {})
 
+    @slow
+    @require_torch
+    def test_integration_torch_conversation(self):
+        # When
+        nlp = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM)
+        conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
+        conversation_2 = Conversation("What's the last book you have read?")
+        # Then
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_2.past_user_inputs), 0)
+        # When
+        result = nlp([conversation_1, conversation_2], do_sample=False, max_length=1000)
+        # Then
+        self.assertEqual(result, [conversation_1, conversation_2])
+        self.assertEqual(len(result[0].past_user_inputs), 1)
+        self.assertEqual(len(result[1].past_user_inputs), 1)
+        self.assertEqual(len(result[0].generated_responses), 1)
+        self.assertEqual(len(result[1].generated_responses), 1)
+        self.assertEqual(result[0].past_user_inputs[0], "Going to the movies tonight - any suggestions?")
+        self.assertEqual(result[0].generated_responses[0], "The Big Lebowski")
+        self.assertEqual(result[1].past_user_inputs[0], "What's the last book you have read?")
+        self.assertEqual(result[1].generated_responses[0], "The Last Question")
+        # When
+        conversation_2.add_user_input("Why do you recommend it?")
+        result = nlp(conversation_2, do_sample=False, max_length=1000)
+        # Then
+        self.assertEqual(result, conversation_2)
+        self.assertEqual(len(result.past_user_inputs), 2)
+        self.assertEqual(len(result.generated_responses), 2)
+        self.assertEqual(result.past_user_inputs[1], "Why do you recommend it?")
+        self.assertEqual(result.generated_responses[1], "It's a good book.")
+
+    @slow
+    @require_torch
+    def test_integration_torch_conversation_truncated_history(self):
+        # When
+        nlp = pipeline(task="conversational", min_length_for_response=24, device=DEFAULT_DEVICE_NUM)
+        conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
+        # Then
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        # When
+        result = nlp(conversation_1, do_sample=False, max_length=36)
+        # Then
+        self.assertEqual(result, conversation_1)
+        self.assertEqual(len(result.past_user_inputs), 1)
+        self.assertEqual(len(result.generated_responses), 1)
+        self.assertEqual(result.past_user_inputs[0], "Going to the movies tonight - any suggestions?")
+        self.assertEqual(result.generated_responses[0], "The Big Lebowski")
+        # When
+        conversation_1.add_user_input("Is it an action movie?")
+        result = nlp(conversation_1, do_sample=False, max_length=36)
+        # Then
+        self.assertEqual(result, conversation_1)
+        self.assertEqual(len(result.past_user_inputs), 2)
+        self.assertEqual(len(result.generated_responses), 2)
+        self.assertEqual(result.past_user_inputs[1], "Is it an action movie?")
+        self.assertEqual(result.generated_responses[1], "It's a comedy.")
+
 
 QA_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]
+
+
+class ZeroShotClassificationPipelineTests(unittest.TestCase):
+    def _test_scores_sum_to_one(self, result):
+        sum = 0.0
+        for score in result["scores"]:
+            sum += score
+        self.assertAlmostEqual(sum, 1.0)
+
+    def _test_zero_shot_pipeline(self, nlp):
+        output_keys = {"sequence", "labels", "scores"}
+        valid_mono_inputs = [
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics"},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": ["politics"]},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics, public health"},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": ["politics", "public health"]},
+            {"sequences": ["Who are you voting for in 2020?"], "candidate_labels": "politics"},
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": "This text is about {}",
+            },
+        ]
+        valid_multi_input = {
+            "sequences": ["Who are you voting for in 2020?", "What is the capital of Spain?"],
+            "candidate_labels": "politics",
+        }
+        invalid_inputs = [
+            {"sequences": None, "candidate_labels": "politics"},
+            {"sequences": "", "candidate_labels": "politics"},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": None},
+            {"sequences": "Who are you voting for in 2020?", "candidate_labels": ""},
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": None,
+            },
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": "",
+            },
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": "politics",
+                "hypothesis_template": "Template without formatting syntax.",
+            },
+        ]
+        self.assertIsNotNone(nlp)
+
+        for mono_input in valid_mono_inputs:
+            mono_result = nlp(**mono_input)
+            self.assertIsInstance(mono_result, dict)
+            if len(mono_result["labels"]) > 1:
+                self._test_scores_sum_to_one(mono_result)
+
+            for key in output_keys:
+                self.assertIn(key, mono_result)
+
+        multi_result = nlp(**valid_multi_input)
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], dict)
+        self.assertEqual(len(multi_result), len(valid_multi_input["sequences"]))
+
+        for result in multi_result:
+            for key in output_keys:
+                self.assertIn(key, result)
+
+            if len(result["labels"]) > 1:
+                self._test_scores_sum_to_one(result)
+
+        for bad_input in invalid_inputs:
+            self.assertRaises(Exception, nlp, **bad_input)
+
+    def _test_zero_shot_pipeline_outputs(self, nlp):
+        inputs = [
+            {
+                "sequences": "Who are you voting for in 2020?",
+                "candidate_labels": ["politics", "public health", "science"],
+            },
+            {
+                "sequences": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.",
+                "candidate_labels": ["machine learning", "statistics", "translation", "vision"],
+                "multi_class": True,
+            },
+        ]
+
+        expected_outputs = [
+            {
+                "sequence": "Who are you voting for in 2020?",
+                "labels": ["politics", "public health", "science"],
+                "scores": [0.975, 0.015, 0.008],
+            },
+            {
+                "sequence": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks in an encoder-decoder configuration. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing both with large and limited training data.",
+                "labels": ["translation", "machine learning", "vision", "statistics"],
+                "scores": [0.817, 0.712, 0.018, 0.017],
+            },
+        ]
+
+        for input, expected_output in zip(inputs, expected_outputs):
+            output = nlp(**input)
+            for key in output:
+                if key == "scores":
+                    for output_score, expected_score in zip(output[key], expected_output[key]):
+                        self.assertAlmostEqual(output_score, expected_score, places=2)
+                else:
+                    self.assertEqual(output[key], expected_output[key])
+
+    @require_torch
+    def test_torch_zero_shot_classification(self):
+        for model_name in TEXT_CLASSIF_FINETUNED_MODELS:
+            nlp = pipeline(task="zero-shot-classification", model=model_name, tokenizer=model_name)
+            self._test_zero_shot_pipeline(nlp)
+
+    @require_tf
+    def test_tf_zero_shot_classification(self):
+        for model_name in TEXT_CLASSIF_FINETUNED_MODELS:
+            nlp = pipeline(task="zero-shot-classification", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_zero_shot_pipeline(nlp)
+
+    @slow
+    @require_torch
+    def test_torch_zero_shot_outputs(self):
+        nlp = pipeline(task="zero-shot-classification", model="roberta-large-mnli")
+        self._test_zero_shot_pipeline_outputs(nlp)
+
+    @slow
+    @require_tf
+    def test_tf_zero_shot_outputs(self):
+        nlp = pipeline(task="zero-shot-classification", model="roberta-large-mnli", framework="tf")
+        self._test_zero_shot_pipeline_outputs(nlp)
+
+
+class DialoguePipelineTests(unittest.TestCase):
+    def _test_conversation_pipeline(self, nlp):
+        valid_inputs = [Conversation("Hi there!"), [Conversation("Hi there!"), Conversation("How are you?")]]
+        invalid_inputs = ["Hi there!", Conversation()]
+        self.assertIsNotNone(nlp)
+
+        mono_result = nlp(valid_inputs[0])
+        self.assertIsInstance(mono_result, Conversation)
+
+        multi_result = nlp(valid_inputs[1])
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], Conversation)
+        # Inactive conversations passed to the pipeline raise a ValueError
+        self.assertRaises(ValueError, nlp, valid_inputs[1])
+
+        for bad_input in invalid_inputs:
+            self.assertRaises(Exception, nlp, bad_input)
+        self.assertRaises(Exception, nlp, invalid_inputs)
+
+    @require_torch
+    def test_torch_conversation(self):
+        for model_name in DIALOGUE_FINETUNED_MODELS:
+            nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name)
+            self._test_conversation_pipeline(nlp)
+
+    @require_tf
+    def test_tf_conversation(self):
+        for model_name in DIALOGUE_FINETUNED_MODELS:
+            nlp = pipeline(task="conversational", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_conversation_pipeline(nlp)
 
 
 class QAPipelineTests(unittest.TestCase):
@@ -393,8 +590,101 @@ class QAPipelineTests(unittest.TestCase):
             self._test_qa_pipeline(nlp)
 
 
-class PipelineCommonTests(unittest.TestCase):
+class NerPipelineTests(unittest.TestCase):
+    def _test_ner_pipeline(
+        self, nlp: Pipeline, output_keys: Iterable[str],
+    ):
 
+        ungrouped_ner_inputs = [
+            [
+                {"entity": "B-PER", "index": 1, "score": 0.9994944930076599, "word": "Cons"},
+                {"entity": "B-PER", "index": 2, "score": 0.8025449514389038, "word": "##uelo"},
+                {"entity": "I-PER", "index": 3, "score": 0.9993102550506592, "word": "Ara"},
+                {"entity": "I-PER", "index": 4, "score": 0.9993743896484375, "word": "##új"},
+                {"entity": "I-PER", "index": 5, "score": 0.9992871880531311, "word": "##o"},
+                {"entity": "I-PER", "index": 6, "score": 0.9993029236793518, "word": "No"},
+                {"entity": "I-PER", "index": 7, "score": 0.9981776475906372, "word": "##guera"},
+                {"entity": "B-PER", "index": 15, "score": 0.9998136162757874, "word": "Andrés"},
+                {"entity": "I-PER", "index": 16, "score": 0.999740719795227, "word": "Pas"},
+                {"entity": "I-PER", "index": 17, "score": 0.9997414350509644, "word": "##tran"},
+                {"entity": "I-PER", "index": 18, "score": 0.9996136426925659, "word": "##a"},
+                {"entity": "B-ORG", "index": 28, "score": 0.9989739060401917, "word": "Far"},
+                {"entity": "I-ORG", "index": 29, "score": 0.7188422083854675, "word": "##c"},
+            ],
+            [
+                {"entity": "I-PER", "index": 1, "score": 0.9968166351318359, "word": "En"},
+                {"entity": "I-PER", "index": 2, "score": 0.9957635998725891, "word": "##zo"},
+                {"entity": "I-ORG", "index": 7, "score": 0.9986497163772583, "word": "UN"},
+            ],
+        ]
+        expected_grouped_ner_results = [
+            [
+                {"entity_group": "B-PER", "score": 0.9710702640669686, "word": "Consuelo Araújo Noguera"},
+                {"entity_group": "B-PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
+                {"entity_group": "B-ORG", "score": 0.8589080572128296, "word": "Farc"},
+            ],
+            [
+                {"entity_group": "I-PER", "score": 0.9962901175022125, "word": "Enzo"},
+                {"entity_group": "I-ORG", "score": 0.9986497163772583, "word": "UN"},
+            ],
+        ]
+
+        self.assertIsNotNone(nlp)
+
+        mono_result = nlp(VALID_INPUTS[0])
+        self.assertIsInstance(mono_result, list)
+        self.assertIsInstance(mono_result[0], (dict, list))
+
+        if isinstance(mono_result[0], list):
+            mono_result = mono_result[0]
+
+        for key in output_keys:
+            self.assertIn(key, mono_result[0])
+
+        multi_result = [nlp(input) for input in VALID_INPUTS]
+        self.assertIsInstance(multi_result, list)
+        self.assertIsInstance(multi_result[0], (dict, list))
+
+        if isinstance(multi_result[0], list):
+            multi_result = multi_result[0]
+
+        for result in multi_result:
+            for key in output_keys:
+                self.assertIn(key, result)
+
+        for ungrouped_input, grouped_result in zip(ungrouped_ner_inputs, expected_grouped_ner_results):
+            self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
+
+    @require_torch
+    def test_torch_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+    @require_torch
+    def test_ner_grouped(self):
+        mandatory_keys = {"entity_group", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+    @require_tf
+    def test_tf_ner(self):
+        mandatory_keys = {"entity", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+    @require_tf
+    def test_tf_ner_grouped(self):
+        mandatory_keys = {"entity_group", "word", "score"}
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
+            self._test_ner_pipeline(nlp, mandatory_keys)
+
+
+class PipelineCommonTests(unittest.TestCase):
     pipelines = SUPPORTED_TASKS.keys()
 
     @slow

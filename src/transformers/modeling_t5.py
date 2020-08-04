@@ -27,12 +27,20 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from .configuration_t5 import T5Config
-from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
+from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 ####################################################
@@ -123,7 +131,9 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
             logger.info("Transposing numpy weight of shape {} for {}".format(array.shape, name))
             array = np.transpose(array)
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -667,6 +677,7 @@ class T5Stack(T5PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
     ):
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -674,6 +685,7 @@ class T5Stack(T5PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -704,6 +716,9 @@ class T5Stack(T5PreTrainedModel):
         else:
             mask_seq_length = seq_length
 
+        if use_cache is True:
+            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
+
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -726,9 +741,9 @@ class T5Stack(T5PreTrainedModel):
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-        present_key_value_states = ()
-        all_hidden_states = ()
-        all_attentions = ()
+        present_key_value_states = () if use_cache else None
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
         position_bias = None
         encoder_decoder_position_bias = None
 
@@ -761,7 +776,8 @@ class T5Stack(T5PreTrainedModel):
                 if self.is_decoder and encoder_hidden_states is not None:
                     encoder_decoder_position_bias = layer_outputs[5 if output_attentions else 3]
             # append next layer key value states
-            present_key_value_states = present_key_value_states + (present_key_value_state,)
+            if use_cache:
+                present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
@@ -773,15 +789,18 @@ class T5Stack(T5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states,)
-        if use_cache is True:
-            assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
-            outputs = outputs + (present_key_value_states,)
-        if output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (presents,) (all hidden states), (all attentions)
+        if not return_dict:
+            return tuple(
+                v
+                for v in [hidden_states, present_key_value_states, all_hidden_states, all_attentions]
+                if v is not None
+            )
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=present_key_value_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+        )
 
 
 T5_START_DOCSTRING = r"""
@@ -819,27 +838,27 @@ T5_INPUTS_DOCSTRING = r"""
             Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
-            If `decoder_past_key_value_states` is used, optionally only the last `decoder_input_ids` have to be input (see `decoder_past_key_value_states`).
+            If `decoder_past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see `decoder_past_key_values`).
             To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
             `T5 Training <./t5.html#training>`__. If decoder_input_ids and decoder_inputs_embeds are both None,
             decoder_input_ids takes the value of input_ids.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        decoder_past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.
-            If `decoder_past_key_value_states` are used, the user can optionally input only the last `decoder_input_ids`
+            If `decoder_past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all `decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If `use_cache` is True, `decoder_past_key_value_states` are returned and can be used to speed up decoding (see `decoder_past_key_value_states`).
+            If `use_cache` is True, `decoder_past_key_values` are returned and can be used to speed up decoding (see `decoder_past_key_values`).
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
-            If `decoder_past_key_value_states` is used, optionally only the last `decoder_inputs_embeds` have to be input (see `decoder_past_key_value_states`).
+            If `decoder_past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be input (see `decoder_past_key_values`).
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix. If decoder_input_ids and decoder_inputs_embeds are both None,
             decoder_inputs_embeds takes the value of inputs_embeds.
@@ -849,6 +868,11 @@ T5_INPUTS_DOCSTRING = r"""
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -894,6 +918,7 @@ class T5Model(T5PreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -901,49 +926,41 @@ class T5Model(T5PreTrainedModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        decoder_past_key_value_states=None,
+        decoder_past_key_values=None,
         use_cache=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
+        **kwargs,
     ):
         r"""
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-            If `decoder_past_key_value_states` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``use_cache=True``):
-            Contains pre-computed key and value hidden-states of the attention blocks.
-            Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
-            Note that when using `decoder_past_key_value_states`, the model only outputs the last `hidden-state` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+    Example::
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        >>> from transformers import T5Tokenizer, T5Model
 
-        Example::
+        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        >>> model = T5Model.from_pretrained('t5-small')
 
-            >>> from transformers import T5Tokenizer, T5Model
+        >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        >>> outputs = model(input_ids=input_ids)
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5Model.from_pretrained('t5-small')
-
-            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            >>> outputs = model(input_ids=input_ids)
-
-            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
+        if "decoder_past_key_value_states" in kwargs:
+            warnings.warn(
+                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `decoder_past_key_values` instead.",
+                FutureWarning,
+            )
+            decoder_past_key_values = kwargs.pop("decoder_past_key_value_states")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -954,6 +971,13 @@ class T5Model(T5PreTrainedModel):
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        elif not return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         hidden_states = encoder_outputs[0]
@@ -966,7 +990,7 @@ class T5Model(T5PreTrainedModel):
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
-        if decoder_past_key_value_states is not None:
+        if decoder_past_key_values is not None:
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
             if decoder_inputs_embeds is not None:
@@ -977,24 +1001,37 @@ class T5Model(T5PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_value_states=decoder_past_key_value_states,
+            past_key_value_states=decoder_past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        if use_cache is True:
-            past = ((encoder_outputs, decoder_outputs[1]),)
-            decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
+        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
+        if not return_dict:
+            if past is not None:
+                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
+            return decoder_outputs + encoder_outputs
 
-        return decoder_outputs + encoder_outputs
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            decoder_past_key_values=past,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class T5ForConditionalGeneration(T5PreTrainedModel):
+    authorized_missing_keys = [r"encoder\.embed_tokens\.weight", r"decoder\.embed_tokens\.weight", r"lm_head\.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model
@@ -1031,6 +1068,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1038,7 +1076,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        decoder_past_key_value_states=None,
+        decoder_past_key_values=None,
         use_cache=None,
         labels=None,
         inputs_embeds=None,
@@ -1046,7 +1084,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        **kwargs
+        return_dict=None,
+        **kwargs,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1058,40 +1097,20 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             Used to hide legacy arguments that have been deprecated.
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Classification loss (cross entropy).
-        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-            If `past_key_value_states` is used only the last prediction_scores of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``use_cache=True``):
-            Contains pre-computed key and value hidden-states of the attention blocks.
-            Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
-            Note that when using `decoder_past_key_value_states`, the model only outputs the last `prediction_score` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
 
     Examples::
 
         >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
 
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
         >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
         >>> outputs = model(input_ids=input_ids, labels=input_ids)
-        >>> loss, prediction_scores = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
         >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
         >>> outputs = model.generate(input_ids)
         """
@@ -1099,12 +1118,19 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if "lm_labels" in kwargs:
             warnings.warn(
                 "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                DeprecationWarning,
+                FutureWarning,
             )
             labels = kwargs.pop("lm_labels")
+        if "decoder_past_key_value_states" in kwargs:
+            warnings.warn(
+                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `decoder_past_key_values` instead.",
+                FutureWarning,
+            )
+            decoder_past_key_values = kwargs.pop("decoder_past_key_value_states")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1116,6 +1142,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1126,7 +1159,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
-        if decoder_past_key_value_states is not None:
+        if decoder_past_key_values is not None:
             assert labels is None, "Decoder should not use cached key value states when training."
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1138,20 +1171,15 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_value_states=decoder_past_key_value_states,
+            past_key_value_states=decoder_past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-
-        # insert decoder past at right place
-        # to speed up decoding
-        if use_cache is True:
-            past = ((encoder_outputs, decoder_outputs[1]),)
-            decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
 
         sequence_output = decoder_outputs[0]
         # Rescale output before projecting on vocab
@@ -1159,23 +1187,38 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         sequence_output = sequence_output * (self.model_dim ** -0.5)
         lm_logits = self.lm_head(sequence_output)
 
-        decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
+        loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
-            decoder_outputs = (loss,) + decoder_outputs
 
-        return decoder_outputs + encoder_outputs
+        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
+        if not return_dict:
+            if past is not None:
+                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
+            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=lm_logits,
+            decoder_past_key_values=past,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
-        encoder_outputs, decoder_past_key_value_states = past
+        encoder_outputs, decoder_past_key_values = past
 
         return {
             "decoder_input_ids": input_ids,
-            "decoder_past_key_value_states": decoder_past_key_value_states,
+            "decoder_past_key_values": decoder_past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "use_cache": use_cache,

@@ -30,12 +30,26 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import gelu
 from .configuration_distilbert import DistilBertConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
+from .modeling_outputs import (
+    BaseModelOutput,
+    MaskedLMOutput,
+    MultipleChoiceModelOutput,
+    QuestionAnsweringModelOutput,
+    SequenceClassifierOutput,
+    TokenClassifierOutput,
+)
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "DistilBertConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -264,7 +278,9 @@ class Transformer(nn.Module):
         layer = TransformerBlock(config)
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
 
-    def forward(self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False):
+    def forward(
+        self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_dict=None
+    ):
         """
         Parameters
         ----------
@@ -284,8 +300,8 @@ class Transformer(nn.Module):
             Tuple of length n_layers with the attention weights from each layer
             Optional: only if output_attentions=True
         """
-        all_hidden_states = ()
-        all_attentions = ()
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
 
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
@@ -308,12 +324,11 @@ class Transformer(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
 
-        outputs = (hidden_state,)
-        if output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if output_attentions:
-            outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+        if not return_dict:
+            return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
@@ -379,6 +394,11 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -410,6 +430,12 @@ class DistilBertModel(DistilBertPreTrainedModel):
             self.transformer.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="distilbert-base-uncased",
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
     def forward(
         self,
@@ -419,28 +445,13 @@ class DistilBertModel(DistilBertPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
     ):
-        r"""
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -461,17 +472,14 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
-        tfmr_output = self.transformer(
+        return self.transformer(
             x=inputs_embeds,
             attn_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
-        hidden_state = tfmr_output[0]
-        output = (hidden_state,) + tfmr_output[1:]
-
-        return output  # last-layer hidden-state, (all hidden_states), (all attentions)
 
 
 @add_start_docstrings(
@@ -494,7 +502,12 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         return self.vocab_projector
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="distilbert-base-uncased",
+        output_type=MaskedLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -504,6 +517,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -514,33 +528,15 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             in ``[0, ..., config.vocab_size]``
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
-
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
-        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Masked language modeling loss.
-        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-
         """
         if "masked_lm_labels" in kwargs:
             warnings.warn(
                 "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                DeprecationWarning,
+                FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
@@ -549,6 +545,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         hidden_states = dlbrt_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
@@ -556,12 +553,20 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         prediction_logits = self.vocab_layer_norm(prediction_logits)  # (bs, seq_length, dim)
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, seq_length, vocab_size)
 
-        outputs = (prediction_logits,) + dlbrt_output[1:]
+        mlm_loss = None
         if labels is not None:
             mlm_loss = self.mlm_loss_fct(prediction_logits.view(-1, prediction_logits.size(-1)), labels.view(-1))
-            outputs = (mlm_loss,) + outputs
 
-        return outputs  # (mlm_loss), prediction_logits, (all hidden_states), (all attentions)
+        if not return_dict:
+            output = (prediction_logits,) + dlbrt_output[1:]
+            return ((mlm_loss,) + output) if mlm_loss is not None else output
+
+        return MaskedLMOutput(
+            loss=mlm_loss,
+            logits=prediction_logits,
+            hidden_states=dlbrt_output.hidden_states,
+            attentions=dlbrt_output.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -582,7 +587,12 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="distilbert-base-uncased",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -592,6 +602,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -599,26 +610,9 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -626,6 +620,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
@@ -634,7 +629,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         pooled_output = self.dropout(pooled_output)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
-        outputs = (logits,) + distilbert_output[1:]
+        loss = None
         if labels is not None:
             if self.num_labels == 1:
                 loss_fct = nn.MSELoss()
@@ -642,9 +637,17 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             else:
                 loss_fct = nn.CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (logits,) + distilbert_output[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=distilbert_output.hidden_states,
+            attentions=distilbert_output.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -664,7 +667,12 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="distilbert-base-uncased",
+        output_type=QuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -675,6 +683,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -685,27 +694,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-start scores (before SoftMax).
-        end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -713,6 +704,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
 
@@ -722,7 +714,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         start_logits = start_logits.squeeze(-1)  # (bs, max_query_len)
         end_logits = end_logits.squeeze(-1)  # (bs, max_query_len)
 
-        outputs = (start_logits, end_logits,) + distilbert_output[1:]
+        total_loss = None
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
@@ -738,9 +730,18 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-            outputs = (total_loss,) + outputs
 
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (start_logits, end_logits) + distilbert_output[1:]
+            return ((total_loss,) + output) if total_loss is not None else output
+
+        return QuestionAnsweringModelOutput(
+            loss=total_loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=distilbert_output.hidden_states,
+            attentions=distilbert_output.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -760,7 +761,12 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="distilbert-base-uncased",
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -770,30 +776,14 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
-
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
-            Classification loss.
-        scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
-            Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.distilbert(
             input_ids,
@@ -802,6 +792,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -809,7 +800,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
-        outputs = (logits,) + outputs[1:]  # add hidden states and attention if they are here
+        loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             # Only keep active parts of the loss
@@ -822,9 +813,14 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
                 loss = loss_fct(active_logits, active_labels)
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
 
-        return outputs  # (loss), scores, (hidden_states), (attentions)
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -844,6 +840,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    @replace_return_docstrings(output_type=MultipleChoiceModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -853,6 +850,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -861,24 +859,6 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             of the input tensors. (see `input_ids` above)
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Classification loss.
-        classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
-            `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
-
-            Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
 
     Examples::
 
@@ -886,7 +866,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased')
+        >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased', return_dict=True)
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
@@ -897,9 +877,10 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         >>> outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
 
         >>> # the linear classifier still needs to be trained
-        >>> loss, logits = outputs[:2]
-
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -917,6 +898,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         hidden_state = outputs[0]  # (bs * num_choices, seq_len, dim)
@@ -928,11 +910,15 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
 
         reshaped_logits = logits.view(-1, num_choices)  # (bs, num_choices)
 
-        outputs = (reshaped_logits,) + outputs[1:]  # add hidden states and attention if they are here
-
+        loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-            outputs = (loss,) + outputs
 
-        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )

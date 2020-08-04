@@ -165,7 +165,7 @@ class MemorySummary(NamedTuple):
         - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace`
             by substracting the memory after executing each line from the memory before executing said line.
         - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
-            obtained by summing repeted memory increase for a line if it's executed several times.
+            obtained by summing repeated memory increase for a line if it's executed several times.
             The list is sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory is released)
         - `total`: total memory increase during the full tracing as a `Memory` named tuple (see below).
             Line with memory release (negative consumption) are ignored if `ignore_released_memory` is `True` (default).
@@ -310,7 +310,7 @@ def start_memory_tracing(
     gpus_to_trace: Optional[List[int]] = None,
 ) -> MemoryTrace:
     """ Setup line-by-line tracing to record rss mem (RAM) at each line of a module or sub-module.
-        See `../../examples/benchmarks.py for a usage example.
+        See `./benchmark.py` for usage examples.
         Current memory consumption is returned using psutil and in particular is the RSS memory
             "Resident Set Size” (the non-swapped physical memory the process is using).
             See https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_info
@@ -385,6 +385,9 @@ def start_memory_tracing(
                 return traceit
             elif isinstance(events_to_trace, (list, tuple)) and event not in events_to_trace:
                 return traceit
+
+        if "__name__" not in frame.f_globals:
+            return traceit
 
         # Filter modules
         name = frame.f_globals["__name__"]
@@ -465,7 +468,7 @@ def stop_memory_tracing(
                 - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace`
                     by substracting the memory after executing each line from the memory before executing said line.
                 - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
-                    obtained by summing repeted memory increase for a line if it's executed several times.
+                    obtained by summing repeated memory increase for a line if it's executed several times.
                     The list is sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory is released)
                 - `total`: total memory increase during the full tracing as a `Memory` named tuple (see below).
                     Line with memory release (negative consumption) are ignored if `ignore_released_memory` is `True` (default).

@@ -903,6 +903,7 @@ class TokenizerTesterMixin:
                 tokenizer.padding_side = "right"
                 encoded_sequence = tokenizer.encode(sequence)
                 sequence_length = len(encoded_sequence)
+                # FIXME: the next line should be padding(max_length) to avoid warning
                 padded_sequence = tokenizer.encode(
                     sequence, max_length=sequence_length + padding_size, pad_to_max_length=True
                 )
@@ -1063,10 +1064,6 @@ class TokenizerTesterMixin:
 
                 self.assertIsInstance(vocab, dict)
                 self.assertEqual(len(vocab), len(tokenizer))
-
-                for word, ind in vocab.items():
-                    self.assertEqual(tokenizer.convert_tokens_to_ids(word), ind)
-                    self.assertEqual(tokenizer.convert_ids_to_tokens(ind), word)
 
                 tokenizer.add_tokens(["asdfasdfasdfasdf"])
                 vocab = tokenizer.get_vocab()

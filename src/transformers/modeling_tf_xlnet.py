@@ -38,7 +38,6 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
-    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -92,6 +91,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         self.d_model = config.d_model
         self.scale = 1 / (config.d_head ** 0.5)
         self.initializer_range = config.initializer_range
+        self.output_attentions = config.output_attentions
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -142,11 +142,10 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         return x
 
-    def rel_attn_core(self, inputs, training=False):
+    def rel_attn_core(
+        self, q_head, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask, head_mask, output_attentions, training=False
+    ):
         """Core relative positional attention operations."""
-
-        q_head, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask, head_mask, output_attentions = inputs
-
         # content based attention score
         ac = tf.einsum("ibnd,jbnd->ijbn", q_head + self.r_w_bias, k_head_h)
 
@@ -182,16 +181,14 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         # attention output
         attn_vec = tf.einsum("ijbn,jbnd->ibnd", attn_prob, v_head_h)
 
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             return attn_vec, attn_prob
 
         return attn_vec
 
-    def post_attention(self, inputs, residual=True, training=False):
+    def post_attention(self, h, attn_vec, residual=True, training=False):
         """Post-attention processing."""
         # post-attention projection (back to `d_model`)
-        h, attn_vec = inputs
-
         attn_out = tf.einsum("ibnd,hnd->ibh", attn_vec, self.o)
 
         attn_out = self.dropout(attn_out, training=training)
@@ -202,9 +199,20 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         return output
 
-    def call(self, inputs, training=False):
-        (h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems, target_mapping, head_mask, output_attentions) = inputs
-
+    def call(
+        self,
+        h,
+        g,
+        attn_mask_h,
+        attn_mask_g,
+        r,
+        seg_mat,
+        mems,
+        target_mapping,
+        head_mask,
+        output_attentions,
+        training=False,
+    ):
         if g is not None:
             # Two-stream attention with relative positional encoding.
             # content based attention score
@@ -228,15 +236,22 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
             # core attention ops
             attn_vec_h = self.rel_attn_core(
-                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask, output_attentions],
+                q_head_h,
+                k_head_h,
+                v_head_h,
+                k_head_r,
+                seg_mat,
+                attn_mask_h,
+                head_mask,
+                output_attentions,
                 training=training,
             )
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 attn_vec_h, attn_prob_h = attn_vec_h
 
             # post processing
-            output_h = self.post_attention([h, attn_vec_h], training=training)
+            output_h = self.post_attention(h, attn_vec_h, training=training)
 
             # g-stream
             # query-stream query head
@@ -246,27 +261,41 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
             if target_mapping is not None:
                 q_head_g = tf.einsum("mbnd,mlb->lbnd", q_head_g, target_mapping)
                 attn_vec_g = self.rel_attn_core(
-                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask, output_attentions],
+                    q_head_g,
+                    k_head_h,
+                    v_head_h,
+                    k_head_r,
+                    seg_mat,
+                    attn_mask_g,
+                    head_mask,
+                    output_attentions,
                     training=training,
                 )
 
-                if cast_bool_to_primitive(output_attentions) is True:
+                if output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
                 attn_vec_g = tf.einsum("lbnd,mlb->mbnd", attn_vec_g, target_mapping)
             else:
                 attn_vec_g = self.rel_attn_core(
-                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask, output_attentions],
+                    q_head_g,
+                    k_head_h,
+                    v_head_h,
+                    k_head_r,
+                    seg_mat,
+                    attn_mask_g,
+                    head_mask,
+                    output_attentions,
                     training=training,
                 )
 
-                if cast_bool_to_primitive(output_attentions) is True:
+                if output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
             # post processing
-            output_g = self.post_attention([g, attn_vec_g], training=training)
+            output_g = self.post_attention(g, attn_vec_g, training=training)
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 attn_prob = attn_prob_h, attn_prob_g
 
         else:
@@ -286,19 +315,26 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
             # core attention ops
             attn_vec = self.rel_attn_core(
-                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask, output_attentions],
+                q_head_h,
+                k_head_h,
+                v_head_h,
+                k_head_r,
+                seg_mat,
+                attn_mask_h,
+                head_mask,
+                output_attentions,
                 training=training,
             )
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 attn_vec, attn_prob = attn_vec
 
             # post processing
-            output_h = self.post_attention([h, attn_vec], training=training)
+            output_h = self.post_attention(h, attn_vec, training=training)
             output_g = None
 
         outputs = (output_h, output_g)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs = outputs + (attn_prob,)
         return outputs
 
@@ -337,8 +373,33 @@ class TFXLNetLayer(tf.keras.layers.Layer):
         self.ff = TFXLNetFeedForward(config, name="ff")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-    def call(self, inputs, training=False):
-        outputs = self.rel_attn(inputs, training=training)
+    def call(
+        self,
+        output_h,
+        output_g,
+        non_tgt_mask,
+        attn_mask,
+        pos_emb,
+        seg_mat,
+        mems,
+        target_mapping,
+        head_mask,
+        output_attentions,
+        training=False,
+    ):
+        outputs = self.rel_attn(
+            output_h,
+            output_g,
+            non_tgt_mask,
+            attn_mask,
+            pos_emb,
+            seg_mat,
+            mems,
+            target_mapping,
+            head_mask,
+            output_attentions,
+            training=training,
+        )
         output_h, output_g = outputs[:2]
 
         if output_g is not None:
@@ -493,8 +554,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 bwd_pos_seq = tf.clip_by_value(bwd_pos_seq, -self.clamp_len, self.clamp_len)
 
             if bsz is not None:
-                # With bi_data, the batch size should be divisible by 2.
-                assert bsz % 2 == 0
+                assert bsz % 2 == 0, f"With bi_data, the batch size {bsz} should be divisible by 2"
                 fwd_pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz // 2)
                 bwd_pos_emb = self.positional_embedding(bwd_pos_seq, inv_freq, bsz // 2)
             else:
@@ -687,32 +747,30 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
             # cache new mems
-            if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
+            if self.mem_len is not None and self.mem_len > 0 and use_cache:
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
             outputs = layer_module(
-                [
-                    output_h,
-                    output_g,
-                    non_tgt_mask,
-                    attn_mask,
-                    pos_emb,
-                    seg_mat,
-                    mems[i],
-                    target_mapping,
-                    head_mask[i],
-                    output_attentions,
-                ],
+                output_h,
+                output_g,
+                non_tgt_mask,
+                attn_mask,
+                pos_emb,
+                seg_mat,
+                mems[i],
+                target_mapping,
+                head_mask[i],
+                output_attentions,
                 training=training,
             )
             output_h, output_g = outputs[:2]
-            if cast_bool_to_primitive(output_attentions) is True:
+            if output_attentions:
                 attentions.append(outputs[2])
 
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
         output = self.dropout(output_g if output_g is not None else output_h, training=training)
@@ -720,16 +778,16 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         outputs = (tf.transpose(output, perm=(1, 0, 2)),)
 
-        if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
+        if self.mem_len is not None and self.mem_len > 0 and use_cache:
             outputs = outputs + (new_mems,)
 
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             if output_g is not None:
                 hidden_states = tuple(tf.transpose(h, perm=(1, 0, 2)) for hs in hidden_states for h in hs)
             else:
                 hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in hidden_states)
             outputs = outputs + (hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
             outputs = outputs + (attentions,)
 
@@ -884,9 +942,18 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
+        # At every pass, the attention values for the new token and the two last generated tokens
+        # are computed, the rest is reloaded from the `past` cache. A purely auto-regressive model would have
+        # offset = 1; offset = 2 seems to have slightly better computation.
+        offset = 2
+
         effective_batch_size = inputs.shape[0]
         dummy_token = tf.zeros((effective_batch_size, 1), dtype=tf.int32)
-        inputs = tf.concat([inputs, dummy_token], axis=1)
+
+        if past:
+            inputs = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
+        else:
+            inputs = tf.concat([inputs, dummy_token], axis=1)
 
         # Build permutation mask so that previous tokens don't see last token
         sequence_length = inputs.shape[1]
@@ -908,7 +975,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
-            inputs["mems"] = past
+            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past)
 
         return inputs
 
@@ -1232,8 +1299,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             if inputs_embeds is not None
             else None
         )
-
-        flat_inputs = [
+        transformer_outputs = self.transformer(
             flat_input_ids,
             flat_attention_mask,
             mems,
@@ -1246,14 +1312,12 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             use_cache,
             output_attentions,
             output_hidden_states,
-        ]
-
-        transformer_outputs = self.transformer(flat_inputs, training=training)
+            training=training,
+        )
         output = transformer_outputs[0]
         logits = self.sequence_summary(output)
         logits = self.logits_proj(logits)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-
         outputs = (reshaped_logits,) + transformer_outputs[1:]  # add hidden states and attention if they are here
 
         if labels is not None:

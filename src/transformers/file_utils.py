@@ -8,18 +8,22 @@ import fnmatch
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 import tarfile
 import tempfile
+from collections import OrderedDict
 from contextlib import contextmanager
+from dataclasses import fields
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
+import numpy as np
 import requests
 from filelock import FileLock
 from tqdm.auto import tqdm
@@ -186,6 +190,69 @@ def add_end_docstrings(*docstr):
     return docstring_decorator
 
 
+RETURN_INTRODUCTION = r"""
+    Returns:
+        :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`:
+        A :class:`~{full_output_type}` (if ``return_dict=True`` is passed or when ``config.return_dict=True``) or a
+        tuple of :obj:`torch.FloatTensor` comprising various elements depending on the configuration
+        (:class:`~transformers.{config_class}`) and inputs.
+
+"""
+
+
+def _get_indent(t):
+    """Returns the indentation in the first line of t"""
+    search = re.search(r"^(\s*)\S", t)
+    return "" if search is None else search.groups()[0]
+
+
+def _convert_output_args_doc(output_args_doc):
+    """Convert output_args_doc to display properly."""
+    # Split output_arg_doc in blocks argument/description
+    indent = _get_indent(output_args_doc)
+    blocks = []
+    current_block = ""
+    for line in output_args_doc.split("\n"):
+        # If the indent is the same as the beginning, the line is the name of new arg.
+        if _get_indent(line) == indent:
+            if len(current_block) > 0:
+                blocks.append(current_block[:-1])
+            current_block = f"{line}\n"
+        else:
+            # Otherwise it's part of the description of the current arg.
+            # We need to remove 2 spaces to the indentation.
+            current_block += f"{line[2:]}\n"
+    blocks.append(current_block[:-1])
+
+    # Format each block for proper rendering
+    for i in range(len(blocks)):
+        blocks[i] = re.sub(r"^(\s+)(\S+)(\s+)", r"\1- **\2**\3", blocks[i])
+        blocks[i] = re.sub(r":\s*\n\s*(\S)", r" -- \1", blocks[i])
+
+    return "\n".join(blocks)
+
+
+def _prepare_output_docstrings(output_type, config_class):
+    """
+    Prepares the return part of the docstring using `output_type`.
+    """
+    docstrings = output_type.__doc__
+
+    # Remove the head of the docstring to keep the list of args only
+    lines = docstrings.split("\n")
+    i = 0
+    while i < len(lines) and re.search(r"^\s*(Args|Parameters):\s*$", lines[i]) is None:
+        i += 1
+    if i < len(lines):
+        docstrings = "\n".join(lines[(i + 1) :])
+        docstrings = _convert_output_args_doc(docstrings)
+
+    # Add the return introduction
+    full_output_type = f"{output_type.__module__}.{output_type.__name__}"
+    intro = RETURN_INTRODUCTION.format(full_output_type=full_output_type, config_class=config_class)
+    return intro + docstrings
+
+
 PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
@@ -193,13 +260,14 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
 
         >>> outputs = model(**inputs, labels=labels)
-        >>> loss, scores = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 PT_QUESTION_ANSWERING_SAMPLE = r"""
@@ -209,14 +277,16 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 
         >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
-        >>> loss, start_scores, end_scores = outputs[:3]
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_scores
+        >>> end_scores = outputs.end_scores
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
@@ -226,12 +296,13 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         >>> outputs = model(**inputs, labels=labels)
-        >>> loss, logits = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 PT_MASKED_LM_SAMPLE = r"""
@@ -241,12 +312,13 @@ PT_MASKED_LM_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt")["input_ids"]
 
         >>> outputs = model(input_ids, labels=input_ids)
-        >>> loss, prediction_scores = outputs[:2]
+        >>> loss = outputs.loss
+        >>> prediction_logits = outputs.logits
 """
 
 PT_BASE_MODEL_SAMPLE = r"""
@@ -256,12 +328,12 @@ PT_BASE_MODEL_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+        >>> last_hidden_states = outputs.last_hidden_state
 """
 
 PT_MULTIPLE_CHOICE_SAMPLE = r"""
@@ -271,7 +343,7 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
@@ -282,7 +354,8 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, labels=labels)  # batch size is 1
 
         >>> # the linear classifier still needs to be trained
-        >>> loss, logits = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 PT_CAUSAL_LM_SAMPLE = r"""
@@ -292,11 +365,12 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
-        >>> loss, logits = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 """
 
 TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
@@ -414,7 +488,7 @@ TF_CAUSAL_LM_SAMPLE = r"""
 """
 
 
-def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None):
+def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None, output_type=None, config_class=None):
     def docstring_decorator(fn):
         model_class = fn.__qualname__.split(".")[0]
         is_tf_class = model_class[:2] == "TF"
@@ -436,8 +510,29 @@ def add_code_sample_docstrings(*docstr, tokenizer_class=None, checkpoint=None):
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 
+        output_doc = _prepare_output_docstrings(output_type, config_class) if output_type is not None else ""
         built_doc = code_sample.format(model_class=model_class, tokenizer_class=tokenizer_class, checkpoint=checkpoint)
-        fn.__doc__ = (fn.__doc__ or "") + "".join(docstr) + built_doc
+        fn.__doc__ = (fn.__doc__ or "") + "".join(docstr) + output_doc + built_doc
+        return fn
+
+    return docstring_decorator
+
+
+def replace_return_docstrings(output_type=None, config_class=None):
+    def docstring_decorator(fn):
+        docstrings = fn.__doc__
+        lines = docstrings.split("\n")
+        i = 0
+        while i < len(lines) and re.search(r"^\s*Returns?:\s*$", lines[i]) is None:
+            i += 1
+        if i < len(lines):
+            lines[i] = _prepare_output_docstrings(output_type, config_class)
+            docstrings = "\n".join(lines)
+        else:
+            raise ValueError(
+                f"The function {fn} should have an empty 'Return:' or 'Returns:' in its docstring as placeholder, current docstring is:\n{docstrings}"
+            )
+        fn.__doc__ = docstrings
         return fn
 
     return docstring_decorator
@@ -806,3 +901,93 @@ def tf_required(func):
             raise ImportError(f"Method `{func.__name__}` requires TF.")
 
     return wrapper
+
+
+def is_tensor(x):
+    """ Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`. """
+    if is_torch_available():
+        import torch
+
+        if isinstance(x, torch.Tensor):
+            return True
+    if is_tf_available():
+        import tensorflow as tf
+
+        if isinstance(x, tf.Tensor):
+            return True
+    return isinstance(x, np.ndarray)
+
+
+class ModelOutput(OrderedDict):
+    """
+    Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
+    a tuple) or strings (like a dictionnary) that will ignore the ``None`` attributes. Otherwise behaves like a
+    regular python dictionary.
+
+    .. warning::
+        You can't unpack a :obj:`ModelOutput` directly. Use the :meth:`~transformers.file_utils.ModelOutput.to_tuple`
+        method to convert it to a tuple before.
+    """
+
+    def __post_init__(self):
+        class_fields = fields(self)
+
+        # Safety and consistency checks
+        assert len(class_fields), f"{self.__class__.__name__} has no fields."
+        assert all(
+            field.default is None for field in class_fields[1:]
+        ), f"{self.__class__.__name__} should not have more than one required field."
+
+        first_field = getattr(self, class_fields[0].name)
+        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+
+        if other_fields_are_none and not is_tensor(first_field):
+            try:
+                iterator = iter(first_field)
+                first_field_iterator = True
+            except TypeError:
+                first_field_iterator = False
+
+            # if we provided an iterator as first field and the iterator is a (key, value) iterator
+            # set the associated fields
+            if first_field_iterator:
+                for element in iterator:
+                    if (
+                        not isinstance(element, (list, tuple))
+                        or not len(element) == 2
+                        or not isinstance(element[0], str)
+                    ):
+                        break
+                    setattr(self, element[0], element[1])
+                    if element[1] is not None:
+                        self[element[0]] = element[1]
+        else:
+            for field in class_fields:
+                v = getattr(self, field.name)
+                if v is not None:
+                    self[field.name] = v
+
+    def __delitem__(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``__delitem__`` on a {self.__class__.__name__} instance.")
+
+    def setdefault(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``setdefault`` on a {self.__class__.__name__} instance.")
+
+    def pop(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``pop`` on a {self.__class__.__name__} instance.")
+
+    def update(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``update`` on a {self.__class__.__name__} instance.")
+
+    def __getitem__(self, k):
+        if isinstance(k, str):
+            inner_dict = {k: v for (k, v) in self.items()}
+            return inner_dict[k]
+        else:
+            return self.to_tuple()[k]
+
+    def to_tuple(self) -> Tuple[Any]:
+        """
+        Convert self to a tuple containing all the attributes/keys that are not ``None``.
+        """
+        return tuple(self[k] for k in self.keys())

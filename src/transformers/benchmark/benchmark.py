@@ -88,7 +88,11 @@ class PyTorchBenchmark(Benchmark):
         if self.args.torchscript:
             config.torchscript = True
 
-        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        has_model_class_in_config = (
+            hasattr(config, "architectures")
+            and isinstance(config.architectures, list)
+            and len(config.architectures) > 0
+        )
         if not self.args.only_pretrain_model and has_model_class_in_config:
             try:
                 model_class = config.architectures[0]
@@ -138,7 +142,11 @@ class PyTorchBenchmark(Benchmark):
     def _prepare_train_func(self, model_name: str, batch_size: int, sequence_length: int) -> Callable[[], None]:
         config = self.config_dict[model_name]
 
-        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
+        has_model_class_in_config = (
+            hasattr(config, "architectures")
+            and isinstance(config.architectures, list)
+            and len(config.architectures) > 0
+        )
         if not self.args.only_pretrain_model and has_model_class_in_config:
             try:
                 model_class = config.architectures[0]
@@ -157,7 +165,7 @@ class PyTorchBenchmark(Benchmark):
         else:
             train_model = model
 
-        model.eval()
+        model.train()
         model.to(self.args.device)
 
         # encoder-decoder has vocab size saved differently
@@ -175,12 +183,12 @@ class PyTorchBenchmark(Benchmark):
         def compute_loss_and_backprob_encoder():
             loss = train_model(input_ids, labels=input_ids)[0]
             loss.backward()
-            train_model.zero_grad()
+            return loss
 
         def compute_loss_and_backprob_encoder_decoder():
             loss = train_model(input_ids, decoder_input_ids=input_ids, labels=input_ids)[0]
             loss.backward()
-            train_model.zero_grad()
+            return loss
 
         _train = (
             compute_loss_and_backprob_encoder_decoder

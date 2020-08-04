@@ -157,14 +157,15 @@ conversion utilities for the following models:
     notebooks
     converting_tensorflow_models
     migration
-    torchscript
     contributing
+    serialization
 
 .. toctree::
     :maxdepth: 2
     :caption: Research
 
     bertology
+    perplexity
     benchmarks
 
 .. toctree::
@@ -172,12 +173,13 @@ conversion utilities for the following models:
     :caption: Package Reference
 
     main_classes/configuration
+    main_classes/output
     main_classes/model
     main_classes/tokenizer
     main_classes/pipelines
+    main_classes/trainer
     main_classes/optimizer_schedules
     main_classes/processors
-    main_classes/trainer
     model_doc/auto
     model_doc/encoderdecoder
     model_doc/bert
@@ -203,3 +205,6 @@ conversion utilities for the following models:
     model_doc/retribert
     model_doc/mobilebert
     model_doc/dpr
+    internal/modeling_utils
+    internal/tokenization_utils
+    internal/pipelines_utils

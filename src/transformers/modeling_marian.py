@@ -15,7 +15,8 @@
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
 
-from transformers.modeling_bart import BartForConditionalGeneration
+from .configuration_marian import MarianConfig
+from .modeling_bart import BartForConditionalGeneration
 
 
 MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -24,6 +25,7 @@ MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class MarianMTModel(BartForConditionalGeneration):
+    config_class = MarianConfig
     r"""
     Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
     Model API is identical to BartForConditionalGeneration.

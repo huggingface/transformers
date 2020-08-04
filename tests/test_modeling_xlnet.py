@@ -35,6 +35,7 @@ if is_torch_available():
         XLNetForSequenceClassification,
         XLNetForTokenClassification,
         XLNetForQuestionAnswering,
+        XLNetForQuestionAnsweringSimple,
     )
     from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -136,6 +137,7 @@ class XLNetModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -176,30 +178,85 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        _, _ = model(input_ids_1, input_mask=input_mask)
-        _, _ = model(input_ids_1, attention_mask=input_mask)
-        _, _ = model(input_ids_1, token_type_ids=segment_ids)
-        outputs, mems_1 = model(input_ids_1)
-
-        result = {
-            "mems_1": mems_1,
-            "outputs": outputs,
-        }
+        result = model(input_ids_1, input_mask=input_mask)
+        result = model(input_ids_1, attention_mask=input_mask)
+        result = model(input_ids_1, token_type_ids=segment_ids)
+        result = model(input_ids_1)
 
         config.mem_len = 0
         model = XLNetModel(config)
         model.to(torch_device)
         model.eval()
-        no_mems_outputs = model(input_ids_1)
-        self.parent.assertEqual(len(no_mems_outputs), 1)
+        base_model_output = model(input_ids_1)
+        self.parent.assertEqual(len(base_model_output), 2)
 
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(result["outputs"].size()), [self.batch_size, self.seq_length, self.hidden_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
+            list(list(mem.size()) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
+
+    def create_and_check_xlnet_model_use_cache(
+        self,
+        config,
+        input_ids_1,
+        input_ids_2,
+        input_ids_q,
+        perm_mask,
+        input_mask,
+        target_mapping,
+        segment_ids,
+        lm_labels,
+        sequence_labels,
+        is_impossible_labels,
+        token_labels,
+    ):
+        model = XLNetModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        causal_mask = torch.ones(
+            input_ids_1.shape[0], input_ids_1.shape[1], input_ids_1.shape[1], dtype=torch.float, device=torch_device,
+        )
+        causal_mask = torch.triu(causal_mask, diagonal=0)
+        outputs_cache = model(input_ids_1, use_cache=True, perm_mask=causal_mask)
+        outputs_no_cache = model(input_ids_1, use_cache=False, perm_mask=causal_mask)
+        outputs_conf = model(input_ids_1)
+
+        self.parent.assertTrue(len(outputs_cache) == len(outputs_conf))
+        self.parent.assertTrue(len(outputs_cache) == len(outputs_no_cache) + 1)
+
+        output, mems = outputs_cache.to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and token_type_ids
+        next_input_ids = torch.cat([input_ids_1, next_tokens], dim=-1)
+
+        # causal mask
+        causal_mask = torch.ones(
+            input_ids_1.shape[0],
+            input_ids_1.shape[1] + 1,
+            input_ids_1.shape[1] + 1,
+            dtype=torch.float,
+            device=torch_device,
+        )
+        causal_mask = torch.triu(causal_mask, diagonal=0)
+        single_mask = torch.ones(input_ids_1.shape[0], 1, 1, dtype=torch.float, device=torch_device)
+
+        # second forward pass
+        output_from_no_past = model(next_input_ids, perm_mask=causal_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, mems=mems, perm_mask=single_mask)["last_hidden_state"]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_xlnet_base_model_with_att_output(
         self,
@@ -220,7 +277,7 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        _, _, attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)
+        attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)["attentions"]
 
         self.parent.assertEqual(len(attentions), config.n_layer)
         self.parent.assertIsInstance(attentions[0], tuple)
@@ -246,36 +303,23 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
+        result1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
 
-        loss_2, all_logits_2, mems_2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1)
+        result2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=result1["mems"])
 
-        logits, _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
+        _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
 
-        result = {
-            "loss_1": loss_1,
-            "mems_1": mems_1,
-            "all_logits_1": all_logits_1,
-            "loss_2": loss_2,
-            "mems_2": mems_2,
-            "all_logits_2": all_logits_2,
-        }
-
-        self.parent.assertListEqual(list(result["loss_1"].size()), [])
+        self.parent.assertEqual(result1.loss.shape, ())
+        self.parent.assertEqual(result1.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["all_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
+            list(list(mem.size()) for mem in result1["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
-        self.parent.assertListEqual(list(result["loss_2"].size()), [])
+        self.parent.assertEqual(result2.loss.shape, ())
+        self.parent.assertEqual(result2.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["all_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_2"]),
+            list(list(mem.size()) for mem in result2["mems"]),
             [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -298,10 +342,9 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        outputs = model(input_ids_1)
-        (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems,) = outputs
+        result = model(input_ids_1)
 
-        outputs = model(
+        result_with_labels = model(
             input_ids_1,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -310,7 +353,7 @@ class XLNetModelTester:
             p_mask=input_mask,
         )
 
-        outputs = model(
+        result_with_labels = model(
             input_ids_1,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -318,37 +361,22 @@ class XLNetModelTester:
             is_impossible=is_impossible_labels,
         )
 
-        total_loss, mems = outputs
+        total_loss, mems = result_with_labels.to_tuple()
 
-        outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels,)
+        result_with_labels = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels,)
 
-        total_loss, mems = outputs
+        total_loss, mems = result_with_labels.to_tuple()
 
-        result = {
-            "loss": total_loss,
-            "start_top_log_probs": start_top_log_probs,
-            "start_top_index": start_top_index,
-            "end_top_log_probs": end_top_log_probs,
-            "end_top_index": end_top_index,
-            "cls_logits": cls_logits,
-            "mems": mems,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(
-            list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top],
+        self.parent.assertEqual(result_with_labels.loss.shape, ())
+        self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(
+            result.end_top_log_probs.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
-        self.parent.assertListEqual(
-            list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top],
+        self.parent.assertEqual(
+            result.end_top_index.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
-        self.parent.assertListEqual(
-            list(result["end_top_log_probs"].size()),
-            [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(
-            list(result["end_top_index"].size()), [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
+        self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
         self.parent.assertListEqual(
             list(list(mem.size()) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
@@ -373,21 +401,13 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        logits, mems_1 = model(input_ids_1)
-        loss, logits, mems_1 = model(input_ids_1, labels=token_labels)
+        result = model(input_ids_1)
+        result = model(input_ids_1, labels=token_labels)
 
-        result = {
-            "loss": loss,
-            "mems_1": mems_1,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
+            list(list(mem.size()) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -410,21 +430,13 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        logits, mems_1 = model(input_ids_1)
-        loss, logits, mems_1 = model(input_ids_1, labels=sequence_labels)
+        result = model(input_ids_1)
+        result = model(input_ids_1, labels=sequence_labels)
 
-        result = {
-            "loss": loss,
-            "mems_1": mems_1,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
+            list(list(mem.size()) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -450,7 +462,6 @@ class XLNetModelTester:
 
 @require_torch
 class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             XLNetModel,
@@ -458,6 +469,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             XLNetForTokenClassification,
             XLNetForSequenceClassification,
             XLNetForQuestionAnswering,
+            XLNetForQuestionAnsweringSimple,
             XLNetForMultipleChoice,
         )
         if is_torch_available()
@@ -479,6 +491,12 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
+
+    def test_xlnet_base_model_use_cache(self):
+        # checking that in auto-regressive mode, `use_cache` gives the same results
+        self.model_tester.set_seed()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlnet_model_use_cache(*config_and_inputs)
 
     def test_xlnet_base_model_with_att_output(self):
         self.model_tester.set_seed()
@@ -872,33 +890,33 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
             9,
             69,
             27,
-            50,
-            551,
+            442,
             22,
             2771,
-            4901,
-            19,
-            21,
-            45,
-            668,
-            21,
+            24,
+            11335,
+            20,
             18,
-            416,
-            41,
-            1499,
-            22,
-            755,
-            18,
-            14285,
+            9225,
+            2198,
             9,
-            12943,
-            4354,
-            153,
+            69,
             27,
-            1499,
+            442,
             22,
-            642,
+            2771,
+            24,
+            11335,
+            20,
+            18,
+            9225,
+            2198,
+            9,
+            69,
+            27,
+            442,
             22,
+            2771,
         ]
         #  In 1991, the remains of Russian Tsar Nicholas II and his family (except for Alexei and Maria)
         #  are discovered. The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich,
@@ -908,9 +926,8 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
         #  him for making such an accusation, Rasputin watches as the man is chased outside and beaten.
         #  Twenty years later, Rasputin sees a vision of the Virgin Mary, prompting him to become a priest.
         #  Rasputin quickly becomes famous, with people, even a bishop, begging for his blessing.
-        #  <sep><cls>, Rasputin is asked to perform magic.
-        #  He is not able to perform magic, and his father and
-        # the men are forced to leave the monastery. Rasputin is forced to return to
+        #  <sep><cls>, Rasputin is asked to perform magic. He is asked to perform a ritual of the Virgin Mary.
+        #  He is asked to perform a ritual of the Virgin Mary. He is asked to perform
 
         output_ids = model.generate(input_ids, max_length=200, do_sample=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

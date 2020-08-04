@@ -54,6 +54,16 @@ TransfoXLTokenizerFast
     :members:
 
 
+TransfoXL specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_transfo_xl.TransfoXLModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_transfo_xl.TransfoXLLMHeadModelOutput
+    :members:
+
+
 TransfoXLModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
