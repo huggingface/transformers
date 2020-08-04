@@ -370,9 +370,6 @@ def test_finetune_lr_shedulers(capsys):
 
     # --lr_scheduler=non_existing_scheduler test
     unsupported_param = "non_existing_scheduler"
-    # parser = argparse.ArgumentParser()
-    # parser = pl.Trainer.add_argparse_args(parser)
-    # parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
     args = {f"--lr_scheduler={unsupported_param}"}
     with pytest.raises(SystemExit) as excinfo:
         args = parser.parse_args(args)
