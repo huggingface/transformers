@@ -10,6 +10,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install --upgrade pip
             - run: sudo pip install .[sklearn,tf-cpu,torch,testing]
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ --cov  | tee output.txt
@@ -27,6 +28,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install --upgrade pip
             - run: sudo pip install .[sklearn,torch,testing]
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
             - store_artifacts:
@@ -43,6 +45,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install --upgrade pip
             - run: sudo pip install .[sklearn,tf-cpu,testing]
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
             - store_artifacts:
@@ -56,6 +59,7 @@ jobs:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
+            - run: sudo pip install --upgrade pip
             - run: sudo pip install .[ja,testing]
             - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
             - store_artifacts:
@@ -71,6 +75,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install --upgrade pip
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install -r examples/requirements.txt
             - run: python -m pytest -n 8 --dist=loadfile -rA -s ./examples/ | tee output.txt
@@ -83,6 +88,7 @@ jobs:
             - image: circleci/python:3.6
         steps:
             - checkout
+            - run: sudo pip install --upgrade pip
             - run: sudo pip install .[tf,torch,docs]
             - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
@@ -106,6 +112,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install --upgrade pip
             # we need a version of isort with https://github.com/timothycrosley/isort/pull/1000
             - run: sudo pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
             - run: sudo pip install .[tf,torch,quality]
