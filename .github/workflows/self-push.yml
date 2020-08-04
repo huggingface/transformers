@@ -36,7 +36,7 @@ jobs:
       run: |
         source .env/bin/activate
         pip install --upgrade pip
-        pip install torch
+        pip install torch --no-cache-dir
         pip install .[sklearn,testing]
 
     - name: Are GPUs recognized by our DL frameworks
