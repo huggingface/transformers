@@ -35,6 +35,7 @@ jobs:
     - name: Install dependencies
       run: |
         source .env/bin/activate
+        pip install --upgrade pip
         pip install torch
         pip install .[sklearn,testing]
 
