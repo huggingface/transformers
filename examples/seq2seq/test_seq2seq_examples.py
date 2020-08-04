@@ -60,6 +60,7 @@ CHEAP_ARGS = {
     "tokenizer_name": "facebook/bart-large",
     "do_lower_case": False,
     "learning_rate": 0.3,
+    "lr_scheduler": 'linear',
     "weight_decay": 0.0,
     "adam_epsilon": 1e-08,
     "warmup_steps": 0,
