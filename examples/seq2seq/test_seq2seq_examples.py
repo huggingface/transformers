@@ -359,6 +359,7 @@ def test_finetune_lr_shedulers(capsys):
     with pytest.raises(SystemExit) as excinfo:
         model = main(args)
         assert False, "--lr_scheduler=help is expected to sys.exit"
+    assert excinfo.type == SystemExit
     captured = capsys.readouterr()
     error_msg = "--lr_scheduler=help is expected to dump the supported schedulers"
     assert "lr_scheduler=cosine" in captured.out, error_msg
