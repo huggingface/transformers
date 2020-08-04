@@ -127,7 +127,13 @@ class EncoderDecoderModel(PreTrainedModel):
         Examples::
 
             >>> from transformers import EncoderDecoderModel
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert2bert")
+            >>> # load fine-tuned model
+            >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
+
         """
 
         kwargs_encoder = {
@@ -273,7 +279,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
-                return_tuple=True,
+                return_dict=False,
                 **kwargs_encoder,
             )
 
@@ -288,7 +294,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             labels=labels,
-            return_tuple=True,
+            return_dict=False,
             **kwargs_decoder,
         )
 

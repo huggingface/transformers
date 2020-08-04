@@ -33,6 +33,7 @@ if is_torch_available():
         XLMForQuestionAnswering,
         XLMForSequenceClassification,
         XLMForQuestionAnsweringSimple,
+        XLMForMultipleChoice,
     )
     from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -63,7 +64,7 @@ class XLMModelTester:
         self.max_position_embeddings = 512
         self.type_sequence_label_size = 2
         self.initializer_range = 0.02
-        self.num_labels = 3
+        self.num_labels = 2
         self.num_choices = 4
         self.summary_type = "last"
         self.use_proj = True
@@ -91,6 +92,7 @@ class XLMModelTester:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             is_impossible_labels = ids_tensor([self.batch_size], 2).float()
+            choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = XLMConfig(
             vocab_size=self.vocab_size,
@@ -109,7 +111,9 @@ class XLMModelTester:
             initializer_range=self.initializer_range,
             summary_type=self.summary_type,
             use_proj=self.use_proj,
+            num_labels=self.num_labels,
             bos_token_id=self.bos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -120,11 +124,9 @@ class XLMModelTester:
             sequence_labels,
             token_labels,
             is_impossible_labels,
+            choice_labels,
             input_mask,
         )
-
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
 
     def create_and_check_xlm_model(
         self,
@@ -135,21 +137,16 @@ class XLMModelTester:
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = XLMModel(config=config)
         model.to(torch_device)
         model.eval()
-        outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
-        outputs = model(input_ids, langs=token_type_ids)
-        outputs = model(input_ids)
-        sequence_output = outputs[0]
-        result = {
-            "sequence_output": sequence_output,
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        result = model(input_ids, lengths=input_lengths, langs=token_type_ids)
+        result = model(input_ids, langs=token_type_ids)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_xlm_lm_head(
         self,
@@ -160,21 +157,16 @@ class XLMModelTester:
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = XLMWithLMHeadModel(config)
         model.to(torch_device)
         model.eval()
 
-        loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
-
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
+        result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_xlm_simple_qa(
         self,
@@ -185,6 +177,7 @@ class XLMModelTester:
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = XLMForQuestionAnsweringSimple(config)
@@ -194,16 +187,9 @@ class XLMModelTester:
         outputs = model(input_ids)
 
         outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
-        loss, start_logits, end_logits = outputs
-
-        result = {
-            "loss": loss,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.check_loss_output(result)
+        result = outputs
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_xlm_qa(
         self,
@@ -214,16 +200,16 @@ class XLMModelTester:
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = XLMForQuestionAnswering(config)
         model.to(torch_device)
         model.eval()
 
-        outputs = model(input_ids)
-        start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = outputs
+        result = model(input_ids)
 
-        outputs = model(
+        result_with_labels = model(
             input_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -232,7 +218,7 @@ class XLMModelTester:
             p_mask=input_mask,
         )
 
-        outputs = model(
+        result_with_labels = model(
             input_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -240,36 +226,22 @@ class XLMModelTester:
             is_impossible=is_impossible_labels,
         )
 
-        (total_loss,) = outputs
+        (total_loss,) = result_with_labels.to_tuple()
 
-        outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+        result_with_labels = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
 
-        (total_loss,) = outputs
+        (total_loss,) = result_with_labels.to_tuple()
 
-        result = {
-            "loss": total_loss,
-            "start_top_log_probs": start_top_log_probs,
-            "start_top_index": start_top_index,
-            "end_top_log_probs": end_top_log_probs,
-            "end_top_index": end_top_index,
-            "cls_logits": cls_logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(
-            list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
+        self.parent.assertEqual(result_with_labels.loss.shape, ())
+        self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(
+            result.end_top_log_probs.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
-        self.parent.assertListEqual(
-            list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
+        self.parent.assertEqual(
+            result.end_top_index.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
-        self.parent.assertListEqual(
-            list(result["end_top_log_probs"].size()),
-            [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(
-            list(result["end_top_index"].size()), [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
+        self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
 
     def create_and_check_xlm_sequence_classif(
         self,
@@ -280,22 +252,17 @@ class XLMModelTester:
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         model = XLMForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
 
-        (logits,) = model(input_ids)
-        loss, logits = model(input_ids, labels=sequence_labels)
-
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size])
+        result = model(input_ids)
+        result = model(input_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def create_and_check_xlm_token_classif(
         self,
@@ -306,6 +273,7 @@ class XLMModelTester:
         sequence_labels,
         token_labels,
         is_impossible_labels,
+        choice_labels,
         input_mask,
     ):
         config.num_labels = self.num_labels
@@ -313,13 +281,35 @@ class XLMModelTester:
         model.to(torch_device)
         model.eval()
 
-        loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
-        self.check_loss_output(result)
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
+    def create_and_check_xlm_for_multiple_choice(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_lengths,
+        sequence_labels,
+        token_labels,
+        is_impossible_labels,
+        choice_labels,
+        input_mask,
+    ):
+        config.num_choices = self.num_choices
+        model = XLMForMultipleChoice(config=config)
+        model.to(torch_device)
+        model.eval()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        result = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            token_type_ids=multiple_choice_token_type_ids,
+            labels=choice_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -331,6 +321,7 @@ class XLMModelTester:
             sequence_labels,
             token_labels,
             is_impossible_labels,
+            choice_labels,
             input_mask,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "lengths": input_lengths}
@@ -348,6 +339,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             XLMForSequenceClassification,
             XLMForQuestionAnsweringSimple,
             XLMForTokenClassification,
+            XLMForMultipleChoice,
         )
         if is_torch_available()
         else ()
@@ -386,6 +378,10 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_xlm_token_classif(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_token_classif(*config_and_inputs)
+
+    def test_xlm_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

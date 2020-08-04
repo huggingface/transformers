@@ -5,7 +5,7 @@ Exporting transformers models
 ONNX / ONNXRuntime
 ==============================================
 
-Projects ONNX (Open Neural Network eXchange) and ONNXRuntime (ORT) are part of an effort from leading industries in the AI field
+Projects `ONNX (Open Neural Network eXchange) <http://onnx.ai>`_ and `ONNXRuntime (ORT) <https://microsoft.github.io/onnxruntime/>`_ are part of an effort from leading industries in the AI field
 to provide a unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
 of hardware and dedicated optimizations.
 
@@ -21,9 +21,10 @@ The following command shows how easy it is to export a BERT model from the libra
     python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased bert-base-cased.onnx
 
 The conversion tool works for both PyTorch and Tensorflow models and ensures:
-    * The model and its weights are correctly initialized from the Hugging Face model hub or a local checkpoint.
-    * The inputs and outputs are correctly generated to their ONNX counterpart.
-    * The generated model can be correctly loaded through onnxruntime.
+
+* The model and its weights are correctly initialized from the Hugging Face model hub or a local checkpoint.
+* The inputs and outputs are correctly generated to their ONNX counterpart.
+* The generated model can be correctly loaded through onnxruntime.
 
 .. note::
     Currently, inputs and outputs are always exported with dynamic sequence axes preventing some optimizations
@@ -32,10 +33,87 @@ The conversion tool works for both PyTorch and Tensorflow models and ensures:
 
 
 Also, the conversion tool supports different options which let you tune the behavior of the generated model:
-    * Change the target opset version of the generated model: More recent opset generally supports more operator and enables faster inference.
-    * Export pipeline specific prediction heads: Allow to export model along with its task-specific prediction head(s).
-    * Use the external data format (PyTorch only): Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_).
 
+* **Change the target opset version of the generated model.**  (More recent opset generally supports more operators and enables faster inference)
+
+* **Export pipeline-specific prediction heads.**  (Allow to export model along with its task-specific prediction head(s))
+
+* **Use the external data format (PyTorch only).**  (Lets you export model which size is above 2Gb (`More info <https://github.com/pytorch/pytorch/pull/33062>`_))
+
+
+Optimizations
+------------------------------------------------
+
+ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph.
+Below are some of the operators which can be enabled to speed up inference through ONNXRuntime (*see note below*):
+
+* Constant folding
+* Attention Layer fusing
+* Skip connection LayerNormalization fusing
+* FastGeLU approximation
+
+
+Fortunately, you can let ONNXRuntime find all the possible optimized operators for you. Simply add ``--optimize``
+when exporting your model through ``convert_graph_to_onnx.py``.
+
+Example:
+
+.. code-block:: bash
+
+    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --optimize bert-base-cased.onnx
+
+.. note::
+    For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
+
+Quantization
+------------------------------------------------
+
+ONNX exporter supports generating a quantized version of the model to allow efficient inference.
+
+Quantization works by converting the memory representation of the parameters in the neural network
+to a compact integer format. By default, weights of a neural network are stored as single-precision float (`float32`)
+which can express a wide-range of floating-point numbers with decent precision.
+These properties are especially interesting at training where you want fine-grained representation.
+
+On the other hand, after the training phase, it has been shown one can greatly reduce the range and the precision of `float32` numbers
+without changing the performances of the neural network.
+
+More technically, `float32` parameters are converted to a type requiring fewer bits to represent each number, thus reducing
+the overall size of the model. Here, we are enabling `float32` mapping to `int8` values (a non-floating, single byte, number representation)
+according to the following formula:
+
+.. math::
+    y_{float32} = scale * x_{int8} - zero\_point
+
+.. note::
+    The quantization process will infer the parameter `scale` and `zero_point` from the neural network parameters
+
+Leveraging tiny-integers has numerous advantages when it comes to inference:
+
+* Storing fewer bits instead of 32 bits for the `float32` reduces the size of the model and makes it load faster.
+* Integer operations execute a magnitude faster on modern hardware
+* Integer operations require less power to do the computations
+
+In order to convert a transformers model to ONNX IR with quantized weights you just need to specify ``--quantize``
+when using ``convert_graph_to_onnx.py``. Also, you can have a look at the ``quantize()`` utility-method in this
+same script file.
+
+Example of quantized BERT model export:
+
+.. code-block:: bash
+
+    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --quantize bert-base-cased.onnx
+
+.. note::
+    Quantization support requires ONNX Runtime >= 1.4.0
+
+.. note::
+    When exporting quantized model you will end up with two different ONNX files. The one specified at the end of the
+    above command will contain the original ONNX model storing `float32` weights.
+    The second one, with ``-quantized`` suffix, will hold the quantized parameters.
+
+.. note::
+    The quantization export gives the best performances when used in combination with ``--optimize``.
 
 TorchScript
 =======================================
