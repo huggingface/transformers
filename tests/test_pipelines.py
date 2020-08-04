@@ -238,7 +238,6 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     def test_torch_fill_mask_with_targets(self):
-        mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = ["My name is <mask>"]
         valid_targets = [[" Teven", " Patrick", " Clara"], [" Sam"]]
         invalid_targets = [[], [""], ""]
@@ -253,7 +252,6 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_tf
     def test_tf_fill_mask_with_targets(self):
-        mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = ["My name is <mask>"]
         valid_targets = [[" Teven", " Patrick", " Clara"], [" Sam"]]
         invalid_targets = [[], [""], ""]
