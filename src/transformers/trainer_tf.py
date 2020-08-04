@@ -263,7 +263,8 @@ class TFTrainer:
                 'Automatic Comet.ml offline logging enabled; use `comet upload` when finished'
             )
         if experiment is not None:
-            experiment.set_model_graph(self.model)
+            experiment._set_model_graph(self.model, framework="transformers")
+            experiment._log_parameters(self.args, framework="transformers")
 
     def prediction_loop(
         self,
@@ -386,7 +387,7 @@ class TFTrainer:
         if is_comet_available():
             experiment = comet_ml.config.get_global_experiment()
             if experiment is not None:
-                experiment.log_metrics(logs, step=self.global_step, epoch=self.epoch_logging)
+                experiment._log_metrics(logs, step=self.global_step, epoch=self.epoch_logging, framework="transformers")
 
         output = {**logs, **{"step": self.global_step}}
 

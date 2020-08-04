@@ -426,8 +426,8 @@ class Trainer:
                     'Automatic Comet.ml offline logging enabled; use `comet upload` when finished'
                 )
             if experiment is not None:
-                experiment.set_model_graph(self.model)
-
+                experiment._set_model_graph(self.model, framework="transformers")
+                experiment._log_parameters(self.args, framework="transformers")
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -693,7 +693,7 @@ class Trainer:
             if self.is_world_master():
                 experiment = comet_ml.config.get_global_experiment()
                 if experiment is not None:
-                    experiment.log_metrics(logs, step=self.global_step, epoch=self.epoch)
+                    experiment._log_metrics(logs, step=self.global_step, epoch=self.epoch, framework="transformers")
         output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
