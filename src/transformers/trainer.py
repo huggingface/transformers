@@ -383,7 +383,14 @@ class Trainer:
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
-            wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=self.args.to_sanitized_dict())
+            combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
+            common_keys = self.model.config.to_dict().keys() & self.args.to_sanitized_dict().keys()
+            if common_keys:
+                warnings.warn(
+                    f"Using trainer values in wandb initial logging for keys {common_keys} shared"
+                    f" between model and trainer configs."
+                )
+            wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=self.args.name)
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(
