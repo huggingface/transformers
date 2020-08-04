@@ -1180,15 +1180,17 @@ class FillMaskPipeline(Pipeline):
         batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
 
         if targets is not None:
+            if len(targets) == 0 or len(targets[0]) == 0:
+                raise ValueError("At least one target must be provided when passed.")
             if isinstance(targets, str):
                 targets = [targets]
 
             targets_proc = []
             for target in targets:
                 target_enc = self.tokenizer.tokenize(target)
-                if len(target_enc) > 1:
+                if len(target_enc) > 1 or target_enc[0] == self.tokenizer.unk_token:
                     logger.warning(
-                        "The specified target token `{}` does not exist in the model vocabulary. Truncating to `{}`.".format(
+                        "The specified target token `{}` does not exist in the model vocabulary. Replacing with `{}`.".format(
                             target, target_enc[0]
                         )
                     )
@@ -1211,9 +1213,9 @@ class FillMaskPipeline(Pipeline):
                     topk = tf.math.top_k(probs, k=self.topk)
                     values, predictions = topk.values.numpy(), topk.indices.numpy()
                 else:
-                    values = tf.gather_nd(probs, tf.reshape(target_inds, (-1,1)))
+                    values = tf.gather_nd(probs, tf.reshape(target_inds, (-1, 1)))
                     sort_inds = tf.reverse(tf.argsort(values), [0])
-                    values = tf.gather_nd(values, tf.reshape(sort_inds, (-1,1))).numpy()
+                    values = tf.gather_nd(values, tf.reshape(sort_inds, (-1, 1))).numpy()
                     predictions = target_inds[sort_inds.numpy()]
             else:
                 masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
@@ -1226,9 +1228,9 @@ class FillMaskPipeline(Pipeline):
                 if targets is None:
                     values, predictions = probs.topk(self.topk)
                 else:
-                    values = probs[...,target_inds]
+                    values = probs[..., target_inds]
                     sort_inds = list(reversed(values.argsort(dim=-1)))
-                    values = values[...,sort_inds]
+                    values = values[..., sort_inds]
                     predictions = target_inds[sort_inds]
 
             for v, p in zip(values.tolist(), predictions.tolist()):
