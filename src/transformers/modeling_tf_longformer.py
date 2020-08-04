@@ -154,10 +154,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             ) = self._get_global_attn_indices(is_index_global_attn)
             # calculate global attn probs from global key
 
-            import ipdb
-
-            ipdb.set_trace()
-
             global_key_attn_scores = self._concat_with_global_key_attn_probs(
                 query_vectors=query_vectors,
                 key_vectors=key_vectors,
@@ -188,23 +184,24 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.reshape(value_vectors, (seq_len, batch_size, self.num_heads, self.head_dim)), (1, 0, 2, 3)
         )
 
-        # compute local attention output with global attention value and add
-        #        if is_global_attn:
-        # compute sum of global and local attn
-        #            attn_output = self._compute_attn_output_with_global_indices(
-        #                value_vectors=value_vectors,
-        #                attn_probs=attn_probs,
-        #                max_num_global_attn_indices=max_num_global_attn_indices,
-        #                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
-        #                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
-        #            )
-        #        else:
-
-        if True:
+        if is_global_attn:
+            # compute sum of global and local attn
+            attn_output = self._compute_attn_output_with_global_indices(
+                value_vectors=value_vectors,
+                attn_probs=attn_probs,
+                max_num_global_attn_indices=max_num_global_attn_indices,
+                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
+                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
+            )
+        else:
             # compute local attn only
             attn_output = self._sliding_chunks_matmul_attn_probs_value(
                 attn_probs, value_vectors, self.one_sided_attn_window_size
             )
+
+        import ipdb
+
+        ipdb.set_trace()
 
         assert shape_list(attn_output) == [batch_size, seq_len, self.num_heads, self.head_dim], "Unexpected size"
         attn_output = tf.reshape(tf.transpose(attn_output, (1, 0, 2, 3)), (seq_len, batch_size, embed_dim))
@@ -498,8 +495,8 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         is_index_global_attn_nonzero = tf.where(is_index_global_attn)
 
         # helper variable
-        is_local_index_global_attn = tf.expand_dims(
-            tf.range(max_num_global_attn_indices) < num_global_attn_indices, axis=-1
+        is_local_index_global_attn = tf.range(max_num_global_attn_indices) < tf.expand_dims(
+            num_global_attn_indices, axis=-1
         )
 
         # location of the non-padding values within global attention indices
@@ -514,6 +511,79 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             is_local_index_global_attn_nonzero,
             is_local_index_no_global_attn_nonzero,
         )
+
+    def _concat_with_global_key_attn_probs(
+        self,
+        key_vectors,
+        query_vectors,
+        max_num_global_attn_indices,
+        is_index_global_attn_nonzero,
+        is_local_index_global_attn_nonzero,
+        is_local_index_no_global_attn_nonzero,
+    ):
+        batch_size = key_vectors.shape[0]
+
+        # select global key vectors
+        global_key_vectors = tf.gather_nd(key_vectors, is_index_global_attn_nonzero)
+        # create only global key vectors
+        key_vectors_only_global = tf.scatter_nd(
+            is_local_index_global_attn_nonzero,
+            global_key_vectors,
+            shape=(batch_size, max_num_global_attn_indices, self.num_heads, self.head_dim),
+        )
+
+        # (batch_size, seq_len, num_heads, max_num_global_attn_indices)
+        attn_probs_from_global_key = tf.einsum("blhd,bshd->blhs", query_vectors, key_vectors_only_global)
+        # (batch_size, max_num_global_attn_indices, seq_len, num_heads)
+        attn_probs_from_global_key_trans = tf.transpose(attn_probs_from_global_key, (0, 3, 1, 2))
+        mask_shape = (shape_list(is_local_index_no_global_attn_nonzero)[0],) + tuple(
+            shape_list(attn_probs_from_global_key_trans)[-2:]
+        )
+        mask = tf.ones(mask_shape) * -10000.0
+
+        # scatter mask
+        attn_probs_from_global_key_trans = tf.tensor_scatter_nd_update(
+            attn_probs_from_global_key_trans, is_local_index_no_global_attn_nonzero, mask
+        )
+
+        # (batch_size, seq_len, num_heads, max_num_global_attn_indices)
+        attn_probs_from_global_key = tf.transpose(attn_probs_from_global_key_trans, (0, 2, 3, 1))
+
+        return attn_probs_from_global_key
+
+    def _compute_attn_output_with_global_indices(
+        self,
+        value_vectors,
+        attn_probs,
+        max_num_global_attn_indices,
+        is_index_global_attn_nonzero,
+        is_local_index_global_attn_nonzero,
+    ):
+        batch_size = shape_list(attn_probs)[0]
+
+        # cut local attn probs to global only
+        attn_probs_only_global = attn_probs[:, :, :, :max_num_global_attn_indices]
+
+        # select global value vectors
+        global_value_vectors = tf.gather_nd(value_vectors, is_index_global_attn_nonzero)
+        # create only global value vectors
+        value_vectors_only_global = tf.scatter_nd(
+            is_local_index_global_attn_nonzero,
+            global_value_vectors,
+            shape=(batch_size, max_num_global_attn_indices, self.num_heads, self.head_dim),
+        )
+
+        # compute attn output only global
+        attn_output_only_global = tf.einsum("blhs,bshd->blhd", attn_probs_only_global, value_vectors_only_global)
+
+        # reshape attn probs
+        attn_probs_without_global = attn_probs[:, :, :, max_num_global_attn_indices:]
+
+        # compute attn output with global
+        attn_output_without_global = self._sliding_chunks_matmul_attn_probs_value(
+            attn_probs_without_global, value_vectors, self.one_sided_attn_window_size
+        )
+        return attn_output_only_global + attn_output_without_global
 
 
 class TFLongformerAttention(tf.keras.layers.Layer):

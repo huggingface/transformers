@@ -467,18 +467,35 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         model = LongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
         model.eval()
         layer = model.encoder.layer[0].attention.self.to(torch_device)
-        hidden_states = self._get_hidden_states()
+        hidden_states = torch.cat([self._get_hidden_states(), self._get_hidden_states() - 0.5], dim=0)
         batch_size, seq_length, hidden_size = hidden_states.size()
         attention_mask = torch.zeros((batch_size, 1, 1, seq_length), dtype=torch.float32, device=torch_device)
-        attention_mask[:, :, :, -2:] = 10000
+
+        # create attn mask
+        attention_mask[0, :, :, -2:] = 10000.0
+        attention_mask[0, :, :, -1:] = -10000.0
+        attention_mask[1, :, :, 1:] = 10000.0
         output_hidden_states = layer(hidden_states, attention_mask)[0]
 
-        self.assertTrue(output_hidden_states.shape, (1, 4, 8))
+        self.assertTrue(output_hidden_states.shape, (2, 4, 8))
+
         self.assertTrue(
             torch.allclose(
-                output_hidden_states[0, -1],
+                output_hidden_states[0, 2],
                 torch.tensor(
-                    [-0.0429, -0.0341, 0.0231, -0.0335, -0.0111, -0.0131, -0.0186, -0.0403],
+                    [-0.0651, -0.0393, 0.0309, -0.0342, -0.0066, -0.0155, -0.0209, -0.0494],
+                    dtype=torch.float32,
+                    device=torch_device,
+                ),
+                atol=1e-3,
+            )
+        )
+
+        self.assertTrue(
+            torch.allclose(
+                output_hidden_states[1, -2],
+                torch.tensor(
+                    [-0.0405, -0.0384, 0.0396, -0.0374, -0.0341, 0.0136, 0.0014, -0.0571],
                     dtype=torch.float32,
                     device=torch_device,
                 ),

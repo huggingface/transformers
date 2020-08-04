@@ -446,16 +446,28 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         layer = model.longformer.encoder.layer[0].attention.self_attention
         hidden_states = self._get_hidden_states()
 
+        hidden_states = tf.concat([self._get_hidden_states(), self._get_hidden_states() - 0.5], axis=0)
         batch_size, seq_length, hidden_size = hidden_states.shape
 
-        attention_mask = tf.zeros((batch_size, 1, 1, seq_length), dtype=tf.dtypes.float32)
-        attention_mask = tf.where(tf.range(4)[None, None, None, :] > 1, 10000.0, attention_mask)
-        attention_mask = tf.where(tf.range(4)[None, None, None, :] > 2, -10000.0, attention_mask)
+        # create attn mask
+        attention_mask_1 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
+        attention_mask_2 = tf.zeros((1, 1, 1, seq_length), dtype=tf.dtypes.float32)
+
+        attention_mask_1 = tf.where(tf.range(4)[None, None, None, :] > 1, 10000.0, attention_mask_1)
+        attention_mask_1 = tf.where(tf.range(4)[None, None, None, :] > 2, -10000.0, attention_mask_1)
+        attention_mask_2 = tf.where(tf.range(4)[None, None, None, :] > 0, 10000.0, attention_mask_2)
+        attention_mask = tf.concat([attention_mask_1, attention_mask_2], axis=0)
+
         output_hidden_states = layer([hidden_states, attention_mask, None])[0]
 
+        self.assertTrue(output_hidden_states.shape, (2, 4, 8))
         expected_slice = tf.convert_to_tensor(
-            [0.00188, 0.012196, -0.017051, -0.025571, -0.02996, 0.017297, -0.011521, 0.004848], dtype=tf.dtypes.float32
+            [-0.0651, -0.0393, 0.0309, -0.0342, -0.0066, -0.0155, -0.0209, -0.0494], dtype=tf.dtypes.float32
         )
 
-        self.assertTrue(output_hidden_states.shape, (1, 4, 8))
-        tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)
+        expected_slice = tf.convert_to_tensor(
+            [-0.0405, -0.0384, 0.0396, -0.0374, -0.0341, 0.0136, 0.0014, -0.0571], dtype=tf.dtypes.float32
+        )
+
+        tf.debugging.assert_near(output_hidden_states[0, 2], expected_slice, rtol=1e-3)
+        tf.debugging.assert_near(output_hidden_states[1, -2], expected_slice, rtol=1e-3)
