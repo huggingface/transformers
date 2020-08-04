@@ -388,7 +388,6 @@ def test_finetune_lr_shedulers(capsys):
     args_d1 = args_d.copy()
     args_d1["lr_scheduler"] = supported_param
     args = argparse.Namespace(**args_d1)
-
     model = main(args)
     assert getattr(model.hparams, "lr_scheduler") == supported_param, f"lr_scheduler={supported_param} shouldn't fail"
 

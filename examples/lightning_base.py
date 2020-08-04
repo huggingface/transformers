@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -236,7 +235,7 @@ class BaseTransformer(pl.LightningModule):
             choices=arg_to_scheduler_choices,
             metavar=arg_to_scheduler_metavar,
             type=str,
-            help="Learning rate scheduler. Use --lr_scheduler=help to see supported values",
+            help="Learning rate scheduler",
         )
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
