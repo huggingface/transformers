@@ -176,7 +176,7 @@ class LongformerSelfAttention(nn.Module):
         )
 
         # values to pad for attention probs
-        remove_from_windowed_attention_mask = (attention_mask != 0).unsqueeze(dim=-1).unsqueeze(dim=-1)
+        remove_from_windowed_attention_mask = (attention_mask != 0)[:, :, None, None]
 
         # cast to fp32/fp16 then replace 1's with -inf
         float_mask = remove_from_windowed_attention_mask.type_as(query_vectors).masked_fill(
@@ -230,7 +230,7 @@ class LongformerSelfAttention(nn.Module):
         del attn_probs_fp32
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
-        attn_probs = torch.masked_fill(attn_probs, is_index_masked.unsqueeze(-1).unsqueeze(-1), 0.0)
+        attn_probs = torch.masked_fill(attn_probs, is_index_masked[:, :, None, None], 0.0)
 
         # apply dropout
         attn_probs = F.dropout(attn_probs, p=self.dropout, training=self.training)
@@ -624,7 +624,7 @@ class LongformerSelfAttention(nn.Module):
             is_local_index_no_global_attn_nonzero[0], :, is_local_index_no_global_attn_nonzero[1], :
         ] = -10000.0
 
-        global_attn_scores = global_attn_scores.masked_fill(is_index_masked.unsqueeze(1).unsqueeze(2), -10000.0,)
+        global_attn_scores = global_attn_scores.masked_fill(is_index_masked[:, None, None, :], -10000.0,)
 
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
 

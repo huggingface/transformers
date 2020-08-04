@@ -63,6 +63,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.global_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
@@ -199,53 +200,58 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                 attn_probs, value_vectors, self.one_sided_attn_window_size
             )
 
-        import ipdb
-
-        ipdb.set_trace()
-
         assert shape_list(attn_output) == [batch_size, seq_len, self.num_heads, self.head_dim], "Unexpected size"
         attn_output = tf.reshape(tf.transpose(attn_output, (1, 0, 2, 3)), (seq_len, batch_size, embed_dim))
 
         # compute value for global attention and overwrite to attention output
         # TODO: remove the redundant computation
-        #        if is_global_attn:
-        #            global_attn_output = self._compute_global_attn_output_from_hidden(
-        #                hidden_states=hidden_states,
-        #                max_num_global_attn_indices=max_num_global_attn_indices,
-        #                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
-        #                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
-        #                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
-        #                is_index_masked=is_index_masked,
-        #            )
-        #
-        # get only non zero global attn output
-        #            nonzero_global_attn_output = global_attn_output[
-        #                is_local_index_global_attn_nonzero[0], :, is_local_index_global_attn_nonzero[1]
-        #            ]
-        # overwrite values with global attention
-        #            attn_output[is_index_global_attn_nonzero[::-1]] = nonzero_global_attn_output.view(
-        #                len(is_local_index_global_attn_nonzero[0]), -1
-        #            )
+        if is_global_attn:
+            global_attn_output = self._compute_global_attn_output_from_hidden(
+                hidden_states=hidden_states,
+                max_num_global_attn_indices=max_num_global_attn_indices,
+                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
+                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
+                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
+                is_index_masked=is_index_masked,
+                training=training,
+            )
+
+            # get only non zero global attn output
+            nonzero_global_attn_output_trans = tf.gather_nd(
+                tf.transpose(global_attn_output, (0, 2, 1, 3)), is_local_index_global_attn_nonzero
+            )
+            nonzero_global_attn_output = tf.reshape(
+                tf.transpose(nonzero_global_attn_output_trans, (0, 2, 1)),
+                (shape_list(is_local_index_global_attn_nonzero)[0], -1),
+            )
+
+            # overwrite values with global attention
+            attn_output = tf.tensor_scatter_nd_update(
+                attn_output, tf.reverse(is_local_index_global_attn_nonzero, axis=[1]), nonzero_global_attn_output
+            )
 
         attn_output = tf.transpose(attn_output, (1, 0, 2))
 
         if output_attentions:
-            #            if is_global_attn:
-            # With global attention, return global attention probabilities only
-            # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
-            # which is the attention weights from tokens with global attention to all tokens
-            # It doesn't not return local attention
-            # In case of variable number of global attantion in the rows of a batch,
-            # attn_probs are padded with -10000.0 attention scores
-            #                attn_probs = attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
-            #            else:
-            if True:
+            if is_global_attn:
+                # With global attention, return global attention probabilities only
+                # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
+                # which is the attention weights from tokens with global attention to all tokens
+                # It doesn't not return local attention
+                # In case of variable number of global attantion in the rows of a batch,
+                # attn_probs are padded with -10000.0 attention scores
+                attn_probs = tf.reshape(attn_probs, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len))
+            else:
                 # without global attention, return local attention probabilities
                 # batch_size x num_heads x sequence_length x window_size
                 # which is the attention weights of every token attending to its neighbours
                 attn_probs = tf.transpose(attn_probs, (0, 2, 1, 3))
 
         outputs = (attn_output, attn_probs) if output_attentions else (attn_output,)
+
+        import ipdb
+
+        ipdb.set_trace()
         return outputs
 
     def _sliding_chunks_query_key_matmul(self, query, key, window_overlap):
@@ -585,6 +591,106 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
         return attn_output_only_global + attn_output_without_global
 
+    def _compute_global_attn_output_from_hidden(
+        self,
+        hidden_states,
+        max_num_global_attn_indices,
+        is_local_index_global_attn_nonzero,
+        is_index_global_attn_nonzero,
+        is_local_index_no_global_attn_nonzero,
+        is_index_masked,
+        training,
+    ):
+        seq_len, batch_size = shape_list(hidden_states)[:2]
+
+        # prepare global hidden states
+        global_attn_hidden_states = tf.gather_nd(hidden_states, tf.reverse(is_index_global_attn_nonzero, axis=[1]))
+        global_attn_hidden_states = tf.scatter_nd(
+            tf.reverse(is_local_index_global_attn_nonzero, axis=[1]),
+            global_attn_hidden_states,
+            shape=(max_num_global_attn_indices, batch_size, self.embed_dim),
+        )
+
+        # global key, query, value
+        global_query_vectors_only_global = self.query_global(global_attn_hidden_states)
+        global_key_vectors = self.key_global(hidden_states)
+        global_value_vectors = self.value_global(hidden_states)
+
+        # normalize
+        global_query_vectors_only_global /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
+
+        # (batch_size * self.num_heads, max_num_global_attn_indices, head_dim)
+        global_query_vectors_only_global = tf.transpose(
+            tf.reshape(
+                global_query_vectors_only_global,
+                (max_num_global_attn_indices, batch_size * self.num_heads, self.head_dim),
+            ),
+            (1, 0, 2),
+        )
+
+        # (..., batch_size * self.num_heads, seq_len, head_dim)
+        global_key_vectors = tf.transpose(
+            tf.reshape(global_key_vectors, (-1, batch_size * self.num_heads, self.head_dim)), (1, 0, 2)
+        )
+
+        # (..., batch_size * self.num_heads, seq_len, head_dim)
+        global_value_vectors = tf.transpose(
+            tf.reshape(global_value_vectors, (-1, batch_size * self.num_heads, self.head_dim)), (1, 0, 2)
+        )
+
+        # compute attn scores
+        global_attn_scores = tf.matmul(global_query_vectors_only_global, tf.transpose(global_key_vectors, (0, 2, 1)))
+
+        assert shape_list(global_attn_scores) == [
+            batch_size * self.num_heads,
+            max_num_global_attn_indices,
+            seq_len,
+        ], f"global_attn_scores have the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is {global_attn_scores.size()}."
+
+        global_attn_scores = tf.reshape(
+            global_attn_scores, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
+        )
+
+        global_attn_scores_trans = tf.transpose(global_attn_scores, (0, 2, 1, 3))
+        mask_shape = (shape_list(is_local_index_no_global_attn_nonzero)[0],) + tuple(
+            shape_list(global_attn_scores_trans)[-2:]
+        )
+        global_attn_mask = tf.ones(mask_shape) * -10000.0
+
+        # scatter mask
+        global_attn_scores_trans = tf.tensor_scatter_nd_update(
+            global_attn_scores_trans, is_local_index_no_global_attn_nonzero, global_attn_mask
+        )
+        global_attn_scores = tf.transpose(global_attn_scores_trans, (0, 2, 1, 3))
+
+        # mask global attn scores
+        attn_mask = tf.broadcast_to(is_index_masked[:, None, None, :], shape_list(global_attn_scores))
+        global_attn_scores = tf.where(attn_mask, -10000.0, global_attn_scores)
+
+        global_attn_scores = tf.reshape(
+            global_attn_scores, (batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
+        )
+
+        # compute global attn probs
+        global_attn_probs_float = tf.nn.softmax(global_attn_scores, axis=-1)
+
+        # dropout
+        global_attn_probs = self.global_dropout(global_attn_probs_float, training=training)
+
+        # global attn output
+        global_attn_output = tf.matmul(global_attn_probs, global_value_vectors)
+
+        assert shape_list(global_attn_output) == [
+            batch_size * self.num_heads,
+            max_num_global_attn_indices,
+            self.head_dim,
+        ], f"global_attn_output tensor has the wrong size. Size should be {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is {global_attn_output.size()}."
+
+        global_attn_output = tf.reshape(
+            global_attn_output, (batch_size, self.num_heads, max_num_global_attn_indices, self.head_dim)
+        )
+        return global_attn_output
+
 
 class TFLongformerAttention(tf.keras.layers.Layer):
     def __init__(self, config, layer_id=0, **kwargs):
@@ -750,9 +856,8 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             token_type_ids = tf.fill(input_shape, 0)
 
         # merge `global_attention_mask` and `attention_mask`
-        # TODO(PVP)
-        #        if global_attention_mask is not None:
-        #            attention_mask = self._merge_to_attention_mask(attention_mask, global_attention_mask)
+        if global_attention_mask is not None:
+            attention_mask = self._merge_to_attention_mask(attention_mask, global_attention_mask)
 
         padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
             input_ids=input_ids,
@@ -827,6 +932,19 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
+    @staticmethod
+    def _merge_to_attention_mask(attention_mask: tf.Tensor, global_attention_mask: tf.Tensor):
+        # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
+        # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
+        # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
+        if attention_mask is not None:
+            attention_mask = attention_mask * (global_attention_mask + 1)
+        else:
+            # simply use `global_attention_mask` as `attention_mask`
+            # if no `attention_mask` is given
+            attention_mask = global_attention_mask + 1
+        return attention_mask
+
 
 class TFLongformerPreTrainedModel(TFPreTrainedModel):
     """ An abstract class to handle weights initialization and
@@ -835,6 +953,18 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
 
     config_class = LongformerConfig
     base_model_prefix = "longformer"
+
+    @property
+    def dummy_inputs(self):
+        input_ids = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
+        # make sure global layers are initialized
+        attention_mask = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        global_attention_mask = tf.constant([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]])
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "global_attention_mask": global_attention_mask,
+        }
 
 
 class TFLongformerModel(TFLongformerPreTrainedModel):
