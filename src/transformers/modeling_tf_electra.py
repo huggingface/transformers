@@ -615,7 +615,6 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        config.summary_proj_to_labels = True
         self.electra = TFElectraMainLayer(config, name="electra")
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
@@ -681,7 +680,6 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
         super().__init__(config, *inputs, **kwargs)
 
         self.electra = TFElectraMainLayer(config, name="electra")
-        config.summary_proj_to_labels = True
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
         )
