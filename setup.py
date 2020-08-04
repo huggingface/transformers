@@ -127,7 +127,6 @@ setup(
         "sentencepiece != 0.1.92",
         # for XLM
         "sacremoses",
-        "deberta",
     ],
     extras_require=extras,
     entry_points={

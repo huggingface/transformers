@@ -18,11 +18,13 @@ import re
 import unittest
 from typing import Tuple
 
+from transformers.testing_utils import require_torch
 from transformers.tokenization_deberta import DeBERTaTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_torch
 class DeBERTaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = DeBERTaTokenizer

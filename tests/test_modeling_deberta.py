@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -184,24 +184,6 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
-        # TODO: TBD
-        def create_and_check_deberta_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        ):
-            pass
-
-        # TODO: TBD
-        def create_and_check_deberta_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        ):
-            pass
-
-        # TODO: TBD
-        def create_and_check_deberta_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        ):
-            pass
-
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -262,7 +244,7 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    #    @slow
+    @slow
     def test_model_from_pretrained(self):
         for model_name in DeBERTa_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = DeBERTaModel.from_pretrained(model_name)
