@@ -75,6 +75,8 @@ To see all the possible command line options, run:
 ./finetune.sh --help  # this calls python finetune.py --help
 ```
 
+To see the supported schedulers, add: `--lr_scheduler=help` to the other options
+
 ### Finetuning Training Params
 
 To override the pretrained model's training params, you can pass them to `./finetune.sh`:
