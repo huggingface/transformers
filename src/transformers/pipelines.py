@@ -1162,7 +1162,12 @@ class FillMaskPipeline(Pipeline):
         Fill the masked token in the text(s) given as inputs.
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`): One or several texts (or one list of prompts) with masked tokens.
+            args (:obj:`str` or :obj:`List[str]`):
+                One or several texts (or one list of prompts) with masked tokens.
+            targets (:obj:`str` or :obj:`List[str]`, `optional`):
+                When passed, the model will return the scores for the passed token or tokens rather than the top k
+                predictions in the entire vocabulary. If the provided targets are not in the model vocab, they will
+                be tokenized and the first resulting token will be used (with a warning).
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
