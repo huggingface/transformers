@@ -63,6 +63,12 @@ TransfoXL specific outputs
 .. autoclass:: transformers.modeling_transfo_xl.TransfoXLLMHeadModelOutput
     :members:
 
+.. autoclass:: transformers.modeling_tf_transfo_xl.TFTransfoXLModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
+    :members:
+
 
 TransfoXLModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
