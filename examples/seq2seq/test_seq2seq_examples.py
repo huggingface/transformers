@@ -14,12 +14,11 @@ from pytest import param
 from torch.utils.data import DataLoader
 
 import lightning_base
-from finetune import SummarizationModule
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, MBartTokenizer
 from transformers.testing_utils import require_multigpu
 
 from .distillation import distill_main, evaluate_checkpoint
-from .finetune import main
+from .finetune import SummarizationModule, main
 from .pack_dataset import pack_data_dir
 from .run_eval import generate_summaries_or_translations, run_generate
 from .utils import MBartDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
