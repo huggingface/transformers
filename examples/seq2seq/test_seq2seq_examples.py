@@ -8,10 +8,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import pytorch_lightning as pl
 import torch
 from pytest import param
 from torch.utils.data import DataLoader
 
+import lightning_base
+from finetune import SummarizationModule
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, MBartTokenizer
 from transformers.testing_utils import require_multigpu
 
@@ -351,30 +354,34 @@ def test_finetune_lr_shedulers(capsys):
         freeze_embeds=True,
     )
 
-    # --lr_scheduler=help test
-    args_d1 = args_d.copy()
-    args_d1["lr_scheduler"] = "help"
-    args = argparse.Namespace(**args_d1)
+    # emulate finetune.py
+    parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
+    parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
+    args = {"--help": True}
 
+    # --help test
     with pytest.raises(SystemExit) as excinfo:
-        model = main(args)
-        assert False, "--lr_scheduler=help is expected to sys.exit"
+        args = parser.parse_args(args)
+        assert False, "--help is expected to sys.exit"
     assert excinfo.type == SystemExit
     captured = capsys.readouterr()
-    error_msg = "--lr_scheduler=help is expected to dump the supported schedulers"
-    assert "lr_scheduler=cosine" in captured.out, error_msg
-    assert "lr_scheduler=linear" in captured.out, error_msg
+    expected = lightning_base.arg_to_scheduler_metavar
+    assert expected in captured.out, "--help is expected to list the supported schedulers"
 
     # --lr_scheduler=non_existing_scheduler test
     unsupported_param = "non_existing_scheduler"
-    args_d1 = args_d.copy()
-    args_d1["lr_scheduler"] = unsupported_param
-    args = argparse.Namespace(**args_d1)
-
-    with pytest.raises(Exception) as excinfo:
-        model = main(args)
-    assert str(excinfo.value)
-    str(excinfo.value) == f"Error: Invalid --lr_scheduler option: {unsupported_param}"
+    # parser = argparse.ArgumentParser()
+    # parser = pl.Trainer.add_argparse_args(parser)
+    # parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
+    args = {f"--lr_scheduler={unsupported_param}"}
+    with pytest.raises(SystemExit) as excinfo:
+        args = parser.parse_args(args)
+        assert False, "invalid argument is expected to sys.exit"
+    assert excinfo.type == SystemExit
+    captured = capsys.readouterr()
+    expected = f"invalid choice: '{unsupported_param}'"
+    assert expected in captured.err, f"should have bailed on invalid choice of scheduler {unsupported_param}"
 
     # --lr_scheduler=existing_scheduler test
     supported_param = "cosine"

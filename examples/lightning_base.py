@@ -8,7 +8,6 @@ from typing import Any, Dict
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
 
-import transformers.optimization
 from transformers import (
     AdamW,
     AutoConfig,
@@ -22,6 +21,11 @@ from transformers import (
     AutoTokenizer,
     PretrainedConfig,
     PreTrainedTokenizer,
+)
+from transformers.optimization import (
+    get_cosine_schedule_with_warmup,
+    get_cosine_with_hard_restarts_schedule_with_warmup,
+    get_linear_schedule_with_warmup,
 )
 
 
@@ -40,16 +44,17 @@ MODEL_MODES = {
 }
 
 
-# update this to support new schedulers from transformers.optimization
-# the listed below schedulers appear in the output of --lr_scheduler=help
+# update this and the import above to support new schedulers from transformers.optimization
 arg_to_scheduler = {
-    "linear": "get_linear_schedule_with_warmup",
-    "cosine": "get_cosine_schedule_with_warmup",
-    "cosine_w_restarts": "get_cosine_with_hard_restarts_schedule_with_warmup",
-    # 'polynomial': '',                    # TODO
-    # 'get_constant_schedule',             # not supported for now
-    # 'get_constant_schedule_with_warmup', # not supported for now
+    "linear": get_linear_schedule_with_warmup,
+    "cosine": get_cosine_schedule_with_warmup,
+    "cosine_w_restarts": get_cosine_with_hard_restarts_schedule_with_warmup,
+    # polynomial': '',                       # TODO
+    # '': get_constant_schedule,             # not supported for now
+    # '': get_constant_schedule_with_warmup, # not supported for now
 }
+arg_to_scheduler_choices = sorted(arg_to_scheduler.keys())
+arg_to_scheduler_metavar = "{" + ", ".join(arg_to_scheduler_choices) + "}"
 
 
 class BaseTransformer(pl.LightningModule):
@@ -84,15 +89,6 @@ class BaseTransformer(pl.LightningModule):
         else:
             self.config: PretrainedConfig = config
 
-        # usage extended helpers
-        lr_scheduler = hparams.lr_scheduler
-        if lr_scheduler not in arg_to_scheduler.keys():
-            if lr_scheduler == "help":
-                print(lr_schedulers_help())
-                sys.exit(0)
-            else:
-                assert False, f"Error: Invalid --lr_scheduler option: {lr_scheduler}\n" + lr_schedulers_help()
-
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
         for p in extra_model_params:
             if getattr(self.hparams, p, None):
@@ -121,7 +117,7 @@ class BaseTransformer(pl.LightningModule):
         self.model = self.model_type.from_pretrained(*args, **kwargs)
 
     def get_lr_scheduler(self):
-        get_schedule_func = getattr(transformers.optimization, arg_to_scheduler[self.hparams.lr_scheduler])
+        get_schedule_func = arg_to_scheduler[self.hparams.lr_scheduler]
         scheduler = get_schedule_func(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps
         )
@@ -237,6 +233,8 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument(
             "--lr_scheduler",
             default="linear",
+            choices=arg_to_scheduler_choices,
+            metavar=arg_to_scheduler_metavar,
             type=str,
             help="Learning rate scheduler. Use --lr_scheduler=help to see supported values",
         )
@@ -310,16 +308,6 @@ def add_generic_args(parser, root_dir) -> None:
     )
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-
-
-def lr_schedulers_help():
-    return "\n".join(
-        [
-            "Available lr_schedulers:",
-            *[f"--lr_scheduler={k} ({v})" for k, v in sorted(arg_to_scheduler.items())],
-            "--lr_scheduler=help (this help)",
-        ]
-    )
 
 
 def generic_train(
