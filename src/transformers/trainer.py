@@ -564,7 +564,6 @@ class Trainer:
                         self.non_embedding_flos += 6 * model.module.floating_point_ops(
                             *estimate_tokens(inputs), no_embeddings=True
                         )
-                    print(self.non_embedding_flos)
 
                     if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
                         self.global_step == 1 and self.args.logging_first_step
