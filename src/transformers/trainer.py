@@ -427,7 +427,8 @@ class Trainer:
                 )
             if experiment is not None:
                 experiment._set_model_graph(self.model, framework="transformers")
-                experiment._log_parameters(self.args, framework="transformers")
+                experiment._log_parameters(self.args, prefix="args/", framework="transformers")
+                experiment._log_parameters(self.model.config, prefix="config/", framework="transformers")
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
