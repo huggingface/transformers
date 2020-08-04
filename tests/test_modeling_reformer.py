@@ -389,7 +389,7 @@ class ReformerModelTester:
         model.to(torch_device)
         model.half()
         model.eval()
-        output = model(input_ids, attention_mask=input_mask)["last_input_state"]
+        output = model(input_ids, attention_mask=input_mask)["last_hidden_state"]
         self.parent.assertFalse(torch.isnan(output).any().item())
 
     def create_and_check_reformer_model_generate(self, config, input_ids, input_mask, choice_labels):
