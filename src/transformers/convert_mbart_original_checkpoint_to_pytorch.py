@@ -8,7 +8,6 @@ from .convert_bart_original_pytorch_checkpoint_to_pytorch import remove_ignore_k
 
 
 def convert_fairseq_mbart_checkpoint_from_disk(checkpoint_path, hf_config_path="facebook/mbart-large-en-ro"):
-
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
