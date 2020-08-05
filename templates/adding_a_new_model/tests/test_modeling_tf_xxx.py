@@ -24,9 +24,11 @@ from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
+    import tensorflow as tf
     from transformers.modeling_tf_xxx import (
         TFXxxModel,
         TFXxxForMaskedLM,
+        TFXxxForMultipleChoice,
         TFXxxForSequenceClassification,
         TFXxxForTokenClassification,
         TFXxxForQuestionAnswering,
