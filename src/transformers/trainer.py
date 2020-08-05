@@ -408,7 +408,7 @@ class Trainer:
                 (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
 
         For a number of configurable items in the environment,
-        see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
+        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
         """
         if self.is_world_master():
             comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
