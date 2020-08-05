@@ -217,17 +217,16 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             )
 
             # get only non zero global attn output
-            nonzero_global_attn_output_trans = tf.gather_nd(
+            nonzero_global_attn_output = tf.gather_nd(
                 tf.transpose(global_attn_output, (0, 2, 1, 3)), is_local_index_global_attn_nonzero
             )
             nonzero_global_attn_output = tf.reshape(
-                tf.transpose(nonzero_global_attn_output_trans, (0, 2, 1)),
-                (shape_list(is_local_index_global_attn_nonzero)[0], -1),
+                nonzero_global_attn_output, (shape_list(is_local_index_global_attn_nonzero)[0], -1),
             )
 
             # overwrite values with global attention
             attn_output = tf.tensor_scatter_nd_update(
-                attn_output, tf.reverse(is_local_index_global_attn_nonzero, axis=[1]), nonzero_global_attn_output
+                attn_output, tf.reverse(is_index_global_attn_nonzero, axis=[1]), nonzero_global_attn_output
             )
 
         attn_output = tf.transpose(attn_output, (1, 0, 2))
@@ -249,9 +248,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         outputs = (attn_output, attn_probs) if output_attentions else (attn_output,)
 
-        import ipdb
-
-        ipdb.set_trace()
         return outputs
 
     def _sliding_chunks_query_key_matmul(self, query, key, window_overlap):

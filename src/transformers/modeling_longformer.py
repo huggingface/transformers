@@ -272,6 +272,7 @@ class LongformerSelfAttention(nn.Module):
             nonzero_global_attn_output = global_attn_output[
                 is_local_index_global_attn_nonzero[0], :, is_local_index_global_attn_nonzero[1]
             ]
+
             # overwrite values with global attention
             attn_output[is_index_global_attn_nonzero[::-1]] = nonzero_global_attn_output.view(
                 len(is_local_index_global_attn_nonzero[0]), -1

@@ -461,13 +461,13 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         output_hidden_states = layer([hidden_states, attention_mask, None])[0]
 
         self.assertTrue(output_hidden_states.shape, (2, 4, 8))
-        expected_slice = tf.convert_to_tensor(
-            [-0.0651, -0.0393, 0.0309, -0.0342, -0.0066, -0.0155, -0.0209, -0.0494], dtype=tf.dtypes.float32
+        expected_slice_0 = tf.convert_to_tensor(
+            [-0.06508, -0.039306, 0.030934, -0.03417, -0.00656, -0.01553, -0.02088, -0.04938], dtype=tf.dtypes.float32
         )
 
-        expected_slice = tf.convert_to_tensor(
-            [-0.0405, -0.0384, 0.0396, -0.0374, -0.0341, 0.0136, 0.0014, -0.0571], dtype=tf.dtypes.float32
+        expected_slice_1 = tf.convert_to_tensor(
+            [-0.04055, -0.038399, 0.0396, -0.03735, -0.03415, 0.01357, 0.00145, -0.05709], dtype=tf.dtypes.float32
         )
 
-        tf.debugging.assert_near(output_hidden_states[0, 2], expected_slice, rtol=1e-3)
-        tf.debugging.assert_near(output_hidden_states[1, -2], expected_slice, rtol=1e-3)
+        tf.debugging.assert_near(output_hidden_states[0, 2], expected_slice_0, rtol=1e-3)
+        tf.debugging.assert_near(output_hidden_states[1, -2], expected_slice_1, rtol=1e-3)
