@@ -249,7 +249,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
-        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 

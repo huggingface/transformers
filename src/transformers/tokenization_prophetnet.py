@@ -23,8 +23,7 @@ from .tokenization_utils import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
 
-VOCAB_FILES_NAMES_EN = {"vocab_file": "vocab.txt"}
-VOCAB_FILES_NAMES_CROSS_LINGUAL = {"vocab_file": "sentencepiece.bpe.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -50,7 +49,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             ProphetNet inherit from BERT-tokenizer, xProphetNet  inherit from XLMR-tokenizer
         """
 
-    vocab_files_names = VOCAB_FILES_NAMES_EN    # default english version rather than cross-lingual version.
+    vocab_files_names = VOCAB_FILES_NAMES     # default english version rather than cross-lingual version.
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -62,10 +61,6 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         else:
             super_class = BertTokenizer
         cls = type(cls.__name__, (cls, super_class), {})
-        if xprophetnet_tokenizer:
-            cls.vocab_files_names = VOCAB_FILES_NAMES_CROSS_LINGUAL
-        else:
-            cls.vocab_files_names = VOCAB_FILES_NAMES_EN
         return super(ProphetNetTokenizer, cls).__new__(cls)
 
     def __init__(

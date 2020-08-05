@@ -66,8 +66,8 @@ PROPHETNET_GENERATION_EXAMPLE = r"""
         ARTICLE_TO_SUMMARIZE = "USTC was founded in Beijing by the Chinese Academy of Sciences (CAS) in September 1958. The Director of CAS, Mr. Guo Moruo was appointed the first president of USTC. USTC's founding mission was to develop a high-level science and technology workforce, as deemed critical for development of China's economy, defense, and science and technology education. The establishment was hailed as \"A Major Event in the History of Chinese Education and Science.\" CAS has supported USTC by combining most of its institutes with the departments of the university. USTC is listed in the top 16 national key universities, becoming the youngest national key university.".lower()
         inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=100, return_tensors='pt')
 
-        # Generate Summary(bos is removed)
-        summary_ids = model.generate(inputs['input_ids'][:, 1:], num_beams=4, max_length=512, early_stopping=True)
+        # Generate Summary
+        summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=512, early_stopping=True)
         print([tokenizer.decode(g) for g in summary_ids])
     
     xProphetNet xGLUE News Title Generation example:
@@ -77,13 +77,13 @@ PROPHETNET_GENERATION_EXAMPLE = r"""
         model = ProphetNetForConditionalGeneration.from_pretrained('microsoft/xprophetnet-large-wiki100-cased-xglue-ntg')
         tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased-xglue-ntg')
 
-        EN_SENTENCE_TO_QUESTION = "Microsoft Corporation intends to officially end free support for the Windows 7 operating system after January 14, 2020, according to the official portal of the organization. From that day, users of this system will not be able to receive security updates, which could make their computers vulnerable to cyber attacks."
-        RU_SENTENCE_TO_QUESTION = "орпорация Microsoft намерена официально прекратить бесплатную поддержку операционной системы Windows 7 после 14 января 2020 года, сообщается на официальном портале организации . С указанного дня пользователи этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми к кибератакам."
-        ZH_SENTENCE_TO_QUESTION = "根据该组织的官方门户网站，微软公司打算在2020年1月14日之后正式终止对Windows 7操作系统的免费支持。从那时起，该系统的用户将无法接收安全更新，这可能会使他们的计算机容易受到网络攻击。"
-        inputs = tokenizer([EN_SENTENCE_TO_QUESTION, RU_SENTENCE_TO_QUESTION, ZH_SENTENCE_TO_QUESTION], padding=True, max_length=256, return_tensors='pt')
+        EN_SENTENCE = "Microsoft Corporation intends to officially end free support for the Windows 7 operating system after January 14, 2020, according to the official portal of the organization. From that day, users of this system will not be able to receive security updates, which could make their computers vulnerable to cyber attacks."
+        RU_SENTENCE = "орпорация Microsoft намерена официально прекратить бесплатную поддержку операционной системы Windows 7 после 14 января 2020 года, сообщается на официальном портале организации . С указанного дня пользователи этой системы не смогут получать обновления безопасности, из-за чего их компьютеры могут стать уязвимыми к кибератакам."
+        ZH_SENTENCE = "根据该组织的官方门户网站，微软公司打算在2020年1月14日之后正式终止对Windows 7操作系统的免费支持。从那时起，该系统的用户将无法接收安全更新，这可能会使他们的计算机容易受到网络攻击。"
+        inputs = tokenizer([EN_SENTENCE, RU_SENTENCE, ZH_SENTENCE], padding=True, max_length=256, return_tensors='pt')
 
-        # Generate Summary(bos is removed)
-        summary_ids = model.generate(inputs['input_ids'][:, 1:], num_beams=4, max_length=100, early_stopping=True)
+        # Generate Summary
+        summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=100, early_stopping=True)
         print([tokenizer.decode(g) for g in summary_ids])    
 """
 
@@ -438,10 +438,10 @@ class ProphetNetEncoder(nn.Module):
 
         """
 
-        # # remove bos to be consistent with fairseq version
-        # input_ids = input_ids[:, 1:]
-        # if attention_mask is not None:
-        #     attention_mask = attention_mask[:, 1:]
+        # remove bos to be consistent with fairseq version
+        input_ids = input_ids[:, 1:]
+        if attention_mask is not None:
+            attention_mask = attention_mask[:, 1:]
 
         if attention_mask is not None:
             attention_mask = invert_mask(attention_mask)
@@ -1138,8 +1138,8 @@ class ProphetNetDecoder(nn.Module):
 
         """
         if encoder_padding_mask is not None:
-            # # remove bos to be consistent with fairseq version
-            # encoder_padding_mask = encoder_padding_mask[:, 1:]
+            # remove bos to be consistent with fairseq version
+            encoder_padding_mask = encoder_padding_mask[:, 1:]
             encoder_padding_mask = invert_mask(encoder_padding_mask)
         main_stream_pos_embed, real_positions = self.embed_positions(
             input_ids,
