@@ -17,7 +17,7 @@ import random
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import DictAttr, require_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -91,19 +91,21 @@ class TransfoXLModelTester:
 
         outputs1 = model(input_ids_1)
         outputs2 = model(input_ids_2, outputs1["mems"])
-        outputs = DictAttr(
-            {
-                "hidden_states_1": outputs1["last_hidden_state"],
-                "mems_1": outputs1["mems"],
-                "hidden_states_2": outputs2["last_hidden_state"],
-                "mems_2": outputs2["mems"],
-            }
-        )
+        outputs = {
+            "hidden_states_1": outputs1["last_hidden_state"],
+            "mems_1": outputs1["mems"],
+            "hidden_states_2": outputs2["last_hidden_state"],
+            "mems_2": outputs2["mems"],
+        }
         return outputs
 
     def check_transfo_xl_model_output(self, result):
-        self.parent.assertEqual(result.hidden_states_1.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.hidden_states_2.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertListEqual(
+            list(result["hidden_states_1"].size()), [self.batch_size, self.seq_length, self.hidden_size],
+        )
+        self.parent.assertListEqual(
+            list(result["hidden_states_2"].size()), [self.batch_size, self.seq_length, self.hidden_size],
+        )
         self.parent.assertListEqual(
             list(list(mem.size()) for mem in result["mems_1"]),
             [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
@@ -123,28 +125,30 @@ class TransfoXLModelTester:
         lm_logits_2 = model(input_ids_2, mems=outputs1["mems"])["prediction_scores"]
         outputs2 = model(input_ids_2, labels=lm_labels, mems=outputs1["mems"])
 
-        outputs = DictAttr(
-            {
-                "loss_1": outputs1["losses"],
-                "mems_1": outputs1["mems"],
-                "lm_logits_1": lm_logits_1,
-                "loss_2": outputs2["losses"],
-                "mems_2": outputs2["mems"],
-                "lm_logits_2": lm_logits_2,
-            }
-        )
+        outputs = {
+            "loss_1": outputs1["losses"],
+            "mems_1": outputs1["mems"],
+            "lm_logits_1": lm_logits_1,
+            "loss_2": outputs2["losses"],
+            "mems_2": outputs2["mems"],
+            "lm_logits_2": lm_logits_2,
+        }
         return outputs
 
     def check_transfo_xl_lm_head_output(self, result):
-        self.parent.assertEqual(result.loss_1.shape, (self.batch_size, self.seq_length - 1))
-        self.parent.assertEqual(result.lm_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertListEqual(list(result["loss_1"].size()), [self.batch_size, self.seq_length - 1])
+        self.parent.assertListEqual(
+            list(result["lm_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
+        )
         self.parent.assertListEqual(
             list(list(mem.size()) for mem in result["mems_1"]),
             [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
-        self.parent.assertEqual(result.loss_2.shape, (self.batch_size, self.seq_length - 1))
-        self.parent.assertEqual(result.lm_logits_2.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertListEqual(list(result["loss_2"].size()), [self.batch_size, self.seq_length - 1])
+        self.parent.assertListEqual(
+            list(result["lm_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
+        )
         self.parent.assertListEqual(
             list(list(mem.size()) for mem in result["mems_2"]),
             [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,

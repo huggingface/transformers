@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import RobertaConfig, is_tf_available
-from transformers.testing_utils import DictAttr, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -95,6 +95,7 @@ class TFRobertaModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
+            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -104,23 +105,21 @@ class TFRobertaModelTester:
     ):
         model = TFRobertaModel(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        sequence_output = model(inputs)[0]
+        result = model(inputs)
 
         inputs = [input_ids, input_mask]
-        sequence_output = model(inputs)[0]
+        result = model(inputs)
 
-        sequence_output = model(input_ids)[0]
+        result = model(input_ids)
 
-        result = DictAttr({"sequence_output": sequence_output.numpy()})
-        self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_roberta_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFRobertaForMaskedLM(config=config)
-        prediction_scores = model([input_ids, input_mask, token_type_ids])[0]
-        result = DictAttr({"prediction_scores": prediction_scores.numpy()})
-        self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result = model([input_ids, input_mask, token_type_ids])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_roberta_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -128,8 +127,7 @@ class TFRobertaModelTester:
         config.num_labels = self.num_labels
         model = TFRobertaForTokenClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        (logits,) = model(inputs)
-        result = DictAttr({"logits": logits.numpy()})
+        result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_roberta_for_question_answering(
@@ -137,8 +135,7 @@ class TFRobertaModelTester:
     ):
         model = TFRobertaForQuestionAnswering(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        start_logits, end_logits = model(inputs)
-        result = DictAttr({"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()})
+        result = model(inputs)
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
@@ -155,8 +152,7 @@ class TFRobertaModelTester:
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
-        (logits,) = model(inputs)
-        result = DictAttr({"logits": logits.numpy()})
+        result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):

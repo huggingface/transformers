@@ -18,7 +18,7 @@ import random
 import unittest
 
 from transformers import XLNetConfig, is_tf_available
-from transformers.testing_utils import DictAttr, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -110,6 +110,7 @@ class TFXLNetModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -147,23 +148,19 @@ class TFXLNetModelTester:
         model = TFXLNetModel(config)
 
         inputs = {"input_ids": input_ids_1, "input_mask": input_mask, "token_type_ids": segment_ids}
-
-        _, _ = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids_1, input_mask]
-
-        outputs, mems_1 = model(inputs)
-
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "outputs": outputs.numpy()})
+        result = model(inputs)
 
         config.mem_len = 0
         model = TFXLNetModel(config)
         no_mems_outputs = model(inputs)
         self.parent.assertEqual(len(no_mems_outputs), 1)
 
-        self.parent.assertEqual(result.outputs.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
+            list(list(mem.shape) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -184,25 +181,20 @@ class TFXLNetModelTester:
         model = TFXLNetLMHeadModel(config)
 
         inputs_1 = {"input_ids": input_ids_1, "token_type_ids": segment_ids}
-
-        all_logits_1, mems_1 = model(inputs_1)
+        all_logits_1, mems_1 = model(inputs_1).to_tuple()
 
         inputs_2 = {"input_ids": input_ids_2, "mems": mems_1, "token_type_ids": segment_ids}
-
-        all_logits_2, mems_2 = model(inputs_2)
+        all_logits_2, mems_2 = model(inputs_2).to_tuple()
 
         inputs_3 = {"input_ids": input_ids_q, "perm_mask": perm_mask, "target_mapping": target_mapping}
+        logits, _ = model(inputs_3).to_tuple()
 
-        logits, _ = model(inputs_3)
-
-        result = DictAttr(
-            {
-                "mems_1": [mem.numpy() for mem in mems_1],
-                "all_logits_1": all_logits_1.numpy(),
-                "mems_2": [mem.numpy() for mem in mems_2],
-                "all_logits_2": all_logits_2.numpy(),
-            }
-        )
+        result = {
+            "mems_1": [mem.numpy() for mem in mems_1],
+            "all_logits_1": all_logits_1.numpy(),
+            "mems_2": [mem.numpy() for mem in mems_2],
+            "all_logits_2": all_logits_2.numpy(),
+        }
 
         self.parent.assertEqual(result.all_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
@@ -233,15 +225,7 @@ class TFXLNetModelTester:
         model = TFXLNetForQuestionAnsweringSimple(config)
 
         inputs = {"input_ids": input_ids_1, "attention_mask": input_mask, "token_type_ids": segment_ids}
-        start_logits, end_logits, mems = model(inputs)
-
-        result = DictAttr(
-            {
-                "start_logits": start_logits.numpy(),
-                "end_logits": end_logits.numpy(),
-                "mems": [m.numpy() for m in mems],
-            }
-        )
+        result = model(inputs)
 
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -266,13 +250,11 @@ class TFXLNetModelTester:
     ):
         model = TFXLNetForSequenceClassification(config)
 
-        logits, mems_1 = model(input_ids_1)
-
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()})
+        result = model(input_ids_1)
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
+            list(list(mem.shape) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -297,11 +279,10 @@ class TFXLNetModelTester:
             "attention_mask": input_mask,
             # 'token_type_ids': token_type_ids
         }
-        logits, mems_1 = model(inputs)
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()})
+        result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, config.num_labels))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
+            list(list(mem.shape) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -329,12 +310,11 @@ class TFXLNetModelTester:
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
-        (logits, mems_1) = model(inputs)
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()})
+        result = model(inputs)
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
+            list(list(mem.shape) for mem in result["mems"]),
             [[self.seq_length, self.batch_size * self.num_choices, self.hidden_size]] * self.num_hidden_layers,
         )
 

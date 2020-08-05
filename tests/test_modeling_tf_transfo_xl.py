@@ -18,7 +18,7 @@ import random
 import unittest
 
 from transformers import TransfoXLConfig, is_tf_available
-from transformers.testing_utils import DictAttr, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -79,6 +79,7 @@ class TFTransfoXLModelTester:
             div_val=self.div_val,
             n_layer=self.num_hidden_layers,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
@@ -90,20 +91,18 @@ class TFTransfoXLModelTester:
     def create_and_check_transfo_xl_model(self, config, input_ids_1, input_ids_2, lm_labels):
         model = TFTransfoXLModel(config)
 
-        hidden_states_1, mems_1 = model(input_ids_1)
+        hidden_states_1, mems_1 = model(input_ids_1).to_tuple()
 
         inputs = {"input_ids": input_ids_2, "mems": mems_1}
 
-        hidden_states_2, mems_2 = model(inputs)
+        hidden_states_2, mems_2 = model(inputs).to_tuple()
 
-        result = DictAttr(
-            {
-                "hidden_states_1": hidden_states_1.numpy(),
-                "mems_1": [mem.numpy() for mem in mems_1],
-                "hidden_states_2": hidden_states_2.numpy(),
-                "mems_2": [mem.numpy() for mem in mems_2],
-            }
-        )
+        result = {
+            "hidden_states_1": hidden_states_1.numpy(),
+            "mems_1": [mem.numpy() for mem in mems_1],
+            "hidden_states_2": hidden_states_2.numpy(),
+            "mems_2": [mem.numpy() for mem in mems_2],
+        }
 
         self.parent.assertEqual(result.hidden_states_1.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.hidden_states_2.shape, (self.batch_size, self.seq_length, self.hidden_size))
@@ -119,25 +118,23 @@ class TFTransfoXLModelTester:
     def create_and_check_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
         model = TFTransfoXLLMHeadModel(config)
 
-        lm_logits_1, mems_1 = model(input_ids_1)
+        lm_logits_1, mems_1 = model(input_ids_1).to_tuple()
 
         inputs = {"input_ids": input_ids_1, "labels": lm_labels}
-        _, mems_1 = model(inputs)
+        _, mems_1 = model(inputs).to_tuple()
 
-        lm_logits_2, mems_2 = model([input_ids_2, mems_1])
+        lm_logits_2, mems_2 = model([input_ids_2, mems_1]).to_tuple()
 
         inputs = {"input_ids": input_ids_1, "mems": mems_1, "labels": lm_labels}
 
-        _, mems_2 = model(inputs)
+        _, mems_2 = model(inputs).to_tuple()
 
-        result = DictAttr(
-            {
-                "mems_1": [mem.numpy() for mem in mems_1],
-                "lm_logits_1": lm_logits_1.numpy(),
-                "mems_2": [mem.numpy() for mem in mems_2],
-                "lm_logits_2": lm_logits_2.numpy(),
-            }
-        )
+        result = {
+            "mems_1": [mem.numpy() for mem in mems_1],
+            "lm_logits_1": lm_logits_1.numpy(),
+            "mems_2": [mem.numpy() for mem in mems_2],
+            "lm_logits_2": lm_logits_2.numpy(),
+        }
 
         self.parent.assertEqual(result.lm_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(

@@ -74,7 +74,10 @@ ElectraTokenizerFast
 Electra specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_electra.ElectraForPretrainingOutput
+.. autoclass:: transformers.modeling_electra.ElectraForPreTrainingOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_electra.TFElectraForPreTrainingOutput
     :members:
 
 
@@ -103,6 +106,13 @@ ElectraForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForSequenceClassification
+    :members:
+
+
+ElectraForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForMultipleChoice
     :members:
 
 
@@ -138,6 +148,20 @@ TFElectraForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForMaskedLM
+    :members:
+
+
+TFElectraForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForSequenceClassification
+    :members:
+
+
+TFElectraForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForMultipleChoice
     :members:
 
 
