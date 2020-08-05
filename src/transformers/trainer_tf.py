@@ -246,7 +246,7 @@ class TFTrainer:
                 (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
 
         For a number of configurable items in the environment,
-        see https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables
+        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
         """
         comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
         args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
