@@ -1057,8 +1057,7 @@ class TFT5Model(TFT5PreTrainedModel):
             ],
             training=training,
         )
-
-        past = (encoder_outputs, decoder_outputs[1]) if use_cache else None
+        past = (encoder_outputs, decoder_outputs[1]) if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
         if not return_dict:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
@@ -1072,12 +1071,12 @@ class TFT5Model(TFT5PreTrainedModel):
 
         # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
         # TF refuses to compile anymore.
-        if not use_cache:
+        if not cast_bool_to_primitive(use_cache, self.config.use_cache):
             decoder_outputs = decoder_outputs[:1] + (None,) + decoder_outputs[1:]
-        if not output_hidden_states:
+        if not cast_bool_to_primitive(output_hidden_states, self.config.output_hidden_states):
             encoder_outputs = encoder_outputs[:1] + (None,) + encoder_outputs[1:]
             decoder_outputs = decoder_outputs[:2] + (None,) + decoder_outputs[2:]
-        if not output_attentions:
+        if not cast_bool_to_primitive(output_attentions, self.config.output_attentions):
             encoder_outputs = encoder_outputs + (None,)
             decoder_outputs = decoder_outputs + (None,)
 
@@ -1275,7 +1274,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         loss = None if labels is None else self.compute_loss(labels, logits)
 
-        past = (encoder_outputs, decoder_outputs[1]) if use_cache else None
+        past = (encoder_outputs, decoder_outputs[1]) if cast_bool_to_primitive(use_cache, self.config.use_cache) else None
         if not return_dict:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
@@ -1290,12 +1289,12 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
         # TF refuses to compile anymore.
-        if not use_cache:
+        if not cast_bool_to_primitive(use_cache, self.config.use_cache):
             decoder_outputs = decoder_outputs[:1] + (None,) + decoder_outputs[1:]
-        if not output_hidden_states:
+        if not cast_bool_to_primitive(output_hidden_states, self.config.output_hidden_states):
             encoder_outputs = encoder_outputs[:1] + (None,) + encoder_outputs[1:]
             decoder_outputs = decoder_outputs[:2] + (None,) + decoder_outputs[2:]
-        if not output_attentions:
+        if not cast_bool_to_primitive(output_attentions, self.config.output_attentions):
             encoder_outputs = encoder_outputs + (None,)
             decoder_outputs = decoder_outputs + (None,)
 
