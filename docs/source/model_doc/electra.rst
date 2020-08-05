@@ -109,6 +109,13 @@ ElectraForSequenceClassification
     :members:
 
 
+ElectraForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForMultipleChoice
+    :members:
+
+
 ElectraForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -141,6 +148,20 @@ TFElectraForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForMaskedLM
+    :members:
+
+
+TFElectraForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForSequenceClassification
+    :members:
+
+
+TFElectraForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForMultipleChoice
     :members:
 
 

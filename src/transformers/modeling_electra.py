@@ -850,7 +850,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
 @add_start_docstrings(
     """ELECTRA Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    ELECTRA_INPUTS_DOCSTRING,
+    ELECTRA_START_DOCSTRING,
 )
 class ElectraForMultipleChoice(ElectraPreTrainedModel):
     def __init__(self, config):

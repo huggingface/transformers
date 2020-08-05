@@ -18,7 +18,9 @@ from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFMaskedLMOutput,
+    TFMultipleChoiceModelOutput,
     TFQuestionAnsweringModelOutput,
+    TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
 )
 from .modeling_tf_utils import (
@@ -39,7 +41,6 @@ logger = logging.getLogger(__name__)
 
 _CONFIG_FOR_DOC = "ElectraConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
-_CONFIG_FOR_DOC = "ElectraConfig"
 
 TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-small-generator",
@@ -634,6 +635,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             attentions=generator_hidden_states.attentions,
         )
 
+
 class TFElectraClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
@@ -674,6 +676,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/electra-small-discriminator",
+        output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
@@ -686,23 +689,25 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
         r"""
-    Returns:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
-        logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`)
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+        if isinstance(input_ids, (tuple, list)):
+            labels = input_ids[9] if len(input_ids) > 9 else labels
+            if len(input_ids) > 9:
+                input_ids = input_ids[:9]
+        elif isinstance(input_ids, (dict, BatchEncoding)):
+            labels = input_ids.pop("labels", labels)
+
         outputs = self.electra(
             input_ids,
             attention_mask,
@@ -712,16 +717,20 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             inputs_embeds,
             output_attentions,
             output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
         logits = self.classifier(outputs[0])
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        if labels is not None:
-            loss = self.compute_loss(labels, logits)
-            outputs = (loss,) + outputs
+        loss = None if labels is None else self.compute_loss(labels, logits)
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -751,7 +760,12 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/electra-small-discriminator")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="google/electra-small-discriminator",
+        output_type=TFMultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs,
@@ -762,6 +776,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -770,24 +785,6 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
-        classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
-            `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
-
-            Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -798,8 +795,9 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
             output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            labels = inputs[8] if len(inputs) > 8 else labels
-            assert len(inputs) <= 9, "Too many inputs."
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            labels = inputs[9] if len(inputs) > 9 else labels
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -809,10 +807,12 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
             labels = inputs.get("labels", labels)
-            assert len(inputs) <= 9, "Too many inputs."
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
+        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
 
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -839,18 +839,22 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             flat_inputs_embeds,
             output_attentions,
             output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
         logits = self.sequence_summary(outputs[0])
         logits = self.classifier(logits)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
-        outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        if labels is not None:
-            loss = self.compute_loss(labels, reshaped_logits)
-            outputs = (loss,) + outputs
+        loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
-        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFMultipleChoiceModelOutput(
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(

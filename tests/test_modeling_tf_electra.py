@@ -138,10 +138,7 @@ class TFElectraModelTester:
         config.num_labels = self.num_labels
         model = TFElectraForSequenceClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = model(inputs)
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
     def create_and_check_electra_for_multiple_choice(
@@ -157,8 +154,7 @@ class TFElectraModelTester:
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
-        (logits,) = model(inputs)
-        result = {"logits": logits.numpy()}
+        result = model(inputs)
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
 
     def create_and_check_electra_for_question_answering(
