@@ -182,7 +182,7 @@ class TFBertModelTester:
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         prediction_scores, seq_relationship_score = model(inputs)
         result = DictAttr(
-            {"prediction_scores": prediction_scores.numpy(), "seq_relationship_score": seq_relationship_score.numpy(),}
+            {"prediction_scores": prediction_scores.numpy(), "seq_relationship_score": seq_relationship_score.numpy()}
         )
         self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(result.seq_relationship_score.shape, (self.batch_size, 2))
