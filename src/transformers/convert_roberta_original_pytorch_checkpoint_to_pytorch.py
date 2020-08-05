@@ -59,7 +59,7 @@ def convert_roberta_checkpoint_to_pytorch(
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
     )
     if classification_head:
-        config.num_labels = roberta.model.classification_heads['mnli'].out_proj.weight.shape[0]
+        config.num_labels = roberta.model.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
     model = RobertaForSequenceClassification(config) if classification_head else RobertaForMaskedLM(config)
