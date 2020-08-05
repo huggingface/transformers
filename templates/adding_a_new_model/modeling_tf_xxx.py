@@ -31,6 +31,14 @@ from .file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_callable,
 )
+from .modeling_tf_outputs import (
+    TFBaseModelOutputWithPooling,
+    TFMaskedLMOutput,
+    TFMultipleChoiceModelOutput,
+    TFQuestionAnsweringModelOutput,
+    TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
+)
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
@@ -46,6 +54,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "XXXConfig"
 _TOKENIZER_FOR_DOC = "XxxTokenizer"
 
 ####################################################
@@ -117,35 +126,60 @@ class TFXxxMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
 
     def call(
-        self, inputs, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, training=False
+        self,
+        inputs,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
     ):
-        # We allow three types of multi-inputs:
-        # - traditional keyword arguments in the call method
-        # - all the arguments provided as a dict in the first positional argument of call
-        # - all the arguments provided as a list/tuple (ordered) in the first positional argument of call
-        # The last two options are useful to use the tf.keras fit() method.
-
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            assert len(inputs) <= 5, "Too many inputs."
-        elif isinstance(inputs, dict):
+            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            assert len(inputs) <= 9, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             token_type_ids = inputs.get("token_type_ids", token_type_ids)
             position_ids = inputs.get("position_ids", position_ids)
             head_mask = inputs.get("head_mask", head_mask)
-            assert len(inputs) <= 5, "Too many inputs."
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+        elif inputs_embeds is not None:
+            input_shape = shape_list(inputs_embeds)[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
         if attention_mask is None:
-            attention_mask = tf.fill(shape_list(input_ids), 1)
+            attention_mask = tf.fill(input_shape, 1)
         if token_type_ids is None:
-            token_type_ids = tf.fill(shape_list(input_ids), 0)
+            token_type_ids = tf.fill(input_shape, 0)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -174,14 +208,29 @@ class TFXxxMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_hidden_layers
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
-        ##################################
-        # Replace this with your model code
-        embedding_output = self.embeddings(input_ids, position_ids=position_ids, token_type_ids=token_type_ids)
-        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training)
-        sequence_output = encoder_outputs[0]
-        outputs = (sequence_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        embedding_output = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
+        encoder_outputs = self.encoder(
+            embedding_output,
+            extended_attention_mask,
+            head_mask,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            training=training,
+        )
 
-        return outputs  # sequence_output, (hidden_states), (attentions)
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
+
+        if not return_dict:
+            return (sequence_output, pooled_output,) + encoder_outputs[1:]
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 ####################################################
@@ -274,6 +323,11 @@ XXX_INPUTS_DOCSTRING = r"""
             (if set to :obj:`False`) for evaluation.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -287,32 +341,13 @@ class TFXxxModel(TFXxxPreTrainedModel):
         self.transformer = TFXxxMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xxx-base-cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="xxx-base-cased",
+        output_type=TFBaseModelOutputWithPooling,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(self, inputs, **kwargs):
-        r"""
-    Returns:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XxxConfig`) and inputs:
-        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during XXX pretraining. This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
 
@@ -329,7 +364,12 @@ class TFXxxForMaskedLM(TFXxxPreTrainedModel, TFMaskedLanguageModelingLoss):
         self.mlm = TFXxxMLMHead(config, self.transformer.embeddings, name="mlm")
 
     @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xxx-base-cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="xxx-base-cased",
+        output_type=TFMaskedLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs=None,
@@ -340,6 +380,7 @@ class TFXxxForMaskedLM(TFXxxPreTrainedModel, TFMaskedLanguageModelingLoss):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -349,27 +390,12 @@ class TFXxxForMaskedLM(TFXxxPreTrainedModel, TFMaskedLanguageModelingLoss):
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XxxConfig`) and inputs:
-        prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
-            labels = inputs[8] if len(inputs) > 8 else labels
-            if len(inputs) > 8:
-                inputs = inputs[:8]
+            labels = inputs[9] if len(inputs) > 9 else labels
+            if len(inputs) > 9:
+                inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
@@ -382,19 +408,22 @@ class TFXxxForMaskedLM(TFXxxPreTrainedModel, TFMaskedLanguageModelingLoss):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=training)
 
-        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+        loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
-        if labels is not None:
-            loss = self.compute_loss(labels, prediction_scores)
-            outputs = (loss,) + outputs
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
-        return outputs  # (loss), prediction_scores, (hidden_states), (attentions)
+        return TFMaskedLMOutput(
+            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -414,7 +443,12 @@ class TFXxxForSequenceClassification(TFXxxPreTrainedModel, TFSequenceClassificat
         )
 
     @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xxx-base-cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="xxx-base-cased",
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs=None,
@@ -425,6 +459,7 @@ class TFXxxForSequenceClassification(TFXxxPreTrainedModel, TFSequenceClassificat
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -434,27 +469,12 @@ class TFXxxForSequenceClassification(TFXxxPreTrainedModel, TFSequenceClassificat
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XxxConfig`) and inputs:
-        logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
-            labels = inputs[8] if len(inputs) > 8 else labels
-            if len(inputs) > 8:
-                inputs = inputs[:8]
+            labels = inputs[9] if len(inputs) > 9 else labels
+            if len(inputs) > 9:
+                inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
@@ -467,6 +487,7 @@ class TFXxxForSequenceClassification(TFXxxPreTrainedModel, TFSequenceClassificat
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
@@ -475,13 +496,15 @@ class TFXxxForSequenceClassification(TFXxxPreTrainedModel, TFSequenceClassificat
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
 
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+        loss = None if labels is None else self.compute_loss(labels, logits)
 
-        if labels is not None:
-            loss = self.compute_loss(labels, logits)
-            outputs = (loss,) + outputs
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        return TFSequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -509,7 +532,12 @@ class TFXxxForMultipleChoice(TFXxxPreTrainedModel, TFMultipleChoiceLoss):
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xxx-base-cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="xxx-base-cased",
+        output_type=TFMultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs,
@@ -520,6 +548,7 @@ class TFXxxForMultipleChoice(TFXxxPreTrainedModel, TFMultipleChoiceLoss):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -527,24 +556,7 @@ class TFXxxForMultipleChoice(TFXxxPreTrainedModel, TFMultipleChoiceLoss):
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the multiple choice classification loss.
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XxxConfig`) and inputs:
-        classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
-            `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
-
-            Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            of the input tensors. (see `input_ids` above)s after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         """
         if isinstance(inputs, (tuple, list)):
@@ -556,8 +568,9 @@ class TFXxxForMultipleChoice(TFXxxPreTrainedModel, TFMultipleChoiceLoss):
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
             output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            labels = inputs[8] if len(inputs) > 8 else labels
-            assert len(inputs) <= 9, "Too many inputs."
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            labels = inputs[9] if len(inputs) > 9 else labels
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -567,10 +580,12 @@ class TFXxxForMultipleChoice(TFXxxPreTrainedModel, TFMultipleChoiceLoss):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
             labels = inputs.get("labels", labels)
-            assert len(inputs) <= 9, "Too many inputs."
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
 
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -598,6 +613,7 @@ class TFXxxForMultipleChoice(TFXxxPreTrainedModel, TFMultipleChoiceLoss):
             flat_inputs_embeds,
             output_attentions,
             output_hidden_states,
+            return_dict,
         ]
 
         outputs = self.transformer(flat_inputs, training=training)
@@ -608,13 +624,15 @@ class TFXxxForMultipleChoice(TFXxxPreTrainedModel, TFMultipleChoiceLoss):
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
-        outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
+        loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
-        if labels is not None:
-            loss = self.compute_loss(labels, reshaped_logits)
-            outputs = (loss,) + outputs
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
-        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
+        return TFMultipleChoiceModelOutput(
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -634,7 +652,12 @@ class TFXxxForTokenClassification(TFXxxPreTrainedModel, TFTokenClassificationLos
         )
 
     @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xxx-base-cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="xxx-base-cased",
+        output_type=TFTokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs=None,
@@ -645,6 +668,7 @@ class TFXxxForTokenClassification(TFXxxPreTrainedModel, TFTokenClassificationLos
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -652,27 +676,12 @@ class TFXxxForTokenClassification(TFXxxPreTrainedModel, TFTokenClassificationLos
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XxxConfig`) and inputs:
-        scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
-            Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
-            labels = inputs[8] if len(inputs) > 8 else labels
-            if len(inputs) > 8:
-                inputs = inputs[:8]
+            labels = inputs[9] if len(inputs) > 9 else labels
+            if len(inputs) > 9:
+                inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
@@ -685,6 +694,7 @@ class TFXxxForTokenClassification(TFXxxPreTrainedModel, TFTokenClassificationLos
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
@@ -693,13 +703,15 @@ class TFXxxForTokenClassification(TFXxxPreTrainedModel, TFTokenClassificationLos
         sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
 
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+        loss = None if labels is None else self.compute_loss(labels, logits)
 
-        if labels is not None:
-            loss = self.compute_loss(labels, logits)
-            outputs = (loss,) + outputs
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        return TFTokenClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -718,7 +730,12 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel, TFQuestionAnsweringLoss):
         )
 
     @add_start_docstrings_to_callable(XXX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="xxx-base-cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="xxx-base-cased",
+        output_type=TFQuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs=None,
@@ -729,6 +746,7 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel, TFQuestionAnsweringLoss):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         start_positions=None,
         end_positions=None,
         training=False,
@@ -742,30 +760,13 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel, TFQuestionAnsweringLoss):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XxxConfig`) and inputs:
-        start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-start scores (before SoftMax).
-        end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
-            start_positions = inputs[8] if len(inputs) > 8 else start_positions
-            end_positions = inputs[9] if len(inputs) > 9 else end_positions
-            if len(inputs) > 8:
-                inputs = inputs[:8]
+            start_positions = inputs[9] if len(inputs) > 9 else start_positions
+            end_positions = inputs[10] if len(inputs) > 10 else end_positions
+            if len(inputs) > 9:
+                inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             start_positions = inputs.pop("start_positions", start_positions)
             end_positions = inputs.pop("end_positions", start_positions)
@@ -779,6 +780,7 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel, TFQuestionAnsweringLoss):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
@@ -789,12 +791,20 @@ class TFXxxForQuestionAnswering(TFXxxPreTrainedModel, TFQuestionAnsweringLoss):
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + outputs[2:]
-
+        loss = None
         if start_positions is not None and end_positions is not None:
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
-            loss = self.compute_loss(labels, outputs[:2])
-            outputs = (loss,) + outputs
+            loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFQuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )

@@ -74,6 +74,24 @@ XLNet specific outputs
 .. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringOutput
     :members:
 
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
+    :members:
+
 
 XLNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
