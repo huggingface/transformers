@@ -106,7 +106,7 @@ class TFDistilBertModelTester:
 
         (sequence_output,) = model(inputs)
 
-        result = DictAttr({"sequence_output": sequence_output.numpy(),})
+        result = DictAttr({"sequence_output": sequence_output.numpy()})
         self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_distilbert_for_masked_lm(
@@ -163,7 +163,7 @@ class TFDistilBertModelTester:
         model = TFDistilBertForTokenClassification(config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         (logits,) = model(inputs)
-        result = DictAttr({"logits": logits.numpy(),})
+        result = DictAttr({"logits": logits.numpy()})
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):

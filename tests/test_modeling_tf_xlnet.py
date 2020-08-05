@@ -154,7 +154,7 @@ class TFXLNetModelTester:
 
         outputs, mems_1 = model(inputs)
 
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "outputs": outputs.numpy(),})
+        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "outputs": outputs.numpy()})
 
         config.mem_len = 0
         model = TFXLNetModel(config)
@@ -268,7 +268,7 @@ class TFXLNetModelTester:
 
         logits, mems_1 = model(input_ids_1)
 
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy(),})
+        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()})
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
         self.parent.assertListEqual(
@@ -298,7 +298,7 @@ class TFXLNetModelTester:
             # 'token_type_ids': token_type_ids
         }
         logits, mems_1 = model(inputs)
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy(),})
+        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()})
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, config.num_labels))
         self.parent.assertListEqual(
             list(list(mem.shape) for mem in result["mems_1"]),
@@ -330,7 +330,7 @@ class TFXLNetModelTester:
             "token_type_ids": multiple_choice_token_type_ids,
         }
         (logits, mems_1) = model(inputs)
-        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy(),})
+        result = DictAttr({"mems_1": [mem.numpy() for mem in mems_1], "logits": logits.numpy()})
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
         self.parent.assertListEqual(

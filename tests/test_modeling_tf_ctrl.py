@@ -118,14 +118,14 @@ class TFCTRLModelTester(object):
 
         sequence_output = model(input_ids)[0]
 
-        result = DictAttr({"sequence_output": sequence_output.numpy(),})
+        result = DictAttr({"sequence_output": sequence_output.numpy()})
         self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_ctrl_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = TFCTRLLMHeadModel(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         prediction_scores = model(inputs)[0]
-        result = DictAttr({"prediction_scores": prediction_scores.numpy(),})
+        result = DictAttr({"prediction_scores": prediction_scores.numpy()})
         self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):

@@ -145,7 +145,7 @@ class TFXLMModelTester:
         inputs = [input_ids, input_mask]
         outputs = model(inputs)
         sequence_output = outputs[0]
-        result = DictAttr({"sequence_output": sequence_output.numpy(),})
+        result = DictAttr({"sequence_output": sequence_output.numpy()})
         self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_xlm_lm_head(
@@ -167,7 +167,7 @@ class TFXLMModelTester:
 
         logits = outputs[0]
 
-        result = DictAttr({"logits": logits.numpy(),})
+        result = DictAttr({"logits": logits.numpy()})
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -189,7 +189,7 @@ class TFXLMModelTester:
 
         start_logits, end_logits = model(inputs)
 
-        result = DictAttr({"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy(),})
+        result = DictAttr({"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()})
 
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -212,7 +212,7 @@ class TFXLMModelTester:
 
         (logits,) = model(inputs)
 
-        result = DictAttr({"logits": logits.numpy(),})
+        result = DictAttr({"logits": logits.numpy()})
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
@@ -232,7 +232,7 @@ class TFXLMModelTester:
         model = TFXLMForTokenClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         (logits,) = model(inputs)
-        result = DictAttr({"logits": logits.numpy(),})
+        result = DictAttr({"logits": logits.numpy()})
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_xlm_for_multiple_choice(

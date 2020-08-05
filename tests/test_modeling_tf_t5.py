@@ -121,7 +121,7 @@ class TFT5ModelTester:
 
         prediction_scores, _, _ = model(inputs_dict)
 
-        result = DictAttr({"prediction_scores": prediction_scores.numpy(),})
+        result = DictAttr({"prediction_scores": prediction_scores.numpy()})
         self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_t5_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):

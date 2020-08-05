@@ -107,7 +107,7 @@ class TFElectraModelTester:
 
         (sequence_output,) = model(input_ids)
 
-        result = DictAttr({"sequence_output": sequence_output.numpy(),})
+        result = DictAttr({"sequence_output": sequence_output.numpy()})
         self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_electra_for_masked_lm(
@@ -116,7 +116,7 @@ class TFElectraModelTester:
         model = TFElectraForMaskedLM(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         (prediction_scores,) = model(inputs)
-        result = DictAttr({"prediction_scores": prediction_scores.numpy(),})
+        result = DictAttr({"prediction_scores": prediction_scores.numpy()})
         self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_electra_for_pretraining(
@@ -125,7 +125,7 @@ class TFElectraModelTester:
         model = TFElectraForPreTraining(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         (prediction_scores,) = model(inputs)
-        result = DictAttr({"prediction_scores": prediction_scores.numpy(),})
+        result = DictAttr({"prediction_scores": prediction_scores.numpy()})
         self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_electra_for_question_answering(
@@ -134,7 +134,7 @@ class TFElectraModelTester:
         model = TFElectraForQuestionAnswering(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         start_logits, end_logits = model(inputs)
-        result = DictAttr({"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy(),})
+        result = DictAttr({"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()})
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
@@ -145,7 +145,7 @@ class TFElectraModelTester:
         model = TFElectraForTokenClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         (logits,) = model(inputs)
-        result = DictAttr({"logits": logits.numpy(),})
+        result = DictAttr({"logits": logits.numpy()})
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
