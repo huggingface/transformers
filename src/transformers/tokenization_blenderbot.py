@@ -50,7 +50,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
-        sep_token="</s>",
+        sep_token="__end__",
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
