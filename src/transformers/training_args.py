@@ -109,6 +109,8 @@ class TrainingArguments:
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument ``mems``.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
     """
 
     output_dir: str = field(
@@ -220,6 +222,10 @@ class TrainingArguments:
     past_index: int = field(
         default=-1,
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
+    )
+
+    run_name: Optional[str] = field(
+        default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
     )
 
     @property

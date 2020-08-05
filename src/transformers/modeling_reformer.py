@@ -1399,15 +1399,16 @@ class ReformerLayer(nn.Module):
         """
 
         # randomize seeds
-        if next(self.parameters()).device.type == "cuda":
+        # use cuda generator if available
+        if len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.attention_seed = torch.cuda.default_generators[device_idx].seed()
-            torch.cuda.manual_seed(self.attention_seed)
         else:
             # CPU
             self.attention_seed = int(torch.seed() % sys.maxsize)
-            torch.manual_seed(self.attention_seed)
+
+        torch.manual_seed(self.attention_seed)
 
     def _init_feed_forward_seed(self):
         """
@@ -1417,17 +1418,17 @@ class ReformerLayer(nn.Module):
             call and 1 forward call in backward
             to recalculate activations.
         """
-
         # randomize seeds
-        if next(self.parameters()).device.type == "cuda":
+        # use cuda generator if available
+        if len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.feed_forward_seed = torch.cuda.default_generators[device_idx].seed()
-            torch.cuda.manual_seed(self.feed_forward_seed)
         else:
             # CPU
             self.feed_forward_seed = int(torch.seed() % sys.maxsize)
-            torch.manual_seed(self.feed_forward_seed)
+
+        torch.manual_seed(self.feed_forward_seed)
 
     def forward(
         self,

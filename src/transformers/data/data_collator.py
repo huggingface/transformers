@@ -87,7 +87,8 @@ class DataCollatorForLanguageModeling:
             return {"input_ids": inputs, "labels": labels}
         else:
             labels = batch.clone().detach()
-            labels[labels == self.tokenizer.pad_token_id] = -100
+            if self.tokenizer.pad_token_id is not None:
+                labels[labels == self.tokenizer.pad_token_id] = -100
             return {"input_ids": batch, "labels": labels}
 
     def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:

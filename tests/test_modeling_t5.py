@@ -95,9 +95,6 @@ class T5ModelTester:
             lm_labels,
         )
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def check_prepare_lm_labels_via_shift_left(
         self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
     ):
