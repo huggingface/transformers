@@ -148,7 +148,7 @@ class LongformerSelfAttention(nn.Module):
         # is index masked or global attention
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
-        is_global_attn = any(is_index_global_attn.flatten())
+        is_global_attn = is_index_global_attn.flatten().any().item()
 
         hidden_states = hidden_states.transpose(0, 1)
 
