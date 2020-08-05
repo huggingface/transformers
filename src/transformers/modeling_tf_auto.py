@@ -77,8 +77,10 @@ from .modeling_tf_distilbert import (
 )
 from .modeling_tf_electra import (
     TFElectraForMaskedLM,
+    TFElectraForMultipleChoice,
     TFElectraForPreTraining,
     TFElectraForQuestionAnswering,
+    TFElectraForSequenceClassification,
     TFElectraForTokenClassification,
     TFElectraModel,
 )
@@ -247,6 +249,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (MobileBertConfig, TFMobileBertForSequenceClassification),
         (FlaubertConfig, TFFlaubertForSequenceClassification),
         (XLMConfig, TFXLMForSequenceClassification),
+        (ElectraConfig, TFElectraForSequenceClassification),
     ]
 )
 
@@ -294,6 +297,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetForMultipleChoice),
         (FlaubertConfig, TFFlaubertForMultipleChoice),
         (AlbertConfig, TFAlbertForMultipleChoice),
+        (ElectraConfig, TFElectraForMultipleChoice),
     ]
 )
 
