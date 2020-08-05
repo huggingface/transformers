@@ -432,14 +432,14 @@ if is_torch_available():
         default_data_collator,
         DataCollator,
         DataCollatorForLanguageModeling,
-        DataCollatorForAlbertPretrain,
+        DataCollatorForSOP,
         DataCollatorForPermutationLanguageModeling,
     )
     from .data.datasets import (
         GlueDataset,
         TextDataset,
         LineByLineTextDataset,
-        AlbertTextDataset,
+        LineByLineWithSOPTextDataset,
         GlueDataTrainingArguments,
         SquadDataset,
         SquadDataTrainingArguments,

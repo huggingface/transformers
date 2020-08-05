@@ -102,9 +102,9 @@ class LineByLineTextDataset(Dataset):
     def __getitem__(self, i) -> torch.Tensor:
         return torch.tensor(self.examples[i], dtype=torch.long)
 
-class AlbertTextDataset(Dataset):
+class LineByLineWithSOPTextDataset(Dataset):
     """
-    Dataset for Albert Pretraining, prepare sentence pairs for SOP task
+    Dataset for sentence order prediction task, prepare sentence pairs for SOP task
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int, random_seed: int):
@@ -112,20 +112,23 @@ class AlbertTextDataset(Dataset):
         logger.info(f"Creating features from dataset file folder at {file_dir}")
         self.examples = []
         # TODO: randomness could apply a random seed, ex. rng = random.Random(random_seed)
-        for file_name in os.listdir(file_dir):
-            file_path = os.path.join(file_dir, file_name)
-            assert os.path.isfile(file_path)
-            with open(file_path, encoding="utf-8") as f:
-                document = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line)) 
-                            for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
-                examples = self.create_examples_from_document(document, block_size, tokenizer)
-                self.examples.extend(examples)
+        # file path looks like ./dataset/AA/wiki00, ./dataset/BB/wiki01
+        for subfolder in os.listdir(file_dir):
+            for file_name in os.listdir(os.path.join(file_dir, subfolder)):
+                file_path = os.path.join(file_dir, subfolder, file_name)
+                assert os.path.isfile(file_path)
+                with open(file_path, encoding="utf-8") as f:
+                    document = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line)) 
+                                for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+                    examples = self.create_examples_from_document(document, block_size, tokenizer)
+                    self.examples.extend(examples)
+        logger.info(f"Dataset parse finished.")
 
     def create_examples_from_document(self, document, block_size, tokenizer, short_seq_prob=0.1):
         """Creates examples for a single document."""
 
-        # Account for [CLS], [SEP], [SEP]
-        max_num_tokens = block_size - 3
+        # Account for special tokens
+        max_num_tokens = block_size - tokenizer.num_special_tokens_to_add(pair=True)
 
         # We *usually* want to fill up the entire sequence since we are padding
         # to `block_size` anyways, so short sequences are generally wasted
@@ -198,13 +201,13 @@ class AlbertTextDataset(Dataset):
                     assert len(tokens_b) >= 1
 
                     # add special tokens
-                    tokens = tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+                    input_ids = tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
                     # add token type ids, 0 for sentence a, 1 for sentence b
-                    segment_ids = tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
+                    token_type_ids = tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
 
                     example = {
-                        "tokens": torch.tensor(tokens, dtype=torch.long),
-                        "segment_ids": torch.tensor(segment_ids, dtype=torch.long),
+                        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+                        "token_type_ids": torch.tensor(token_type_ids, dtype=torch.long),
                         "sentence_order_label": torch.tensor(0 if is_next else 1, dtype=torch.long)}
                     examples.append(example)
                 current_chunk = []  # clear current chunk
