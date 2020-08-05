@@ -20,7 +20,7 @@ else:
 import logging
 
 # Integrations
-from .integrations import is_wandb_available, is_comet_available, is_tensorboard_available
+from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 
 # Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
