@@ -21,6 +21,7 @@ import logging
 
 # Integrations
 from .integrations import is_wandb_available, is_comet_available, is_tensorboard_available
+
 # Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig

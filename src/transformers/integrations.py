@@ -4,6 +4,7 @@ import os
 
 try:
     import comet_ml
+
     _has_comet = True
 except (ImportError):
     _has_comet = False
@@ -38,8 +39,10 @@ except ImportError:
 def is_wandb_available():
     return _has_wandb
 
+
 def is_comet_available():
     return _has_comet
+
 
 def is_tensorboard_available():
     return _has_tensorboard
