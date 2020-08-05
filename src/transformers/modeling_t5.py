@@ -922,9 +922,9 @@ class T5Model(T5PreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        decoder_input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
-        decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_past_key_values=None,
         use_cache=None,
@@ -1072,9 +1072,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        decoder_input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
-        decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_past_key_values=None,
         use_cache=None,
