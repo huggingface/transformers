@@ -687,7 +687,7 @@ class Trainer:
             if self.is_world_process_zero():
                 wandb.log(logs, step=self.global_step)
         if is_comet_available():
-            if self.is_world_master():
+            if self.is_world_process_zero():
                 experiment = comet_ml.config.get_global_experiment()
                 if experiment is not None:
                     experiment._log_metrics(logs, step=self.global_step, epoch=self.epoch, framework="transformers")
