@@ -215,7 +215,8 @@ class TFTrainer:
             return self._setup_wandb()
 
         logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
-        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
+        combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
+        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=self.args.run_name)
 
     def prediction_loop(
         self,
