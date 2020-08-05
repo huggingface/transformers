@@ -4,9 +4,10 @@ import math
 import tensorflow as tf
 
 from .configuration_longformer import LongformerConfig
-from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertSelfOutput
-from .modeling_tf_roberta import TFRobertaEmbeddings
+from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertSelfOutput
+from .modeling_tf_roberta import TFRobertaEmbeddings, TFRobertaLMHead
 from .modeling_tf_utils import (
+    TFMaskedLanguageModelingLoss,
     TFPreTrainedModel,
     cast_bool_to_primitive,
     get_initializer,
@@ -784,6 +785,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
         self.encoder = TFLongformerEncoder(config, name="encoder")
+        self.pooler = TFBertPooler(config, name="pooler")
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -886,8 +888,11 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        outputs = (sequence_output, pooled_output) + encoder_outputs[
+            1:
+        ]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
     def _pad_to_window_size(
@@ -971,3 +976,81 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
     def call(self, inputs, **kwargs):
         outputs = self.longformer(inputs, **kwargs)
         return outputs
+
+
+class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
+        self.lm_head = TFRobertaLMHead(config, self.longformer.embeddings, name="lm_head")
+
+    def get_output_embeddings(self):
+        return self.longformer.embeddings
+
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        global_attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+        training=False,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        """
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[8] if len(inputs) > 8 else labels
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+
+        outputs = self.longformer(
+            inputs,
+            attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
+
+        sequence_output = outputs[0]
+        prediction_scores = self.lm_head(sequence_output, training=training)
+
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+
+        if labels is not None:
+            loss = self.compute_loss(labels, prediction_scores)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), prediction_scores, (hidden_states), (attentions)

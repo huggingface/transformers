@@ -424,7 +424,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3)
 
     def test_layer_local_attn(self):
-        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
+        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny", use_cdn=False)
         layer = model.longformer.encoder.layer[0].attention.self_attention
         hidden_states = self._get_hidden_states()
         batch_size, seq_length, hidden_size = hidden_states.shape
@@ -442,7 +442,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(output_hidden_states[0, 1], expected_slice, rtol=1e-3)
 
     def test_layer_global_attn(self):
-        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
+        model = TFLongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny", use_cdn=False)
         layer = model.longformer.encoder.layer[0].attention.self_attention
         hidden_states = self._get_hidden_states()
 
@@ -471,3 +471,64 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         tf.debugging.assert_near(output_hidden_states[0, 2], expected_slice_0, rtol=1e-3)
         tf.debugging.assert_near(output_hidden_states[1, -2], expected_slice_1, rtol=1e-3)
+
+    @slow
+    def test_inference_no_head(self):
+        model = TFLongformerModel.from_pretrained("allenai/longformer-base-4096")
+
+        # 'Hello world!'
+        input_ids = tf.convert_to_tensor([[0, 20920, 232, 328, 1437, 2]], dtype=tf.dtypes.int32)
+        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.dtypes.int32)
+
+        output = model(input_ids, attention_mask=attention_mask)[0]
+        output_without_mask = model(input_ids)[0]
+
+        expected_output_slice = tf.convert_to_tensor(
+            [0.0549, 0.1087, -0.1119, -0.0368, 0.0250], dtype=tf.dtypes.float32
+        )
+
+        tf.debugging.assert_near(output[0, 0, -5:], expected_output_slice, rtol=1e-3)
+        tf.debugging.assert_near(output_without_mask[0, 0, -5:], expected_output_slice, rtol=1e-3)
+
+    @slow
+    def _test_inference_no_head_long(self):
+        model = TFLongformerModel.from_pretrained("allenai/longformer-base-4096")
+
+        # 'Hello world! ' repeated 1000 times
+        input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.dtypes.int32)
+
+        attention_mask = tf.ones(shape_list(input_ids), dtype=tf.dtypes.int32)
+        global_attention_mask = tf.zeros(shape_list(input_ids), dtype=tf.dtypes.int32)
+        # Set global attention on a few random positions
+        global_attention_mask = tf.tensor_scatter_nd_update(
+            global_attention_mask, tf.constant([1, 4, 21]), tf.constant([1])
+        )
+
+        output = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)[0]
+
+        expected_output_sum = tf.constant(74585.8594)
+        expected_output_mean = tf.constant(0.0243)
+
+        # assert close
+        tf.debugging.assert_near(tf.reduce_sum(output), expected_output_sum, rtol=1e-4)
+        tf.debugging.assert_near(tf.reduce_mean(output), expected_output_mean, rtol=1e-4)
+
+    @slow
+    def _test_inference_masked_lm_long(self):
+        model = TFLongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+
+        # 'Hello world! ' repeated 1000 times
+        input_ids = torch.tensor(
+            [[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=torch.long, device=torch_device
+        )  # long input
+
+        loss, prediction_scores = model(input_ids, labels=input_ids)
+
+        expected_loss = torch.tensor(0.0074, device=torch_device)
+        expected_prediction_scores_sum = torch.tensor(-6.1048e08, device=torch_device)
+        expected_prediction_scores_mean = torch.tensor(-3.0348, device=torch_device)
+        input_ids = input_ids.to(torch_device)
+
+        self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))
+        self.assertTrue(torch.allclose(prediction_scores.sum(), expected_prediction_scores_sum, atol=1e-4))
+        self.assertTrue(torch.allclose(prediction_scores.mean(), expected_prediction_scores_mean, atol=1e-4))
