@@ -360,7 +360,8 @@ class LongformerSelfAttention(nn.Module):
         chunk_stride[1] = chunk_stride[1] // 2
         return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-    def _mask_invalid_locations(self, input_tensor, affected_seq_len) -> torch.Tensor:
+    @staticmethod
+    def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
         beginning_mask_2d = input_tensor.new_ones(affected_seq_len, affected_seq_len + 1).tril().flip(dims=[0])
         beginning_mask = beginning_mask_2d[None, :, None, :]
         ending_mask = beginning_mask.flip(dims=(1, 3))

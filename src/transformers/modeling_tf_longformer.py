@@ -67,6 +67,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         self.global_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
         self.layer_id = layer_id
+
         attention_window = config.attention_window[self.layer_id]
         assert (
             attention_window % 2 == 0
@@ -174,10 +175,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         attn_probs = tf.nn.softmax(attn_scores, axis=-1)
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
-        # TODO:(PVP) attn_probs = torch.masked_fill(attn_probs, is_index_masked.unsqueeze(-1).unsqueeze(-1), 0.0)
-
-        # mask probs according to attention_mask
-        attn_probs = tf.where(is_index_masked[:, :, None, None], 0.0, attn_probs)
+        attn_probs = tf.where(
+            tf.broadcast_to(is_index_masked[:, :, None, None], shape_list(attn_probs)), 0.0, attn_probs
+        )
 
         # apply dropout
         attn_probs = self.dropout(attn_probs, training=training)
@@ -340,25 +340,31 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         return diagonal_attention_scores
 
     @staticmethod
-    def _mask_invalid_locations(input_tensor_4d, window_overlap):
-        # retrieve correct shape of dims to mask
-        mask_2d_shape = (shape_list(input_tensor_4d)[1], shape_list(input_tensor_4d)[-1])
-
-        # create correct subband triangle bool mask to filter
-        mask_2d = tf.reverse(
-            tf.linalg.band_part(tf.ones(shape=mask_2d_shape), window_overlap - 1, window_overlap), axis=[0]
+    def _mask_invalid_locations(input_tensor, window_overlap):
+        # create correct upper triangle bool mask
+        mask_2d_upper = tf.reverse(
+            tf.linalg.band_part(tf.ones(shape=(window_overlap, window_overlap + 1)), -1, 0), axis=[0]
+        )
+        # pad to full matrix
+        padding = tf.constant(
+            [[0, shape_list(input_tensor)[1] - window_overlap], [0, shape_list(input_tensor)[3] - window_overlap - 1]]
         )
 
+        # combine with lower mask
+        mask_2d_upper_pad = tf.pad(mask_2d_upper, padding)
+        mask_2d_lower_pad = tf.reverse(mask_2d_upper_pad, axis=[0, 1])
+        mask_2d = mask_2d_upper_pad + mask_2d_lower_pad
+
         # broadcast to full matrix
-        mask_4d = tf.broadcast_to(mask_2d[None, :, None, :], shape_list(input_tensor_4d))
+        mask_4d = tf.broadcast_to(mask_2d[None, :, None, :], shape_list(input_tensor))
 
         # inf tensor used for masking
-        inf_tensor = -float("inf") * tf.ones_like(input_tensor_4d, dtype=tf.dtypes.float32)
+        inf_tensor = -float("inf") * tf.ones_like(input_tensor, dtype=tf.dtypes.float32)
 
         # mask
-        input_tensor_4d = tf.where(mask_4d < 1, inf_tensor, input_tensor_4d)
+        input_tensor = tf.where(mask_4d > 0, inf_tensor, input_tensor)
 
-        return input_tensor_4d
+        return input_tensor
 
     def _sliding_chunks_matmul_attn_probs_value(self, attn_probs, value, window_overlap):
 
@@ -889,6 +895,11 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
+
+        # undo padding
+        if padding_len > 0:
+            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
+            sequence_output = sequence_output[:, :-padding_len]
 
         outputs = (sequence_output, pooled_output) + encoder_outputs[
             1:

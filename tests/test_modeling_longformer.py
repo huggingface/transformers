@@ -440,6 +440,31 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, atol=1e-3))
         self.assertTrue(chunked_hidden_states.shape, (1, 3, 4, 4))
 
+    def test_mask_invalid_locations(self):
+        hidden_states = self._get_hidden_states()
+
+        batch_size = 1
+        seq_length = 8
+        hidden_size = 4
+        hidden_states = hidden_states.reshape((batch_size, seq_length, hidden_size))
+        chunked_hidden_states = LongformerSelfAttention._chunk(hidden_states, window_overlap=2)
+
+        hid_states_1 = chunked_hidden_states.clone()
+        LongformerSelfAttention._mask_invalid_locations(hid_states_1, 1)
+        self.assertTrue(torch.isinf(hid_states_1).sum().item() == 8)
+
+        hid_states_2 = chunked_hidden_states.clone()
+        LongformerSelfAttention._mask_invalid_locations(hid_states_2, 2)
+        self.assertTrue(torch.isinf(hid_states_2).sum().item() == 24)
+
+        hid_states_3 = chunked_hidden_states.clone()[:, :, :, :3]
+        LongformerSelfAttention._mask_invalid_locations(hid_states_3, 2)
+        self.assertTrue(torch.isinf(hid_states_3).sum().item() == 24)
+
+        hid_states_4 = chunked_hidden_states.clone()[:, :, 2:, :]
+        LongformerSelfAttention._mask_invalid_locations(hid_states_4, 2)
+        self.assertTrue(torch.isinf(hid_states_4).sum().item() == 12)
+
     def test_layer_local_attn(self):
         model = LongformerModel.from_pretrained("patrickvonplaten/longformer-random-tiny")
         model.eval()
@@ -548,13 +573,13 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         input_ids = torch.tensor(
             [[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=torch.long, device=torch_device
         )  # long input
+        input_ids = input_ids.to(torch_device)
 
         loss, prediction_scores = model(input_ids, labels=input_ids)
 
         expected_loss = torch.tensor(0.0074, device=torch_device)
         expected_prediction_scores_sum = torch.tensor(-6.1048e08, device=torch_device)
         expected_prediction_scores_mean = torch.tensor(-3.0348, device=torch_device)
-        input_ids = input_ids.to(torch_device)
 
         self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))
         self.assertTrue(torch.allclose(prediction_scores.sum(), expected_prediction_scores_sum, atol=1e-4))
