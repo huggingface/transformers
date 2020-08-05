@@ -245,7 +245,10 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)["input_ids"]  # Let's keep only input_ids
 
             try:
-                traced_gpt2 = torch.jit.trace(model, inputs)
+                if model.__class__.__name__ in ["T5Model", "T5ForConditionalGeneration"]:
+                    traced_model = torch.jit.trace(model, (inputs, inputs))
+                else:
+                    traced_model = torch.jit.trace(model, inputs)
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -253,7 +256,7 @@ class ModelTesterMixin:
                 pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
 
                 try:
-                    torch.jit.save(traced_gpt2, pt_file_name)
+                    torch.jit.save(traced_model, pt_file_name)
                 except Exception:
                     self.fail("Couldn't save module.")
 
