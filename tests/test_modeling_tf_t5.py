@@ -18,7 +18,7 @@ import unittest
 
 from transformers import T5Config, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import DictAttr, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -94,17 +94,15 @@ class TFT5ModelTester:
         decoder_output, decoder_past, encoder_output = model(
             input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids
         )
-        result = {
-            "encoder_output": encoder_output.numpy(),
-            "decoder_past": decoder_past,
-            "decoder_output": decoder_output.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["encoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+        result = DictAttr(
+            {
+                "encoder_output": encoder_output.numpy(),
+                "decoder_past": decoder_past,
+                "decoder_output": decoder_output.numpy(),
+            }
         )
-        self.parent.assertListEqual(
-            list(result["decoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        self.parent.assertEqual(result.encoder_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.decoder_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(decoder_past), 2)
         # decoder_past[0] should correspond to encoder output
         self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
@@ -123,12 +121,8 @@ class TFT5ModelTester:
 
         prediction_scores, _, _ = model(inputs_dict)
 
-        result = {
-            "prediction_scores": prediction_scores.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        result = DictAttr({"prediction_scores": prediction_scores.numpy(),})
+        self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_t5_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):
         model = TFT5Model(config=config).get_decoder()

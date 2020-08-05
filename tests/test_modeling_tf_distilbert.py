@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import DistilBertConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import DictAttr, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -106,12 +106,8 @@ class TFDistilBertModelTester:
 
         (sequence_output,) = model(inputs)
 
-        result = {
-            "sequence_output": sequence_output.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        result = DictAttr({"sequence_output": sequence_output.numpy(),})
+        self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_distilbert_for_masked_lm(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -119,10 +115,8 @@ class TFDistilBertModelTester:
         model = TFDistilBertForMaskedLM(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         (prediction_scores,) = model(inputs)
-        result = {"prediction_scores": prediction_scores.numpy()}
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        result = DictAttr({"prediction_scores": prediction_scores.numpy()})
+        self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_distilbert_for_question_answering(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -133,9 +127,9 @@ class TFDistilBertModelTester:
             "attention_mask": input_mask,
         }
         start_logits, end_logits = model(inputs)
-        result = {"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()}
-        self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+        result = DictAttr({"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy()})
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_distilbert_for_sequence_classification(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -144,8 +138,8 @@ class TFDistilBertModelTester:
         model = TFDistilBertForSequenceClassification(config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         (logits,) = model(inputs)
-        result = {"logits": logits.numpy()}
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
+        result = DictAttr({"logits": logits.numpy()})
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_distilbert_for_multiple_choice(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -159,8 +153,8 @@ class TFDistilBertModelTester:
             "attention_mask": multiple_choice_input_mask,
         }
         (logits,) = model(inputs)
-        result = {"logits": logits.numpy()}
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+        result = DictAttr({"logits": logits.numpy()})
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def create_and_check_distilbert_for_token_classification(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -169,10 +163,8 @@ class TFDistilBertModelTester:
         model = TFDistilBertForTokenClassification(config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask}
         (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
+        result = DictAttr({"logits": logits.numpy(),})
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

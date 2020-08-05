@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import GPT2Config, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import DictAttr, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -132,12 +132,8 @@ class TFGPT2ModelTester:
 
         sequence_output = model(input_ids)[0]
 
-        result = {
-            "sequence_output": sequence_output.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size],
-        )
+        result = DictAttr({"sequence_output": sequence_output.numpy(),})
+        self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = TFGPT2Model(config=config)
@@ -221,12 +217,8 @@ class TFGPT2ModelTester:
             "token_type_ids": token_type_ids,
         }
         prediction_scores = model(inputs)[0]
-        result = {
-            "prediction_scores": prediction_scores.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size],
-        )
+        result = DictAttr({"prediction_scores": prediction_scores.numpy(),})
+        self.parent.assertEqual(result.prediction_scores.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_gpt2_double_head(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
@@ -244,11 +236,11 @@ class TFGPT2ModelTester:
             "token_type_ids": multiple_choice_token_type_ids,
         }
         lm_logits, mc_logits = model(inputs)[:2]
-        result = {"lm_logits": lm_logits.numpy(), "mc_logits": mc_logits.numpy()}
-        self.parent.assertListEqual(
-            list(result["lm_logits"].shape), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size],
+        result = DictAttr({"lm_logits": lm_logits.numpy(), "mc_logits": mc_logits.numpy()})
+        self.parent.assertEqual(
+            result.lm_logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
         )
-        self.parent.assertListEqual(list(result["mc_logits"].shape), [self.batch_size, self.num_choices])
+        self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import DictAttr, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -145,12 +145,8 @@ class TFXLMModelTester:
         inputs = [input_ids, input_mask]
         outputs = model(inputs)
         sequence_output = outputs[0]
-        result = {
-            "sequence_output": sequence_output.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        result = DictAttr({"sequence_output": sequence_output.numpy(),})
+        self.parent.assertEqual(result.sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_xlm_lm_head(
         self,
@@ -171,11 +167,9 @@ class TFXLMModelTester:
 
         logits = outputs[0]
 
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = DictAttr({"logits": logits.numpy(),})
 
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.vocab_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_xlm_qa(
         self,
@@ -195,13 +189,10 @@ class TFXLMModelTester:
 
         start_logits, end_logits = model(inputs)
 
-        result = {
-            "start_logits": start_logits.numpy(),
-            "end_logits": end_logits.numpy(),
-        }
+        result = DictAttr({"start_logits": start_logits.numpy(), "end_logits": end_logits.numpy(),})
 
-        self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_xlm_sequence_classif(
         self,
@@ -221,11 +212,9 @@ class TFXLMModelTester:
 
         (logits,) = model(inputs)
 
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = DictAttr({"logits": logits.numpy(),})
 
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def create_and_check_xlm_for_token_classification(
         self,
@@ -243,10 +232,8 @@ class TFXLMModelTester:
         model = TFXLMForTokenClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
+        result = DictAttr({"logits": logits.numpy(),})
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_xlm_for_multiple_choice(
         self,
@@ -271,8 +258,8 @@ class TFXLMModelTester:
             "token_type_ids": multiple_choice_token_type_ids,
         }
         (logits,) = model(inputs)
-        result = {"logits": logits.numpy()}
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+        result = DictAttr({"logits": logits.numpy()})
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

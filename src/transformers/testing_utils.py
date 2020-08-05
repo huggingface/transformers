@@ -136,3 +136,29 @@ def require_torch_and_cuda(test_case):
         return unittest.skip("test requires CUDA")
     else:
         return test_case
+
+
+class DictAttr:
+    """This is a wrapper class that turns a plain dict into an object-like dict
+    that allows key access via a method.
+
+    For example:
+    data = {
+        "loss_1": 1,
+        "mems_1": 2,
+    }
+    result = DictAttr(data)
+
+    now the values can be accessed as a subscription or a an accessor:
+
+    print(result["loss_1"]) # 1
+    print(result.loss_1)    # 1
+
+    """
+
+    def __init__(self, args):
+        for k in args:
+            setattr(self, k, args[k])
+
+    def __getitem__(self, item):
+        return getattr(self, item)

@@ -18,7 +18,7 @@ import random
 import unittest
 
 from transformers import TransfoXLConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import DictAttr, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -96,19 +96,17 @@ class TFTransfoXLModelTester:
 
         hidden_states_2, mems_2 = model(inputs)
 
-        result = {
-            "hidden_states_1": hidden_states_1.numpy(),
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "hidden_states_2": hidden_states_2.numpy(),
-            "mems_2": [mem.numpy() for mem in mems_2],
-        }
+        result = DictAttr(
+            {
+                "hidden_states_1": hidden_states_1.numpy(),
+                "mems_1": [mem.numpy() for mem in mems_1],
+                "hidden_states_2": hidden_states_2.numpy(),
+                "mems_2": [mem.numpy() for mem in mems_2],
+            }
+        )
 
-        self.parent.assertListEqual(
-            list(result["hidden_states_1"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(
-            list(result["hidden_states_2"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        self.parent.assertEqual(result.hidden_states_1.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.hidden_states_2.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
             list(list(mem.shape) for mem in result["mems_1"]),
             [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
@@ -132,24 +130,22 @@ class TFTransfoXLModelTester:
 
         _, mems_2 = model(inputs)
 
-        result = {
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "lm_logits_1": lm_logits_1.numpy(),
-            "mems_2": [mem.numpy() for mem in mems_2],
-            "lm_logits_2": lm_logits_2.numpy(),
-        }
-
-        self.parent.assertListEqual(
-            list(result["lm_logits_1"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+        result = DictAttr(
+            {
+                "mems_1": [mem.numpy() for mem in mems_1],
+                "lm_logits_1": lm_logits_1.numpy(),
+                "mems_2": [mem.numpy() for mem in mems_2],
+                "lm_logits_2": lm_logits_2.numpy(),
+            }
         )
+
+        self.parent.assertEqual(result.lm_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
             list(list(mem.shape) for mem in result["mems_1"]),
             [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
-        self.parent.assertListEqual(
-            list(result["lm_logits_2"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        self.parent.assertEqual(result.lm_logits_2.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
             list(list(mem.shape) for mem in result["mems_2"]),
             [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
