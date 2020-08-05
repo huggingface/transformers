@@ -843,8 +843,8 @@ class BartModel(PretrainedBartModel):
     def forward(
         self,
         input_ids,
-        attention_mask=None,
         decoder_input_ids=None,
+        attention_mask=None,
         encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
         decoder_past_key_values=None,
@@ -968,9 +968,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
     def forward(
         self,
         input_ids,
+        decoder_input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
-        decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_past_key_values=None,
         labels=None,
@@ -1026,8 +1026,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
         outputs = self.model(
             input_ids,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
             decoder_past_key_values=decoder_past_key_values,
@@ -1139,9 +1139,9 @@ class BartForSequenceClassification(PretrainedBartModel):
     def forward(
         self,
         input_ids,
+        decoder_input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
-        decoder_input_ids=None,
         decoder_attention_mask=None,
         labels=None,
         use_cache=None,
@@ -1161,8 +1161,8 @@ class BartForSequenceClassification(PretrainedBartModel):
 
         outputs = self.model(
             input_ids,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             use_cache=use_cache,
@@ -1225,9 +1225,9 @@ class BartForQuestionAnswering(PretrainedBartModel):
     def forward(
         self,
         input_ids,
+        decoder_input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
-        decoder_input_ids=None,
         decoder_attention_mask=None,
         start_positions=None,
         end_positions=None,
@@ -1252,8 +1252,8 @@ class BartForQuestionAnswering(PretrainedBartModel):
 
         outputs = self.model(
             input_ids,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             use_cache=use_cache,

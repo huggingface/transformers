@@ -245,7 +245,7 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)["input_ids"]  # Let's keep only input_ids
 
             try:
-                if model.__class__.__name__ in ["T5Model", "T5ForConditionalGeneration"]:
+                if model.config.is_encoder_decoder:
                     traced_model = torch.jit.trace(model, (inputs, inputs))
                 else:
                     traced_model = torch.jit.trace(model, inputs)
