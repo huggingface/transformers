@@ -14,7 +14,7 @@ from pytest import param
 from torch.utils.data import DataLoader
 
 import lightning_base
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, MBartTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import require_multigpu
 
 from .distillation import distill_main, evaluate_checkpoint
@@ -406,8 +406,9 @@ def test_pack_dataset():
     assert orig_paths == new_paths
 
 
-def test_mbart_dataset_truncation():
-    tokenizer = MBartTokenizer.from_pretrained(MBART_TINY)
+@pytest.mark.parametrize(["tok_name"], [pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)])
+def test_mbart_dataset_truncation(tok_name):
+    tokenizer = AutoTokenizer.from_pretrained(tok_name)
     tmp_dir = make_test_data_dir()
     max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
     max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
@@ -433,6 +434,8 @@ def test_mbart_dataset_truncation():
         assert batch["input_ids"].shape[1] == max_src_len
         # show that targets are the same len
         assert batch["decoder_input_ids"].shape[1] == max_tgt_len
+        if tok_name == MARIAN_TINY:
+            continue
         # check language codes in correct place
         assert batch["decoder_input_ids"][0, 0].item() == tokenizer.lang_code_to_id[tgt_lang]
         assert batch["decoder_input_ids"][0, -1].item() == tokenizer.eos_token_id

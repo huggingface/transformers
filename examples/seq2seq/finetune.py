@@ -14,7 +14,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import MBartTokenizer, T5ForConditionalGeneration, get_linear_schedule_with_warmup
+from transformers import MarianTokenizer, MBartTokenizer, T5ForConditionalGeneration, get_linear_schedule_with_warmup
 
 
 try:
@@ -108,7 +108,7 @@ class SummarizationModule(BaseTransformer):
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
-        if isinstance(self.tokenizer, MBartTokenizer):
+        if isinstance(self.tokenizer, MBartTokenizer) or isinstance(self.tokenizer, MarianTokenizer):
             self.dataset_class = MBartDataset
         else:
             self.dataset_class = Seq2SeqDataset
