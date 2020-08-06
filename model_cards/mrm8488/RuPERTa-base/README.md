@@ -16,12 +16,12 @@ The architecture is the same as `roberta-base`:
 ## Benchmarks 🧾 
 WIP (I continue working on it) 🚧
 
-| Task     |    F1 | Precision | Recall |                                                                        Fine-tuned model |                                                                                                                                                                                                                                                                                               Reproduce it |
+| Task/Dataset     |    F1 | Precision | Recall |                                                                        Fine-tuned model |                                                                                                                                                                                                                                                                                               Reproduce it |
 | -------- | ----: | --------: | -----: | --------------------------------------------------------------------------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
 | POS      | 97.39 |     97.47 |  97.32 | [RuPERTa-base-finetuned-pos](https://huggingface.co/mrm8488/RuPERTa-base-finetuned-pos) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mrm8488/shared_colab_notebooks/blob/master/RuPERTa_base_finetuned_POS.ipynb)
 | NER      | 77.55 |     75.53 |  79.68 | [RuPERTa-base-finetuned-ner](https://huggingface.co/mrm8488/RuPERTa-base-finetuned-ner) |
-| SQUAD-es v1 |  to-do |       |    |
-| SQUAD-es v2 |  to-do |       |    |
+| SQUAD-es v1 |  to-do |       |    |[RuPERTa-base-finetuned-squadv1](https://huggingface.co/mrm8488/RuPERTa-base-finetuned-squadv1)
+| SQUAD-es v2 |  to-do |       |  |[RuPERTa-base-finetuned-squadv2](https://huggingface.co/mrm8488/RuPERTa-base-finetuned-squadv2)
 
 ## Model in action 🔨
 
