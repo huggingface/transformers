@@ -54,7 +54,6 @@ class GLUETransformer(BaseTransformer):
             cached_features_file = self._feature_file(mode)
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 logger.info("Loading features from cached file %s", cached_features_file)
-                features = torch.load(cached_features_file)
             else:
                 logger.info("Creating features from dataset file at %s", args.data_dir)
                 examples = (
