@@ -63,6 +63,7 @@ class TFElectraModelTester:
         self.num_labels = 3
         self.num_choices = 4
         self.scope = None
+        self.embedding_size = 128
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -194,7 +195,7 @@ class TFElectraModelTester:
 class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFElectraModel, TFElectraForMaskedLM, TFElectraForPreTraining, TFElectraForTokenClassification,)
+        (TFElectraModel, TFElectraForMaskedLM, TFElectraForPreTraining, TFElectraForTokenClassification, TFElectraForMultipleChoice, TFElectraForSequenceClassification)
         if is_tf_available()
         else ()
     )
