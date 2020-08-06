@@ -935,7 +935,7 @@ class TFPegasusPreTrainedModel:
         self._context = context
         targets_BxT = features["targets"]
 
-        import ipdb; ipdb.set_trace()
+        #import ipdb; ipdb.set_trace()
         bias_1xTxT = upper_triangle_bias(tf.shape(input=targets_BxT)[1], self._dtype)
         states_BxTxD = self._embedding_layer(targets_BxT, True)
         states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
