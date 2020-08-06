@@ -89,6 +89,9 @@ from .file_utils import (
 )
 from .hf_argparser import HfArgumentParser
 
+# Integrations
+from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
+
 # Model Cards
 from .modelcard import ModelCard
 
@@ -121,6 +124,7 @@ from .pipelines import (
     TextGenerationPipeline,
     TokenClassificationPipeline,
     TranslationPipeline,
+    ZeroShotClassificationPipeline,
     pipeline,
 )
 
@@ -537,8 +541,10 @@ if is_tf_available():
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFElectraForMaskedLM,
+        TFElectraForMultipleChoice,
         TFElectraForPreTraining,
         TFElectraForQuestionAnswering,
+        TFElectraForSequenceClassification,
         TFElectraForTokenClassification,
         TFElectraModel,
         TFElectraPreTrainedModel,

@@ -1,5 +1,6 @@
 ---
 language: de
+license: mit
 thumbnail: https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png
 tags:
 - exbert

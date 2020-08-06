@@ -81,7 +81,13 @@ Feedback and more use cases and benchmarks involving TPUs are welcome, please sh
 
 ## Logging & Experiment tracking
 
-You can easily log and monitor your runs code. [TensorBoard](https://www.tensorflow.org/tensorboard) and [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface) are currently supported.
+You can easily log and monitor your runs code. The following are currently supported:
+
+* [TensorBoard](https://www.tensorflow.org/tensorboard)
+* [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface)
+* [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
+
+### Weights & Biases
 
 To use Weights & Biases, install the wandb package with:
 
@@ -104,6 +110,18 @@ wandb.login()
 
 Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
 
-For advanced configuration and examples, refer to the [W&B documentation](https://docs.wandb.com/library/integrations/huggingface).
-
 When using 🤗 Transformers with PyTorch Lightning, runs can be tracked through `WandbLogger`. Refer to related [documentation & examples](https://docs.wandb.com/library/frameworks/pytorch/lightning).
+
+### Comet.ml
+
+To use `comet_ml`, install the Python package with:
+
+```bash
+pip install comet_ml
+```
+
+or if in a Conda environment:
+
+```bash
+conda install -c comet_ml -c anaconda -c conda-forge comet_ml
+```

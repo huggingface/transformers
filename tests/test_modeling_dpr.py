@@ -130,9 +130,7 @@ class DPRModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertListEqual(
-            list(result["pooler_output"].size()), [self.batch_size, self.projection_dim or self.hidden_size]
-        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_question_encoder(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -143,9 +141,7 @@ class DPRModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertListEqual(
-            list(result["pooler_output"].size()), [self.batch_size, self.projection_dim or self.hidden_size]
-        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_reader(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -154,9 +150,10 @@ class DPRModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask,)
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["relevance_logits"].size()), [self.batch_size])
+
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.relevance_logits.shape, (self.batch_size,))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
