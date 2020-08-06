@@ -409,7 +409,7 @@ class BasicTokenizer(object):
             if token not in never_split:
                 if self.do_lower_case:
                     token = token.lower()
-                    if (self.strip_accents) or (self.strip_accents is None):
+                    if self.strip_accents != False:
                         token = self._run_strip_accents(token)
                 elif self.strip_accents:
                     token = self._run_strip_accents(token)
