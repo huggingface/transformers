@@ -8,10 +8,7 @@ from tokenizers import AddedToken, CharBPETokenizer, Tokenizer
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 
-from transformers import (
-    BartConfig,
-    BartForConditionalGeneration,
-)
+from transformers import BartConfig, BartForConditionalGeneration
 from utils import label_smoothed_nll_loss
 
 
