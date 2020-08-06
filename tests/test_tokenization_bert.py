@@ -130,7 +130,6 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
 
-
     def test_basic_tokenizer_lower_strip_accents_false(self):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=False)
 

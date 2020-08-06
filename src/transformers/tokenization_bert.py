@@ -198,8 +198,10 @@ class BertTokenizer(PreTrainedTokenizer):
         self.do_basic_tokenize = do_basic_tokenize
         if do_basic_tokenize:
             self.basic_tokenizer = BasicTokenizer(
-                do_lower_case=do_lower_case, never_split=never_split,
-                tokenize_chinese_chars=tokenize_chinese_chars, strip_accents=strip_accents,
+                do_lower_case=do_lower_case,
+                never_split=never_split,
+                tokenize_chinese_chars=tokenize_chinese_chars,
+                strip_accents=strip_accents,
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
@@ -356,8 +358,7 @@ class BertTokenizer(PreTrainedTokenizer):
 class BasicTokenizer(object):
     """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True,
-                 strip_accents=None):
+    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
         """ Constructs a BasicTokenizer.
 
         Args:
