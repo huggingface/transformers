@@ -18,29 +18,38 @@
 import logging
 from typing import List, Optional
 
-from .tokenization_bert import BertTokenizer
+from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_utils import AddedToken
 
 
 logger = logging.getLogger(__name__)
 
 
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "mpnet-base": "",
+    }        
+}
+
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "mpnet-base": 512,
+}
+
+
 class MPNetTokenizer(BertTokenizer):
     """
     Constructs a MPNet BPE tokenizer, derived from the Bert tokenizer. Peculiarities:
-    - Byte-level Byte-Pair-Encoding
-    - Requires a space to start the input string => the encoding methods should be called with the
-      ``add_prefix_space`` flag set to ``True``.
-      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
-      the absence of a space at the beginning of a string:
-    ::
-        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    
+    :This tokenizer inherits from :class:`~transformers.BertTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
+
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
-        merges_file (:obj:`str`):
-            Path to the merges file.
         errors (:obj:`str`, `optional`, defaults to "replace"):
             Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
             <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
@@ -72,6 +81,10 @@ class MPNetTokenizer(BertTokenizer):
             modeling. This is the token which the model will try to predict.
     """
 
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
     def __init__(
         self,
         vocab_file,
@@ -91,7 +104,6 @@ class MPNetTokenizer(BertTokenizer):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
 
-        
         super().__init__(
             vocab_file=vocab_file,
             max_len=512,
@@ -113,7 +125,7 @@ class MPNetTokenizer(BertTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
+        A MPNet sequence has the following format:
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``
         Args:
@@ -163,7 +175,7 @@ class MPNetTokenizer(BertTokenizer):
     ) -> List[int]:
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        RoBERTa does not make use of token type ids, therefore a list of zeros is returned.
+        MPNet does not make use of token type ids, therefore a list of zeros is returned.
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
@@ -178,3 +190,42 @@ class MPNetTokenizer(BertTokenizer):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+
+class MPNetTokenizerFast(BertTokenizerFast):
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+
+    def __init__(
+        self,
+        vocab_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="[UNK]",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        **kwargs
+    ):
+        super().__init__(
+            vocab_file,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+        if token_ids_1 is None:
+            return output
+        
+        return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
