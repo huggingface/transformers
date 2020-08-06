@@ -67,9 +67,10 @@ def _get_question_end_index(input_ids, sep_token_id):
     batch_size = input_ids.shape[0]
 
     assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
-    assert (
-        sep_token_indices.shape[0] == 3 * batch_size
-    ), f"There should be exactly three separator tokens: {sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this error."
+    if sep_token_indices.shape[0] == 3 * batch_size:
+        logger.warning(
+            f"There should be exactly three separator tokens: {sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this error."
+        )
 
     return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
 
@@ -1345,7 +1346,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # set global attention on question tokens
-        if global_attention_mask is None:
+        if global_attention_mask is None and input_ids is not None:
             logger.info("Initializing global attention on question tokens...")
             # put global attention on all tokens until `config.sep_token_id` is reached
             global_attention_mask = _compute_global_attention_mask(input_ids, self.config.sep_token_id)
@@ -1533,7 +1534,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # set global attention on question tokens
-        if global_attention_mask is None:
+        if global_attention_mask is None and input_ids is not None:
             logger.info("Initializing global attention on multiple choice...")
             # put global attention on all tokens after `config.sep_token_id`
             global_attention_mask = torch.stack(

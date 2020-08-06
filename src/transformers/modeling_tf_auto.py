@@ -94,7 +94,7 @@ from .modeling_tf_flaubert import (
     TFFlaubertWithLMHeadModel,
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
-from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerModel
+from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
@@ -271,6 +271,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
         (ElectraConfig, TFElectraForQuestionAnswering),
+        (LongformerConfig, TFLongformerForQuestionAnswering),
     ]
 )
 

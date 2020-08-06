@@ -201,6 +201,7 @@ class TFModelTesterMixin:
             and tf.keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
         )
+
         for main_layer_class in tf_main_layer_classes:
             # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
             if "T5" in main_layer_class.__name__:
@@ -377,9 +378,6 @@ class TFModelTesterMixin:
 
             outputs_dict = model(input_ids)
             hidden_states = outputs_dict[0]
-            import ipdb
-
-            ipdb.set_trace()
 
             # Add a dense layer on top to test integration with other keras modules
             outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)

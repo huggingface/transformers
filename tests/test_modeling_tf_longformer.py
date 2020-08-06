@@ -31,7 +31,7 @@ if is_tf_available():
         LongformerConfig,
         TFLongformerModel,
         TFLongformerForMaskedLM,
-        #        TFLongformerForQuestionAnswering,
+        TFLongformerForQuestionAnswering,
         #        TFLongformerForSequenceClassification,
         #        TFLongformerForTokenClassification,
         #        TFLongformerForMultipleChoice,
@@ -69,8 +69,8 @@ class TFLongformerModelTester:
         # `ModelTesterMixin.test_attention_outputs` is expecting attention tensors to be of size
         # [num_attention_heads, encoder_seq_length, encoder_key_length], but TFLongformerSelfAttention
         # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
-        # because its local attention only attends to `self.attention_window + 1` locations
-        self.key_length = self.attention_window + 1
+        # because its local attention only attends to `self.attention_window` and one before and one after
+        self.key_length = self.attention_window + 2
 
         # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
         # the `test_attention_outputs` and `test_hidden_states_output` tests
@@ -196,7 +196,6 @@ class TFLongformerModelTester:
         loss, start_logits, end_logits = model(
             input_ids,
             attention_mask=input_mask,
-            global_attention_mask=input_mask,
             token_type_ids=token_type_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -248,9 +247,9 @@ class TFLongformerModelTester:
         ) = config_and_inputs
 
         # Replace sep_token_id by some random id
-        input_ids[input_ids == config.sep_token_id] = tf.randint(0, config.vocab_size, (1,)).item()
+        input_ids = tf.where(input_ids == config.sep_token_id, 0, input_ids)
         # Make sure there are exactly three sep_token_id
-        input_ids[:, -3:] = config.sep_token_id
+        input_ids = tf.concat([input_ids[:, :-3], tf.ones_like(input_ids)[:, -3:] * config.sep_token_id], axis=-1)
         input_mask = tf.ones_like(input_ids)
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -263,13 +262,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     all_model_classes = (
-        (
-            TFLongformerModel,
-            TFLongformerForMaskedLM,
-            #            LongformerForQuestionAnswering,
-        )
-        if is_tf_available()
-        else ()
+        (TFLongformerModel, TFLongformerForMaskedLM, TFLongformerForQuestionAnswering,) if is_tf_available() else ()
     )
 
     def setUp(self):

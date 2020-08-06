@@ -9,6 +9,7 @@ from .modeling_tf_roberta import TFRobertaEmbeddings, TFRobertaLMHead
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
     cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
@@ -28,6 +29,34 @@ TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-large-4096-extra.pos.embd.only",
     # See all Longformer models at https://huggingface.co/models?filter=longformer
 ]
+
+
+def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_sep_token=True):
+    """
+        Computes global attention mask by putting attention on all tokens
+        before `sep_token_id` if `before_sep_token is True` else after
+        `sep_token_id`.
+    """
+
+    assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
+    question_end_index = tf.reshape(sep_token_indices, (input_ids_shape[0], 3, 2))[:, 0, 1]
+    question_end_index = tf.cast(question_end_index[:, None], tf.dtypes.int32)  # size: batch_size x 1
+    # bool attention mask with True in locations of global attention
+    attention_mask = tf.range(input_ids_shape[1])
+    if before_sep_token is True:
+        attention_mask = tf.cast(
+            tf.broadcast_to(attention_mask, input_ids_shape) < tf.broadcast_to(question_end_index, input_ids_shape),
+            tf.dtypes.int32,
+        )
+    else:
+        # last token is separation token and should not be counted and in the middle are two separation tokens
+        attention_mask = tf.cast(
+            tf.broadcast_to(attention_mask, input_ids_shape)
+            > tf.broadcast_to(question_end_index + 1, input_ids_shape),
+            tf.dtypes.int32,
+        ) * tf.cast(tf.broadcast_to(attention_mask, input_ids_shape) < input_ids_shape[-1], tf.dtypes.int32)
+
+    return attention_mask
 
 
 class TFLongformerSelfAttention(tf.keras.layers.Layer):
@@ -109,9 +138,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = shape_list(hidden_states)
-        assert (
-            embed_dim == self.embed_dim
-        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+        tf.debugging.assert_equal(
+            embed_dim,
+            self.embed_dim,
+            message=f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}",
+        )
 
         # normalize query
         query_vectors /= math.sqrt(self.head_dim)
@@ -139,12 +170,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # pad local attention probs
         attn_scores += diagonal_mask
 
-        assert shape_list(attn_scores) == [
-            batch_size,
-            seq_len,
-            self.num_heads,
-            self.one_sided_attn_window_size * 2 + 1,
-        ], f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+        tf.debugging.assert_equal(
+            shape_list(attn_scores),
+            [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1],
+            message=f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}",
+        )
 
         # compute global attn indices required through out forward fn
         (
@@ -199,7 +229,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             ),
         )
 
-        assert shape_list(attn_output) == [batch_size, seq_len, self.num_heads, self.head_dim], "Unexpected size"
+        tf.debugging.assert_equal(
+            shape_list(attn_output), [batch_size, seq_len, self.num_heads, self.head_dim], message="Unexpected size"
+        )
         attn_output = tf.reshape(tf.transpose(attn_output, (1, 0, 2, 3)), (seq_len, batch_size, embed_dim))
 
         # compute value for global attention and overwrite to attention output
@@ -232,17 +264,13 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # without global attention, return local attention probabilities
         # batch_size x num_heads x sequence_length x window_size
         # which is the attention weights of every token attending to its neighbours
-
         attn_probs = tf.cond(
             is_global_attn,
             lambda: self._get_global_attn_probs(attn_probs, max_num_global_attn_indices),
             lambda: tf.transpose(attn_probs, (0, 2, 1, 3)),
         )
 
-        outputs = (attn_output,)
-        if output_attentions:
-            outputs = outputs + (attn_probs,)
-
+        outputs = (attn_output, attn_probs)
         return outputs
 
     @staticmethod
@@ -263,10 +291,16 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         This implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer)
         with an overlap of size window_overlap"""
         batch_size, seq_len, num_heads, head_dim = shape_list(query)
-        assert (
-            seq_len % (window_overlap * 2) == 0
-        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
-        assert shape_list(query) == shape_list(key)
+        tf.debugging.assert_equal(
+            seq_len % (window_overlap * 2),
+            0,
+            message=f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}",
+        )
+        tf.debugging.assert_equal(
+            shape_list(query),
+            shape_list(key),
+            message=f"Shape of query and key should be equal, but got query: {shape_list(query)} and key: {shape_list(key)}",
+        )
 
         chunks_count = seq_len // window_overlap - 1
 
@@ -422,12 +456,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             chunked_value, (batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim)
         )
 
-        assert shape_list(chunked_value) == [
-            batch_size * num_heads,
-            chunks_count + 1,
-            3 * window_overlap,
-            head_dim,
-        ], "Chunked value has the wrong shape"
+        tf.debugging.assert_equal(
+            shape_list(chunked_value),
+            [batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim],
+            message="Chunked value has the wrong shape",
+        )
 
         chunked_attn_probs = self._pad_and_diagonalize(chunked_attn_probs)
 
@@ -498,11 +531,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # chunk with overlap
         chunked_hidden_states = tf.signal.frame(hidden_states, frame_size, frame_hop_size)
 
-        assert shape_list(chunked_hidden_states) == [
-            batch_size,
-            num_output_chunks,
-            frame_size,
-        ], f"Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}."
+        tf.debugging.assert_equal(
+            shape_list(chunked_hidden_states),
+            [batch_size, num_output_chunks, frame_size],
+            message=f"Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}.",
+        )
 
         chunked_hidden_states = tf.reshape(
             chunked_hidden_states, (batch_size, num_output_chunks, 2 * window_overlap, hidden_dim)
@@ -550,7 +583,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         is_local_index_global_attn_nonzero,
         is_local_index_no_global_attn_nonzero,
     ):
-        batch_size = key_vectors.shape[0]
+        batch_size = shape_list(key_vectors)[0]
 
         # select global key vectors
         global_key_vectors = tf.gather_nd(key_vectors, is_index_global_attn_nonzero)
@@ -748,7 +781,8 @@ class TFLongformerAttention(tf.keras.layers.Layer):
 
         self_outputs = self.self_attention([input_tensor, attention_mask, output_attentions], training=training)
         attention_output = self.dense_output(self_outputs[0], input_tensor, training=training)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+
+        outputs = (attention_output,) + self_outputs[1:]
         return outputs
 
 
@@ -773,33 +807,37 @@ class TFLongformerLayer(tf.keras.layers.Layer):
 class TFLongformerEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+        self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
         self.layer = [
             TFLongformerLayer(config, i, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, output_attentions, output_hidden_states = inputs
+        hidden_states, attention_mask, output_attentions, output_hidden_states, padding_len = inputs
 
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
-            if cast_bool_to_primitive(output_hidden_states) is True:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+            if cast_bool_to_primitive(output_hidden_states, self.output_hidden_states) is True:
+                hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
+                all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
             layer_outputs = layer_module([hidden_states, attention_mask, output_attentions], training=training)
             hidden_states = layer_outputs[0]
 
-            if cast_bool_to_primitive(output_attentions) is True:
+            if cast_bool_to_primitive(output_attentions, self.output_attentions) is True:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         # Add last layer
-        if cast_bool_to_primitive(output_hidden_states) is True:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+        if cast_bool_to_primitive(output_hidden_states, self.output_hidden_states) is True:
+            hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
+            all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if cast_bool_to_primitive(output_hidden_states, self.output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if cast_bool_to_primitive(output_attentions, self.output_attentions) is True:
             outputs = outputs + (all_attentions,)
         return outputs  # outputs, (hidden states), (attentions)
 
@@ -929,7 +967,8 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         embedding_output = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         encoder_outputs = self.encoder(
-            [embedding_output, extended_attention_mask, output_attentions, output_hidden_states], training=training,
+            [embedding_output, extended_attention_mask, output_attentions, output_hidden_states, padding_len],
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]
@@ -1105,3 +1144,113 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             outputs = (loss,) + outputs
 
         return outputs  # (loss), prediction_scores, (hidden_states), (attentions)
+
+
+class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
+        self.qa_outputs = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+        )
+
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        global_attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        start_positions=None,
+        end_positions=None,
+        training=False,
+    ):
+        r"""
+        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-start scores (before SoftMax).
+        end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-end scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        """
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            global_attention_mask = inputs[2]
+            start_positions = inputs[8] if len(inputs) > 8 else start_positions
+            end_positions = inputs[9] if len(inputs) > 9 else end_positions
+            if len(inputs) > 8:
+                inputs = inputs[:8]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("input_ids", inputs)
+            global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
+            start_positions = inputs.pop("start_positions", start_positions)
+            end_positions = inputs.pop("end_positions", start_positions)
+        else:
+            input_ids = inputs
+
+        # set global attention on question tokens
+        if global_attention_mask is None and input_ids is not None:
+            sep_token_indices = tf.where(input_ids == self.config.sep_token_id)
+
+            if sep_token_indices.shape[0] != 3 * input_ids.shape[0]:
+                logger.warning(
+                    f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this. This is most likely an error."
+                )
+            else:
+                logger.info("Initializing global attention on question tokens...")
+                # put global attention on all tokens until `config.sep_token_id` is reached
+                global_attention_mask = _compute_global_attention_mask(shape_list(input_ids), sep_token_indices)
+
+        outputs = self.longformer(
+            inputs,
+            attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = tf.split(logits, 2, axis=-1)
+        start_logits = tf.squeeze(start_logits, axis=-1)
+        end_logits = tf.squeeze(end_logits, axis=-1)
+
+        outputs = (start_logits, end_logits,) + outputs[2:]
+
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.compute_loss(labels, outputs[:2])
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
