@@ -166,10 +166,85 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
                 output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
 
                 sess.run(tf.compat.v1.global_variables_initializer())
-                listed = sess.run(input_ids,
-                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]})
-                import ipdb; ipdb.set_trace()
+
 
                 print(sess.run(output_str,
                                feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
 
+
+    def test_eager_pegasus(self):
+        model_dir = "../pegasus/ckpt/aeslc"
+        spm_model = "../pegasus/ckpt/c4.unigram.newline.10pct.96000.model"
+        assert os.path.exists(model_dir)
+
+        self.assertTrue(tf.compat.v1.train.checkpoint_exists(model_dir))
+        config = PegasusConfig(vocab_size=96000 + 103, d_model=1024,
+                               num_beams=8)
+
+        # #hidden_size = 1024
+        # #filter_size = 4096
+        # num_heads = 16
+        # num_encoder_layers = 16
+        # num_decoder_layers = 16
+        # label_smoothing = 0.0
+        # dropout = 0.1
+        # beam_size = 8
+        # beam_alpha = 0.6
+
+        # run the model to build all variables (but not initialized yet)
+        model = TFPegasusPreTrainedModel(config)
+        dummy_inputs = {"inputs": tf.ones((2, 7), tf.int64), "targets": tf.ones((2, 5), tf.int64)}
+        loss, outputs = model(dummy_inputs, True)
+        self.assertEqual(loss.shape, [])
+        self.assertEqual(outputs["logits"].shape, [2, 5, config.vocab_size])
+        model.restore
+
+        # create assignment map
+        ignore_name = ["Adafactor", "global_step"]
+        #var_list = tf.compat.v1.global_variables(scope=None)
+        ckpt_var_list = tf.train.list_variables(model_dir)
+        ckpt_var_list = [var for var in ckpt_var_list if not any(ign in var[0] for ign in ignore_name)]
+        new_var_name_dict = {var.name: var for var in var_list}
+        assignment_map = {}
+        for var in ckpt_var_list:
+            old_var_name = var[0]
+            new_var_name = var[0] + ":0"
+            assert new_var_name in new_var_name_dict
+            assignment_map[old_var_name] = new_var_name_dict[new_var_name]
+
+        # define the initialization (but not intialized until global_variables_initializer is called)
+        tf.compat.v1.train.init_from_checkpoint(model_dir, assignment_map)
+
+        # check running
+        raw_input_str = (
+            "To ensure a smooth flow of bank resolutions to the necessary signatories, "
+            "I am requesting that Enron Treasury first route the bank resolutions to Angela Davis "
+            "(EWS Legal) to be initialed before being routed to John Lavorato or Louise Kitchen.\n"
+            "If you have any questions please call me at 3-6544."
+            "Thank you for your attention to this matter."
+        )
+        raw_target_str = "Treasury Bank Resolutions"  # or something close
+
+        #input_str = tf.compat.v1.placeholder(tf.string, shape=[1, ], name=None)
+        #target_str = tf.compat.v1.placeholder(tf.string, shape=[1, ], name=None)
+
+        # tokenization
+        input_ids = encode(raw_input_str, 512, spm_model, encoder_type="sentencepiece")
+        target_ids = encode(raw_target_str, 32, spm_model, encoder_type="sentencepiece")
+
+        input_ids = tf.reshape(input_ids, [1, 512])
+        target_ids = tf.reshape(target_ids, [1, 32])
+
+        output_ids = model.predict(
+            {"inputs": input_ids, "targets": target_ids, }, 32, config.num_beams, beam_alpha=0.6
+        )
+        self.assertEqual(output_ids["outputs"].shape, [1, 32])
+
+        # decode to str
+        output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
+        print(output_str)
+        #
+        # sess.run(tf.compat.v1.global_variables_initializer())
+        #
+        # print(sess.run(output_str,
+        #                feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
