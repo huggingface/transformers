@@ -201,7 +201,6 @@ class TFModelTesterMixin:
             and tf.keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
         )
-
         for main_layer_class in tf_main_layer_classes:
             # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
             if "T5" in main_layer_class.__name__:
@@ -679,6 +678,7 @@ class TFModelTesterMixin:
 
                 # Test that model correctly compute the loss with a dict
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                loss = model(prepared_for_class)[0]
                 self.assertEqual(loss.shape, [loss_size])
 
                 # Test that model correctly compute the loss with a tuple
