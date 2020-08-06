@@ -136,7 +136,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["hällo", "!", "how", "are", "you", "?"]
         )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
+        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["h\u00E9llo"])
 
     def test_basic_tokenizer_lower_strip_accents_true(self):
         tokenizer = BasicTokenizer(do_lower_case=True, strip_accents=True)
@@ -169,7 +169,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_basic_tokenizer_no_lower_strip_accents_true(self):
-        tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=False)
+        tokenizer = BasicTokenizer(do_lower_case=False, strip_accents=True)
 
         self.assertListEqual(
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HaLLo", "!", "how", "Are", "yoU", "?"]
