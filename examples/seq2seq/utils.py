@@ -148,6 +148,7 @@ class Seq2SeqDataset(Dataset):
 
 class TranslationDataset(Seq2SeqDataset):
     """A dataset that calls prepare_translation_batch."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.max_source_length != self.max_target_length:
