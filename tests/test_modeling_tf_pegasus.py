@@ -92,8 +92,8 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
 
     # TODO: refactor to follow transformers' standard testing pipeline
     def test_pegasus_aeslc_model(self):
-        model_dir = "../pegasus/ckpt/pegasus_ckpt/aeslc"
-        spm_model = "../pegasus/ckpt/pegasus_ckpt/c4.unigram.newline.10pct.96000.model"
+        model_dir = "../pegasus/ckpt/aeslc"
+        spm_model = "../pegasus/ckpt/c4.unigram.newline.10pct.96000.model"
         assert os.path.exists(model_dir)
 
         self.assertTrue(tf.compat.v1.train.checkpoint_exists(model_dir))
