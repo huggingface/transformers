@@ -201,7 +201,7 @@ def main():
     model = BartForConditionalGeneration(config)
     translator = Translate(model, tokenizer)
 
-    trainer = pl.Trainer(gpus=1)
+    trainer = pl.Trainer(gpus=0)
     trainer.fit(translator, train_loader, val_loader)
 
 
