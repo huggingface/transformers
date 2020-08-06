@@ -77,6 +77,9 @@ OpenAI specific outputs
 .. autoclass:: transformers.modeling_openai.OpenAIGPTDoubleHeadsModelOutput
     :members:
 
+.. autoclass:: transformers.modeling_tf_openai.TFOpenAIGPTDoubleHeadsModelOutput
+    :members:
+
 
 OpenAIGPTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~

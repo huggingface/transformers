@@ -95,6 +95,8 @@ class TFTrainingArguments(TrainingArguments):
             at the next training step under the keyword argument ``mems``.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
     """
 
     tpu_name: str = field(

@@ -120,6 +120,7 @@ from .pipelines import (
     TextGenerationPipeline,
     TokenClassificationPipeline,
     TranslationPipeline,
+    ZeroShotClassificationPipeline,
     pipeline,
 )
 
@@ -541,8 +542,10 @@ if is_tf_available():
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFElectraForMaskedLM,
+        TFElectraForMultipleChoice,
         TFElectraForPreTraining,
         TFElectraForQuestionAnswering,
+        TFElectraForSequenceClassification,
         TFElectraForTokenClassification,
         TFElectraModel,
         TFElectraPreTrainedModel,
