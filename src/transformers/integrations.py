@@ -23,7 +23,6 @@ try:
 except (ImportError, AttributeError):
     _has_wandb = False
 
-
 try:
     from torch.utils.tensorboard import SummaryWriter
 

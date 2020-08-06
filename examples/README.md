@@ -125,10 +125,3 @@ or if in a Conda environment:
 ```bash
 conda install -c comet_ml -c anaconda -c conda-forge comet_ml
 ```
-
-### Further Reading
-
-For advanced configuration and examples, refer one of the following options:
-
-* [W&B documentation](https://docs.wandb.com/library/integrations/huggingface)
-* [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
