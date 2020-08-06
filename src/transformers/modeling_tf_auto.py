@@ -151,6 +151,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertModel),
         (CamembertConfig, TFCamembertModel),
         (XLMRobertaConfig, TFXLMRobertaModel),
+        (LongformerConfig, TFLongformerModel),
         (RobertaConfig, TFRobertaModel),
         (BertConfig, TFBertModel),
         (OpenAIGPTConfig, TFOpenAIGPTModel),
@@ -162,7 +163,6 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
         (ElectraConfig, TFElectraModel),
-        (LongformerConfig, TFLongformerModel),
     ]
 )
 
@@ -194,6 +194,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
+        (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
@@ -205,7 +206,6 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMConfig, TFXLMWithLMHeadModel),
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
-        (LongformerConfig, TFLongformerForMaskedLM),
     ]
 )
 
@@ -230,13 +230,13 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
+        (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (MobileBertConfig, TFMobileBertForMaskedLM),
         (FlaubertConfig, TFFlaubertWithLMHeadModel),
         (XLMConfig, TFXLMWithLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
-        (LongformerConfig, TFLongformerForMaskedLM),
     ]
 )
 
@@ -264,6 +264,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForQuestionAnswering),
         (CamembertConfig, TFCamembertForQuestionAnswering),
         (XLMRobertaConfig, TFXLMRobertaForQuestionAnswering),
+        (LongformerConfig, TFLongformerForQuestionAnswering),
         (RobertaConfig, TFRobertaForQuestionAnswering),
         (BertConfig, TFBertForQuestionAnswering),
         (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
@@ -271,7 +272,6 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
         (ElectraConfig, TFElectraForQuestionAnswering),
-        (LongformerConfig, TFLongformerForQuestionAnswering),
     ]
 )
 

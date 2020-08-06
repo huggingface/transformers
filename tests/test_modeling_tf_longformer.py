@@ -17,7 +17,6 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.modeling_tf_longformer import TFLongformerSelfAttention
 from transformers.modeling_tf_utils import shape_list
 from transformers.testing_utils import require_tf, slow
 
@@ -32,9 +31,7 @@ if is_tf_available():
         TFLongformerModel,
         TFLongformerForMaskedLM,
         TFLongformerForQuestionAnswering,
-        #        TFLongformerForSequenceClassification,
-        #        TFLongformerForTokenClassification,
-        #        TFLongformerForMultipleChoice,
+        TFLongformerSelfAttention,
     )
 
 
