@@ -651,7 +651,7 @@ def stack(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, 
     return s_BxIxD
 
 
-class TFPegasusPreTrainedModel:
+class TFPegasusLegacyModel:
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pre-trained models.
     """
@@ -694,6 +694,142 @@ class TFPegasusPreTrainedModel:
         self._layer_norm_decoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         _assert_equal(type(self._dtype), type(tf.float32))
 
+
+    def _encode(self, features, training):
+        inputs_BxI = features["inputs"]
+
+        assert self._dtype == tf.float32, f'{self._dtype} != tf.float32'
+        inputs_bias_Bx1xI = ids_to_bias(inputs_BxI)#, self._dtype)
+        states_BxIxD = self._embedding_layer(inputs_BxI, True)
+        states_BxIxD = self._dropout_fn(add_time_signal(states_BxIxD), training)
+        with tf.compat.v1.variable_scope("encoder", reuse=tf.compat.v1.AUTO_REUSE):
+            states_BxIxD = stack(self._encoder_layers, training, states_BxIxD, inputs_bias_Bx1xI, None, None)
+            states_BxIxD = self._layer_norm_encoder(states_BxIxD)
+        return {"memory": states_BxIxD, "memory_bias": inputs_bias_Bx1xI}
+
+    def __call__(self, features, training):
+        """Create model.
+        Args:
+          features: dictionary of tensors including "inputs" [batch, input_len] and
+            "targets" [batch, output_len]
+          training: bool of whether the mode is training.
+        Returns:
+         Tuple of (loss, outputs): Loss is a scalar. Output is a dictionary of
+           tensors, containing model's output logits.
+        """
+        if "inputs" not in features or "targets" not in features:
+            raise ValueError("Require inputs and targets keys in features.")
+        _assert_equal(type(self._dtype), type(tf.float32))
+        context = self._encode(features, training)
+        self._context = context
+        targets_BxT = features["targets"]
+
+        #import ipdb; ipdb.set_trace()
+        bias_1xTxT = upper_triangle_bias(tf.shape(input=targets_BxT)[1], self._dtype)
+        states_BxTxD = self._embedding_layer(targets_BxT, True)
+        self._emb = states_BxTxD
+        states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+        states_BxTxD = add_time_signal(states_BxTxD)
+        #self._time_signal =
+        states_BxTxD = self._dropout_fn(states_BxTxD, training)
+        with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
+            states_BxTxD = stack(
+                self._decoder_layers, training, states_BxTxD, bias_1xTxT, context["memory"], context["memory_bias"]
+            )
+            states_BxTxD = self._layer_norm_decoder(states_BxTxD)
+        logits_BxTxV = self._embedding_layer(states_BxTxD, False)
+        targets_mask_BxT = tf.cast(tf.greater(targets_BxT, 0), self._dtype)
+        loss = tf.compat.v1.losses.softmax_cross_entropy(
+            tf.one_hot(targets_BxT, self._vocab_size),
+            logits_BxTxV,
+            label_smoothing=self._label_smoothing,
+            weights=targets_mask_BxT,
+        )
+        return loss, {"logits": logits_BxTxV}
+
+    def predict(self, features, max_decode_len, beam_size, **beam_kwargs):
+        """Predict."""
+        cache = self._encode(features, False)
+        B, _, D = cache["memory"].shape
+        T, V, H = max_decode_len, self._vocab_size, self._num_heads
+
+        bias_1xTxT = upper_triangle_bias(T, self._dtype)
+        for i in range(len(self._decoder_layers)):
+            cache[str(i)] = {
+                "k": tf.zeros([B, H, T, D // H], self._dtype),
+                "v": tf.zeros([B, H, T, D // H], self._dtype),
+            }
+
+        def symbols_to_logits_fn(dec_BxT, context, i):
+            """Decode loop."""
+            dec_Bx1 = tf.slice(dec_BxT, [0, tf.maximum(tf.cast(0, i.dtype), i - 1)], [dec_BxT.shape[0], 1])
+            bias_1x1xT = tf.slice(bias_1xTxT, [0, i, 0], [1, 1, T])
+            dec_Bx1xD = self._embedding_layer(dec_Bx1, True)
+            dec_Bx1xD *= tf.cast(tf.greater(i, 0), self._dtype)
+            dec_Bx1xD = add_time_signal(dec_Bx1xD, start_index=i)
+            with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
+                dec_Bx1xD = stack(
+                    self._decoder_layers,
+                    False,
+                    dec_Bx1xD,
+                    bias_1x1xT,
+                    context["memory"],
+                    context["memory_bias"],
+                    context,
+                    i,
+                )
+                dec_Bx1xD = self._layer_norm_decoder(dec_Bx1xD)
+            logits_Bx1xV = self._embedding_layer(dec_Bx1xD, False)
+            logits_BxV = tf.squeeze(logits_Bx1xV, axis=1)
+            return logits_BxV
+
+        decodes_BxT = left2right_decode(symbols_to_logits_fn, cache, B, T, V, beam_size, **beam_kwargs)
+        return {"outputs": decodes_BxT}
+
+
+
+class TFPegasusPretrainedModel(TFPreTrainedModel):
+    """ An abstract class to handle weights initialization and
+        a simple interface for downloading and loading pre-trained models.
+    """
+
+    config_class = PegasusConfig
+    base_model_prefix = "transformer"
+
+    def __init__(
+        self,
+        config: PegasusConfig,
+
+    ):
+        #super().__init__(config)
+        # vocab_size,
+        # hidden_size,
+        # filter_size,
+        # num_heads,
+        # num_encoder_layers,
+        # num_decoder_layers,
+        # label_smoothing,
+        # dropout,
+        # FIXME(SS): should take config
+        #import ipdb; ipdb.set_trace()
+        #self._dtype = tf.float32
+        _assert_equal(type(self._dtype), type(tf.float32))
+        self._embedding_layer = Embedding(config.vocab_size, config.d_model, "weights", self._dtype)
+        #block_fn = lambda: TransformerBlock(c.d_model, c.encoder_ffn_dim, c.encoder_attention_heads, c.dropout)
+        self._encoder_layers = [TransformerBlock(config.d_model, config.encoder_ffn_dim, config.encoder_attention_heads, config.dropout) for _ in range(config.encoder_layers)]
+        self._decoder_layers = [TransformerBlock(config.d_model, config.decoder_ffn_dim, config.decoder_attention_heads, config.dropout) for _ in range(config.decoder_layers)]
+        self._dropout_fn = (
+            lambda x, training: tf.compat.v2.nn.dropout(x, config.dropout, noise_shape=[x.shape[0], 1, x.shape[2]])
+            if training
+            else x
+        )
+        self._vocab_size = config.vocab_size
+        self._num_heads = config.encoder_attention_heads
+        self._label_smoothing = 0.1
+        self._decoder_scope_name = "decoder"
+        self._layer_norm_encoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
+        self._layer_norm_decoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
+        _assert_equal(type(self._dtype), type(tf.float32))
 
     def _encode(self, features, training):
         inputs_BxI = features["inputs"]

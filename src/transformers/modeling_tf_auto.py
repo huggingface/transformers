@@ -234,8 +234,8 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForMaskedLM),
     ]
 )
-from .modeling_tf_pegasus import PegasusConfig, TFPegasusPreTrainedModel
-TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict([(T5Config, TFT5ForConditionalGeneration), (PegasusConfig, TFPegasusPreTrainedModel)])
+from .modeling_tf_pegasus import PegasusConfig, TFPegasusLegacyModel
+TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict([(T5Config, TFT5ForConditionalGeneration), (PegasusConfig, TFPegasusLegacyModel)])
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [

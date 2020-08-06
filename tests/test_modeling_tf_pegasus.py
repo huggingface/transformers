@@ -14,11 +14,12 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import TFPegasusPreTrainedModel
+    from transformers import TFPegasusLegacyModel, TFPegasusPretrainedModel
     from transformers.modeling_tf_pegasus import encode, decode
     from .test_modeling_bart import ModelTester
     from transformers.configuration_pegasus import PegasusConfig
     from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+
 
 class TFPegasusModelTester:
     def __init__(
@@ -67,13 +68,9 @@ class TFPegasusModelTester:
         #input_ids[:, -1] = config.eos_token_id
         return config, {'inputs': input_ids, 'attention_mask': input_mask, 'training': True}
 
-
-
-
-
 class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
-    all_model_classes = (TFPegasusPreTrainedModel,) if is_tf_available() else ()
+    all_model_classes = (TFPegasusPretrainedModel,) if is_tf_available() else ()
 
     def setUp(self):
         self.model_tester = TFPegasusModelTester(self)
@@ -82,15 +79,12 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFPegasusModelIntegrationTest(unittest.TestCase):
-
-    is_encoder_decoder = True
-    all_model_classes = (TFPegasusPreTrainedModel,) if is_tf_available() else ()
-
     @cached_property
     def model(self):
         raise NotImplementedError("no s3 yet")
 
     # TODO: refactor to follow transformers' standard testing pipeline
+    #@slow
     def test_pegasus_aeslc_model(self):
         model_dir = "../pegasus/ckpt/aeslc"
         spm_model = "../pegasus/ckpt/c4.unigram.newline.10pct.96000.model"
@@ -112,7 +106,7 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
 
         with tf.Graph().as_default() as graph:
             with tf.compat.v1.Session() as sess:
-                model = TFPegasusPreTrainedModel(config)
+                model = TFPegasusLegacyModel(config)
 
                 # run the model to build all variables (but not initialized yet)
                 dummy_inputs = {"inputs": tf.ones((2, 7), tf.int64), "targets": tf.ones((2, 5), tf.int64)}
@@ -168,8 +162,9 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
                 sess.run(tf.compat.v1.global_variables_initializer())
 
 
-                print(sess.run(output_str,
-                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
+                results = sess.run([output_str, model._emb],
+                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]})
+                print(results)
 
 
     def test_eager_pegasus(self):
@@ -192,7 +187,7 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
         # beam_alpha = 0.6
 
         # run the model to build all variables (but not initialized yet)
-        model = TFPegasusPreTrainedModel(config)
+        model = TFPegasusPretrainedModel(config)
         dummy_inputs = {"inputs": tf.ones((2, 7), tf.int64), "targets": tf.ones((2, 5), tf.int64)}
         loss, outputs = model(dummy_inputs, True)
         self.assertEqual(loss.shape, [])
