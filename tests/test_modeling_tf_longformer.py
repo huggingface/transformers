@@ -297,6 +297,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_longformer_for_question_answering(*config_and_inputs)
 
 
+@require_tf
 class TFLongformerModelIntegrationTest(unittest.TestCase):
     def _get_hidden_states(self):
         return tf.convert_to_tensor(
