@@ -326,6 +326,7 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_longformer_for_multiple_choice(*config_and_inputs)
 
 
+@require_torch
 class LongformerModelIntegrationTest(unittest.TestCase):
     def _get_hidden_states(self):
         return torch.tensor(
