@@ -1,5 +1,5 @@
 import os
-from typing import Callable, Dict, Iterable, List
+from typing import Dict
 
 import nlp
 import pytorch_lightning as pl
@@ -8,7 +8,10 @@ from tokenizers import AddedToken, CharBPETokenizer, Tokenizer
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset
 
-from transformers import AutoModel, BartConfig, BartForConditionalGeneration, BartTokenizerFast
+from transformers import (
+    BartConfig,
+    BartForConditionalGeneration,
+)
 from utils import label_smoothed_nll_loss
 
 
@@ -31,9 +34,16 @@ class Translate(pl.LightningModule):
         decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
         lm_labels = target_ids[:, 1:].clone()  # why clone?
 
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False,)
+        outputs = self(
+            source_ids,
+            attention_mask=source_mask,
+            decoder_input_ids=decoder_input_ids,
+            use_cache=False,
+        )
         lprobs = F.log_softmax(outputs[0], dim=-1)
-        loss = label_smoothed_nll_loss(lprobs, lm_labels, epsilon=0.1, ignore_index=self.tokenizer.pad_token_id)
+        loss = label_smoothed_nll_loss(
+            lprobs, lm_labels, epsilon=0.1, ignore_index=self.tokenizer.pad_token_id
+        )
         return loss[0]
 
     def training_step(self, batch, batch_nb):
@@ -63,7 +73,12 @@ class Translate(pl.LightningModule):
 
 
 def encode_line(
-    tokenizer, line, max_length, pad_token_id, pad_to_max_length=True, return_tensors="pt",
+    tokenizer,
+    line,
+    max_length,
+    pad_token_id,
+    pad_to_max_length=True,
+    return_tensors="pt",
 ):
     encoded = tokenizer.encode(line)
     input_ids = torch.zeros(max_length).long() + pad_token_id
@@ -118,8 +133,12 @@ class Seq2SeqDataset(Dataset):
         target_line = self.dataset[index]["target"]
         assert source_line, f"empty source line for index {index}"
         assert target_line, f"empty tgt line for index {index}"
-        source_inputs = encode_line(self.tokenizer, source_line, self.max_source_length, self.pad_token_id)
-        target_inputs = encode_line(self.tokenizer, target_line, self.max_target_length, self.pad_token_id)
+        source_inputs = encode_line(
+            self.tokenizer, source_line, self.max_source_length, self.pad_token_id
+        )
+        target_inputs = encode_line(
+            self.tokenizer, target_line, self.max_target_length, self.pad_token_id
+        )
 
         source_ids = source_inputs["input_ids"].squeeze()
         target_ids = target_inputs["input_ids"].squeeze()
@@ -136,7 +155,9 @@ class Seq2SeqDataset(Dataset):
         target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
         pad_token_id = self.pad_token_id
         y = trim_batch(target_ids, pad_token_id)
-        source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
+        source_ids, source_mask = trim_batch(
+            input_ids, pad_token_id, attention_mask=masks
+        )
         batch = {
             "input_ids": source_ids,
             "attention_mask": source_mask,
@@ -174,8 +195,12 @@ def main():
     tokenizer.pad_token_id = vocab_size
 
     # Loaders
-    train_dataset = Seq2SeqDataset(tokenizer, dataset["train"], max_source_length, max_target_length)
-    val_dataset = Seq2SeqDataset(tokenizer, dataset["validation"], max_source_length, max_target_length)
+    train_dataset = Seq2SeqDataset(
+        tokenizer, dataset["train"], max_source_length, max_target_length
+    )
+    val_dataset = Seq2SeqDataset(
+        tokenizer, dataset["validation"], max_source_length, max_target_length
+    )
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -184,7 +209,10 @@ def main():
         num_workers=num_workers,
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=batch_size, collate_fn=val_dataset.collate_fn, num_workers=num_workers,
+        val_dataset,
+        batch_size=batch_size,
+        collate_fn=val_dataset.collate_fn,
+        num_workers=num_workers,
     )
 
     # Train model
