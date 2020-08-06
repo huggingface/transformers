@@ -92,12 +92,10 @@ class TFTransfoXLModelTester:
         model = TFTransfoXLModel(config)
 
         hidden_states_1, mems_1 = model(input_ids_1).to_tuple()
-        mems_1 = [mem.numpy() for mem in mems_1]
 
         inputs = {"input_ids": input_ids_2, "mems": mems_1}
 
         hidden_states_2, mems_2 = model(inputs).to_tuple()
-        mems_2 = [mem.numpy() for mem in mems_2]
 
         self.parent.assertEqual(hidden_states_1.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(hidden_states_2.shape, (self.batch_size, self.seq_length, self.hidden_size))
@@ -117,14 +115,12 @@ class TFTransfoXLModelTester:
 
         inputs = {"input_ids": input_ids_1, "labels": lm_labels}
         _, mems_1 = model(inputs).to_tuple()
-        mems_1 = [mem.numpy() for mem in mems_1]
 
         lm_logits_2, mems_2 = model([input_ids_2, mems_1]).to_tuple()
 
         inputs = {"input_ids": input_ids_1, "mems": mems_1, "labels": lm_labels}
 
         _, mems_2 = model(inputs).to_tuple()
-        mems_2 = [mem.numpy() for mem in mems_2]
 
         self.parent.assertEqual(lm_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(

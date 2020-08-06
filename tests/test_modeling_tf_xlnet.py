@@ -189,11 +189,6 @@ class TFXLNetModelTester:
         inputs_3 = {"input_ids": input_ids_q, "perm_mask": perm_mask, "target_mapping": target_mapping}
         logits, _ = model(inputs_3).to_tuple()
 
-        mems_1 = [mem.numpy() for mem in mems_1]
-        mems_2 = [mem.numpy() for mem in mems_2]
-        all_logits_1 = all_logits_1.numpy()
-        all_logits_2 = all_logits_2.numpy()
-
         self.parent.assertEqual(all_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
             list(list(mem.shape) for mem in mems_1),
