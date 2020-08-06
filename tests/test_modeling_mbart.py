@@ -121,7 +121,7 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
         result = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(result["logits"].shape, expected_shape)
+        self.assertEqual(result.logits.shape, expected_shape)
 
 
 @require_torch

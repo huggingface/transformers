@@ -160,7 +160,7 @@ class TFXLNetModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
+            list(list(mem.shape) for mem in result.mems),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -227,7 +227,7 @@ class TFXLNetModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
+            list(list(mem.shape) for mem in result.mems),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -251,7 +251,7 @@ class TFXLNetModelTester:
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
+            list(list(mem.shape) for mem in result.mems),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -279,7 +279,7 @@ class TFXLNetModelTester:
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, config.num_labels))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
+            list(list(mem.shape) for mem in result.mems),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -311,7 +311,7 @@ class TFXLNetModelTester:
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
+            list(list(mem.shape) for mem in result.mems),
             [[self.seq_length, self.batch_size * self.num_choices, self.hidden_size]] * self.num_hidden_layers,
         )
 
