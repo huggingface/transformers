@@ -399,6 +399,7 @@ if is_torch_available():
         LongformerForMultipleChoice,
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
+        LongformerSelfAttention,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
