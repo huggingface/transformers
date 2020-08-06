@@ -195,7 +195,14 @@ class TFElectraModelTester:
 class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFElectraModel, TFElectraForMaskedLM, TFElectraForPreTraining, TFElectraForTokenClassification, TFElectraForMultipleChoice, TFElectraForSequenceClassification)
+        (
+            TFElectraModel,
+            TFElectraForMaskedLM,
+            TFElectraForPreTraining,
+            TFElectraForTokenClassification,
+            TFElectraForMultipleChoice,
+            TFElectraForSequenceClassification,
+        )
         if is_tf_available()
         else ()
     )
