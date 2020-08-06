@@ -1,4 +1,4 @@
-# TF-Adapter-BERT
+## What is Adapter
 
 [Houlsby et al. (2019)](https://arxiv.org/abs/1902.00751) introduced adapters as an alternative approach for adaptation in transfer learning in NLP within deep transformer-based architectures.
 Adapters are task-specific neural modules that are added between layers of a pre-trained network. After coping weights from a pre-trained network, pre-trained weights will be frozen, and only Adapters will be trained.
