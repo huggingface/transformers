@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerModel, TFLongformerSelfAttention
+from transformers.modeling_tf_longformer import TFLongformerSelfAttention
 from transformers.modeling_tf_utils import shape_list
 from transformers.testing_utils import require_tf, slow
 
@@ -29,16 +29,16 @@ if is_tf_available():
     import tensorflow as tf
     from transformers import (
         LongformerConfig,
-        #        TFLongformerModel,
-        #        TFLongformerForMaskedLM,
+        TFLongformerModel,
+        TFLongformerForMaskedLM,
+        #        TFLongformerForQuestionAnswering,
         #        TFLongformerForSequenceClassification,
         #        TFLongformerForTokenClassification,
-        #        TFLongformerForQuestionAnswering,
         #        TFLongformerForMultipleChoice,
     )
 
 
-class LongformerModelTester:
+class TFLongformerModelTester:
     def __init__(
         self, parent,
     ):
@@ -114,27 +114,20 @@ class LongformerModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def create_and_check_attention_mask_determinism(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFLongformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
 
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+        attention_mask = tf.ones(input_ids.shape, dtype=tf.dtypes.int32)
         output_with_mask = model(input_ids, attention_mask=attention_mask)[0]
         output_without_mask = model(input_ids)[0]
-        self.parent.assertTrue(torch.allclose(output_with_mask[0, 0, :5], output_without_mask[0, 0, :5], atol=1e-4))
+        tf.debugging.assert_near(output_with_mask[0, 0, :5], output_without_mask[0, 0, :5], rtol=1e-4)
 
     def create_and_check_longformer_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFLongformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
         sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
         sequence_output, pooled_output = model(input_ids)
@@ -144,19 +137,22 @@ class LongformerModelTester:
             "pooled_output": pooled_output,
         }
         self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            shape_list(result["sequence_output"]), [self.batch_size, self.seq_length, self.hidden_size]
         )
-        self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+        self.parent.assertListEqual(shape_list(result["pooled_output"]), [self.batch_size, self.hidden_size])
 
     def create_and_check_longformer_model_with_global_attention_mask(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFLongformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        global_attention_mask = input_mask.clone()
-        global_attention_mask[:, input_mask.shape[-1] // 2] = 0
-        global_attention_mask = global_attention_mask.to(torch_device)
+        half_input_mask_length = shape_list(input_mask)[-1] // 2
+        global_attention_mask = tf.concat(
+            [
+                tf.zeros_like(input_mask)[:, :half_input_mask_length],
+                tf.ones_like(input_mask)[:, half_input_mask_length:],
+            ],
+            axis=-1,
+        )
 
         sequence_output, pooled_output = model(
             input_ids,
@@ -174,16 +170,14 @@ class LongformerModelTester:
             "pooled_output": pooled_output,
         }
         self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+            shape_list(result["sequence_output"]), [self.batch_size, self.seq_length, self.hidden_size]
         )
-        self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+        self.parent.assertListEqual(shape_list(result["pooled_output"]), [self.batch_size, self.hidden_size])
 
     def create_and_check_longformer_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFLongformerForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
         loss, prediction_scores = model(
             input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
         )
@@ -192,16 +186,13 @@ class LongformerModelTester:
             "prediction_scores": prediction_scores,
         }
         self.parent.assertListEqual(
-            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            shape_list(result["prediction_scores"]), [self.batch_size, self.seq_length, self.vocab_size]
         )
-        self.check_loss_output(result)
 
     def create_and_check_longformer_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFLongformerForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
         loss, start_logits, end_logits = model(
             input_ids,
             attention_mask=input_mask,
@@ -215,66 +206,8 @@ class LongformerModelTester:
             "start_logits": start_logits,
             "end_logits": end_logits,
         }
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.check_loss_output(result)
-
-    def create_and_check_longformer_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = TFLongformerForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        loss, logits = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-        )
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
-        self.check_loss_output(result)
-
-    def create_and_check_longformer_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = TFLongformerForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
-        self.check_loss_output(result)
-
-    def create_and_check_longformer_for_multiple_choice(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_choices = self.num_choices
-        model = TFLongformerForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        loss, logits = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            global_attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
-        self.check_loss_output(result)
+        self.parent.assertListEqual(shape_list(result["start_logits"]), [self.batch_size, self.seq_length])
+        self.parent.assertListEqual(shape_list(result["end_logits"]), [self.batch_size, self.seq_length])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -287,7 +220,13 @@ class LongformerModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        global_attention_mask = torch.zeros_like(input_ids)
+
+        # global attention mask has to be partly defined
+        # to trace all weights
+        global_attention_mask = tf.concat(
+            [tf.zeros_like(input_ids)[:, :-1], tf.ones_like(input_ids)[:, -1:]], axis=-1,
+        )
+
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
@@ -309,12 +248,56 @@ class LongformerModelTester:
         ) = config_and_inputs
 
         # Replace sep_token_id by some random id
-        input_ids[input_ids == config.sep_token_id] = torch.randint(0, config.vocab_size, (1,)).item()
+        input_ids[input_ids == config.sep_token_id] = tf.randint(0, config.vocab_size, (1,)).item()
         # Make sure there are exactly three sep_token_id
         input_ids[:, -3:] = config.sep_token_id
-        input_mask = torch.ones_like(input_ids)
+        input_mask = tf.ones_like(input_ids)
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+
+@require_tf
+class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
+    test_pruning = False  # pruning is not supported
+    test_headmasking = False  # head masking is not supported
+    test_torchscript = False
+
+    all_model_classes = (
+        (
+            TFLongformerModel,
+            TFLongformerForMaskedLM,
+            #            LongformerForQuestionAnswering,
+        )
+        if is_tf_available()
+        else ()
+    )
+
+    def setUp(self):
+        self.model_tester = TFLongformerModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_longformer_model_attention_mask_determinism(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_attention_mask_determinism(*config_and_inputs)
+
+    def test_longformer_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_model(*config_and_inputs)
+
+    def test_longformer_model_global_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_model_with_global_attention_mask(*config_and_inputs)
+
+    def test_longformer_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_masked_lm(*config_and_inputs)
+
+    def test_longformer_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_question_answering()
+        self.model_tester.create_and_check_longformer_for_question_answering(*config_and_inputs)
 
 
 class TFLongformerModelIntegrationTest(unittest.TestCase):

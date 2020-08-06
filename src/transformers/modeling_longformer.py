@@ -1079,6 +1079,9 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         self.init_weights()
 
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
+
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
