@@ -831,7 +831,7 @@ class BartModel(PretrainedBartModel):
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
 
-        self.init_weights()
+        # self.init_weights()FIXME
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
