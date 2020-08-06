@@ -12,14 +12,13 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.2-virtual-env-torch-and-tf-{{ checksum "setup.py" }}
-                      - v0.2-virtual-env-torch-and-tf
-                      - v0.2-virtual-env
+                      - v0.3-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing]
             - run: pip install codecov pytest-cov
             - save_cache:
-                key: v0.2-virtual-env-torch-and-tf-{{ checksum "setup.py" }}
+                key: v0.3-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ --cov  | tee output.txt
@@ -37,8 +36,16 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install --upgrade pip
-            - run: sudo pip install .[sklearn,torch,testing] --no-cache-dir
+            - restore_cache:
+                  keys:
+                      - v0.3-torch-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing]
+            - save_cache:
+                  key: v0.3-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
@@ -54,8 +61,16 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install --upgrade pip
-            - run: sudo pip install .[sklearn,tf-cpu,testing] --no-cache-dir
+            - restore_cache:
+                  keys:
+                      - v0.3-tf-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,testing]
+            - save_cache:
+                  key: v0.3-tf-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
             - store_artifacts:
                path: ~/transformers/output.txt
@@ -68,8 +83,16 @@ jobs:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
-            - run: sudo pip install --upgrade pip
-            - run: sudo pip install .[ja,testing]
+            - restore_cache:
+                  keys:
+                      - v0.3-custom_tokenizers-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[ja,testing]
+            - save_cache:
+                  key: v0.3-custom_tokenizers-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
             - store_artifacts:
                 path: ~/transformers/output.txt
@@ -84,9 +107,17 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install --upgrade pip
-            - run: sudo pip install .[sklearn,torch,testing] --no-cache-dir
-            - run: sudo pip install -r examples/requirements.txt
+            - restore_cache:
+                  keys:
+                      - v0.3-torch_examples-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing]
+            - run: pip install -r examples/requirements.txt
+            - save_cache:
+                  key: v0.3-torch_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -rA -s ./examples/ | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
@@ -97,8 +128,16 @@ jobs:
             - image: circleci/python:3.6
         steps:
             - checkout
-            - run: sudo pip install --upgrade pip
-            - run: sudo pip install .[tf,torch,docs] --no-cache-dir
+            - restore_cache:
+                  keys:
+                      - v0.3-build_doc-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[tf,torch,docs]
+            - save_cache:
+                  key: v0.3-build_doc-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
                 path: ./docs/_build
@@ -111,7 +150,15 @@ jobs:
                 fingerprints:
                     - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
             - checkout
-            - run: sudo pip install .[tf,torch,docs] --no-cache-dir
+            - restore_cache:
+                  keys:
+                      - v0.3-deploy_doc-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install .[tf,torch,docs]
+            - save_cache:
+                  key: v0.3-deploy_doc-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: ./.circleci/deploy.sh
     check_code_quality:
         working_directory: ~/transformers
@@ -121,10 +168,18 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install --upgrade pip
+            - restore_cache:
+                  keys:
+                      - v0.3-code_quality-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
             # we need a version of isort with https://github.com/timothycrosley/isort/pull/1000
-            - run: sudo pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
-            - run: sudo pip install .[tf,torch,quality] --no-cache-dir
+            - run: pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+            - run: pip install .[tf,torch,quality]
+            - save_cache:
+                  key: v0.3-code_quality-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: black --check --line-length 119 --target-version py35 examples templates tests src utils
             - run: isort --check-only --recursive examples templates tests src utils
             - run: flake8 examples templates tests src utils
@@ -136,7 +191,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install requests
+            - run: pip install requests
             - run: python ./utils/link_tester.py
 workflow_filters: &workflow_filters
     filters:
@@ -147,12 +202,12 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-#            - check_code_quality
-#            - check_repository_consistency
-#            - run_examples_torch
-#            - run_tests_custom_tokenizers
+            - check_code_quality
+            - check_repository_consistency
+            - run_examples_torch
+            - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
-#            - run_tests_torch
-#            - run_tests_tf
-#            - build_doc
-#            - deploy_doc: *workflow_filters
+            - run_tests_torch
+            - run_tests_tf
+            - build_doc
+            - deploy_doc: *workflow_filters
