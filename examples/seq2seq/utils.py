@@ -128,12 +128,6 @@ class Seq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
-    @staticmethod
-    def trim_seq2seq_batch(batch, pad_token_id) -> tuple:
-        y = trim_batch(batch["decoder_input_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
-        return source_ids, source_mask, y
-
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
@@ -152,12 +146,15 @@ class Seq2SeqDataset(Dataset):
         return SortishSampler(self.src_lens, batch_size)
 
 
-class MBartDataset(Seq2SeqDataset):
+class TranslationDataset(Seq2SeqDataset):
+    """A dataset that calls prepare_translation_batch."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.max_source_length != self.max_target_length:
             warnings.warn(
-                f"Mbart will ignore max_target_length = {self.max_target_length} and use {self.max_source_length} for both sides."
+                f"Mbart is using sequence lengths {self.max_source_length}, {self.max_target_length}. "
+                f"Imbalanced sequence lengths may be undesired for translation tasks"
             )
 
     def __getitem__(self, index) -> Dict[str, str]:
@@ -178,6 +175,7 @@ class MBartDataset(Seq2SeqDataset):
             tgt_texts=[x["tgt_texts"] for x in batch],
             tgt_lang=self.tgt_lang,
             max_length=self.max_source_length,
+            max_target_length=self.max_target_length,
         )
         return batch_encoding.data
 

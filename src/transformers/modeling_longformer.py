@@ -694,7 +694,7 @@ class LongformerEncoder(nn.Module):
         attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_tuple=False,
+        return_dict=False,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -724,7 +724,7 @@ class LongformerEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
@@ -811,8 +811,9 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -942,7 +943,7 @@ class LongformerModel(LongformerPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
 
@@ -953,7 +954,7 @@ class LongformerModel(LongformerPreTrainedModel):
         >>> import torch
         >>> from transformers import LongformerModel, LongformerTokenizer
 
-        >>> model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerModel.from_pretrained('allenai/longformer-base-4096', return_dict=True)
         >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
         >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
@@ -965,14 +966,16 @@ class LongformerModel(LongformerPreTrainedModel):
         ...                                     # classification: the <s> token
         ...                                     # QA: question tokens
         ...                                     # LM: potentially on the beginning of sentences and paragraphs
-        >>> sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
+        >>> outputs = model(input_ids, attention_mask=attention_mask)
+        >>> sequence_output = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1016,7 +1019,7 @@ class LongformerModel(LongformerPreTrainedModel):
             attention_mask=extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
@@ -1026,7 +1029,7 @@ class LongformerModel(LongformerPreTrainedModel):
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
             sequence_output = sequence_output[:, :-padding_len]
 
-        if return_tuple:
+        if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
@@ -1063,7 +1066,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -1082,7 +1085,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         >>> import torch
         >>> from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-        >>> model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
+        >>> model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096', return_dict=True)
         >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
         >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
@@ -1102,7 +1105,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.longformer(
             input_ids,
@@ -1113,7 +1116,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -1123,7 +1126,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -1171,7 +1174,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1180,7 +1183,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if global_attention_mask is None:
             logger.info("Initializing global attention on CLS token...")
@@ -1197,7 +1200,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -1212,7 +1215,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1272,7 +1275,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1291,7 +1294,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
-        >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa", return_dict=True)
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         >>> encoding = tokenizer(question, text, return_tensors="pt")
@@ -1310,7 +1313,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
 
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # set global attention on question tokens
         if global_attention_mask is None:
@@ -1327,7 +1330,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1354,7 +1357,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
@@ -1404,14 +1407,14 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.longformer(
             input_ids,
@@ -1422,7 +1425,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1444,7 +1447,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1489,7 +1492,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1498,7 +1501,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
             of the input tensors. (see `input_ids` above)
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # set global attention on question tokens
         if global_attention_mask is None:
@@ -1536,7 +1539,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         pooled_output = outputs[1]
 
@@ -1549,7 +1552,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if return_tuple:
+        if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

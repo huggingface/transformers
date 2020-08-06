@@ -253,9 +253,6 @@ class EncoderDecoderModelTest(unittest.TestCase):
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    def check_loss_output(self, loss):
-        self.assertEqual(loss.size(), ())
-
     def create_and_check_bert_encoder_decoder_model_labels(
         self,
         config,
@@ -281,7 +278,6 @@ class EncoderDecoderModelTest(unittest.TestCase):
         )
 
         mlm_loss = outputs_encoder_decoder[0]
-        self.check_loss_output(mlm_loss)
         # check that backprop works
         mlm_loss.backward()
 

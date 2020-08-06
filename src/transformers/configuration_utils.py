@@ -49,8 +49,9 @@ class PretrainedConfig(object):
                 Whether or not the model should returns all attentions.
             use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should return the last key/values attentions (not used by all models).
-            return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the model should return tuples instead of :obj:`ModelOutput` objects.
+            return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the model should return a :class:`~transformers.file_utils.ModelOutput` instead of a
+                plain tuple.
             is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether the model is used as an encoder/decoder or not.
             is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -133,7 +134,7 @@ class PretrainedConfig(object):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.return_tuple = kwargs.pop("return_tuple", False)
+        self.return_dict = kwargs.pop("return_dict", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
@@ -194,12 +195,18 @@ class PretrainedConfig(object):
                 raise err
 
     @property
-    def use_return_tuple(self):
-        # If torchscript is set, force return_tuple to avoid jit errors
-        return self.return_tuple or self.torchscript
+    def use_return_dict(self) -> bool:
+        """
+        :obj:`bool`: Whether or not return :class:`~transformers.file_utils.ModelOutput` instead of tuples.
+        """
+        # If torchscript is set, force `return_dict=False` to avoid jit errors
+        return self.return_dict and not self.torchscript
 
     @property
     def num_labels(self) -> int:
+        """
+        :obj:`int`: The number of labels for classification models.
+        """
         return len(self.id2label)
 
     @num_labels.setter

@@ -185,9 +185,14 @@ class MecabTokenizer:
         self.never_split = never_split if never_split is not None else []
         self.normalize_text = normalize_text
 
-        import MeCab
+        import fugashi
+        import ipadic
 
-        self.mecab = MeCab.Tagger(mecab_option) if mecab_option is not None else MeCab.Tagger()
+        # Use ipadic by default (later options can override it)
+        mecab_option = mecab_option or ""
+        mecab_option = ipadic.MECAB_ARGS + " " + mecab_option
+
+        self.mecab = fugashi.GenericTagger(mecab_option)
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
@@ -197,21 +202,13 @@ class MecabTokenizer:
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
-        mecab_output = self.mecab.parse(text)
+        for word in self.mecab(text):
+            token = word.surface
 
-        cursor = 0
-        for line in mecab_output.split("\n"):
-            if line == "EOS":
-                break
-
-            token, _ = line.split("\t")
-            token_start = text.index(token, cursor)
-            token_end = token_start + len(token)
             if self.do_lower_case and token not in never_split:
                 token = token.lower()
 
             tokens.append(token)
-            cursor = token_end
 
         return tokens
 

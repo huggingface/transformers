@@ -49,7 +49,7 @@ put it in train mode.
 .. code-block:: python
 
     from transformers import BertForSequenceClassification
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', return_dict=True)
     model.train()
 
 This is useful because it allows us to make use of the pre-trained BERT

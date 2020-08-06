@@ -108,12 +108,10 @@ class LongformerModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             attention_window=self.attention_window,
+            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
 
     def create_and_check_attention_mask_determinism(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -123,8 +121,8 @@ class LongformerModelTester:
         model.eval()
 
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-        output_with_mask = model(input_ids, attention_mask=attention_mask)[0]
-        output_without_mask = model(input_ids)[0]
+        output_with_mask = model(input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        output_without_mask = model(input_ids)["last_hidden_state"]
         self.parent.assertTrue(torch.allclose(output_with_mask[0, 0, :5], output_without_mask[0, 0, :5], atol=1e-4))
 
     def create_and_check_longformer_model(
@@ -133,18 +131,11 @@ class LongformerModelTester:
         model = LongformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
-        sequence_output, pooled_output = model(input_ids)
-
-        result = {
-            "sequence_output": sequence_output,
-            "pooled_output": pooled_output,
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_longformer_model_with_global_attention_mask(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -156,25 +147,17 @@ class LongformerModelTester:
         global_attention_mask[:, input_mask.shape[-1] // 2] = 0
         global_attention_mask = global_attention_mask.to(torch_device)
 
-        sequence_output, pooled_output = model(
+        result = model(
             input_ids,
             attention_mask=input_mask,
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
         )
-        sequence_output, pooled_output = model(
-            input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask
-        )
-        sequence_output, pooled_output = model(input_ids, global_attention_mask=global_attention_mask)
+        result = model(input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask)
+        result = model(input_ids, global_attention_mask=global_attention_mask)
 
-        result = {
-            "sequence_output": sequence_output,
-            "pooled_output": pooled_output,
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_longformer_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -182,17 +165,8 @@ class LongformerModelTester:
         model = LongformerForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        loss, prediction_scores = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
-        )
-        result = {
-            "loss": loss,
-            "prediction_scores": prediction_scores,
-        }
-        self.parent.assertListEqual(
-            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
-        )
-        self.check_loss_output(result)
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_longformer_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -200,7 +174,7 @@ class LongformerModelTester:
         model = LongformerForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
-        loss, start_logits, end_logits = model(
+        result = model(
             input_ids,
             attention_mask=input_mask,
             global_attention_mask=input_mask,
@@ -208,14 +182,8 @@ class LongformerModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        result = {
-            "loss": loss,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.check_loss_output(result)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_longformer_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -224,15 +192,8 @@ class LongformerModelTester:
         model = LongformerForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        loss, logits = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-        )
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
-        self.check_loss_output(result)
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_longformer_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -241,13 +202,8 @@ class LongformerModelTester:
         model = LongformerForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
-        self.check_loss_output(result)
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_longformer_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -260,19 +216,14 @@ class LongformerModelTester:
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        loss, logits = model(
+        result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             global_attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
-        self.check_loss_output(result)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

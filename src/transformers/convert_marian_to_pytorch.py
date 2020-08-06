@@ -166,7 +166,7 @@ def write_model_card(
     extra_markdown = f"### {hf_model_name}\n\n* source languages: {s}\n* target languages: {t}\n*  OPUS readme: [{opus_name}]({readme_url})\n"
     # combine with opus markdown
     opus_readme_path = Path(f"{repo_path}{opus_name}/README.md")
-    assert opus_readme_path.exists(), opus_readme_path
+    assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
     content = opus_readme_path.open().read()
     content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
     content = "*".join(content.split("*")[1:])
@@ -231,7 +231,9 @@ def fetch_test_set(test_set_url):
     src = lmap(str.strip, lns[::4])
     gold = lmap(str.strip, lns[1::4])
     mar_model = lmap(str.strip, lns[2::4])
-    assert len(gold) == len(mar_model) == len(src)
+    assert (
+        len(gold) == len(mar_model) == len(src)
+    ), f"Gold, marian and source lengths {len(gold)}, {len(mar_model)}, {len(src)} mismatched"
     os.remove(fname)
     return src, mar_model, gold
 
@@ -374,20 +376,21 @@ class OpusState:
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
         assert cfg["dim-vocabs"][0] == cfg["dim-vocabs"][1]
-        assert "Wpos" not in self.state_dict
+        assert "Wpos" not in self.state_dict, "Wpos key in state dictionary"
         self.state_dict = dict(self.state_dict)
         self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
         self.pad_token_id = self.wemb.shape[0] - 1
         cfg["vocab_size"] = self.pad_token_id + 1
         # self.state_dict['Wemb'].sha
         self.state_keys = list(self.state_dict.keys())
-        if "Wtype" in self.state_dict:
-            raise ValueError("found Wtype key")
+        assert "Wtype" not in self.state_dict, "Wtype key in state dictionary"
         self._check_layer_entries()
         self.source_dir = source_dir
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
-        assert hidden_size == cfg["dim-emb"] == 512
+        assert (
+            hidden_size == cfg["dim-emb"] == 512
+        ), f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched or not 512"
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
@@ -448,7 +451,7 @@ class OpusState:
     def load_marian_model(self) -> MarianMTModel:
         state_dict, cfg = self.state_dict, self.hf_config
 
-        assert cfg.static_position_embeddings
+        assert cfg.static_position_embeddings, "config.static_position_embeddings should be True"
         model = MarianMTModel(cfg)
 
         assert "hidden_size" not in cfg.to_dict()
@@ -476,7 +479,9 @@ class OpusState:
             raise NotImplementedError("Need to convert layernorm_embedding")
 
         assert not self.extra_keys, f"Failed to convert {self.extra_keys}"
-        assert model.model.shared.padding_idx == self.pad_token_id
+        assert (
+            model.model.shared.padding_idx == self.pad_token_id
+        ), f"Padding tokens {model.model.shared.padding_idx} and {self.pad_token_id} mismatched"
         return model
 
 
@@ -500,7 +505,9 @@ def convert(source_dir: Path, dest_dir):
     save_tokenizer(tokenizer, dest_dir)
 
     opus_state = OpusState(source_dir)
-    assert opus_state.cfg["vocab_size"] == len(tokenizer.encoder)
+    assert opus_state.cfg["vocab_size"] == len(
+        tokenizer.encoder
+    ), f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
     # save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
     # ^^ Save human readable marian config for debugging
 
@@ -517,7 +524,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     source_dir = Path(args.src)
-    assert source_dir.exists()
+    assert source_dir.exists(), f"Source directory {source_dir} not found"
     dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
     convert(source_dir, dest_dir)
 

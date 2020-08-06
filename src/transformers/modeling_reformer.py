@@ -39,13 +39,7 @@ from .file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_callable,
 )
-from .modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    MaskedLMOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-)
+from .modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
 
 
@@ -1405,15 +1399,16 @@ class ReformerLayer(nn.Module):
         """
 
         # randomize seeds
-        if next(self.parameters()).device.type == "cuda":
+        # use cuda generator if available
+        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.attention_seed = torch.cuda.default_generators[device_idx].seed()
-            torch.cuda.manual_seed(self.attention_seed)
         else:
             # CPU
             self.attention_seed = int(torch.seed() % sys.maxsize)
-            torch.manual_seed(self.attention_seed)
+
+        torch.manual_seed(self.attention_seed)
 
     def _init_feed_forward_seed(self):
         """
@@ -1423,17 +1418,17 @@ class ReformerLayer(nn.Module):
             call and 1 forward call in backward
             to recalculate activations.
         """
-
         # randomize seeds
-        if next(self.parameters()).device.type == "cuda":
+        # use cuda generator if available
+        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.feed_forward_seed = torch.cuda.default_generators[device_idx].seed()
-            torch.cuda.manual_seed(self.feed_forward_seed)
         else:
             # CPU
             self.feed_forward_seed = int(torch.seed() % sys.maxsize)
-            torch.manual_seed(self.feed_forward_seed)
+
+        torch.manual_seed(self.feed_forward_seed)
 
     def forward(
         self,
@@ -1851,8 +1846,8 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1922,8 +1917,9 @@ REFORMER_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -1962,7 +1958,7 @@ class ReformerModel(ReformerPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
-        output_type=BaseModelOutput,
+        output_type=ReformerModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1977,40 +1973,14 @@ class ReformerModel(ReformerPreTrainedModel):
         use_cache=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_dict=None,
     ):
-        r"""
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        past_buckets_states (:obj:`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`tuple(torch.LongTensor, torch.FloatTensor` of length :obj:`config.n_layers`,  with :obj:`tuple(0)` being the previous `buckets` of shape
-            :obj:`(batch_size, num_heads, num_hashes, sequence_length)`)
-            and :obj:`tuple(1)` being the previous `hidden_states` of shape
-            :obj:`(batch_size, sequence_length, hidden_size)`).
-
-            Contains pre-computed buckets and hidden-states that can be used (see
-            ``past_buckets_states`` input) to speed up sequential decoding.
-        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -2102,7 +2072,7 @@ class ReformerModel(ReformerPreTrainedModel):
         hidden_states = encoder_outputs.all_hidden_states if output_hidden_states else None
         attentions = encoder_outputs.all_attentions if output_attentions else None
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [sequence_output, past_buckets_states, hidden_states, attentions] if v is not None)
         return ReformerModelOutput(
             last_hidden_state=sequence_output,
@@ -2208,7 +2178,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         use_cache=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_dict=None,
         labels=None,
     ):
         r"""
@@ -2218,7 +2188,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
                 All labels set to ``-100`` are ignored (masked), the loss is only
                 computed for labels in ``[0, ..., config.vocab_size]``
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2231,7 +2201,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             use_cache=use_cache,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = reformer_outputs[0]
@@ -2246,7 +2216,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + reformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -2326,7 +2296,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         labels=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -2334,7 +2304,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2346,7 +2316,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
             use_cache=False,  # no causal mask
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = reformer_outputs[0]
@@ -2357,7 +2327,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + reformer_outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -2408,7 +2378,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         labels=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
             labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -2417,6 +2387,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
                 If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
                 If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.reformer(
             input_ids,
@@ -2427,7 +2398,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             num_hashes=num_hashes,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -2443,7 +2414,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -2511,7 +2482,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         end_positions=None,
         output_hidden_states=None,
         output_attentions=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -2523,7 +2494,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -2535,7 +2506,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             use_cache=False,  # no causal mask
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = reformer_outputs[0]
@@ -2562,7 +2533,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits) + reformer_outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 

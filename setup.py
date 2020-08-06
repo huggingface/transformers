@@ -65,7 +65,7 @@ if stale_egg_info.exists():
 
 extras = {}
 
-extras["mecab"] = ["mecab-python3<1"]
+extras["ja"] = ["fugashi>=1.0", "ipadic>=1.0,<2.0"]
 extras["sklearn"] = ["scikit-learn"]
 
 # keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
@@ -97,7 +97,7 @@ extras["quality"] = [
     "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
     "flake8",
 ]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3<1", "scikit-learn", "tensorflow", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",

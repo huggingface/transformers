@@ -179,7 +179,9 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -346,7 +348,7 @@ class AlbertTransformer(nn.Module):
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_tuple=False,
+        return_dict=False,
     ):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
@@ -375,7 +377,7 @@ class AlbertTransformer(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
@@ -405,9 +407,9 @@ class AlbertPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class AlbertForPretrainingOutput(ModelOutput):
+class AlbertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.AlbertForPretrainingModel`.
+    Output type of :class:`~transformers.AlbertForPreTrainingModel`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -430,9 +432,9 @@ class AlbertForPretrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    prediction_logits: torch.FloatTensor
-    sop_logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    prediction_logits: torch.FloatTensor = None
+    sop_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -488,8 +490,9 @@ ALBERT_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -561,13 +564,13 @@ class AlbertModel(AlbertPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -599,14 +602,14 @@ class AlbertModel(AlbertPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = encoder_outputs[0]
 
         pooled_output = self.pooler_activation(self.pooler(sequence_output[:, 0]))
 
-        if return_tuple:
+        if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
@@ -640,7 +643,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         return self.predictions.decoder
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=AlbertForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=AlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -653,7 +656,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         sentence_order_label=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs,
     ):
         r"""
@@ -678,7 +681,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2')
+        >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2', return_dict=True)
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         >>> outputs = model(input_ids)
@@ -695,7 +698,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.albert(
             input_ids,
@@ -706,7 +709,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -721,11 +724,11 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             sentence_order_loss = loss_fct(sop_scores.view(-1, 2), sentence_order_label.view(-1))
             total_loss = masked_lm_loss + sentence_order_loss
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores, sop_scores) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return AlbertForPretrainingOutput(
+        return AlbertForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
             sop_logits=sop_scores,
@@ -808,7 +811,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -823,11 +826,11 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         if "masked_lm_labels" in kwargs:
             warnings.warn(
                 "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                DeprecationWarning,
+                FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.albert(
             input_ids=input_ids,
@@ -838,7 +841,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_outputs = outputs[0]
 
@@ -849,7 +852,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -895,7 +898,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -904,7 +907,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.albert(
             input_ids=input_ids,
@@ -915,7 +918,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         pooled_output = outputs[1]
@@ -933,7 +936,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -976,14 +979,14 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.albert(
             input_ids,
@@ -994,7 +997,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1014,7 +1017,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1057,7 +1060,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1069,7 +1072,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.albert(
             input_ids=input_ids,
@@ -1080,7 +1083,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1107,7 +1110,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
@@ -1153,7 +1156,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1161,7 +1164,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1182,7 +1185,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         pooled_output = outputs[1]
@@ -1196,7 +1199,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if return_tuple:
+        if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

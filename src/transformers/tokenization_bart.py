@@ -122,6 +122,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
         self.cur_lang_code = self.lang_code_to_id["en_XX"]
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
@@ -193,6 +194,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         tgt_texts: Optional[List[str]] = None,
         tgt_lang: str = "ro_RO",
         max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
         padding: str = "longest",
         return_tensors: str = "pt",
         **kwargs,
@@ -224,13 +226,16 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         if tgt_texts is None:
             return model_inputs
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
         self.set_tgt_lang_special_tokens(tgt_lang)
         decoder_inputs: BatchEncoding = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             padding=padding,
-            max_length=max_length,
+            max_length=max_target_length,
             truncation=True,
             **kwargs,
         )

@@ -194,8 +194,12 @@ class SingleSentenceClassificationProcessor(DataProcessor):
     def add_examples(
         self, texts_or_text_and_labels, labels=None, ids=None, overwrite_labels=False, overwrite_examples=False
     ):
-        assert labels is None or len(texts_or_text_and_labels) == len(labels)
-        assert ids is None or len(texts_or_text_and_labels) == len(ids)
+        assert labels is None or len(texts_or_text_and_labels) == len(
+            labels
+        ), f"Text and labels have mismatched lengths {len(texts_or_text_and_labels)} and {len(labels)}"
+        assert ids is None or len(texts_or_text_and_labels) == len(
+            ids
+        ), f"Text and ids have mismatched lengths {len(texts_or_text_and_labels)} and {len(ids)}"
         if ids is None:
             ids = [None] * len(texts_or_text_and_labels)
         if labels is None:

@@ -157,8 +157,8 @@ conversion utilities for the following models:
     notebooks
     converting_tensorflow_models
     migration
-    torchscript
     contributing
+    serialization
 
 .. toctree::
     :maxdepth: 2
@@ -206,3 +206,5 @@ conversion utilities for the following models:
     model_doc/mobilebert
     model_doc/dpr
     internal/modeling_utils
+    internal/tokenization_utils
+    internal/pipelines_utils

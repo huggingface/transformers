@@ -20,7 +20,8 @@ jobs:
         python-version: 3.7
     - name: Install dependencies
       run: |
-        pip install torch
+        pip install --upgrade pip
+        pip install torch --no-cache-dir
         pip install numpy tokenizers filelock requests tqdm regex sentencepiece sacremoses packaging
 
     - name: Torch hub list
