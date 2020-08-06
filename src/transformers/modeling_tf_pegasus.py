@@ -44,6 +44,7 @@ _NEWLINE_SYMBOL = "<n>"
 
 def encode(text: tf.Tensor, max_len: int, vocab_filename: str, encoder_type: str):
     """EncodeOp."""
+    import tensorflow_text as tf_text
     if encoder_type not in ["sentencepiece", "sentencepiece_newline"]:
         raise ValueError("Unsupported encoder type: %s" % encoder_type)
     sp_model = tf.io.gfile.GFile(vocab_filename, "rb").read()
@@ -66,6 +67,7 @@ def encode(text: tf.Tensor, max_len: int, vocab_filename: str, encoder_type: str
 
 def decode(ids: tf.Tensor, vocab_filename: str, encoder_type: str):
     """DecodeOp."""
+    import tensorflow_text as tf_text
     if encoder_type not in ["sentencepiece", "sentencepiece_newline"]:
         raise ValueError("Unsupported encoder type: %s" % encoder_type)
     sp_model = tf.io.gfile.GFile(vocab_filename, "rb").read()
@@ -563,6 +565,9 @@ class SelfAttention(Attention):
         return super().__call__(x, x, bias, training, cache=cache, decode_i=decode_i)
 
 
+def _assert_equal(a,b):
+    assert a ==b, f'{a} != {b}'
+
 def ids_to_bias(ids_BxI, dtype=tf.float32, padding_id=0):
     """Convert ids to attention bias for attention."""
     pad_BxI = tf.cast(tf.equal(ids_BxI, padding_id), dtype)
@@ -573,7 +578,11 @@ def ids_to_bias(ids_BxI, dtype=tf.float32, padding_id=0):
 def upper_triangle_bias(D, dtype=tf.float32):
     """Create a upper triangle matrix for decoding bias."""
     upper_triangle_DxD = 1 - tf.linalg.band_part(tf.ones([D, D], dtype=dtype), -1, 0)
-    tensor_1xDxD = tf.expand_dims(upper_triangle_DxD * dtype.min, axis=0)
+    #assert self._dtype == tf.float32, f'{self._dtype} != tf.float32'
+    if isinstance(dtype, str):
+        raise TypeError(dtype)
+    min_val =dtype.min
+    tensor_1xDxD = tf.expand_dims(upper_triangle_DxD * min_val, axis=0)
     return tensor_1xDxD
 
 
@@ -642,7 +651,7 @@ def stack(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, 
     return s_BxIxD
 
 
-class TFPegasusPreTrainedModel(TFPreTrainedModel):
+class TFPegasusPreTrainedModel:
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pre-trained models.
     """
@@ -655,7 +664,218 @@ class TFPegasusPreTrainedModel(TFPreTrainedModel):
         config: PegasusConfig,
 
     ):
-        super().__init__(config)
+        #
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        #super().__init__(config)
         # vocab_size,
         # hidden_size,
         # filter_size,
@@ -665,7 +885,9 @@ class TFPegasusPreTrainedModel(TFPreTrainedModel):
         # label_smoothing,
         # dropout,
         # FIXME(SS): should take config
+        #import ipdb; ipdb.set_trace()
         self._dtype = tf.float32
+        _assert_equal(type(self._dtype), type(tf.float32))
         self._embedding_layer = Embedding(config.vocab_size, config.d_model, "weights", self._dtype)
         #block_fn = lambda: TransformerBlock(c.d_model, c.encoder_ffn_dim, c.encoder_attention_heads, c.dropout)
         self._encoder_layers = [TransformerBlock(config.d_model, config.encoder_ffn_dim, config.encoder_attention_heads, config.dropout) for _ in range(config.encoder_layers)]
@@ -677,14 +899,18 @@ class TFPegasusPreTrainedModel(TFPreTrainedModel):
         )
         self._vocab_size = config.vocab_size
         self._num_heads = config.encoder_attention_heads
-        #self._label_smoothing = label_smoothing
+        self._label_smoothing = 0.1
         self._decoder_scope_name = "decoder"
         self._layer_norm_encoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         self._layer_norm_decoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
+        _assert_equal(type(self._dtype), type(tf.float32))
+
 
     def _encode(self, features, training):
         inputs_BxI = features["inputs"]
-        inputs_bias_Bx1xI = ids_to_bias(inputs_BxI, self._dtype)
+
+        assert self._dtype == tf.float32, f'{self._dtype} != tf.float32'
+        inputs_bias_Bx1xI = ids_to_bias(inputs_BxI)#, self._dtype)
         states_BxIxD = self._embedding_layer(inputs_BxI, True)
         states_BxIxD = self._dropout_fn(add_time_signal(states_BxIxD), training)
         with tf.compat.v1.variable_scope("encoder", reuse=tf.compat.v1.AUTO_REUSE):
@@ -704,10 +930,12 @@ class TFPegasusPreTrainedModel(TFPreTrainedModel):
         """
         if "inputs" not in features or "targets" not in features:
             raise ValueError("Require inputs and targets keys in features.")
-
+        _assert_equal(type(self._dtype), type(tf.float32))
         context = self._encode(features, training)
         self._context = context
         targets_BxT = features["targets"]
+
+        import ipdb; ipdb.set_trace()
         bias_1xTxT = upper_triangle_bias(tf.shape(input=targets_BxT)[1], self._dtype)
         states_BxTxD = self._embedding_layer(targets_BxT, True)
         states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]

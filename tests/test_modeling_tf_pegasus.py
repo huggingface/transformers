@@ -97,36 +97,28 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
         assert os.path.exists(model_dir)
 
         self.assertTrue(tf.compat.v1.train.checkpoint_exists(model_dir))
-        vocab_size = 96000 + 103
-        hidden_size = 1024
-        filter_size = 4096
-        num_heads = 16
-        num_encoder_layers = 16
-        num_decoder_layers = 16
-        label_smoothing = 0.0
-        dropout = 0.1
-        beam_size = 8
-        beam_alpha = 0.6
+        config = PegasusConfig(vocab_size = 96000 + 103, d_model=1024,
+                               num_beams=8)
+
+        # #hidden_size = 1024
+        # #filter_size = 4096
+        # num_heads = 16
+        # num_encoder_layers = 16
+        # num_decoder_layers = 16
+        # label_smoothing = 0.0
+        # dropout = 0.1
+        # beam_size = 8
+        # beam_alpha = 0.6
 
         with tf.Graph().as_default() as graph:
             with tf.compat.v1.Session() as sess:
-                model = TFPegasusPreTrainedModel(
-                    vocab_size=vocab_size,
-                    hidden_size=hidden_size,
-                    filter_size=filter_size,
-                    num_heads=num_heads,
-                    num_encoder_layers=num_encoder_layers,
-                    num_decoder_layers=num_decoder_layers,
-                    label_smoothing=label_smoothing,
-                    dropout=dropout,
-                )
+                model = TFPegasusPreTrainedModel(config)
 
                 # run the model to build all variables (but not initialized yet)
-                loss, outputs = model(
-                    {"inputs": tf.ones((2, 7), tf.int64), "targets": tf.ones((2, 5), tf.int64)}, True
-                )
+                dummy_inputs = {"inputs": tf.ones((2, 7), tf.int64), "targets": tf.ones((2, 5), tf.int64)}
+                loss, outputs = model(dummy_inputs, True)
                 self.assertEqual(loss.shape, [])
-                self.assertEqual(outputs["logits"].shape, [2, 5, vocab_size])
+                self.assertEqual(outputs["logits"].shape, [2, 5, config.vocab_size])
 
                 # create assignment map
                 ignore_name = ["Adafactor", "global_step"]
@@ -165,7 +157,7 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
                 target_ids = tf.reshape(target_ids, [1, 32])
 
                 output_ids = model.predict(
-                    {"inputs": input_ids, "targets": target_ids,}, 32, beam_size, beam_alpha=beam_alpha
+                    {"inputs": input_ids, "targets": target_ids,}, 32, config.num_beams, beam_alpha=0.6
                 )
                 self.assertEqual(output_ids["outputs"].shape, [1, 32])
 
