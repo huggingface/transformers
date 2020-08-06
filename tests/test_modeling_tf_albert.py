@@ -24,10 +24,12 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
+    import tensorflow as tf
     from transformers.modeling_tf_albert import (
         TFAlbertModel,
         TFAlbertForPreTraining,
         TFAlbertForMaskedLM,
+        TFAlbertForMultipleChoice,
         TFAlbertForSequenceClassification,
         TFAlbertForQuestionAnswering,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -180,6 +182,22 @@ class TFAlbertModelTester:
         self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
+    def create_and_check_albert_for_multiple_choice(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_choices = self.num_choices
+        model = TFAlbertForMultipleChoice(config=config)
+        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        inputs = {
+            "input_ids": multiple_choice_inputs_ids,
+            "attention_mask": multiple_choice_input_mask,
+            "token_type_ids": multiple_choice_token_type_ids,
+        }
+        result = model(inputs)
+        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -228,6 +246,10 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_masked_lm(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_albert_for_multiple_choice(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

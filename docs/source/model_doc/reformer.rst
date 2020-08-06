@@ -121,6 +121,13 @@ ReformerForMaskedLM
     :members:
 
 
+ReformerForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ReformerForSequenceClassification
+    :members:
+
+
 ReformerForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
