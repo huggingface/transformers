@@ -240,10 +240,11 @@ class Block(nn.Module):
     def __init__(self, n_ctx, config, scale=False):
         super().__init__()
         nx = config.n_embd
+        inner_dim = config.n_inner if config.n_inner is not None else 4 * nx
         self.ln_1 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.attn = Attention(nx, n_ctx, config, scale)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        self.mlp = MLP(4 * nx, config)
+        self.mlp = MLP(inner_dim, config)
 
     def forward(
         self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False,
