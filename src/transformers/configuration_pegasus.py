@@ -48,6 +48,7 @@ class PegasusConfig(BartConfig):
         dropout=0.1,
         pad_token_id=0,
         eos_token_id=1,
+        # normalize_before=True,
         **kwargs
     ):
         super().__init__(
@@ -64,5 +65,6 @@ class PegasusConfig(BartConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=True,
+            normalize_before=True,
             **kwargs,
         )
