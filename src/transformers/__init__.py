@@ -19,9 +19,6 @@ else:
 
 import logging
 
-# Integrations
-from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
-
 # Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
@@ -90,6 +87,9 @@ from .file_utils import (
     is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
+
+# Integrations
+from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 
 # Model Cards
 from .modelcard import ModelCard

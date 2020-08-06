@@ -20,16 +20,10 @@ from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_torch_tpu_available
-from .integrations import is_comet_available, is_wandb_available, is_tensorboard_available
+from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import (
-    PREFIX_CHECKPOINT_DIR,
-    EvalPrediction,
-    PredictionOutput,
-    TrainOutput,
-    set_seed,
-)
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, set_seed
 from .training_args import TrainingArguments
 
 
@@ -53,22 +47,11 @@ if is_torch_tpu_available():
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-
-    _has_tensorboard = True
-except ImportError:
+if is_tensorboard_available():
     try:
-        from tensorboardX import SummaryWriter
-
-        _has_tensorboard = True
+        from torch.utils.tensorboard import SummaryWriter
     except ImportError:
-        _has_tensorboard = False
-
-
-def is_tensorboard_available():
-    return _has_tensorboard
-
+        from tensorboardX import SummaryWriter
 
 if is_wandb_available():
     import wandb

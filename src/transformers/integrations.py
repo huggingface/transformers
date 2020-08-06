@@ -1,10 +1,10 @@
-## Integrations with other Python libraries
+# Integrations with other Python libraries
 
 import os
 
 
 try:
-    import comet_ml
+    import comet_ml  # noqa: F401
 
     _has_comet = True
 except (ImportError):
@@ -24,12 +24,12 @@ except (ImportError, AttributeError):
     _has_wandb = False
 
 try:
-    from torch.utils.tensorboard import SummaryWriter
+    from torch.utils.tensorboard import SummaryWriter  # noqa: F401
 
     _has_tensorboard = True
 except ImportError:
     try:
-        from tensorboardX import SummaryWriter
+        from tensorboardX import SummaryWriter  # noqa: F401
 
         _has_tensorboard = True
     except ImportError:
