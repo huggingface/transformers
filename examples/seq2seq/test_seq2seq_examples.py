@@ -21,7 +21,7 @@ from .distillation import distill_main, evaluate_checkpoint
 from .finetune import SummarizationModule, main
 from .pack_dataset import pack_data_dir
 from .run_eval import generate_summaries_or_translations, run_generate
-from .utils import MBartDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
+from .utils import Seq2SeqDataset, TranslationDataset, label_smoothed_nll_loss, lmap, load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -417,7 +417,7 @@ def test_mbart_dataset_truncation(tok_name):
     assert max_len_target > max_src_len  # Truncated
     assert max_len_source > max_src_len
     src_lang, tgt_lang = "ro_RO", "de_DE"  # NOT WHAT IT WAS TRAINED ON
-    train_dataset = MBartDataset(
+    train_dataset = TranslationDataset(
         tokenizer,
         data_dir=tmp_dir,
         type_path="train",

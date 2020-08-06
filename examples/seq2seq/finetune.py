@@ -32,7 +32,7 @@ try:
         ROUGE_KEYS,
         calculate_bleu_score,
         Seq2SeqDataset,
-        MBartDataset,
+        TranslationDataset,
         label_smoothed_nll_loss,
     )
 
@@ -40,7 +40,7 @@ try:
 except ImportError:
     from utils import (
         Seq2SeqDataset,
-        MBartDataset,
+        TranslationDataset,
         assert_all_frozen,
         use_task_specific_params,
         lmap,
@@ -109,7 +109,7 @@ class SummarizationModule(BaseTransformer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
         if isinstance(self.tokenizer, MBartTokenizer) or isinstance(self.tokenizer, MarianTokenizer):
-            self.dataset_class = MBartDataset
+            self.dataset_class = TranslationDataset
         else:
             self.dataset_class = Seq2SeqDataset
 
