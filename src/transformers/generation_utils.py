@@ -120,6 +120,7 @@ class GenerationMixin:
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
+        return_probs=False,
         **model_specific_kwargs
     ) -> torch.LongTensor:
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
@@ -197,6 +198,9 @@ class GenerationMixin:
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
+
+            return_probs: (`optional`) bool
+                if  `return_probs` is True, return a tuple with both generation tensors and their probabilities.
 
             model_specific_kwargs: (`optional`) dict
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
@@ -456,6 +460,7 @@ class GenerationMixin:
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                return_probs=return_probs,
                 model_specific_kwargs=model_specific_kwargs,
             )
         else:
@@ -477,6 +482,7 @@ class GenerationMixin:
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                return_probs=return_probs,
                 model_specific_kwargs=model_specific_kwargs,
             )
 
@@ -501,6 +507,7 @@ class GenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        return_probs,
         model_specific_kwargs,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
@@ -512,6 +519,7 @@ class GenerationMixin:
 
         past = (encoder_outputs, None) if encoder_outputs is not None else None
 
+        output_probs = None
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
@@ -538,6 +546,8 @@ class GenerationMixin:
             if self._use_cache(outputs, use_cache):
                 past = outputs[1]
 
+            original_probs = F.softmax(scores)
+
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
                 if temperature != 1.0:
@@ -545,6 +555,7 @@ class GenerationMixin:
                 # Top-p/top-k filtering
                 next_token_logscores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p)
                 # Sample
+                # We need to re calc the softmax since we now sample after setting filtered values to 0
                 probs = F.softmax(next_token_logscores, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
@@ -557,6 +568,12 @@ class GenerationMixin:
                 tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
+
+            if return_probs:
+                if output_probs is None:
+                    output_probs = original_probs[:, tokens_to_add]
+                else:
+                    output_probs = torch.cat([output_probs, original_probs[:, tokens_to_add]], dim=-1)
 
             # add token and increase length by one
             input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
@@ -580,6 +597,8 @@ class GenerationMixin:
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
 
+        if return_probs:
+            return input_ids, output_probs
         return input_ids
 
     def _generate_beam_search(
@@ -606,6 +625,7 @@ class GenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        return_probs,
         model_specific_kwargs,
     ):
         """ Generate sequences for each example with beam search.
@@ -631,6 +651,8 @@ class GenerationMixin:
         # done sentences
         done = [False for _ in range(batch_size)]
 
+        output_probs = None
+
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
@@ -647,10 +669,10 @@ class GenerationMixin:
                     next_token_logits, cur_len=cur_len, max_length=max_length
                 )
 
-            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+            original_log_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             scores = self.postprocess_next_token_scores(
-                scores=scores,
+                scores=original_log_scores,
                 input_ids=input_ids,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
@@ -716,7 +738,7 @@ class GenerationMixin:
                     assert (
                         eos_token_id is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
-                    next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
+                    next_batch_beam.extend([(0, pad_token_id, 0, 0)] * num_beams)  # pad the batch
                     continue
 
                 # next sentence beam content, this will get added to next_batch_beam
@@ -737,12 +759,26 @@ class GenerationMixin:
                         is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
                         if is_beam_token_worse_than_top_num_beams:
                             continue
-                        generated_hyps[batch_idx].add(
-                            input_ids[effective_beam_id].clone(), beam_token_score.item(),
-                        )
+                        if return_probs:
+                            generated_hyps[batch_idx].add(
+                                input_ids[effective_beam_id].clone(),
+                                beam_token_score.item(),
+                                output_probs[effective_beam_id],
+                            )
+                        else:
+                            generated_hyps[batch_idx].add(
+                                input_ids[effective_beam_id].clone(), beam_token_score.item(),
+                            )
                     else:
                         # add next predicted token since it is not eos_token
-                        next_sent_beam.append((beam_token_score, token_id, effective_beam_id))
+                        next_sent_beam.append(
+                            (
+                                beam_token_score,
+                                token_id,
+                                effective_beam_id,
+                                original_log_scores[effective_beam_id, token_id],
+                            )
+                        )
 
                     # once the beam for next step is full, don't add more tokens to it.
                     if len(next_sent_beam) == num_beams:
@@ -767,11 +803,17 @@ class GenerationMixin:
             beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
             beam_tokens = input_ids.new([x[1] for x in next_batch_beam])
             beam_idx = input_ids.new([x[2] for x in next_batch_beam])
+            token_probs = torch.exp(torch.tensor([x[3] for x in next_batch_beam]).unsqueeze(1))
 
             # re-order batch and update current length
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
             cur_len = cur_len + 1
+
+            if output_probs is None:
+                output_probs = token_probs[beam_idx, :]
+            else:
+                output_probs = torch.cat([output_probs[beam_idx, :], token_probs], dim=-1)
 
             # re-order internal states
             if past is not None:
@@ -803,41 +845,55 @@ class GenerationMixin:
                 effective_beam_id = batch_idx * num_beams + beam_id
                 final_score = beam_scores[effective_beam_id].item()
                 final_tokens = input_ids[effective_beam_id]
-                generated_hyps[batch_idx].add(final_tokens, final_score)
 
+                if return_probs:
+                    generated_hyps[batch_idx].add(final_tokens, final_score, output_probs[effective_beam_id])
+                else:
+                    generated_hyps[batch_idx].add(final_tokens, final_score)
         # depending on whether greedy generation is wanted or not define different output_batch_size and output_num_return_sequences_per_batch
         output_batch_size = batch_size if do_sample else batch_size * num_return_sequences
         output_num_return_sequences_per_batch = 1 if do_sample else num_return_sequences
 
         # select the best hypotheses
         sent_lengths = input_ids.new(output_batch_size)
-        best = []
+        probs_lengts = input_ids.new(output_batch_size)
+        best_hyp_probs = []
 
         # retrieve best hypotheses
         for i, hypotheses in enumerate(generated_hyps):
             sorted_hyps = sorted(hypotheses.beams, key=lambda x: x[0])
             for j in range(output_num_return_sequences_per_batch):
                 effective_batch_idx = output_num_return_sequences_per_batch * i + j
-                best_hyp = sorted_hyps.pop()[1]
-                sent_lengths[effective_batch_idx] = len(best_hyp)
-                best.append(best_hyp)
+                h_p = sorted_hyps.pop()[1:]
+                sent_lengths[effective_batch_idx] = len(h_p[0])
+                if return_probs:
+                    probs_lengts[effective_batch_idx] = h_p[1].shape[-1]
+                best_hyp_probs.append(h_p)
 
         # shorter batches are padded
         if sent_lengths.min().item() != sent_lengths.max().item():
             assert pad_token_id is not None, "`Pad_token_id` has to be defined"
             sent_max_len = min(sent_lengths.max().item() + 1, max_length)
+            probs_max_len = min(probs_lengts.max().item() + 1, max_length)
+            final_output_probs = torch.zeros((output_batch_size, probs_max_len)).to(next(self.parameters()).device)
             decoded = input_ids.new(output_batch_size, sent_max_len).fill_(pad_token_id)
 
             # fill with hypothesis and eos_token_id if necessary
-            for i, hypo in enumerate(best):
+            for i, (hypo, probs) in enumerate(best_hyp_probs):
                 decoded[i, : sent_lengths[i]] = hypo
+                if return_probs:
+                    final_output_probs[i, : probs_lengts[i]] = probs
                 if sent_lengths[i] < max_length:
                     decoded[i, sent_lengths[i]] = eos_token_id
         else:
             # none of the hypotheses have an eos_token
-            assert (len(hypo) == max_length for hypo in best)
-            decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
+            assert (len(hypo) == max_length for hypo in best_hyp_probs)
+            decoded = torch.stack([b[0] for b in best_hyp_probs]).type(torch.long).to(next(self.parameters()).device)
+            if return_probs:
+                final_output_probs = torch.stack([b[1] for b in best_hyp_probs]).to(next(self.parameters()).device)
 
+        if return_probs:
+            return decoded, final_output_probs
         return decoded
 
     @staticmethod
@@ -963,15 +1019,15 @@ class BeamHypotheses(object):
         """
         return len(self.beams)
 
-    def add(self, hyp, sum_logprobs):
+    def add(self, hyp, sum_logprobs, output_probs=None):
         """
         Add a new hypothesis to the list.
         """
         score = sum_logprobs / len(hyp) ** self.length_penalty
         if len(self) < self.num_beams or score > self.worst_score:
-            self.beams.append((score, hyp))
+            self.beams.append((score, hyp, output_probs))
             if len(self) > self.num_beams:
-                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
+                sorted_scores = sorted([(s, idx) for idx, (s, _, _) in enumerate(self.beams)])
                 del self.beams[sorted_scores[0][1]]
                 self.worst_score = sorted_scores[1][0]
             else:
