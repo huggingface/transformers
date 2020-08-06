@@ -151,6 +151,7 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
 
                 # tokenization
                 input_ids = encode(input_str, 512, spm_model, encoder_type="sentencepiece")
+
                 target_ids = encode(target_str, 32, spm_model, encoder_type="sentencepiece")
 
                 input_ids = tf.reshape(input_ids, [1, 512])
@@ -165,4 +166,10 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
                 output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
 
                 sess.run(tf.compat.v1.global_variables_initializer())
-                print(sess.run(output_str, feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
+                listed = sess.run(input_ids,
+                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]})
+                import ipdb; ipdb.set_trace()
+
+                print(sess.run(output_str,
+                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
+
