@@ -1,4 +1,17 @@
 # TF-Adapter-BERT
+
+[Houlsby et al. (2019)](https://arxiv.org/abs/1902.00751) introduced adapters as an alternative approach for adaptation in transfer learning in NLP within deep transformer-based architectures.
+Adapters are task-specific neural modules that are added between layers of a pre-trained network. After coping weights from a pre-trained network, pre-trained weights will be frozen, and only Adapters will be trained.
+
+## Why Adapters?
+Adapters provide numerous benefits over plain fully fine-tuning or other approaches that result in compact models such as multi-task learning:
+
+* It is a lightweight alternative to fully fine-tuning that trains only a few trainable parameters per task without sacrificing performance.
+* Yielding a high degree of parameter sharing between down-stream tasks due to being frozen of original network parameters.
+* Unlike multi-task learning that requires simultaneous access to all tasks, it allows training on down-stream tasks sequentially. Thus, adding new tasks do not require complete joint retraining. Further, eliminates the hassle of weighing losses or balancing training set sizes.
+* Training adapters for each task separately, leading to that the model not forgetting how to perform previous tasks (the problem of catastrophic forgetting).
+
+
 Learn more in the paper ["Parameter-Efficient Transfer Learning for NLP"](https://arxiv.org/abs/1902.00751).
 
 
