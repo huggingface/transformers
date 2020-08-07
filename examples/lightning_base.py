@@ -245,8 +245,8 @@ class BaseTransformer(pl.LightningModule):
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
-        self.lr_scheduler = trainer.lr_schedulers[0]["scheduler"]
-        lrs = {f"lr_group_{i}": lr for i, lr in enumerate(self.lr_scheduler.get_lr())}
+        lr_scheduler = trainer.lr_schedulers[0]["scheduler"]
+        lrs = {f"lr_group_{i}": lr for i, lr in enumerate(lr_scheduler.get_lr())}
         pl_module.logger.log_metrics(lrs)
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
