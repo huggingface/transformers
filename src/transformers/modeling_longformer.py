@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Longformer model. """
+"""Tensorflow Longformer model. """
 
 import logging
 import warnings
@@ -781,9 +781,8 @@ class LongformerPreTrainedModel(PreTrainedModel):
 
 
 LONGFORMER_START_DOCSTRING = r"""
-
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    This model is a Tensorflow `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
+    Use it as a regular Tensorflow Module and refer to the Tensorflow documentation for all matter related to general
     usage and behavior.
 
     Parameters:
@@ -850,13 +849,13 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 )
 class LongformerModel(LongformerPreTrainedModel):
     """
-    This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
-    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
-    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
+    This class copied code from :class:`~transformers.RobertaModel` and overwrote standard self-attention with longformer self-attention to provide the ability to process
+    long sequences following the self-attention approach described in `Longformer: the Long-Document Transformer
+    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer self-attention
     combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
     memory and compute.
 
-    The selfattention module `LongformerSelfAttention` implemented here supports the combination of local and
+    The self-attention module `LongformerSelfAttention` implemented here supports the combination of local and
     global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
     and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
     tasks. Future release will add support for autoregressive attention, but the support for dilated attention
@@ -910,7 +909,7 @@ class LongformerModel(LongformerPreTrainedModel):
         inputs_embeds: torch.Tensor,
         pad_token_id: int,
     ):
-        """A helper function to pad tokens and mask to work with implementation of Longformer selfattention."""
+        """A helper function to pad tokens and mask to work with implementation of Longformer self-attention."""
         # padding
         attention_window = (
             self.config.attention_window

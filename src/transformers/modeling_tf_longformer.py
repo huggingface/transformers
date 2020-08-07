@@ -1,9 +1,9 @@
 import logging
-import math
 
 import tensorflow as tf
 
 from .configuration_longformer import LongformerConfig
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertSelfOutput
 from .modeling_tf_roberta import TFRobertaEmbeddings, TFRobertaLMHead
 from .modeling_tf_utils import (
@@ -20,7 +20,9 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
+
 TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
     "allenai/longformer-large-4096",
@@ -126,8 +128,8 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         attention_mask = tf.squeeze(tf.squeeze(attention_mask, axis=2), axis=1)
         # is index masked or global attention
 
-        is_index_masked = attention_mask < 0
-        is_index_global_attn = attention_mask > 0
+        is_index_masked = tf.math.less(attention_mask, 0)
+        is_index_global_attn = tf.math.greater(attention_mask, 0)
         is_global_attn = tf.math.reduce_any(is_index_global_attn)
 
         hidden_states = tf.transpose(hidden_states, (1, 0, 2))
@@ -145,7 +147,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # normalize query
-        query_vectors /= math.sqrt(self.head_dim)
+        query_vectors /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
 
         query_vectors = tf.transpose(
             tf.reshape(query_vectors, (seq_len, batch_size, self.num_heads, self.head_dim)), (1, 0, 2, 3)
@@ -328,6 +330,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         # copy parts from diagonal_chunked_attention_scores into the combined matrix of attentions
         # - copying the main diagonal and the upper triangle
+        # TODO: This code is most likely not very efficient and should be improved
         diagonal_attn_scores_up_triang = tf.concat(
             [
                 diagonal_chunked_attention_scores[:, :, :window_overlap, : window_overlap + 1],
@@ -391,10 +394,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             [[0, shape_list(input_tensor)[1] - window_overlap], [0, shape_list(input_tensor)[3] - window_overlap - 1]]
         )
 
-        # combine with lower mask
-        mask_2d_upper_pad = tf.pad(mask_2d_upper, padding)
-        mask_2d_lower_pad = tf.reverse(mask_2d_upper_pad, axis=[0, 1])
-        mask_2d = mask_2d_upper_pad + mask_2d_lower_pad
+        # create lower mask
+        mask_2d = tf.pad(mask_2d_upper, padding)
+        # combine with upper mask
+        mask_2d = mask_2d + tf.reverse(mask_2d, axis=[0, 1])
 
         # broadcast to full matrix
         mask_4d = tf.broadcast_to(mask_2d[None, :, None, :], shape_list(input_tensor))
@@ -403,7 +406,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         inf_tensor = -float("inf") * tf.ones_like(input_tensor, dtype=tf.dtypes.float32)
 
         # mask
-        input_tensor = tf.where(mask_4d > 0, inf_tensor, input_tensor)
+        input_tensor = tf.where(tf.math.greater(mask_4d, 0), inf_tensor, input_tensor)
 
         return input_tensor
 
@@ -1057,7 +1060,109 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
         }
 
 
+LONGFORMER_START_DOCSTRING = r"""
+    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
+    Use it as a regular TF 2.0 Keras Model and
+    refer to the TF 2.0 documentation for all matter related to general usage and behavior.
+
+    .. note::
+
+        TF 2.0 models accepts two formats as inputs:
+
+            - having all inputs as keyword arguments (like PyTorch models), or
+            - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
+        in the first positional argument :
+
+        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+
+    Parameters:
+        config (:class:`~transformers.LongformerConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+
+LONGFORMER_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`tf.Tensor` of shape :obj:`{0}`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`transformers.LonmgformerTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+        global_attention_mask (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Mask to decide the attention given on each token, local attention or global attenion.
+            Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
+            task-specific finetuning because it makes the model more flexible at representing the task. For example,
+            for classification, the <s> token should be given global attention. For QA, all question tokens should also have
+            global attention. Please refer to the `Longformer paper <https://arxiv.org/abs/2004.05150>`__ for more details.
+            Mask values selected in ``[0, 1]``:
+            ``0`` for local attention (a sliding window attention),
+            ``1`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
+
+        token_type_ids (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        position_ids (:obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`_
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
+"""
+
+
+@add_start_docstrings(
+    "The bare Longformer Model outputting raw hidden-states without any specific head on top.",
+    LONGFORMER_START_DOCSTRING,
+)
 class TFLongformerModel(TFLongformerPreTrainedModel):
+    """
+    This class copied code from :class:`~transformers.RobertaModel` and overwrote standard self-attention with longformer self-attention to provide the ability to process
+    long sequences following the self-attention approach described in `Longformer: the Long-Document Transformer
+    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer self-attention
+    combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
+    memory and compute.
+
+    The self-attention module `LongformerSelfAttention` implemented here supports the combination of local and
+    global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
+    and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
+    tasks. Future release will add support for autoregressive attention, but the support for dilated attention
+    requires a custom CUDA kernel to be memory and compute efficient.
+
+    """
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.longformer = TFLongformerMainLayer(config, name="longformer")
@@ -1067,6 +1172,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         return outputs
 
 
+@add_start_docstrings("""Longformer Model with a `language modeling` head on top. """, LONGFORMER_START_DOCSTRING)
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1077,6 +1183,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(
         self,
         inputs=None,
@@ -1097,22 +1204,27 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+    Returns:
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+    Examples::
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        >>> import tensorflow as tf
+        >>> from transformers import TFLongformerForMaskedLM, LongformerTokenizer
+
+        >>> model = TFLongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096', return_dict=True)
+        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+
+        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        >>> input_ids = tf.convert_to_tensor(tokenizer.encode(SAMPLE_TEXT))[None, :]  # batch of size 1
+
+        >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
+        ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
+        >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
+        >>> loss = outputs[0]
+        >>> prediction_logits = output[1]
         """
 
         if isinstance(inputs, (tuple, list)):
@@ -1146,6 +1258,11 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         return outputs  # (loss), prediction_scores, (hidden_states), (attentions)
 
 
+@add_start_docstrings(
+    """Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD / TriviaQA (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    LONGFORMER_START_DOCSTRING,
+)
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1156,6 +1273,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(
         self,
         inputs=None,
@@ -1179,24 +1297,32 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
+    Returns:
 
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-start scores (before SoftMax).
-        end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+    Examples::
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+        >>> from transformers import LongformerTokenizer, TFLongformerForQuestionAnswering
+        >>> import tensorflow as tf
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        >>> tokenizer = TFLongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> model = TFLongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> encoding = tokenizer(question, text, return_tensors="tf")
+        >>> input_ids = encoding["input_ids"]
+
+        >>> # default is local attention everywhere
+        >>> # the forward method will automatically set global attention on question tokens
+        >>> attention_mask = encoding["attention_mask"]
+
+        >>> outputs = model(input_ids, attention_mask=attention_mask)
+        >>> start_logits = outputs[0]
+        >>> end_logits = outputs[1]
+        >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].numpy().tolist())
+
+        >>> answer_tokens = all_tokens[tf.argmax(start_logits) :tf.argmax(end_logits)+1]
+        >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
+
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
