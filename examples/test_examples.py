@@ -93,7 +93,7 @@ class ExamplesTests(unittest.TestCase):
             --learning_rate=1e-4
             --seed=42
             --max_seq_length=128
-            --num_train_epochs=1
+            --num_train_epochs=2
             """.split()
         with patch.object(sys, "argv", testargs):
             result = run_pl_glue.main()
