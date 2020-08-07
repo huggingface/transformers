@@ -19,7 +19,7 @@ BANK_SNIPPET = (
     "If you have any questions please call me at 3-6544."
     "Thank you for your attention to this matter."
 )
-
+raw_target_str = "Treasury Bank Resolutions"  # or something close
 if is_tf_available():
     import tensorflow as tf
     from transformers import TFPegasusLegacyModel, TFPegasusPretrainedModel
@@ -140,7 +140,7 @@ class IntegrationTest(unittest.TestCase):
 
                 # check running
                 raw_input_str = BANK_SNIPPET
-                raw_target_str = "Treasury Bank Resolutions"  # or something close
+
 
                 input_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
                 target_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
@@ -167,7 +167,7 @@ class IntegrationTest(unittest.TestCase):
                 after_time, after_stack, logits, enc_input, encoder_states, debug_history0, debug_history1, attn_history0 = sess.run(
                     [
                         model.signalled,
-                        model.after_stack,
+                        model.decoder_output,
                         model.logits,
                         model.encoder_layer_input,
                         model.encoder_states,
@@ -191,6 +191,133 @@ class IntegrationTest(unittest.TestCase):
                     continue
                 print_tensor(msg, tensor)
         print_tensor("5. encoder layer 1 input", encoder_states[0])
+        print_tensor("6. encoder layer 2 input", encoder_states[1])
+
+        print_tensor("7. encoder last layer output", encoder_states[-1])
+
+        # import ipdb; ipdb.set_trace()
+        # print(f'after_time: {after_time}')
+        # print(f'after_stack: {after_stack}')
+        # print(f'logits: {logits}')
+
+    def test_legacy_forward(self):
+        model_dir = "../pegasus/ckpt/aeslc"
+        spm_model = "../pegasus/ckpt/c4.unigram.newline.10pct.96000.model"
+        assert os.path.exists(model_dir)
+
+        self.assertTrue(tf.compat.v1.train.checkpoint_exists(model_dir))
+        config = PegasusConfig(vocab_size=96000 + 103, d_model=1024, num_beams=8)
+
+        # #hidden_size = 1024
+        # #filter_size = 4096
+        # num_heads = 16
+        # num_encoder_layers = 16
+        # num_decoder_layers = 16
+        # label_smoothing = 0.0
+        # dropout = 0.1
+        # beam_size = 8
+        # beam_alpha = 0.6
+
+        with tf.Graph().as_default() as graph:
+            with tf.compat.v1.Session() as sess:
+                model = TFPegasusLegacyModel(config)
+
+                # run the model to build all variables (but not initialized yet)
+                dummy_inputs = {"inputs": tf.ones((2, 7), tf.int64), "targets": tf.ones((2, 5), tf.int64)}
+                loss, outputs = model(dummy_inputs, True)
+                self.assertEqual(loss.shape, [])
+                self.assertEqual(outputs["logits"].shape, [2, 5, config.vocab_size])
+
+                # create assignment map
+                ignore_name = ["Adafactor", "global_step"]
+                var_list = tf.compat.v1.global_variables(scope=None)
+                ckpt_var_list = tf.train.list_variables(model_dir)
+                ckpt_var_list = [var for var in ckpt_var_list if not any(ign in var[0] for ign in ignore_name)]
+                new_var_name_dict = {var.name: var for var in var_list}
+                assignment_map = {}
+                for var in ckpt_var_list:
+                    old_var_name = var[0]
+                    new_var_name = var[0] + ":0"
+                    assert new_var_name in new_var_name_dict
+                    assignment_map[old_var_name] = new_var_name_dict[new_var_name]
+
+                # define the initialization (but not intialized until global_variables_initializer is called)
+                tf.compat.v1.train.init_from_checkpoint(model_dir, assignment_map)
+
+                # check running
+                raw_input_str = BANK_SNIPPET
+                raw_target_str = "Treasury Bank Resolutions"  # or something close
+
+                input_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
+                target_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
+                src_len = 512
+                tgt_len =32
+                # tokenization
+                input_ids = encode(input_str, src_len, spm_model, encoder_type="sentencepiece")
+                target_ids = encode(target_str, tgt_len, spm_model, encoder_type="sentencepiece")
+
+                input_ids = tf.reshape(input_ids, [1, src_len])
+                target_ids = tf.reshape(target_ids, [1, tgt_len])
+
+                model_outputs = model(
+                    {"inputs": input_ids, "targets": target_ids}, False #32, config.num_beams, beam_alpha=0.6
+                )
+                #self.assertEqual(output_ids["outputs"].shape, [1, 32])
+                # decode to str
+                #output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
+                sess.run(tf.compat.v1.global_variables_initializer())
+                # Run it
+                feed_dict = {input_str: [raw_input_str], target_str: [raw_target_str]}
+
+                results, target_ids, emb, after_pad, after_time, dec_last_layer_out, logits, enc_input, encoder_states, decoder_states, dec_input, enc_output = sess.run(
+                    [
+                        model_outputs,
+                        target_ids,
+                        model._emb,
+                        model.after_pad,
+                        model.after_time_signal,
+                        model.decoder_output,
+                        model.logits,
+                        model.encoder_layer_input,
+                        model.encoder_states,
+                        model.decoder_states,
+                        #model._encoder_layers[0].debug_history, model._encoder_layers[1].debug_history, model._encoder_layers[0]._self_attn_layer.debug_history,
+                        model.decoder_input,
+                        model.memory_context
+                    ],
+                    feed_dict=feed_dict,
+                )
+
+        #print(f"Summary: {results}")
+        print(f'loss: {results[0]}')
+        print_tensor("1. encoder layer 0 input", enc_input)
+        print_tensor("2. encoder last layer output", encoder_states[-1])
+        print_tensor("3. enc output", enc_output)
+        print_tensor('target_ids', target_ids)
+        print_tensor('decoder after emb layer', emb)
+        print_tensor('decoder after pad', after_pad)
+        print_tensor('decoder after time signal', after_time)
+        print_tensor("dec layer 0 input", dec_input)
+        print_tensor("dec layer 1 input", decoder_states[0])
+        print_tensor('decoder last layer output before layernorm', decoder_states[-1])
+        print_tensor('decoder output', dec_last_layer_out)
+        print_tensor("final logits", results[1]['logits'])
+
+        #print_tensor("1. embedded", emb)
+        #print_tensor("2. after pos", after_time)
+        #print_tensor("3. 2-1", after_time - emb)
+
+        # for k,v in attn_history0.items():
+        #     msg = 'layer0' + k
+        #     for tensor in v:
+        #         if tensor.shape[0] != 1:
+        #             print(f'skipping dummy input result')
+        #             continue
+        #         print_tensor(msg, tensor)
+        # print_tensor("5. encoder layer 1 input", encoder_states[0])
+        # print_tensor("6. encoder layer 2 input", encoder_states[1])
+
+
 
         # import ipdb; ipdb.set_trace()
         # print(f'after_time: {after_time}')
@@ -271,13 +398,30 @@ class IntegrationTest(unittest.TestCase):
         # print(sess.run(output_str,
         #                feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
 
-    def test_bart_pegasus(self):
+
+    def test_bart_logits(self):
+        tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
+        model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed", #"sshleifer/pegasus/aeslc",
+            scale_embedding=True, num_beams=1, #activation='relu',
+        ).to(torch_device)
+        assert model.config.activation_function == 'relu'
+        assert model.model.decoder.embed_tokens.padding_idx == tok.pad_token_id
+        batch = tok([BANK_SNIPPET], return_tensors="pt").to(torch_device)
+        decoder_ids = tok([raw_target_str], return_tensors="pt").to(torch_device)
+        print_tensor('target_ids', decoder_ids.input_ids)
+        output = model.forward(batch.input_ids, attention_mask=batch.attention_mask,
+                               decoder_input_ids=decoder_ids.input_ids, use_cache=False)
+
+        #summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
+        #self.assertEqual(summary, "Bank Resolutions")
+    def test_bart_pegasus_generate(self):
         tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
         model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed", #"sshleifer/pegasus/aeslc",
             scale_embedding=True, num_beams=1, #activation='relu',
         ).to(torch_device)
         assert model.config.activation_function == 'relu'
         batch = tok([BANK_SNIPPET], return_tensors="pt").to(torch_device)
+        decoder_ids = tok([raw_target_str], return_tensors="pt").to(torch_device)
         summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
         self.assertEqual(summary, "Bank Resolutions")
 

@@ -353,8 +353,9 @@ class BartEncoder(nn.Module):
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
-            print_tensor(f"encoder layer {i} input", x)
-            # if i >= 1: raise AssertionError('ending after 1 layer')
+            #if i
+            #print_tensor(f"encoder layer {i} input", x)
+            #if i >= 3: raise AssertionError('ending after 1 layer')
             if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -366,7 +367,7 @@ class BartEncoder(nn.Module):
 
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
-
+        print_tensor('Encoder last layer', x)
         if self.layer_norm:
             x = self.layer_norm(x)
         if output_hidden_states:
@@ -376,6 +377,8 @@ class BartEncoder(nn.Module):
 
         # T x B x C -> B x T x C
         x = x.transpose(0, 1)
+        print_tensor('Encoder returning', x)
+
 
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
@@ -548,6 +551,8 @@ class BartDecoder(nn.Module):
 
         # embed positions
         positions = self.embed_positions(input_ids, use_cache=use_cache)
+        print_tensor('target_ids', input_ids)
+        print_tensor('pos_embed', positions)
 
         if use_cache:
             input_ids = input_ids[:, -1:]
@@ -555,7 +560,9 @@ class BartDecoder(nn.Module):
             # assert input_ids.ne(self.padding_idx).any()
 
         x = self.embed_tokens(input_ids) * self.embed_scale
+        print_tensor('tok_embed', x)
         x += positions
+        print_tensor('summed embed. Should be dec layer 0 input', x)
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
@@ -569,6 +576,8 @@ class BartDecoder(nn.Module):
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            if idx in {0, 1, 15}:
+                print_tensor(f'decoder layer {idx} input', x)
             if output_hidden_states:
                 all_hidden_states += (x,)
             dropout_probability = random.uniform(0, 1)
@@ -678,6 +687,7 @@ class SelfAttention(nn.Module):
         else:
             saved_state = None
             layer_state = {}
+        def print_tensor(msg, x): return  # uncomment to turn on print in this module
         print_tensor('query', query)
         q = self.q_proj(query) * self.scaling
         print_tensor('scaled, projected query', q)
@@ -1079,6 +1089,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
             return_dict=return_dict,
         )
         lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
+        print_tensor('decoder_output', outputs[0])
+        print_tensor('logits', lm_logits)
 
         masked_lm_loss = None
         if labels is not None:

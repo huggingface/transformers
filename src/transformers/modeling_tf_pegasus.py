@@ -460,7 +460,7 @@ def left2right_decode(
         return tf.cast(beams[:, 0, :], dtype)
 
 
-class Embedding(object):
+class Embedding:
     """Embedding layer supporting shared input/output weights."""
 
     def __init__(self, vocab_size, hidden_size, name, dtype):
@@ -666,6 +666,9 @@ class TransformerBlock:
         return s_BxIxD
 
 
+def shift_tokens_right(states_BxTxD):
+    return tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+
 def run_all_layers(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, cache=None, decode_i=None):
     """Stack AttentionBlock layers."""
     if (memory_BxMxD is None) != (bias_BxIxM is None):
@@ -776,17 +779,21 @@ class TFPegasusLegacyModel:
         self.upper_tri_bias = bias_1xTxT
         states_BxTxD = self._embedding_layer(targets_BxT, True)
         self._emb = states_BxTxD
-        states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+        #states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+        self.after_pad = states_BxTxD
         states_BxTxD = add_time_signal(states_BxTxD)
         self.after_time_signal = states_BxTxD
         # self._time_signal =
         states_BxTxD = self._dropout_fn(states_BxTxD, training)
+        self.decoder_input = states_BxTxD
+        self.memory_context = context["memory"]
         with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
-            states_BxTxD, _ = run_all_layers(
+            states_BxTxD, self.decoder_states = run_all_layers(
                 self._decoder_layers, training, states_BxTxD, bias_1xTxT, context["memory"], context["memory_bias"]
             )
+            self.decoder_final_layer_output = states_BxTxD
             states_BxTxD = self._layer_norm_decoder(states_BxTxD)
-        self.after_stack = states_BxTxD
+        self.decoder_output = states_BxTxD
         logits_BxTxV = self._embedding_layer(states_BxTxD, False)
         self.logits = logits_BxTxV
         targets_mask_BxT = tf.cast(tf.greater(targets_BxT, 0), self._dtype)
@@ -819,7 +826,7 @@ class TFPegasusLegacyModel:
             dec_Bx1xD *= tf.cast(tf.greater(i, 0), self._dtype)
             dec_Bx1xD = add_time_signal(dec_Bx1xD, start_index=i)
             with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
-                dec_Bx1xD, _ = run_all_layers(
+                dec_Bx1xD, self.decoder_states = run_all_layers(
                     self._decoder_layers,
                     False,
                     dec_Bx1xD,
@@ -920,6 +927,7 @@ class TFPegasusPretrainedModel(TFPreTrainedModel):
         bias_1xTxT = upper_triangle_bias(tf.shape(input=targets_BxT)[1], self._dtype)
         states_BxTxD = self._embedding_layer(targets_BxT, True)
         states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+
         states_BxTxD = add_time_signal(states_BxTxD)
         states_BxTxD = self._dropout_fn(states_BxTxD, training)
         with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
