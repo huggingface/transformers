@@ -354,6 +354,7 @@ class BartEncoder(nn.Module):
         all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
             print_tensor(f"encoder layer {i} input", x)
+            if i >= 1: raise AssertionError('ending after 1 layer')
             if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -365,7 +366,7 @@ class BartEncoder(nn.Module):
 
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
-            raise AssertionError('ending after 1 layer')
+
         if self.layer_norm:
             x = self.layer_norm(x)
         if output_hidden_states:
