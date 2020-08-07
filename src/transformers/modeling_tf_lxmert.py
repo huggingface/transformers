@@ -83,7 +83,7 @@ ACT2FN = {
 }
 
 
-class TFVisualFeatEncoder(tf.keras.layers.Layer):
+class TFLxmertVisualFeatEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -449,7 +449,7 @@ class TFLxmertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.visn_fc = TFVisualFeatEncoder(config, name="visn_fc")
+        self.visn_fc = TFLxmertVisualFeatEncoder(config, name="visn_fc")
 
         # Number of layers
         self.num_l_layers = config.l_layers

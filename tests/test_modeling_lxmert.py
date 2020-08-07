@@ -44,7 +44,7 @@ class LxmertModelTester:
         vocab_size=300,
         hidden_size=28,
         num_attention_heads=2,
-        num_answers=2,
+        num_labels=2,
         intermediate_size=64,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -54,9 +54,10 @@ class LxmertModelTester:
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        n_qa_labels=30,
-        n_object_labels=16,
-        n_attr_labels=4,
+        num_qa_labels=30,
+        num_object_labels=16,
+        num_attr_labels=4,
+        num_visual_features=10,
         l_layers=2,
         x_layers=1,
         r_layers=1,
@@ -73,18 +74,16 @@ class LxmertModelTester:
         visual_obj_loss=True,
         visual_attr_loss=True,
         visual_feat_loss=True,
-        num_visual_features=10,
         use_token_type_ids=True,
         use_lang_mask=True,
         output_attentions=False,
-        output_hidden_states=False,
         scope=None,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
-        self.num_answers = num_answers
+        self.num_labels = num_labels
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -94,9 +93,9 @@ class LxmertModelTester:
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.pad_token_id = pad_token_id
-        self.n_qa_labels = n_qa_labels
-        self.n_object_labels = n_object_labels
-        self.n_attr_labels = n_attr_labels
+        self.num_qa_labels = num_qa_labels
+        self.num_object_labels = num_object_labels
+        self.num_attr_labels = num_attr_labels
         self.l_layers = l_layers
         self.x_layers = x_layers
         self.r_layers = r_layers
@@ -116,15 +115,12 @@ class LxmertModelTester:
         self.visual_feat_loss = visual_feat_loss
         self.num_visual_features = num_visual_features
         self.use_token_type_ids = use_token_type_ids
-        self.scope = scope
         self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
+        self.scope = scope
 
     def prepare_config_and_inputs(self):
 
-        output_v_attentions, output_l_attentions, output_x_attentions = (
-            (True, True, True) if self.output_attentions else (False, False, False)
-        )
+        output_attentions = self.output_attentions
         input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=self.vocab_size)
         visual_feats = torch.rand(self.batch_size, self.num_visual_features, self.visual_feat_dim)
         bounding_boxes = torch.rand(self.batch_size, self.num_visual_features, 4)
@@ -140,8 +136,8 @@ class LxmertModelTester:
             obj_labels = {}
         if self.visual_attr_loss and self.task_obj_predict:
             obj_labels["attr"] = (
-                ids_tensor([self.batch_size, self.num_visual_features], self.n_attr_labels),
-                ids_tensor([self.batch_size, self.num_visual_features], self.n_attr_labels),
+                ids_tensor([self.batch_size, self.num_visual_features], self.num_attr_labels),
+                ids_tensor([self.batch_size, self.num_visual_features], self.num_attr_labels),
             )
         if self.visual_feat_loss and self.task_obj_predict:
             obj_labels["feat"] = (
@@ -152,24 +148,24 @@ class LxmertModelTester:
             )
         if self.visual_obj_loss and self.task_obj_predict:
             obj_labels["obj"] = (
-                ids_tensor([self.batch_size, self.num_visual_features], self.n_object_labels),
-                ids_tensor([self.batch_size, self.num_visual_features], self.n_object_labels),
+                ids_tensor([self.batch_size, self.num_visual_features], self.num_object_labels),
+                ids_tensor([self.batch_size, self.num_visual_features], self.num_object_labels),
             )
         ans = None
         if self.task_qa:
-            ans = ids_tensor([self.batch_size], self.n_qa_labels)
+            ans = ids_tensor([self.batch_size], self.num_qa_labels)
         masked_lm_labels = None
         if self.task_mask_lm:
             masked_lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         matched_labels = None
         if self.task_matched:
-            matched_labels = ids_tensor([self.batch_size], self.num_answers)
+            matched_labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = LxmertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
-            num_answers=self.num_answers,
+            num_labels=self.num_labels,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -179,9 +175,9 @@ class LxmertModelTester:
             initializer_range=self.initializer_range,
             layer_norm_eps=self.layer_norm_eps,
             pad_token_id=self.pad_token_id,
-            n_qa_labels=self.n_qa_labels,
-            n_object_labels=self.n_object_labels,
-            n_attr_labels=self.n_attr_labels,
+            num_qa_labels=self.num_qa_labels,
+            num_object_labels=self.num_object_labels,
+            num_attr_labels=self.num_attr_labels,
             l_layers=self.l_layers,
             x_layers=self.x_layers,
             r_layers=self.r_layers,
@@ -208,9 +204,7 @@ class LxmertModelTester:
             masked_lm_labels,
             matched_labels,
             ans,
-            output_v_attentions,
-            output_l_attentions,
-            output_x_attentions,
+            output_attentions,
         )
 
     def create_and_check_lxmert_model(
@@ -225,9 +219,7 @@ class LxmertModelTester:
         masked_lm_labels,
         matched_labels,
         ans,
-        output_v_attentions,
-        output_l_attentions,
-        output_x_attentions,
+        output_attentions,
     ):
         model = LxmertModel(config=config)
         model.to(torch_device)
@@ -237,18 +229,14 @@ class LxmertModelTester:
             (visual_feats, bounding_boxes),
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            output_v_attentions=output_v_attentions,
-            output_l_attentions=output_l_attentions,
-            output_x_attentions=output_x_attentions,
+            output_attentions=output_attentions,
         )
         result = model(
             input_ids,
             (visual_feats, bounding_boxes),
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            output_v_attentions=not output_v_attentions,
-            output_l_attentions=not output_l_attentions,
-            output_x_attentions=not output_x_attentions,
+            output_attentions=not output_attentions,
         )
         result = model(input_ids, (visual_feats, bounding_boxes), return_dict=False)
         result = model(input_ids, (visual_feats, bounding_boxes), return_dict=True)
@@ -271,9 +259,7 @@ class LxmertModelTester:
         masked_lm_labels,
         matched_labels,
         ans,
-        output_v_attentions,
-        output_l_attentions,
-        output_x_attentions,
+        output_attentions,
     ):
         model = LxmertForPretraining(config=config)
         model.to(torch_device)
@@ -287,9 +273,7 @@ class LxmertModelTester:
             obj_labels=obj_labels,
             matched_label=matched_labels,
             ans=ans,
-            output_v_attentions=output_v_attentions,
-            output_l_attentions=output_l_attentions,
-            output_x_attentions=output_x_attentions,
+            output_attentions=output_attentions,
             return_dict=True,
         )
         result = model(
@@ -298,9 +282,7 @@ class LxmertModelTester:
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
             masked_lm_labels=masked_lm_labels,
-            output_v_attentions=not output_v_attentions,
-            output_l_attentions=not output_l_attentions,
-            output_x_attentions=not output_x_attentions,
+            output_attentions=not output_attentions,
             return_dict=False,
         )
         result = model(
@@ -340,9 +322,7 @@ class LxmertModelTester:
             obj_labels=obj_labels,
             matched_label=matched_labels,
             ans=ans,
-            output_v_attentions=not output_v_attentions,
-            output_l_attentions=not output_l_attentions,
-            output_x_attentions=not output_x_attentions,
+            output_attentions=not output_attentions,
             return_dict=True,
         )
 
@@ -361,11 +341,7 @@ class LxmertModelTester:
             masked_lm_labels,
             matched_labels,
             ans,
-            output_v_attentions,
-            output_l_attentions,
-            output_x_attentions,
-            output_v_hidden_states,
-            output_l_hidden_states,
+            output_attentions,
         ) = config_and_inputs
 
         inputs_dict = {
@@ -373,9 +349,7 @@ class LxmertModelTester:
             "visual_feats": (visual_feats, bounding_boxes),
             "token_type_ids": token_type_ids,
             "attention_mask": input_mask,
-            "output_v_attentions": output_v_attentions,
-            "output_l_attentions": output_l_attentions,
-            "output_x_attentions": output_x_attentions,
+            "output_attentions": output_attentions,
         }
 
         return config, inputs_dict

@@ -149,7 +149,7 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
-from .tokenization_lxmert import LxmertTokenizer
+from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
@@ -423,13 +423,9 @@ if is_torch_available():
         LxmertForPretraining,
         LxmertModel,
         LxmertPreTrainedModel,
-        LxmertVisualAnswerHead,
-        LxmertVisualObjHead,
-        LxmertPreTrainingHeads,
-        LxmertPredictionHeadTransform,
         LxmertEncoder,
         LxmertXLayer,
-        VisualFeatEncoder,
+        LxmertVisualFeatEncoder,
     )
 
     # Optimization
@@ -679,15 +675,11 @@ if is_tf_available():
 
     from .modeling_tf_lxmert import (
         TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFVisualFeatEncoder,
-        TFLxmertXLayer,
+        TFLxmertVisualFeatEncoder,
         TFLxmertMainLayer,
         TFLxmertEncoder,
         TFLxmertPreTrainedModel,
         TFLxmertForPretraining,
-        TFLxmertPreTrainingHeads,
-        TFLxmertVisualObjHead,
-        TFLxmertVisualAnswerHead,
     )
 
     # Optimization
