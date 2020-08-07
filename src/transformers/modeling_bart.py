@@ -337,8 +337,9 @@ class BartEncoder(nn.Module):
             attention_mask = invert_mask(attention_mask)
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-        embed_pos = self.embed_positions(input_ids)
         print_tensor("embedded", inputs_embeds)
+        embed_pos = self.embed_positions(input_ids)
+
         print_tensor("embed_pos", embed_pos)
         x = inputs_embeds + embed_pos
         print_tensor("sum", x)

@@ -414,7 +414,7 @@ class IntegrationTest(unittest.TestCase):
 
         #summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
         #self.assertEqual(summary, "Bank Resolutions")
-    def test_bart_pegasus_generate(self):
+    def test_bart_generate(self):
         tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
         model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed", #"sshleifer/pegasus/aeslc",
             scale_embedding=True, num_beams=1, #activation='relu',
