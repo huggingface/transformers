@@ -1137,9 +1137,6 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
-            plain tuple.
 """
 
 
@@ -1167,6 +1164,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.longformer = TFLongformerMainLayer(config, name="longformer")
 
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         outputs = self.longformer(inputs, **kwargs)
         return outputs
@@ -1195,7 +1193,6 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         output_attentions=None,
         output_hidden_states=None,
         labels=None,
-        return_dict=None,
         training=False,
     ):
         r"""
@@ -1204,8 +1201,6 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
 
     Returns:
 
@@ -1214,7 +1209,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         >>> import tensorflow as tf
         >>> from transformers import TFLongformerForMaskedLM, LongformerTokenizer
 
-        >>> model = TFLongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096', return_dict=True)
+        >>> model = TFLongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
         >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
         >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
@@ -1224,7 +1219,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
         >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         >>> loss = outputs[0]
-        >>> prediction_logits = output[1]
+        >>> prediction_logits = outputs[1]
         """
 
         if isinstance(inputs, (tuple, list)):
@@ -1304,7 +1299,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         >>> from transformers import LongformerTokenizer, TFLongformerForQuestionAnswering
         >>> import tensorflow as tf
 
-        >>> tokenizer = TFLongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
         >>> model = TFLongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -1320,7 +1315,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         >>> end_logits = outputs[1]
         >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].numpy().tolist())
 
-        >>> answer_tokens = all_tokens[tf.argmax(start_logits) :tf.argmax(end_logits)+1]
+        >>> answer_tokens = all_tokens[tf.argmax(start_logits, axis=-1).numpy().item() :tf.argmax(end_logits, axis=-1).numpy().item() + 1]
         >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
 
         """
