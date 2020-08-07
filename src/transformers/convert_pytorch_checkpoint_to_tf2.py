@@ -189,8 +189,8 @@ MODEL_CLASSES = {
     "electra": (ElectraConfig, TFElectraForPreTraining, ElectraForPreTraining, ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "lxmert": (
         LxmertConfig,
-        LxmertPretraining,
-        TFLxmertPretraining,
+        LxmertForPretraining,
+        TFLxmertForPretraining,
         VisualFeatEncoder,
         TFVisualFeatEncoder,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
