@@ -36,6 +36,8 @@ class GLUETransformer(BaseTransformer):
         return self.model(**inputs)
 
     def training_step(self, batch, batch_idx):
+        self.lr_scheduler = self.trainer.lr_schedulers[0]["scheduler"]
+
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
 
         if self.config.model_type != "distilbert":
@@ -44,8 +46,7 @@ class GLUETransformer(BaseTransformer):
         outputs = self(**inputs)
         loss = outputs[0]
 
-        # tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
-        tensorboard_logs = {"loss": loss}
+        tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
 
     def prepare_data(self):
