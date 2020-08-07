@@ -104,7 +104,7 @@ if is_torch_available():
         AlbertForPreTraining,
         T5ForConditionalGeneration,
         ElectraForPreTraining,
-        LxmertPretraining,
+        LxmertForPretraining,
         VisualFeatEncoder,
     )
 
