@@ -93,15 +93,14 @@ class ExamplesTests(unittest.TestCase):
             --learning_rate=1e-4
             --seed=42
             --max_seq_length=128
+            --num_train_epochs=1
             """.split()
         with patch.object(sys, "argv", testargs):
-            run_pl_glue.main()
-            # XXX: for now just test that it runs,
-            # XXX: next validate results of eval or predict?
-            # result = run_pl_glue.main()
-            # del result["eval_loss"]
-            # for value in result.values():
-            #     self.assertGreaterEqual(value, 0.75)
+            result = run_pl_glue.main()
+            # remove all the various *loss* attributes
+            result = {k: v for k, v in result.items() if "loss" not in k}
+            for k, v in result.items():
+                self.assertGreaterEqual(v, 0.75, f"({k})")
 
     def test_run_language_modeling(self):
         stream_handler = logging.StreamHandler(sys.stdout)

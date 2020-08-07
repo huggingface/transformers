@@ -194,7 +194,7 @@ def main():
     if args.do_predict:
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         model = model.load_from_checkpoint(checkpoints[-1])
-        trainer.test(model)
+        return trainer.test(model)
 
 
 if __name__ == "__main__":
