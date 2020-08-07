@@ -65,6 +65,11 @@ class PegasusConfig(BartConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=True,
+
             normalize_before=True,
+            scale_embedding=True,
+            normalize_embedding=False,
+            add_final_layer_norm=True,
+            static_position_embeddings=True,
             **kwargs,
         )

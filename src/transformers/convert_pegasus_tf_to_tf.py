@@ -38,7 +38,9 @@ def rename_state_dict_key(k):
 def convert_pegasus_to_bart(tf_weights):
 
     cfg = PegasusConfig(
-        normalize_embedding=False, add_final_layer_norm=True, static_position_embeddings=True, vocab_size=96103
+        #normalize_embedding=False, add_final_layer_norm=True, static_position_embeddings=True, scale_embedding=True,
+        vocab_size=96103,
+
     )
     bart = BartForConditionalGeneration(cfg)
     sd = bart.model.state_dict()
