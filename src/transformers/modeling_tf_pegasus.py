@@ -568,7 +568,7 @@ class SelfAttention(Attention):
 def _assert_equal(a,b):
     assert a ==b, f'{a} != {b}'
 
-def ids_to_bias(ids_BxI, dtype=tf.float32, padding_id=0):
+def add_attention_mask(ids_BxI, dtype=tf.float32, padding_id=0):
     """Convert ids to attention bias for attention."""
     pad_BxI = tf.cast(tf.equal(ids_BxI, padding_id), dtype)
     bias_Bx1xI = tf.expand_dims(pad_BxI * dtype.min, axis=1)
@@ -579,8 +579,7 @@ def upper_triangle_bias(D, dtype=tf.float32):
     """Create a upper triangle matrix for decoding bias."""
     upper_triangle_DxD = 1 - tf.linalg.band_part(tf.ones([D, D], dtype=dtype), -1, 0)
     #assert self._dtype == tf.float32, f'{self._dtype} != tf.float32'
-    if isinstance(dtype, str):
-        raise TypeError(dtype)
+    if isinstance(dtype, str): raise TypeError(dtype)
     min_val =dtype.min
     tensor_1xDxD = tf.expand_dims(upper_triangle_DxD * min_val, axis=0)
     return tensor_1xDxD
@@ -632,11 +631,12 @@ class TransformerBlock:
         return s_BxIxD
 
 
-def stack(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, cache=None, decode_i=None):
+def run_all_layers(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, cache=None, decode_i=None):
     """Stack AttentionBlock layers."""
     if (memory_BxMxD is None) != (bias_BxIxM is None):
         raise ValueError("memory and memory_bias need to be provided together.")
     s_BxIxD = inputs_BxIxD
+    all_states = []
     for i, layer in enumerate(layers):
         with tf.compat.v1.variable_scope("layer_%d" % i):
             s_BxIxD = layer(
@@ -648,7 +648,8 @@ def stack(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, 
                 cache=cache[str(i)] if cache is not None else None,
                 decode_i=decode_i,
             )
-    return s_BxIxD
+            all_states.append(s_BxIxD)
+    return s_BxIxD, all_states
 
 
 class TFPegasusLegacyModel:
@@ -696,14 +697,20 @@ class TFPegasusLegacyModel:
 
 
     def _encode(self, features, training):
+        "Run whole encoder"
         inputs_BxI = features["inputs"]
-
         assert self._dtype == tf.float32, f'{self._dtype} != tf.float32'
-        inputs_bias_Bx1xI = ids_to_bias(inputs_BxI)#, self._dtype)
+        inputs_bias_Bx1xI = add_attention_mask(inputs_BxI)#, self._dtype)
+        print(f'inputs_bias_Bx1xI : {inputs_bias_Bx1xI.shape}')
         states_BxIxD = self._embedding_layer(inputs_BxI, True)
-        states_BxIxD = self._dropout_fn(add_time_signal(states_BxIxD), training)
+        self.embedded_inputs = states_BxIxD
+        signalled = add_time_signal(states_BxIxD)
+        self.signalled = signalled
+        #print(f'enc: signalled: {signalled}')
+        states_BxIxD = self._dropout_fn(signalled, training)
+        self.encoder_layer_input = states_BxIxD
         with tf.compat.v1.variable_scope("encoder", reuse=tf.compat.v1.AUTO_REUSE):
-            states_BxIxD = stack(self._encoder_layers, training, states_BxIxD, inputs_bias_Bx1xI, None, None)
+            states_BxIxD, self.encoder_states = run_all_layers(self._encoder_layers, training, states_BxIxD, inputs_bias_Bx1xI, None, None)
             states_BxIxD = self._layer_norm_encoder(states_BxIxD)
         return {"memory": states_BxIxD, "memory_bias": inputs_bias_Bx1xI}
 
@@ -735,7 +742,7 @@ class TFPegasusLegacyModel:
         #self._time_signal =
         states_BxTxD = self._dropout_fn(states_BxTxD, training)
         with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
-            states_BxTxD = stack(
+            states_BxTxD, _ = run_all_layers(
                 self._decoder_layers, training, states_BxTxD, bias_1xTxT, context["memory"], context["memory_bias"]
             )
             states_BxTxD = self._layer_norm_decoder(states_BxTxD)
@@ -772,7 +779,7 @@ class TFPegasusLegacyModel:
             dec_Bx1xD *= tf.cast(tf.greater(i, 0), self._dtype)
             dec_Bx1xD = add_time_signal(dec_Bx1xD, start_index=i)
             with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
-                dec_Bx1xD = stack(
+                dec_Bx1xD, _ = run_all_layers(
                     self._decoder_layers,
                     False,
                     dec_Bx1xD,
@@ -839,11 +846,11 @@ class TFPegasusPretrainedModel(TFPreTrainedModel):
         inputs_BxI = features["inputs"]
 
         assert self._dtype == tf.float32, f'{self._dtype} != tf.float32'
-        inputs_bias_Bx1xI = ids_to_bias(inputs_BxI)#, self._dtype)
+        inputs_bias_Bx1xI = add_attention_mask(inputs_BxI)#, self._dtype)
         states_BxIxD = self._embedding_layer(inputs_BxI, True)
         states_BxIxD = self._dropout_fn(add_time_signal(states_BxIxD), training)
         with tf.compat.v1.variable_scope("encoder", reuse=tf.compat.v1.AUTO_REUSE):
-            states_BxIxD = stack(self._encoder_layers, training, states_BxIxD, inputs_bias_Bx1xI, None, None)
+            states_BxIxD, _ = run_all_layers(self._encoder_layers, training, states_BxIxD, inputs_bias_Bx1xI, None, None)
             states_BxIxD = self._layer_norm_encoder(states_BxIxD)
         return {"memory": states_BxIxD, "memory_bias": inputs_bias_Bx1xI}
 
@@ -871,7 +878,7 @@ class TFPegasusPretrainedModel(TFPreTrainedModel):
         states_BxTxD = add_time_signal(states_BxTxD)
         states_BxTxD = self._dropout_fn(states_BxTxD, training)
         with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
-            states_BxTxD = stack(
+            states_BxTxD, _ = run_all_layers(
                 self._decoder_layers, training, states_BxTxD, bias_1xTxT, context["memory"], context["memory_bias"]
             )
             states_BxTxD = self._layer_norm_decoder(states_BxTxD)
@@ -906,7 +913,7 @@ class TFPegasusPretrainedModel(TFPreTrainedModel):
             dec_Bx1xD *= tf.cast(tf.greater(i, 0), self._dtype)
             dec_Bx1xD = add_time_signal(dec_Bx1xD, start_index=i)
             with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
-                dec_Bx1xD = stack(
+                dec_Bx1xD, _ = run_all_layers(
                     self._decoder_layers,
                     False,
                     dec_Bx1xD,

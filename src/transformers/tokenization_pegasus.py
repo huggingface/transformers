@@ -2,8 +2,8 @@ from pathlib import Path
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple
 
-from transformers import BatchEncoding
-from transformers.tokenization_marian import load_spm, save_json
+from .tokenization_utils_base import BatchEncoding
+#from transformers.tokenization_marian import load_spm, save_json
 from transformers.tokenization_reformer import ReformerTokenizer
 
 
@@ -18,9 +18,6 @@ class PegasusTokenizer(ReformerTokenizer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        #
-
         # Dont use reserved words added_token_encoder, added_tokens_decoder because they
         # get checked in from_pretrained
         assert len(self.added_tokens_decoder) == 0

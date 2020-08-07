@@ -11,6 +11,11 @@ from transformers.testing_utils import require_tf, slow
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
+BANK_SNIPPET = ("To ensure a smooth flow of bank resolutions to the necessary signatories, " \
+     "I am requesting that Enron Treasury first route the bank resolutions to Angela Davis " \
+     "(EWS Legal) to be initialed before being routed to John Lavorato or Louise Kitchen.\n" \
+     "If you have any questions please call me at 3-6544." \
+     "Thank you for your attention to this matter.")
 
 if is_tf_available():
     import tensorflow as tf
@@ -68,6 +73,7 @@ class TFPegasusModelTester:
         #input_ids[:, -1] = config.eos_token_id
         return config, {'inputs': input_ids, 'attention_mask': input_mask, 'training': True}
 
+
 class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFPegasusPretrainedModel,) if is_tf_available() else ()
@@ -78,7 +84,7 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 @require_tf
-class TFPegasusModelIntegrationTest(unittest.TestCase):
+class IntegrationTest(unittest.TestCase):
     @cached_property
     def model(self):
         raise NotImplementedError("no s3 yet")
@@ -131,13 +137,7 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
                 tf.compat.v1.train.init_from_checkpoint(model_dir, assignment_map)
 
                 # check running
-                raw_input_str = (
-                    "To ensure a smooth flow of bank resolutions to the necessary signatories, "
-                    "I am requesting that Enron Treasury first route the bank resolutions to Angela Davis "
-                    "(EWS Legal) to be initialed before being routed to John Lavorato or Louise Kitchen.\n"
-                    "If you have any questions please call me at 3-6544."
-                    "Thank you for your attention to this matter."
-                )
+                raw_input_str = BANK_SNIPPET
                 raw_target_str = "Treasury Bank Resolutions"  # or something close
 
                 input_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
@@ -158,16 +158,26 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
                 # decode to str
                 output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
                 sess.run(tf.compat.v1.global_variables_initializer())
-                results, emb = sess.run([output_str, model._emb],
-                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]})
+                # Run it
+                feed_dict = {input_str: [raw_input_str], target_str: [raw_target_str]}
+                results, emb = sess.run([output_str, model.embedded_inputs], feed_dict=feed_dict)
 
-                after_time, after_stack, logits  = sess.run([model.after_time_signal, model.after_stack, model.logits],
-                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]})
+                after_time, after_stack, logits, enc_input, encoder_states = sess.run(
+                    [model.signalled, model.after_stack, model.logits, model.encoder_layer_input, model.encoder_states],
+                    feed_dict=feed_dict
+                )
 
-        print(results)
-        print(f'after_time: {after_time}')
-        print(f'after_stack: {after_time}')
-        print(f'logits: {logits}')
+        print(f'Summary: {results}')
+        print_tensor('1. embedded', emb)
+        print_tensor('2. after pos', after_time)
+        print_tensor('3. 2-1', after_time-emb)
+        print_tensor('4. encoder layer 0 input', enc_input)
+        print_tensor('5. encoder layer 1 input', encoder_states[0])
+
+        #import ipdb; ipdb.set_trace()
+        #print(f'after_time: {after_time}')
+        #print(f'after_stack: {after_stack}')
+        #print(f'logits: {logits}')
 
 
     def test_eager_pegasus(self):
@@ -246,3 +256,20 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
         #
         # print(sess.run(output_str,
         #                feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
+
+
+    def test_bart_pegasus(self):
+        tok = PegasusTokenizer.from_pretrained('sshleifer/pegasus')
+        model = BartForConditionalGeneration.from_pretrained('sshleifer/pegasus/aeslc',
+                                                             scale_embedding=True, num_beams=1).to(torch_device)
+        batch = tok([BANK_SNIPPET], return_tensors='pt').to(torch_device)
+        summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
+        self.assertEqual(summary, 'Bank Resolutions')
+
+
+from transformers import BartForConditionalGeneration, PegasusConfig, PegasusTokenizer
+from transformers.testing_utils import torch_device
+def print_tensor(msg, t):
+    #assert t.shape
+    slice = t[:, :3, :3]
+    print(f'{msg}: shape: {t.shape}, slice: {slice}')
