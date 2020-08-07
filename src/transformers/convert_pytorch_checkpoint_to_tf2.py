@@ -60,7 +60,7 @@ from transformers import (
     TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
-    TFLxmertPretraining,
+    TFLxmertForPretraining,
     TFOpenAIGPTLMHeadModel,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
