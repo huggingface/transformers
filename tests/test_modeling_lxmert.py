@@ -16,211 +16,378 @@
 
 import unittest
 
-from transformers import LxmertConfig, is_tf_available
+from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-if is_tf_available():
-    from transformers.modeling_tf_lxmert import (
-        TFLxmertModel,
-        TFLxmertForMaskedLM,
-        TFLxmertForSequenceClassification,
-        TFLxmertForTokenClassification,
-        TFLxmertForQuestionAnswering,
+if is_torch_available():
+    import torch
+    from transformers import (
+        LxmertConfig,
+        LxmertModel,
+        LxmertForPretraining,
     )
+    from transformers.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
+
+    #
 
 
-@require_tf
-class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
+class LxmertModelTester:
+    """You can also import this e.g from .test_modeling_bart import BartModelTester """
 
-    all_model_classes = (
-        (
-            TFLxmertModel,
-            TFLxmertForMaskedLM,
-            TFLxmertForQuestionAnswering,
-            TFLxmertForSequenceClassification,
-            TFLxmertForTokenClassification,
+    def __init__(
+        self,
+        parent,
+        vocab_size=300,
+        hidden_size=28,
+        num_attention_heads=2,
+        num_answers=2,
+        intermediate_size=64,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=2,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        pad_token_id=0,
+        n_qa_labels=30,
+        n_object_labels=16,
+        n_attr_labels=4,
+        l_layers=2,
+        x_layers=1,
+        r_layers=1,
+        visual_feat_dim=128,
+        visual_pos_dim=4,
+        visual_loss_normalizer=6.67,
+        seq_length=20,
+        batch_size=4,
+        is_training=True,
+        task_matched=True,
+        task_mask_lm=True,
+        task_obj_predict=True,
+        task_qa=True,
+        visual_obj_loss=True,
+        visual_attr_loss=True,
+        visual_feat_loss=True,
+        num_visual_features=10,
+        use_token_type_ids=True,
+        use_lang_mask=True,
+        output_attentions=False,
+        output_hidden_states=False,
+        scope=None,
+    ):
+        self.parent = parent
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.num_answers = num_answers
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.pad_token_id = pad_token_id
+        self.n_qa_labels = n_qa_labels
+        self.n_object_labels = n_object_labels
+        self.n_attr_labels = n_attr_labels
+        self.l_layers = l_layers
+        self.x_layers = x_layers
+        self.r_layers = r_layers
+        self.visual_feat_dim = visual_feat_dim
+        self.visual_pos_dim = visual_pos_dim
+        self.visual_loss_normalizer = visual_loss_normalizer
+        self.seq_length = seq_length
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.use_lang_mask = use_lang_mask
+        self.task_matched = task_matched
+        self.task_mask_lm = task_mask_lm
+        self.task_obj_predict = task_obj_predict
+        self.task_qa = task_qa
+        self.visual_obj_loss = visual_obj_loss
+        self.visual_attr_loss = visual_attr_loss
+        self.visual_feat_loss = visual_feat_loss
+        self.num_visual_features = num_visual_features
+        self.use_token_type_ids = use_token_type_ids
+        self.scope = scope
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
+
+    def prepare_config_and_inputs(self):
+
+        output_v_attentions, output_l_attentions, output_x_attentions = (
+            (True, True, True) if self.output_attentions else (False, False, False)
         )
-        if is_tf_available()
-        else ()
-    )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=self.vocab_size)
+        visual_feats = torch.rand(self.batch_size, self.num_visual_features, self.visual_feat_dim)
+        bounding_boxes = torch.rand(self.batch_size, self.num_visual_features, 4)
 
-    class TFLxmertModelTester(object):
-        def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
-        ):
-            self.parent = parent
-            self.batch_size = batch_size
-            self.seq_length = seq_length
-            self.is_training = is_training
-            self.use_input_mask = use_input_mask
-            self.use_token_type_ids = use_token_type_ids
-            self.use_labels = use_labels
-            self.vocab_size = vocab_size
-            self.hidden_size = hidden_size
-            self.num_hidden_layers = num_hidden_layers
-            self.num_attention_heads = num_attention_heads
-            self.intermediate_size = intermediate_size
-            self.hidden_act = hidden_act
-            self.hidden_dropout_prob = hidden_dropout_prob
-            self.attention_probs_dropout_prob = attention_probs_dropout_prob
-            self.max_position_embeddings = max_position_embeddings
-            self.type_vocab_size = type_vocab_size
-            self.type_sequence_label_size = type_sequence_label_size
-            self.initializer_range = initializer_range
-            self.num_labels = num_labels
-            self.num_choices = num_choices
-            self.scope = scope
-
-        def prepare_config_and_inputs(self):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-            input_mask = None
-            if self.use_input_mask:
-                input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-            token_type_ids = None
-            if self.use_token_type_ids:
-                token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-            sequence_labels = None
-            token_labels = None
-            choice_labels = None
-            if self.use_labels:
-                sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-            config = LxmertConfig(
-                vocab_size=self.vocab_size,
-                hidden_size=self.hidden_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                intermediate_size=self.intermediate_size,
-                hidden_act=self.hidden_act,
-                hidden_dropout_prob=self.hidden_dropout_prob,
-                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-                max_position_embeddings=self.max_position_embeddings,
-                type_vocab_size=self.type_vocab_size,
-                initializer_range=self.initializer_range,
+        input_mask = None
+        if self.use_lang_mask:
+            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+        token_type_ids = None
+        if self.use_token_type_ids:
+            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+        obj_labels = None
+        if self.task_obj_predict:
+            obj_labels = {}
+        if self.visual_attr_loss and self.task_obj_predict:
+            obj_labels["attr"] = (
+                ids_tensor([self.batch_size, self.num_visual_features], self.n_attr_labels),
+                ids_tensor([self.batch_size, self.num_visual_features], self.n_attr_labels),
             )
-
-            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-        def create_and_check_lxmert_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        ):
-            model = TFLxmertModel(config=config)
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-            sequence_output, pooled_output = model(inputs)
-
-            inputs = [input_ids, input_mask]
-            sequence_output, pooled_output = model(inputs)
-
-            sequence_output, pooled_output = model(input_ids)
-
-            result = {
-                "sequence_output": sequence_output.numpy(),
-                "pooled_output": pooled_output.numpy(),
-            }
-            self.parent.assertListEqual(
-                list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+        if self.visual_feat_loss and self.task_obj_predict:
+            obj_labels["feat"] = (
+                ids_tensor(
+                    [self.batch_size, self.num_visual_features, self.visual_feat_dim], self.num_visual_features
+                ),
+                ids_tensor([self.batch_size, self.num_visual_features], self.num_visual_features),
             )
-            self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
+        if self.visual_obj_loss and self.task_obj_predict:
+            obj_labels["obj"] = (
+                ids_tensor([self.batch_size, self.num_visual_features], self.n_object_labels),
+                ids_tensor([self.batch_size, self.num_visual_features], self.n_object_labels),
+            )
+        ans = None
+        if self.task_qa:
+            ans = ids_tensor([self.batch_size], self.n_qa_labels)
+        masked_lm_labels = None
+        if self.task_mask_lm:
+            masked_lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        matched_labels = None
+        if self.task_matched:
+            matched_labels = ids_tensor([self.batch_size], self.num_answers)
 
-        #         def create_and_check_lxmert_for_masked_lm(
-        #             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        #         ):
-        #             model = TFLxmertForMaskedLM(config=config)
-        #             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        #             (prediction_scores,) = model(inputs)
-        #             result = {
-        #                 "prediction_scores": prediction_scores.numpy(),
-        #             }
-        #             self.parent.assertListEqual(
-        #                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        #             )
-        #
-        #         def create_and_check_lxmert_for_sequence_classification(
-        #             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        #         ):
-        #             config.num_labels = self.num_labels
-        #             model = TFLxmertForSequenceClassification(config=config)
-        #             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        #             (logits,) = model(inputs)
-        #             result = {
-        #                 "logits": logits.numpy(),
-        #             }
-        #             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
-        #
-        #         def create_and_check_lxmert_for_token_classification(
-        #             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        #         ):
-        #             config.num_labels = self.num_labels
-        #             model = TFLxmertForTokenClassification(config=config)
-        #             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        #             (logits,) = model(inputs)
-        #             result = {
-        #                 "logits": logits.numpy(),
-        #             }
-        #             self.parent.assertListEqual(
-        #                 list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels]
-        #             )
-        #
-        #         def create_and_check_lxmert_for_question_answering(
-        #             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-        #         ):
-        #             model = TFLxmertForQuestionAnswering(config=config)
-        #             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        #             start_logits, end_logits = model(inputs)
-        #             result = {
-        #                 "start_logits": start_logits.numpy(),
-        #                 "end_logits": end_logits.numpy(),
-        #             }
-        #             self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-        #             self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+        config = LxmertConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            num_attention_heads=self.num_attention_heads,
+            num_answers=self.num_answers,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            initializer_range=self.initializer_range,
+            layer_norm_eps=self.layer_norm_eps,
+            pad_token_id=self.pad_token_id,
+            n_qa_labels=self.n_qa_labels,
+            n_object_labels=self.n_object_labels,
+            n_attr_labels=self.n_attr_labels,
+            l_layers=self.l_layers,
+            x_layers=self.x_layers,
+            r_layers=self.r_layers,
+            visual_feat_dim=self.visual_feat_dim,
+            visual_pos_dim=self.visual_pos_dim,
+            visual_loss_normalizer=self.visual_loss_normalizer,
+            task_matched=self.task_matched,
+            task_mask_lm=self.task_mask_lm,
+            task_obj_predict=self.task_obj_predict,
+            task_qa=self.task_qa,
+            visual_obj_loss=self.visual_obj_loss,
+            visual_attr_loss=self.visual_attr_loss,
+            visual_feat_loss=self.visual_feat_loss,
+        )
 
-        def prepare_config_and_inputs_for_common(self):
-            config_and_inputs = self.prepare_config_and_inputs()
-            (
-                config,
-                input_ids,
-                token_type_ids,
-                input_mask,
-                sequence_labels,
-                token_labels,
-                choice_labels,
-            ) = config_and_inputs
-            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
-            return config, inputs_dict
+        return (
+            config,
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids,
+            input_mask,
+            obj_labels,
+            masked_lm_labels,
+            matched_labels,
+            ans,
+            output_v_attentions,
+            output_l_attentions,
+            output_x_attentions,
+        )
+
+    def create_and_check_lxmert_model(
+        self,
+        config,
+        input_ids,
+        visual_feats,
+        bounding_boxes,
+        token_type_ids,
+        input_mask,
+        obj_labels,
+        masked_lm_labels,
+        matched_labels,
+        ans,
+        output_v_attentions,
+        output_l_attentions,
+        output_x_attentions,
+    ):
+        model = LxmertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            output_v_attentions=output_v_attentions,
+            output_l_attentions=output_l_attentions,
+            output_x_attentions=output_x_attentions,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            output_v_attentions=not output_v_attentions,
+            output_l_attentions=not output_l_attentions,
+            output_x_attentions=not output_x_attentions,
+        )
+        result = model(input_ids, (visual_feats, bounding_boxes), return_dict=False)
+        result = model(input_ids, (visual_feats, bounding_boxes), return_dict=True)
+
+        self.parent.assertEqual(result.last_hidden_state_l.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state_v.shape, (self.batch_size, self.num_visual_features, self.hidden_size)
+        )
+        self.parent.assertEqual(result.pooled_output_x_encoder.shape, (self.batch_size, self.hidden_size))
+
+    def create_and_check_lxmert_for_pretraining(
+        self,
+        config,
+        input_ids,
+        visual_feats,
+        bounding_boxes,
+        token_type_ids,
+        input_mask,
+        obj_labels,
+        masked_lm_labels,
+        matched_labels,
+        ans,
+        output_v_attentions,
+        output_l_attentions,
+        output_x_attentions,
+    ):
+        model = LxmertForPretraining(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+            obj_labels=obj_labels,
+            matched_label=matched_labels,
+            ans=ans,
+            output_v_attentions=output_v_attentions,
+            output_l_attentions=output_l_attentions,
+            output_x_attentions=output_x_attentions,
+            return_dict=True,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+            output_v_attentions=not output_v_attentions,
+            output_l_attentions=not output_l_attentions,
+            output_x_attentions=not output_x_attentions,
+            return_dict=False,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            obj_labels=obj_labels,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            matched_labels=matched_labels,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            ans=ans,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+            obj_labels=obj_labels,
+            matched_label=matched_labels,
+            ans=ans,
+            output_v_attentions=not output_v_attentions,
+            output_l_attentions=not output_l_attentions,
+            output_x_attentions=not output_x_attentions,
+            return_dict=True,
+        )
+
+        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids,
+            input_mask,
+            obj_labels,
+            masked_lm_labels,
+            matched_labels,
+            ans,
+            output_v_attentions,
+            output_l_attentions,
+            output_x_attentions,
+            output_v_hidden_states,
+            output_l_hidden_states,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "visual_feats": (visual_feats, bounding_boxes),
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+            "output_v_attentions": output_v_attentions,
+            "output_l_attentions": output_l_attentions,
+            "output_x_attentions": output_x_attentions,
+        }
+
+        return config, inputs_dict
+
+
+@require_torch
+class LxmertModelTest(unittest.TestCase):
+
+    all_model_classes = (LxmertModel, LxmertForPretraining) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = TFLxmertModelTest.TFLxmertModelTester(self)
+        self.model_tester = LxmertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LxmertConfig, hidden_size=37)
 
     def test_config(self):
@@ -230,24 +397,12 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lxmert_model(*config_and_inputs)
 
-    def test_for_masked_lm(self):
+    def test_lxmert_pretraning(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lxmert_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_lxmert_for_pretraining(*config_and_inputs)
 
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lxmert_for_question_answering(*config_and_inputs)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lxmert_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lxmert_for_token_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in ["lxmert-base-uncased"]:
-            model = TFLxmertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
-            self.assertIsNotNone(model)
+    # @slow
+    # def test_model_from_pretrained(self):
+    #     for model_name in LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+    #         model = LxmertModel.from_pretrained(model_name)
+    #         self.assertIsNotNone(model)

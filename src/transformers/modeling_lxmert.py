@@ -18,21 +18,74 @@
 import logging
 import math
 import os
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
-from .configuration_lxmert import LxmertConfig
-from .file_utils import add_start_docstrings
-from .modeling_utils import PreTrainedModel
 from .activations import gelu, swish
+from .configuration_lxmert import LxmertConfig
+from .file_utils import ModelOutput, add_start_docstrings
+from .modeling_outputs import LxmertModelOutput
+from .modeling_utils import PreTrainedModel
+
 
 logger = logging.getLogger(__name__)
 
 LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = {
     "lxmert-base-uncased": "",
 }
+
+
+class GeLU(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return gelu(x)
+
+
+@dataclass
+class LxmertForPretrainingOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.LxmertForPretrainingModel`.
+
+    Args:
+        loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
+        prediction_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        cross_relationship_score: (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
+            Prediction scores of the textual matching objective (classification) head (scores of True/False
+            continuation before SoftMax).
+        question_answering_score: (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, n_qa_answers)`):
+            Prediction scores of question answering objective (classification).
+        attentions_l_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        attentions_v_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        attentions_x_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: [torch.FloatTensor] = None
+    prediction_logits: Optional[torch.FloatTensor] = None
+    cross_relationship_score: Optional[torch.FloatTensor] = None
+    question_answering_score: Optional[torch.FloatTensor] = None
+    attentions_v_encoder: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_l_encoder: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_x_encoder: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def load_tf_weights_in_lxmert(model, config, tf_checkpoint_path):
@@ -170,7 +223,7 @@ class LxmertAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, context, attention_mask=None):
+    def forward(self, hidden_states, context, attention_mask=None, output_attentions=False):
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(context)
         mixed_value_layer = self.value(context)
@@ -197,7 +250,9 @@ class LxmertAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
-        return context_layer
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        return outputs
 
 
 class LxmertAttOutput(nn.Module):
@@ -220,10 +275,13 @@ class LxmertCrossattLayer(nn.Module):
         self.att = LxmertAttention(config)
         self.output = LxmertAttOutput(config)
 
-    def forward(self, input_tensor, ctx_tensor, ctx_att_mask=None):
-        output = self.att(input_tensor, ctx_tensor, ctx_att_mask)
-        attention_output = self.output(output, input_tensor)
-        return attention_output
+    def forward(self, input_tensor, ctx_tensor, ctx_att_mask=None, output_attentions=False):
+        output = self.att(input_tensor, ctx_tensor, ctx_att_mask, output_attentions=output_attentions)
+        if output_attentions:
+            attention_probs = output[1]
+        attention_output = self.output(output[0], input_tensor)
+        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        return outputs
 
 
 class LxmertSelfattLayer(nn.Module):
@@ -232,11 +290,14 @@ class LxmertSelfattLayer(nn.Module):
         self.self = LxmertAttention(config)
         self.output = LxmertAttOutput(config)
 
-    def forward(self, input_tensor, attention_mask):
+    def forward(self, input_tensor, attention_mask, output_attentions=False):
         # Self attention attends to itself, thus keys and querys are the same (input_tensor).
-        self_output = self.self(input_tensor, input_tensor, attention_mask)
-        attention_output = self.output(self_output, input_tensor)
-        return attention_output
+        output = self.self(input_tensor, input_tensor, attention_mask, output_attentions=output_attentions)
+        if output_attentions:
+            attention_probs = output[1]
+        attention_output = self.output(output[0], input_tensor)
+        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        return outputs
 
 
 class LxmertIntermediate(nn.Module):
@@ -272,12 +333,12 @@ class LxmertLayer(nn.Module):
         self.intermediate = LxmertIntermediate(config)
         self.output = LxmertOutput(config)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
-        attention_output = attention_outputs[0]
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+        outputs = self.attention(hidden_states, hidden_states, attention_mask, output_attentions=output_attentions)
+        attention_output = outputs[0]
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
+        outputs = (layer_output,) + outputs[1:]  # add attentions if we output them
         return outputs
 
 
@@ -297,17 +358,21 @@ class LxmertXLayer(nn.Module):
         self.visn_inter = LxmertIntermediate(config)
         self.visn_output = LxmertOutput(config)
 
-    def cross_att(self, lang_input, lang_attention_mask, visn_input, visn_attention_mask):
+    def cross_att(self, lang_input, lang_attention_mask, visn_input, visn_attention_mask, output_x_attentions=False):
         # Cross Attention
-        lang_att_output = self.visual_attention(lang_input, visn_input, ctx_att_mask=visn_attention_mask)
-        visn_att_output = self.visual_attention(visn_input, lang_input, ctx_att_mask=lang_attention_mask)
+        lang_att_output = self.visual_attention(
+            lang_input, visn_input, ctx_att_mask=visn_attention_mask, output_attentions=output_x_attentions
+        )
+        visn_att_output = self.visual_attention(
+            visn_input, lang_input, ctx_att_mask=lang_attention_mask, output_attentions=False
+        )
         return lang_att_output, visn_att_output
 
     def self_att(self, lang_input, lang_attention_mask, visn_input, visn_attention_mask):
         # Self Attention
-        lang_att_output = self.lang_self_att(lang_input, lang_attention_mask)
-        visn_att_output = self.visn_self_att(visn_input, visn_attention_mask)
-        return lang_att_output, visn_att_output
+        lang_att_output = self.lang_self_att(lang_input, lang_attention_mask, output_attentions=False)
+        visn_att_output = self.visn_self_att(visn_input, visn_attention_mask, output_attentions=False)
+        return lang_att_output[0], visn_att_output[0]
 
     def output_fc(self, lang_input, visn_input):
         # FC layers
@@ -317,22 +382,24 @@ class LxmertXLayer(nn.Module):
         # Layer output
         lang_output = self.lang_output(lang_inter_output, lang_input)
         visn_output = self.visn_output(visn_inter_output, visn_input)
+
         return lang_output, visn_output
 
-    def forward(self, lang_feats, lang_attention_mask, visn_feats, visn_attention_mask):
+    def forward(self, lang_feats, lang_attention_mask, visn_feats, visn_attention_mask, output_attentions=False):
 
-        lang_att_output = lang_feats
-        visn_att_output = visn_feats
+        lang_att_output = (lang_feats,)
+        visn_att_output = (visn_feats,)
 
         lang_att_output, visn_att_output = self.cross_att(
-            lang_att_output, lang_attention_mask, visn_att_output, visn_attention_mask
+            lang_att_output[0], lang_attention_mask, visn_att_output[0], visn_attention_mask,
         )
+        attention_probs = lang_att_output[1:]
         lang_att_output, visn_att_output = self.self_att(
-            lang_att_output, lang_attention_mask, visn_att_output, visn_attention_mask
+            lang_att_output[0], lang_attention_mask, visn_att_output[0], visn_attention_mask
         )
-        lang_output, visn_output = self.output_fc(lang_att_output, visn_att_output)
 
-        return lang_output, visn_output
+        lang_output, visn_output = self.output_fc(lang_att_output, visn_att_output)
+        return (lang_output, visn_output) + (attention_probs,) if output_attentions else (lang_output, visn_output)
 
 
 class VisualFeatEncoder(nn.Module):
@@ -353,7 +420,6 @@ class VisualFeatEncoder(nn.Module):
 
     def forward(self, visn_input):
         feats, boxes = visn_input
-
         x = self.visn_fc(feats)
         x = self.visn_layer_norm(x)
         y = self.box_fc(boxes)
@@ -382,25 +448,55 @@ class LxmertEncoder(nn.Module):
         self.x_layers = nn.ModuleList([LxmertXLayer(config) for _ in range(self.num_x_layers)])
         self.r_layers = nn.ModuleList([LxmertLayer(config) for _ in range(self.num_r_layers)])
 
-    def forward(self, lang_feats, lang_attention_mask, visn_feats, visn_attention_mask=None):
-        # Run visual embedding layer
-        # Note: Word embedding layer was executed outside this module.
-        #       Keep this design to allow loading BERT weights.
+    def forward(
+        self,
+        lang_feats,
+        lang_attention_mask,
+        visn_feats,
+        visn_attention_mask=None,
+        output_v_attentions=None,
+        output_l_attentions=None,
+        output_x_attentions=None,
+    ):
+
+        all_v_hidden_states = ()
+        all_l_hidden_states = ()
+        all_v_attentions = () if output_v_attentions else None
+        all_l_attentions = () if output_l_attentions else None
+        all_x_attentions = () if output_x_attentions else None
+
         visn_feats = self.visn_fc(visn_feats)
 
         # Run language layers
         for layer_module in self.layer:
-            lang_feats = layer_module(lang_feats, lang_attention_mask)
+            l_outputs = layer_module(lang_feats, visn_attention_mask, output_attentions=output_l_attentions)
+            lang_feats = l_outputs[0]
+            if all_l_attentions:
+                all_l_attentions = all_l_attentions + (l_outputs[1],)
 
         # Run relational layers
         for layer_module in self.r_layers:
-            visn_feats = layer_module(visn_feats, visn_attention_mask)
+            v_outputs = layer_module(visn_feats, visn_attention_mask, output_attentions=output_v_attentions)
+            visn_feats = v_outputs[0]
+            if all_v_attentions:
+                all_v_attentions = all_v_attentions + (v_outputs[1],)
 
         # Run cross-modality layers
+        all_v_hidden_states = all_v_hidden_states + (visn_feats,)
+        all_l_hidden_states = all_l_hidden_states + (lang_feats,)
         for layer_module in self.x_layers:
-            lang_feats, visn_feats = layer_module(lang_feats, lang_attention_mask, visn_feats, visn_attention_mask)
+            x_outputs = layer_module(
+                lang_feats, lang_attention_mask, visn_feats, visn_attention_mask, output_attentions=output_x_attentions
+            )
+            lang_feats, visn_feats = x_outputs[:2]
+            all_v_hidden_states = all_v_hidden_states + (visn_feats,)
+            all_l_hidden_states = all_l_hidden_states + (lang_feats,)
+            if all_x_attentions:
+                all_x_attentions = all_x_attentions + (x_outputs[2],)
 
-        return lang_feats, visn_feats
+        visn_encoder_outputs = (all_v_hidden_states, all_v_attentions if output_v_attentions else None)
+        lang_encoder_outputs = (all_l_hidden_states, all_l_attentions if output_l_attentions else None)
+        return (visn_encoder_outputs, lang_encoder_outputs, all_x_attentions if output_x_attentions else None)
 
 
 class LxmertPooler(nn.Module):
@@ -457,7 +553,7 @@ class LxmertVisualAnswerHead(nn.Module):
         hid_dim = config.hidden_size
         self.logit_fc = nn.Sequential(
             nn.Linear(hid_dim, hid_dim * 2),
-            gelu,
+            GeLU(),
             LxmertLayerNorm(hid_dim * 2, eps=1e-12),
             nn.Linear(hid_dim * 2, num_answers),
         )
@@ -467,10 +563,9 @@ class LxmertVisualAnswerHead(nn.Module):
 
 
 class LxmertVisualObjHead(nn.Module):
-    def __init__(self, config, visual_losses):
+    def __init__(self, config):
         super().__init__()
         self.transform = LxmertPredictionHeadTransform(config)
-
         # Decide the use of visual losses
         visual_losses = {}
         if config.visual_obj_loss:
@@ -478,13 +573,13 @@ class LxmertVisualObjHead(nn.Module):
         if config.visual_attr_loss:
             visual_losses["attr"] = {"shape": (-1,), "num": config.n_attr_labels}
         if config.visual_obj_loss:
-            visual_losses["feat"] = {"shape": (-1, 2048), "num": config.visual_feat_dim}
+            visual_losses["feat"] = {"shape": (-1, config.visual_feat_dim), "num": config.visual_feat_dim}
         self.visual_losses = visual_losses
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder_dict = nn.ModuleDict(
-            {key: nn.Linear(config.hidden_size, self.visual_losses[key]["shape"]) for key in self.visual_losses}
+            {key: nn.Linear(config.hidden_size, self.visual_losses[key]["num"]) for key in self.visual_losses}
         )
 
     def forward(self, hidden_states):
@@ -529,38 +624,6 @@ class LxmertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class LxmertForFeatureExtraction(LxmertPreTrainedModel):
-    """
-    Lxmert model for extracting features
-    """
-
-    def __init__(self, config):
-        """
-        :param config:
-        """
-        super().__init__(config)
-        self.bert = LxmertModel(config)
-        self.mode = config.mode
-        self.init_weights()
-
-    def forward(
-        self, input_ids, token_type_ids=None, attention_mask=None, visual_feats=None, visual_attention_mask=None
-    ):
-        feat_seq, pooled_output = self.bert(
-            input_ids,
-            token_type_ids,
-            attention_mask,
-            visual_feats=visual_feats,
-            visual_attention_mask=visual_attention_mask,
-        )
-        if "x" == self.mode:
-            return pooled_output
-        elif "x" in self.mode and ("l" in self.mode or "r" in self.mode):
-            return feat_seq, pooled_output
-        elif "l" in self.mode or "r" in self.mode:
-            return feat_seq
-
-
 LXMERT_START_DOCSTRING = r"""    The LXMERT model was proposed in
     `LXMERT: Learning Cross-Modality Encoder Representations from Transformers
     by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
@@ -585,27 +648,52 @@ LXMERT_START_DOCSTRING = r"""    The LXMERT model was proposed in
 """
 
 LXMERT_INPUTS_DOCSTRING = r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary.
-            To match pre-training, LXMERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
-            Indices can be obtained using :class:`transformers.LxmertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-            corresponds to a `sentence B` token
-        **visual_feats**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length, features_dim)``:
-            Pre-trained and instance-level vision features ROI-aligned and pooled from bounding boxes.
-        **visual_attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length)``:
-            Mask to avoid performing attention on padding token indices for visual features.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+     Args:
+         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
+             Indices of input sequence tokens in the vocabulary.
+
+             Indices can be obtained using :class:`transformers.LxmertTokenizer`.
+             See :func:`transformers.PreTrainedTokenizer.encode` and
+             :func:`transformers.PreTrainedTokenizer.__call__` for details.
+
+             `What are input IDs? <../glossary.html#input-ids>`__
+         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+             Mask to avoid performing attention on padding token indices.
+             Mask values selected in ``[0, 1]``:
+             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+             `What are attention masks? <../glossary.html#attention-mask>`__
+         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+             Segment token indices to indicate first and second portions of the inputs.
+             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+             corresponds to a `sentence B` token
+
+             `What are token type IDs? <../glossary.html#token-type-ids>`_
+
+
+        visual_feats: (:obj: `Tuple[torch.FloatTensor, torch.FloatTensor]`):
+            the first item in the tuple represents the actual visual features
+            (ROI pooled object features from bounding boxes using a faster-RCNN model) of shape ՝(batch_size, num_visual_features, visual_feat_dim)՝
+            and where the second item represents the normalized bounding boxes on a scale of 0~1  of shape ՝(batch_size, 4)՝.
+            These are currently not provided by the transformers library
+        visual_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+             Mask to avoid performing attention on padding token indices.
+             Mask values selected in ``[0, 1]``:
+             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        output_v_attentions: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+             If set to ``True``, the attentions tensors of all attention layers for the visual encoder are returned. See ``attentions`` under returned tensors for more detail.
+        output_l_attentions: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+             If set to ``True``, the attentions tensors of all attention layers for the language encoder are returned. See ``attentions`` under returned tensors for more detail.
+        output_x_attentions: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+             If set to ``True``, the attentions tensors of all attention layers for the cross modality encoder are returned. See ``attentions`` under returned tensors for more detail.
+         output_v_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
+             If set to ``True``, the visual hidden states of all layers from the cross modality encoder are returned where the visual features are used as the input and the language features are used as the context. See ``hidden_states`` under returned tensors for more detail.
+         output_l_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
+             If set to ``True``, the language hidden states of all layers from the cross modality encoder are returned where the visual features are used as the context. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.LxmertModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -615,18 +703,6 @@ LXMERT_INPUTS_DOCSTRING = r"""
     LXMERT_INPUTS_DOCSTRING,
 )
 class LxmertModel(LxmertPreTrainedModel):
-    r"""
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-
-        **(lang_feats, visn_feats)**: ``Tuple[torch.FloatTensor, Tuple[torch.FloatTensor]]`` of shapes
-        ``(batch_size, sequence_length, hidden_size)`` and  each element of the nested tuple being of shape
-        ``(batch_size, num_features, visual_feat_dim)`` and ``(batch_size, num_features, visual_pos_dim)`` respectively
-
-        **pooler_output**: ``torch.FloatTensor`` of shape ``(batch_size, hidden_size)``
-            Last layer hidden-state of the first token of the sequence from the cross modality encoder(classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.embeddings = LxmertEmbeddings(config)
@@ -640,9 +716,22 @@ class LxmertModel(LxmertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
+    def _prune_heads(self, *args, **kwargs):
+        pass
+
     def forward(
-        self, input_ids, token_type_ids=None, attention_mask=None, visual_feats=None, visual_attention_mask=None
+        self,
+        input_ids,
+        visual_feats,
+        token_type_ids=None,
+        attention_mask=None,
+        visual_attention_mask=None,
+        output_v_attentions=False,
+        output_l_attentions=False,
+        output_x_attentions=False,
+        return_dict=False,
     ):
+
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if token_type_ids is None:
@@ -675,67 +764,53 @@ class LxmertModel(LxmertPreTrainedModel):
         embedding_output = self.embeddings(input_ids, token_type_ids)
 
         # Run Lxmert encoder
-        lang_feats, visn_feats = self.encoder(
+        x_encoder_outputs = self.encoder(
             embedding_output,
             extended_attention_mask,
             visn_feats=visual_feats,
             visn_attention_mask=extended_visual_attention_mask,
+            output_v_attentions=output_v_attentions,
+            output_l_attentions=output_l_attentions,
+            output_x_attentions=output_x_attentions,
         )
-        pooled_output = self.pooler(lang_feats)
 
-        return (lang_feats, visn_feats), pooled_output
+        v_outputs, l_outputs = x_encoder_outputs[0], x_encoder_outputs[1]
+        visn_output = v_outputs[0][-1]
+        lang_output = l_outputs[0][-1]
+        pooled_output = self.pooler(lang_output)
+
+        if not return_dict:
+            return (
+                (lang_output, visn_output, pooled_output),
+                (v_outputs[0][:-1], l_outputs[0][:-1]),
+                (
+                    v_outputs[1:] if output_v_attentions else None,
+                    l_outputs[1:] if output_l_attentions else None,
+                    x_encoder_outputs[2:] if output_x_attentions else None,
+                ),
+            )
+
+        return LxmertModelOutput(
+            last_hidden_state_l=lang_output,
+            hidden_states_l=l_outputs[0][:-1],
+            attentions_l_encoder=output_l_attentions,
+            last_hidden_state_v=visn_output,
+            hidden_states_v=v_outputs[0][:-1],
+            attentions_v_encoder=output_v_attentions,
+            pooled_output_x_encoder=pooled_output,
+            attentions_x_encoder=output_x_attentions,
+        )
 
 
 @add_start_docstrings(
     """Lxmert Model with a specified pre-training heads on top. """, LXMERT_START_DOCSTRING, LXMERT_INPUTS_DOCSTRING
 )
 class LxmertForPretraining(LxmertPreTrainedModel):
-    r"""
-    **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-        Indices of input sequence tokens in the vocabulary.
-        To match pre-training, LXMERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
-        Indices can be obtained using :class:`transformers.LxmertTokenizer`.
-        See :func:`transformers.PreTrainedTokenizer.encode` and
-        :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-    **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-        Mask to avoid performing attention on padding token indices.
-        Mask values selected in ``[0, 1]``:
-        ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-    **token_type_ids**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-        Segment token indices to indicate first and second portions of the inputs.
-        Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
-        corresponds to a `sentence B` token
-    **visual_feats**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length, features_dim)``:
-        Pre-trained and instance-level vision features ROI-aligned and pooled from bounding boxes.
-    **pos**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, features_length, visual_pos_dim)``:
-        the bounding box coordinate for each respective visual feature instance.
-    **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-        Labels for computing the masked language modeling loss.
-        Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-        Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-        in ``[0, ..., config.vocab_size]``
-    **obj_labels**: (`optional`): ``Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]``
-        each key is named after each one of the visual losses and each element of the tuple is of the shape
-        ``(batch_size, num_features, num_objects/num_attrs)`` and ``(batch_size, num_features)``
-        for each the label id and the label score respectively
-    **matched_label**: (`optional`) ``Torch.Tensor`` of shape ``(batch_size,)`` an int [0,1] that represents
-    whether or not this text is correctly matching its associated image
-    **ans**: (`optional`) ``Torch.Tensor`` of shape ``(batch_size, num_qa_answers)`` a one hot represntation of the correct answer
-
-
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **total_loss**: ``torch.FloatTensor`` of shape ``(1,)``:
-            total loss as a simple sum from all the modeling objectives.
-        **losses**: ``Tuple[torch.FloatTensor]`` each of shape ``(1,)`` for each indivual loss
-        **answer_score**: ``Torch.FloatTensor`` the accuracy of the question answering loss
-    """
-
     def __init__(self, config):
         super().__init__(config)
         # Configuration
         self.config = config
-        self.num_answers = config.num_answers
+        self.num_answers = config.n_qa_labels
         self.visual_loss_normalizer = config.visual_loss_normalizer
 
         # Use of pre-training tasks
@@ -770,46 +845,95 @@ class LxmertForPretraining(LxmertPreTrainedModel):
         if config.visual_attr_loss:
             visual_losses["attr"] = {"shape": (-1,), "num": config.n_attr_labels, "loss": "visn_ce"}
         if config.visual_obj_loss:
-            visual_losses["feat"] = {"shape": (-1, 2048), "num": config.visual_feat_dim, "loss": "l2"}
+            visual_losses["feat"] = {
+                "shape": (-1, config.visual_feat_dim),
+                "num": config.visual_feat_dim,
+                "loss": "l2",
+            }
         self.visual_losses = visual_losses
 
     def forward(
         self,
         input_ids,
+        visual_feats,
         token_type_ids=None,
         attention_mask=None,
         masked_lm_labels=None,
-        visual_feats=None,
-        pos=None,
         obj_labels=None,
         matched_label=None,
         ans=None,
+        output_v_attentions=False,
+        output_l_attentions=False,
+        output_x_attentions=False,
+        return_dict=False,
+        **kwargs
     ):
 
-        (lang_output, visn_output), pooled_output = self.bert(
-            input_ids, token_type_ids, attention_mask, visual_feats=(visual_feats, pos),
+        (visual_feats, pos) = visual_feats
+
+        r"""
+        masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+        matched_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+            Labels for computing the whether or not the text input matches the image (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
+            Indices should be in ``[0, 1]``.
+            ``0`` indicates that the sentence does not match the image
+            ``1`` indicates that the sentence does match the image
+        input_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``):
+            Indices of input sequence tokens in the vocabulary.
+            To match pre-training, LXMERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            Indices can be obtained using :class:`transformers.LxmertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        visual_feats: (:obj: `Tuple[torch.FloatTensor, torch.FloatTensor]`):
+            the first item in the tuple represents the actual visual features
+            (ROI pooled object features from bounding boxes using a faster-RCNN model) of shape ՝(batch_size, num_visual_features, visual_feat_dim)՝
+            and where the second item represents the normalized bounding boxes on a scale of 0~1  of shape ՝(batch_size, 4)՝.
+            These are currently not provided by the transformers library
+        obj_labels: (``Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]``, `optional`, defaults to :obj: `None`):
+            each key is named after each one of the visual losses and each element of the tuple is of the shape
+            ``(batch_size, num_features)`` and ``(batch_size, num_features, visual_feature_dim)``
+            for each the label id and the label score respectively
+        ans: (``Torch.Tensor`` of shape ``(batch_size)``, `optional`, defaults to :obj: `None`):
+            a one hot representation hof the correct answer `optional`
+        kwargs: (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
+
+        Returns:
+        """
+
+        (
+            (lang_output, visn_output, pooled_output),
+            x_encoder_outputs,
+            (attentions_v_encoder, attentions_l_encoder, attentions_x_encoder),
+        ) = self.bert(
+            input_ids=input_ids,
+            visual_feats=(visual_feats, pos),
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            output_v_attentions=output_v_attentions,
+            output_l_attentions=output_l_attentions,
+            output_x_attentions=output_x_attentions,
         )
 
         lang_prediction_scores, cross_relationship_score = self.cls(lang_output, pooled_output)
         if self.task_qa:
             answer_score = self.answer_head(pooled_output)
         else:
-            # This answer_score would not be used anywhere,
-            # just to keep a constant return function signature.
             answer_score = pooled_output[0][0]
 
         total_loss = 0.0
-        losses = ()
         if masked_lm_labels is not None and self.task_mask_lm:
             masked_lm_loss = self.loss_fcts["ce"](
                 lang_prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1)
             )
             total_loss += masked_lm_loss
-            losses += (masked_lm_loss.detach(),)
         if matched_label is not None and self.task_matched:
             matched_loss = self.loss_fcts["ce"](cross_relationship_score.view(-1, 2), matched_label.view(-1))
             total_loss += matched_loss
-            losses += (matched_loss.detach(),)
         if obj_labels is not None and self.task_obj_predict:
             total_visn_loss = 0.0
             visn_prediction_scores_dict = self.obj_predict_head(visn_output)
@@ -821,20 +945,31 @@ class LxmertForPretraining(LxmertPreTrainedModel):
                 weight = self.visual_loss_normalizer
                 visn_loss_fct = self.loss_fcts[loss_fct_name]
                 visn_prediction_scores = visn_prediction_scores_dict[key]
-                visn_loss = visn_loss_fct(visn_prediction_scores.view(-1, output_dim), label.view(*label_shape),)
+                visn_loss = visn_loss_fct(visn_prediction_scores.view(-1, output_dim), label.view(*label_shape))
                 if visn_loss.dim() > 1:  # Regression Losses
                     visn_loss = visn_loss.mean(1)
                 visn_loss = (visn_loss * mask_conf.view(-1)).mean() * weight
                 total_visn_loss += visn_loss
-                losses += (visn_loss.detach(),)
             total_loss += total_visn_loss
         if ans is not None and self.task_qa:
+            print(answer_score.shape)
+            print(ans.shape)
             answer_loss = self.loss_fcts["ce"](answer_score.view(-1, self.num_answers), ans.view(-1))
-            # exclude "*2" here to match the effect of QA losses.
-            # Previous: (loss *0) for 6 epochs, (loss *2) for 6 epochs.   (Used 10 instead of 6 in EMNLP paper)
-            # Now     : (loss *1) for 12 epochs
-            #
-            # * 2       # Multiply by 2 because > half of the data will not have label
             total_loss += answer_loss
-            losses += (answer_loss.detach(),)
-        return total_loss, torch.stack(losses).unsqueeze(0), answer_score.detach()
+
+        if not return_dict:
+            output = (
+                (lang_prediction_scores, cross_relationship_score, answer_score.detach()),
+                (attentions_v_encoder, attentions_l_encoder, attentions_x_encoder),
+            )
+            return ((total_loss,) + output) if total_loss is not None else output
+
+        return LxmertForPretrainingOutput(
+            loss=total_loss,
+            question_answering_score=answer_score.detach(),
+            prediction_logits=lang_prediction_scores,
+            cross_relationship_score=cross_relationship_score,
+            attentions_v_encoder=attentions_v_encoder,
+            attentions_l_encoder=attentions_l_encoder,
+            attentions_x_encoder=attentions_x_encoder,
+        )

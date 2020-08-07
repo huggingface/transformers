@@ -552,3 +552,54 @@ class Seq2SeqQuestionAnsweringModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class LxmertModelOutput(ModelOutput):
+    """
+    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilites for
+    the language, visual, and, cross-modality encoders.
+    (note: the visual encoder in Lxmert is referred to as the "relation-ship" encoder")
+
+
+    Args:
+        last_hidden_state_l (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the language encoder.
+        hidden_states_l (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each language encoder layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the language encoder at the output of each layer plus the initial embedding outputs.
+        attentions_l_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        last_hidden_state_v (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the visual encoder.
+        hidden_states_v (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each visual encoder layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the visual encoder at the output of each layer plus the initial embedding outputs.
+        attentions_v_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        pooled_output_x_encoder (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
+            Last layer hidden-state of the first token of the sequence (classification, CLS, token)
+            further processed by a Linear layer and a Tanh activation function. The Linear
+        attentions_x_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state_l: torch.FloatTensor
+    last_hidden_state_v: Optional[torch.FloatTensor] = None
+    pooled_output_x_encoder: Optional[torch.FloatTensor] = None
+    hidden_states_v: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_v_encoder: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_x_encoder: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_l: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_l_encoder: Optional[Tuple[torch.FloatTensor]] = None

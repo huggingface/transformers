@@ -45,11 +45,9 @@ class LxmertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        gradient_checkpointing=False,
         n_qa_labels=3129,
         n_object_labels=1600,
         n_attr_labels=400,
-        mode="lxr",
         l_layers=9,
         x_layers=5,
         r_layers=5,
@@ -78,11 +76,9 @@ class LxmertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.gradient_checkpointing = gradient_checkpointing
         self.n_qa_labels = n_qa_labels
         self.n_object_labels = n_object_labels
         self.n_attr_labels = n_attr_labels
-        self.mode = mode
         self.l_layers = l_layers
         self.x_layers = x_layers
         self.r_layers = r_layers
@@ -96,3 +92,4 @@ class LxmertConfig(PretrainedConfig):
         self.visual_obj_loss = visual_obj_loss
         self.visual_attr_loss = visual_attr_loss
         self.visual_feat_loss = visual_feat_loss
+        self.num_hidden_layers = None

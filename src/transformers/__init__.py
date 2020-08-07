@@ -420,9 +420,8 @@ if is_torch_available():
     )
 
     from .modeling_lxmert import (
-        LxmertPretraining,
+        LxmertForPretraining,
         LxmertModel,
-        LxmertFeatureExtraction,
         LxmertPreTrainedModel,
         LxmertVisualAnswerHead,
         LxmertVisualObjHead,
@@ -430,7 +429,7 @@ if is_torch_available():
         LxmertPredictionHeadTransform,
         LxmertEncoder,
         LxmertXLayer,
-        VisaulFeatEncoder,
+        VisualFeatEncoder,
     )
 
     # Optimization
@@ -685,7 +684,7 @@ if is_tf_available():
         TFLxmertMainLayer,
         TFLxmertEncoder,
         TFLxmertPreTrainedModel,
-        TFLxmertPretraining,
+        TFLxmertForPretraining,
         TFLxmertPreTrainingHeads,
         TFLxmertVisualObjHead,
         TFLxmertVisualAnswerHead,
