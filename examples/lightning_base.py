@@ -151,7 +151,7 @@ class BaseTransformer(pl.LightningModule):
 
     def setup(self, step):
         train_batch_size = self.hparams.train_batch_size
-        dataloader = self.get_dataloader("train", train_batch_size)
+        dataloader = self.get_dataloader("train", train_batch_size, shuffle=True)
         self.train_loader = dataloader
         self.total_steps = (
             (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.gpus)))
@@ -163,10 +163,10 @@ class BaseTransformer(pl.LightningModule):
         return self.train_loader
 
     def val_dataloader(self):
-        return self.get_dataloader("dev", self.hparams.eval_batch_size)
+        return self.get_dataloader("dev", self.hparams.eval_batch_size, shuffle=False)
 
     def test_dataloader(self):
-        return self.get_dataloader("test", self.hparams.eval_batch_size)
+        return self.get_dataloader("test", self.hparams.eval_batch_size, shuffle=False)
 
     def _feature_file(self, mode):
         return os.path.join(
