@@ -532,7 +532,7 @@ class Trainer:
                     continue
 
                 tr_loss += self.training_step(model, inputs)
-                
+
                 try:
                     self.non_embedding_flos += 6 * model.floating_point_ops(
                         *estimate_tokens(inputs), no_embeddings=True
