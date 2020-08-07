@@ -527,16 +527,23 @@ class Attention:
         self._num_heads = num_heads
         self._hidden_size = hidden_size
         self._attention_dropout = attention_dropout
+        self.debug_history = defaultdict(list)
 
     def __call__(self, input_BxIxDi, memory_BxMxDi, bias_BxIxM, training, cache=None, decode_i=None):
+        training = False
         B, I, _ = input_BxIxDi.shape
         M, H, D = memory_BxMxDi.shape[1], self._num_heads, self._hidden_size
         dtype = memory_BxMxDi.dtype
+        self.debug_history['query'].append(input_BxIxDi)
 
         q_BxHxIxDh = split_heads(self._q_layer(input_BxIxDi), H)
+
         q_BxHxIxDh *= (D // H) ** -0.5
+        self.debug_history['qproj, scaled'].append(q_BxHxIxDh)
         k_BxHxMxDh = split_heads(self._k_layer(memory_BxMxDi), H)
+        self.debug_history['kproj'].append(k_BxHxMxDh)
         v_BxHxMxDh = split_heads(self._v_layer(memory_BxMxDi), H)
+        self.debug_history['vproj'].append(v_BxHxMxDh)
 
         # cache saves previous activations before time decode_i during TPU decoding.
         if cache is not None and decode_i is not None:
@@ -549,13 +556,16 @@ class Attention:
         bias_BxHxIxM = tf.expand_dims(bias_BxIxM, axis=1)
         logits_BxHxIxM = tf.matmul(q_BxHxIxDh, k_BxHxMxDh, transpose_b=True) + bias_BxHxIxM
         alignment_BxHxIxM = tf.nn.softmax(logits_BxHxIxM)
+        self.debug_history['attn_weights after softmax'].append(logits_BxHxIxM)
         if training:
             alignment_BxHxIxM = tf.compat.v2.nn.dropout(
                 alignment_BxHxIxM, self._attention_dropout, noise_shape=[1, 1, I, M]
             )
         outputs_BxHxIxDh = tf.matmul(alignment_BxHxIxM, v_BxHxMxDh)
+        self.debug_history['attn_output after bmm(probs, v)'].append(outputs_BxHxIxDh)
         outputs_BxIxD = tf.reshape(tf.transpose(a=outputs_BxHxIxDh, perm=[0, 2, 1, 3]), [B, I, D])
         outputs_BxIxD = self._output_layer(outputs_BxIxD)
+        self.debug_history['attn after output_layer'].append(outputs_BxHxIxDh)
         return outputs_BxIxD
 
 
@@ -587,6 +597,7 @@ def upper_triangle_bias(D, dtype=tf.float32):
     tensor_1xDxD = tf.expand_dims(upper_triangle_DxD * min_val, axis=0)
     return tensor_1xDxD
 
+from collections import defaultdict
 
 class TransformerBlock:
     """Transformer block.
@@ -615,22 +626,38 @@ class TransformerBlock:
         self._layer_norm_1 = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         self._layer_norm_2 = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         self._layer_norm_3 = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
+        self.debug_history = defaultdict(list)
 
     def __call__(self, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, cache=None, decode_i=None):
+        #assert not training, training
+        training=False
         s_BxIxD = inputs_BxIxD
         with tf.compat.v1.variable_scope("self_attention"):
             y_BxIxD = self._layer_norm_1(s_BxIxD)
+            self.debug_history['after ln1'].append(y_BxIxD)
             y_BxIxD = self._self_attn_layer(y_BxIxD, bias_BxIxI, training, cache=cache, decode_i=decode_i)
+            self.debug_history['after self_attn'].append(y_BxIxD)
             s_BxIxD += self._dropout_fn(y_BxIxD, training)
+            self.debug_history['after dropout'].append(s_BxIxD)
+
         if memory_BxMxD is not None:
             with tf.compat.v1.variable_scope("memory_attention"):
+                #s_BxIxD
+
                 y_BxIxD = self._layer_norm_2(s_BxIxD)
+                self.debug_history['cross_attn_after ln2'].append(s_BxIxD)
                 y_BxIxD = self._attn_layer(y_BxIxD, memory_BxMxD, bias_BxIxM, training)
+                self.debug_history['after cross_attn '].append(y_BxIxD)
                 s_BxIxD += self._dropout_fn(y_BxIxD, training)
+                self.debug_history['after cross_attn dropout'].append(y_BxIxD)
         with tf.compat.v1.variable_scope("ffn"):
+
             y_BxIxD = self._layer_norm_3(s_BxIxD)
+            self.debug_history['ffn: after ln3'].append(y_BxIxD)
             y_BxIxD = self._dropout_fn(self._relu_layer(y_BxIxD), training)
+            self.debug_history['ffn: after relu_layer'].append(y_BxIxD)
             s_BxIxD += self._dropout_fn(self._output_layer(y_BxIxD), training)
+            self.debug_history['ffn: after output_layer'].append(y_BxIxD)
         return s_BxIxD
 
 

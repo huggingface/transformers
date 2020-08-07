@@ -50,7 +50,7 @@ def convert_pegasus_to_bart(tf_weights):
         if new_k not in sd:
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k}")
 
-        if "dense" in k:
+        if "dense" in k or "proj" in new_k:
             v = v.T
         mapping[new_k] = torch.tensor(v, dtype=sd[new_k].dtype)
         assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
@@ -84,11 +84,13 @@ def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
         tf_weights[name] = array
     return tf_weights
 
-
+from durbango import pickle_save
 def convert_pegasus_ckpt_to_pytorch(ckpt_path, save_dir):
     tf_weights = get_tf_weights_as_numpy(ckpt_path)
     torch_model = convert_pegasus_to_bart(tf_weights)
     torch_model.save_pretrained(save_dir)
+    pickle_save(tf_weights, f'{save_dir}/tf_weights_dict.pkl')#DEL
+
 
 
 if __name__ == "__main__":

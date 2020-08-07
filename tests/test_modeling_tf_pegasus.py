@@ -164,13 +164,16 @@ class IntegrationTest(unittest.TestCase):
                 feed_dict = {input_str: [raw_input_str], target_str: [raw_target_str]}
                 results, emb = sess.run([output_str, model.embedded_inputs], feed_dict=feed_dict)
 
-                after_time, after_stack, logits, enc_input, encoder_states = sess.run(
+                after_time, after_stack, logits, enc_input, encoder_states, debug_history0, debug_history1, attn_history0 = sess.run(
                     [
                         model.signalled,
                         model.after_stack,
                         model.logits,
                         model.encoder_layer_input,
                         model.encoder_states,
+                        model._encoder_layers[0].debug_history,
+                        model._encoder_layers[1].debug_history,
+                        model._encoder_layers[0]._self_attn_layer.debug_history,
                     ],
                     feed_dict=feed_dict,
                 )
@@ -180,6 +183,13 @@ class IntegrationTest(unittest.TestCase):
         print_tensor("2. after pos", after_time)
         print_tensor("3. 2-1", after_time - emb)
         print_tensor("4. encoder layer 0 input", enc_input)
+        for k,v in attn_history0.items():
+            msg = 'layer0' + k
+            for tensor in v:
+                if tensor.shape[0] != 1:
+                    print(f'skipping dummy input result')
+                    continue
+                print_tensor(msg, tensor)
         print_tensor("5. encoder layer 1 input", encoder_states[0])
 
         # import ipdb; ipdb.set_trace()
@@ -263,8 +273,8 @@ class IntegrationTest(unittest.TestCase):
 
     def test_bart_pegasus(self):
         tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
-        model = BartForConditionalGeneration.from_pretrained(
-            "sshleifer/pegasus/aeslc", scale_embedding=True, num_beams=1
+        model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed", #"sshleifer/pegasus/aeslc",
+            scale_embedding=True, num_beams=1,
         ).to(torch_device)
         batch = tok([BANK_SNIPPET], return_tensors="pt").to(torch_device)
         summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
@@ -273,5 +283,10 @@ class IntegrationTest(unittest.TestCase):
 
 def print_tensor(msg, t):
     # assert t.shape
-    slice = t[:, :3, :3]
+    ndim  = len(t.shape)
+    if ndim == 1:   slice = t[:3]
+    elif ndim == 2: slice = t[:3, :3]
+    elif ndim == 3: slice = t[:3, :3, :3]
+    elif ndim == 4: slice = t[:3, :3, :3, :3]
     print(f"{msg}: shape: {t.shape}, slice: {slice}")
+

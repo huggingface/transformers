@@ -247,26 +247,36 @@ class EncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
+        assert self.normalize_before
+        assert not self.training
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-        x, attn_weights = self.self_attn(
+        print_tensor('\tafter ln 1', x)
+        x, attn_weights = self.self_attn.forward(
             query=x, key=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
         )
+        print_tensor('\tafter self_attn', x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
+        print_tensor('\tafter add', x)
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
 
         residual = x
         if self.normalize_before:
             x = self.final_layer_norm(x)
+            print_tensor('\tafter ln 3', x)
         x = self.activation_fn(self.fc1(x))
+        print_tensor('\tafter relu layer', x)
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
+        print_tensor('\tafter output_layer', x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
+
         if not self.normalize_before:
             x = self.final_layer_norm(x)
+        print_tensor('\tenc layer returning', x)
         return x, attn_weights
 
 
@@ -342,8 +352,8 @@ class BartEncoder(nn.Module):
 
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for encoder_layer in self.layers:
-
+        for i, encoder_layer in enumerate(self.layers):
+            print_tensor(f"encoder layer {i} input", x)
             if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -355,7 +365,7 @@ class BartEncoder(nn.Module):
 
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
-
+            raise AssertionError('ending after 1 layer')
         if self.layer_norm:
             x = self.layer_norm(x)
         if output_hidden_states:
@@ -617,7 +627,7 @@ class SelfAttention(nn.Module):
         embed_dim,
         num_heads,
         dropout=0.0,
-        bias=True,
+        bias=True, #COULDCHG
         encoder_decoder_attention=False,  # otherwise self_attention
     ):
         super().__init__()
@@ -633,6 +643,7 @@ class SelfAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
         self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
     def _shape(self, tensor, seq_len, bsz):
@@ -648,6 +659,11 @@ class SelfAttention(nn.Module):
         output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
+        assert_zero_bias(self.q_proj)
+        assert_zero_bias(self.k_proj)
+        assert_zero_bias(self.v_proj)
+        assert_zero_bias(self.out_proj)
+
         static_kv: bool = self.encoder_decoder_attention
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
@@ -661,8 +677,9 @@ class SelfAttention(nn.Module):
         else:
             saved_state = None
             layer_state = {}
-
+        print_tensor('query', query)
         q = self.q_proj(query) * self.scaling
+        print_tensor('scaled, projected query', q)
         if static_kv:
             if key is None:
                 k = v = None
@@ -672,6 +689,8 @@ class SelfAttention(nn.Module):
         else:
             k = self.k_proj(query)
             v = self.v_proj(query)
+        print_tensor('projected k', k)
+        print_tensor('projected k', v)
 
         q = self._shape(q, tgt_len, bsz)
         if k is not None:
@@ -708,14 +727,18 @@ class SelfAttention(nn.Module):
             reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
         attn_weights = F.softmax(attn_weights, dim=-1)
+        print_tensor('attn_weights after softmax', attn_weights)
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training,)
 
         assert v is not None
         attn_output = torch.bmm(attn_probs, v)
+        print_tensor('attn_output after bmm(probs, v)', attn_output)
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
+        print_tensor('attn_output after out_proj', attn_output)
         if output_attentions:
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
         else:
@@ -820,11 +843,16 @@ def fill_with_neg_inf(t):
 
 
 # Public API
-
+def assert_zero_bias(layer):
+    assert layer.bias.eq(0).all().item()
 
 def print_tensor(msg, t):
     # assert t.shape
-    slice = t[:, :3, :3]
+    if t.ndim == 1:   slice = t[:3]
+    elif t.ndim == 2: slice = t[:3, :3]
+    elif t.ndim == 3: slice = t[:3, :3, :3]
+    elif t.ndim == 4: slice = t[:3, :3, :3, :3]
+
     print(f"{msg}: shape: {t.shape}, slice: {slice}")
 
 
@@ -890,7 +918,7 @@ class BartModel(PretrainedBartModel):
         assert decoder_input_ids is not None
 
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(
+            encoder_outputs = self.encoder.forward(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
