@@ -1,9 +1,10 @@
 import modeling_tf_adapter_bert
-import utility
 import os
 import tensorflow as tf
 import tensorflow_datasets
 import numpy as np
+from scipy.stats import spearmanr
+from sklearn.metrics import matthews_corrcoef, f1_score
 from transformers import (
     BertConfig,
     BertTokenizer,
@@ -115,15 +116,15 @@ def main():
   # Metrics, Loss & Optimizer
   if num_labels == 1:
       loss = tf.keras.losses.MeanSquaredError()
-      metric = utility.spearman
+      metric = spearman
       monitor = "val_spearman"
   else:
       loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
       if args.task == 'cola':
-        metric = utility.matthews_cc
+        metric = matthews_cc
         monitor = "val_matthews_cc"
       elif args.task in ['mrpc', 'qqp']:
-        metric = utility.f1
+        metric = f1
         monitor = "val_f1"
       else:
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
@@ -138,7 +139,7 @@ def main():
   model.compile(optimizer=opt, loss=loss, metrics=metric)
 
   # Callback to save the best model
-  checkpoint = utility.ModelCheckpoint(monitor, os.path.join(args.saved_models_dir, args.task))
+  checkpoint = ModelCheckpoint(monitor, os.path.join(args.saved_models_dir, args.task))
 
   # Fine-tuning
   history = model.fit(
@@ -151,6 +152,37 @@ def main():
   )
 
 
+def spearman(labels, preds):
+    return (tf.py_function(spearmanr, [tf.cast(labels, tf.float32), 
+                           tf.cast(preds, tf.float32)], Tout = tf.float32))
+def f1(labels, preds):
+    preds = tf.math.argmax(preds, axis=1)
+    return (tf.py_function(f1_score, [tf.cast(labels, tf.float32), 
+                           tf.cast(preds, tf.float32)], Tout = tf.float32))
+def matthews_cc(labels, preds):
+    preds = tf.math.argmax(preds, axis=1)
+    return (tf.py_function(matthews_corrcoef, [tf.cast(labels, tf.float32), 
+                           tf.cast(preds, tf.float32)], Tout = tf.float32))
+    
+
+class ModelCheckpoint(tf.keras.callbacks.Callback):
+  def __init__(self, monitor, save_path):
+    super(ModelCheckpoint, self).__init__()
+    self.monitor = monitor
+    self.save_path = save_path
+    self.best_score = -np.Inf
+    self.best_loss = np.Inf
+
+  def on_epoch_end(self, epoch, logs):
+    score = logs.get(self.monitor)
+    loss = logs.get("val_loss")
+    if score > self.best_score or (score == self.best_score and loss < self.best_loss):
+      path = os.path.join(self.save_path, str(epoch+1))
+      os.makedirs(path)
+      self.model.save_weights(path+'/best_weights.h5')
+      self.best_score = score
+      self.best_loss = loss
+      print("\nModel saved as the best model")
 
 if __name__ == "__main__":
     main()
