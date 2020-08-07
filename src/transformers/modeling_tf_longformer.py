@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2020 The Allen Institute for AI team and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tensorflow Longformer model. """
+
 import logging
 
 import tensorflow as tf
@@ -1336,15 +1352,18 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
 
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
-            sep_token_indices = tf.where(input_ids == self.config.sep_token_id)
-
-            if sep_token_indices.shape[0] != 3 * input_ids.shape[0]:
+            if input_ids is None:
+                logger.warning(
+                    "It is not possible to automatically generate the `global_attention_mask`. Please make sure that it is correctly set."
+                )
+            elif tf.where(input_ids == self.config.sep_token_id).shape[0] != 3 * input_ids.shape[0]:
                 logger.warning(
                     f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this. This is most likely an error."
                 )
             else:
                 logger.info("Initializing global attention on question tokens...")
                 # put global attention on all tokens until `config.sep_token_id` is reached
+                sep_token_indices = tf.where(input_ids == self.config.sep_token_id)
                 global_attention_mask = _compute_global_attention_mask(shape_list(input_ids), sep_token_indices)
 
         outputs = self.longformer(

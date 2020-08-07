@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tensorflow Longformer model. """
+"""PyTorch Longformer model. """
 
 import logging
+import math
 import warnings
 
 import torch
@@ -81,7 +82,6 @@ def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=Tru
         before `sep_token_id` if `before_sep_token is True` else after
         `sep_token_id`.
     """
-
     question_end_index = _get_question_end_index(input_ids, sep_token_id)
     question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
     # bool attention mask with True in locations of global attention
@@ -164,9 +164,7 @@ class LongformerSelfAttention(nn.Module):
         ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
 
         # normalize query
-        query_vectors /= torch.sqrt(
-            torch.tensor(self.head_dim, device=query_vectors.device, dtype=query_vectors.dtype)
-        )
+        query_vectors /= math.sqrt(self.head_dim)
 
         query_vectors = query_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         key_vectors = key_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
@@ -591,13 +589,7 @@ class LongformerSelfAttention(nn.Module):
         global_value_vectors = self.value_global(hidden_states)
 
         # normalize
-        global_query_vectors_only_global /= torch.sqrt(
-            torch.tensor(
-                self.head_dim,
-                device=global_query_vectors_only_global.device,
-                dtype=global_query_vectors_only_global.dtype,
-            )
-        )
+        global_query_vectors_only_global /= math.sqrt(self.head_dim)
 
         # reshape
         global_query_vectors_only_global = (
@@ -1344,11 +1336,14 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # set global attention on question tokens
-        if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on question tokens...")
-            # put global attention on all tokens until `config.sep_token_id` is reached
-            global_attention_mask = _compute_global_attention_mask(input_ids, self.config.sep_token_id)
+        if global_attention_mask is None:
+            if input_ids is None:
+                logger.warning(
+                    "It is not possible to automatically generate the `global_attention_mask`. Please make sure that it is correctly set."
+                )
+            else:
+                # set global attention on question tokens automatically
+                global_attention_mask = _compute_global_attention_mask(input_ids, self.config.sep_token_id)
 
         outputs = self.longformer(
             input_ids,
