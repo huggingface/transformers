@@ -1,27 +1,7 @@
 import tensorflow as tf
 import copy
 import numpy as np
-
-def gelu(x):
-    """Gaussian Error Linear Unit.
-    This is a smoother version of the RELU.
-    Original paper: https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
-    return x * cdf
-
-def swish(x):
-    return x * tf.sigmoid(x)
-
-def tanh(x):
-    return x * tf.tanh(x)
-
-ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.layers.Activation(swish),
-    "tanh": tf.keras.layers.Activation(tanh),
-}
+from transformers.modeling_tf_bert import gelu, gelu_new, swish, ACT2FN
 
 class AdapterModule(tf.keras.Model):
   __instance_number = 0
@@ -59,53 +39,6 @@ class AdapterModule(tf.keras.Model):
     output = self.up_project(output)
     output = output + inputs
     return output
-
-
-
-class TFBertLayer(tf.keras.layers.Layer):
-    def __init__(self, pretrained_self_attn, pretrained_self_dense, pretrained_self_ln, pretrained_intermediate, pretrained_out_dense, pretrained_out_ln, config, **kwargs):
-        super().__init__(**kwargs)
-        self.attention = TFBertAttention(pretrained_self_attn, pretrained_self_dense, pretrained_self_ln, config, name="attention")
-        # shared new task layer normalization in each layer
-        # self.TaskLayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="TaskLayerNorm")
-        self.intermediate = copy.deepcopy(pretrained_intermediate)
-        self.bert_output = TFBertOutput(pretrained_out_dense, pretrained_out_ln, config, name="output")
-
-
-    def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions = inputs
-
-        attention_outputs = self.attention(
-            [hidden_states, attention_mask, head_mask, output_attentions], training=training
-        )
-        attention_output = attention_outputs[0]
-        # attention_output = self.TaskLayerNorm(attention_output)
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.bert_output([intermediate_output, attention_output], training=training)
-        # layer_output = self.TaskLayerNorm(layer_output)
-        outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-
-class TFBertAttention(tf.keras.layers.Layer):
-    def __init__(self, pretrained_self_attn, pretrained_self_dense, pretrained_self_ln, config, **kwargs):
-        super().__init__(**kwargs)
-        self.self_attention = copy.deepcopy(pretrained_self_attn)
-        self.dense_output = TFBertSelfOutput(pretrained_self_dense, pretrained_self_ln, config, name="output")
-
-    def prune_heads(self, heads):
-        raise NotImplementedError
-
-    def call(self, inputs, training=False):
-        input_tensor, attention_mask, head_mask, output_attentions = inputs
-
-        self_outputs = self.self_attention(
-            [input_tensor, attention_mask, head_mask, output_attentions], training=training
-        )
-        attention_output = self.dense_output([self_outputs[0], input_tensor], training=training)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
 
 
 class TFBertSelfOutput(tf.keras.layers.Layer):
