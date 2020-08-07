@@ -89,8 +89,8 @@ class ExamplesTests(unittest.TestCase):
             --do_train
             --do_predict
             --output_dir ./tests/fixtures/tests_samples/temp_dir
-            --train_batch_size=2
-            --learning_rate=1e-4
+            --train_batch_size=32
+            --learning_rate=2e-5
             --seed=42
             --max_seq_length=128
             --num_train_epochs=2
