@@ -267,10 +267,10 @@ class EncoderLayer(nn.Module):
             x = self.final_layer_norm(x)
             print_tensor('\tafter ln 3', x)
         x = self.activation_fn(self.fc1(x))
-        print_tensor('\tafter relu layer', x)
+        print_tensor('\tafter fc1', x)
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
-        print_tensor('\tafter output_layer', x)
+        print_tensor('\tafter fc2', x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
 
@@ -354,7 +354,7 @@ class BartEncoder(nn.Module):
         all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
             print_tensor(f"encoder layer {i} input", x)
-            if i >= 1: raise AssertionError('ending after 1 layer')
+            # if i >= 1: raise AssertionError('ending after 1 layer')
             if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -691,7 +691,7 @@ class SelfAttention(nn.Module):
             k = self.k_proj(query)
             v = self.v_proj(query)
         print_tensor('projected k', k)
-        print_tensor('projected k', v)
+        print_tensor('projected v', v)
 
         q = self._shape(q, tgt_len, bsz)
         if k is not None:
@@ -712,6 +712,7 @@ class SelfAttention(nn.Module):
         assert k is not None
         src_len = k.size(1)
         attn_weights = torch.bmm(q, k.transpose(1, 2))
+        print_tensor('attn_weights before masking', attn_weights)
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -729,6 +730,7 @@ class SelfAttention(nn.Module):
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
+        print_tensor('attn_weights before softmax', attn_weights)
         attn_weights = F.softmax(attn_weights, dim=-1)
         print_tensor('attn_weights after softmax', attn_weights)
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training,)
@@ -848,6 +850,7 @@ def assert_zero_bias(layer):
     assert layer.bias.eq(0).all().item()
 
 def print_tensor(msg, t):
+    if not isinstance(t, torch.Tensor): return
     # assert t.shape
     if t.ndim == 1:   slice = t[:3]
     elif t.ndim == 2: slice = t[:3, :3]

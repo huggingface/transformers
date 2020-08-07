@@ -274,11 +274,25 @@ class IntegrationTest(unittest.TestCase):
     def test_bart_pegasus(self):
         tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
         model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed", #"sshleifer/pegasus/aeslc",
-            scale_embedding=True, num_beams=1,
+            scale_embedding=True, num_beams=1, #activation='relu',
         ).to(torch_device)
+        assert model.config.activation_function == 'relu'
         batch = tok([BANK_SNIPPET], return_tensors="pt").to(torch_device)
         summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
         self.assertEqual(summary, "Bank Resolutions")
+
+    def test_pegasus_config(self):
+        ckpt = "peg_aeslc_bart_transposed"
+        config = PegasusConfig.from_pretrained(ckpt)
+        assert config.activation_function == 'relu'
+        assert config.scale_embedding
+        assert config.dropout > 0
+        assert config.activation_dropout == config.dropout
+        assert config.attention_dropout == config.dropout
+        assert config.normalize_before
+        assert not config.normalize_embedding
+        assert config.num_beams == 8
+        #assert co
 
 
 def print_tensor(msg, t):

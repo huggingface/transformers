@@ -554,7 +554,10 @@ class Attention:
             cache["k"] = k_BxHxMxDh
             cache["v"] = v_BxHxMxDh
         bias_BxHxIxM = tf.expand_dims(bias_BxIxM, axis=1)
-        logits_BxHxIxM = tf.matmul(q_BxHxIxDh, k_BxHxMxDh, transpose_b=True) + bias_BxHxIxM
+        logits_BxHxIxM = tf.matmul(q_BxHxIxDh, k_BxHxMxDh, transpose_b=True)
+        self.debug_history['attn_weights before masking'].append(logits_BxHxIxM)
+        logits_BxHxIxM = logits_BxHxIxM + bias_BxHxIxM
+        self.debug_history['attn_weights before softmax'].append(logits_BxHxIxM)
         alignment_BxHxIxM = tf.nn.softmax(logits_BxHxIxM)
         self.debug_history['attn_weights after softmax'].append(logits_BxHxIxM)
         if training:
@@ -626,7 +629,7 @@ class TransformerBlock:
         self._layer_norm_1 = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         self._layer_norm_2 = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         self._layer_norm_3 = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
-        self.debug_history = defaultdict(list)
+        self.debug_history = self._self_attn_layer.debug_history
 
     def __call__(self, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, cache=None, decode_i=None):
         #assert not training, training
@@ -655,9 +658,11 @@ class TransformerBlock:
             y_BxIxD = self._layer_norm_3(s_BxIxD)
             self.debug_history['ffn: after ln3'].append(y_BxIxD)
             y_BxIxD = self._dropout_fn(self._relu_layer(y_BxIxD), training)
-            self.debug_history['ffn: after relu_layer'].append(y_BxIxD)
-            s_BxIxD += self._dropout_fn(self._output_layer(y_BxIxD), training)
-            self.debug_history['ffn: after output_layer'].append(y_BxIxD)
+            self.debug_history['ffn: after fc1'].append(y_BxIxD)
+            output_layer_result = self._output_layer(y_BxIxD)
+            self.debug_history['ffn: after fc2'].append(output_layer_result)
+            s_BxIxD += self._dropout_fn(output_layer_result, training)
+            self.debug_history['after final add'].append(output_layer_result)
         return s_BxIxD
 
 
