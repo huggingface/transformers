@@ -215,6 +215,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFT5ModelTester(self)
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

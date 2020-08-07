@@ -1,15 +1,8 @@
-from pathlib import Path
-from shutil import copyfile
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-from .tokenization_utils_base import BatchEncoding
-#from transformers.tokenization_marian import load_spm, save_json
 from transformers.tokenization_reformer import ReformerTokenizer
 
-
-_SHIFT_RESERVED_TOKENS = 103
-_NEWLINE_SYMBOL = "<n>"
-EOS_ID = 1
+from .tokenization_utils_base import BatchEncoding
 
 
 class PegasusTokenizer(ReformerTokenizer):

@@ -328,14 +328,14 @@ class BartEncoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
-        print_tensor('embedded', inputs_embeds)
-        print_tensor('embed_pos', embed_pos)
+        print_tensor("embedded", inputs_embeds)
+        print_tensor("embed_pos", embed_pos)
         x = inputs_embeds + embed_pos
-        print_tensor('sum', x)
+        print_tensor("sum", x)
         x = self.layernorm_embedding(x)
-        print_tensor('after layernorm_embedding (noop?)', x)
+        print_tensor("after layernorm_embedding (noop?)", x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        print_tensor('after dropout (noop?)', x)
+        print_tensor("after dropout (noop?)", x)
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
@@ -821,10 +821,11 @@ def fill_with_neg_inf(t):
 
 # Public API
 
+
 def print_tensor(msg, t):
-    #assert t.shape
+    # assert t.shape
     slice = t[:, :3, :3]
-    print(f'{msg}: shape: {t.shape}, slice: {slice}')
+    print(f"{msg}: shape: {t.shape}, slice: {slice}")
 
 
 @add_start_docstrings(

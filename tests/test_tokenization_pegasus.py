@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
+from transformers.file_utils import cached_property
 from transformers.tokenization_pegasus import PegasusTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -11,7 +12,6 @@ from .test_tokenization_marian import SAMPLE_SP
 # SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/pegasus_sentencepiece.model")
 FRAMEWORK = "tf"
 
-from transformers.file_utils import cached_property
 
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
@@ -29,15 +29,12 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # copyfile(SAMPLE_SP, save_dir / spm_file)
         # tokenizer = PegasusTokenizer(SAMPLE_SP)
 
-
-
         #
         #
-
 
     @cached_property
     def default_tokenizer(self):
-        return PegasusTokenizer.from_pretrained('sshleifer/pegasus')
+        return PegasusTokenizer.from_pretrained("sshleifer/pegasus")
 
     @unittest.skip("add_tokens does not work yet")
     def test_swap_special_token(self):
@@ -65,13 +62,76 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "If you have any questions please call me at 3-6544."
             "Thank you for your attention to this matter."
         )
-        desired_result = [413, 615, 114, 2291, 1971, 113, 1679, 10710, 112,
-                          109, 993, 67158, 108, 125, 346, 11518, 120, 81991,
-                          12596, 211, 2610, 109, 1679, 10710, 112, 14058, 5503,
-                          143, 76757, 6797, 158, 112, 129, 2061, 316, 269,
-                          270, 33259, 112, 1084, 33485, 11661, 497, 132, 17542,
-                          3549, 107, 240, 119, 133, 189, 574, 528, 443,
-                          213, 134, 33625, 43573, 107, 2556, 119, 118, 128,
-                          1090, 112, 136, 841, 107, 1]
+        desired_result = [
+            413,
+            615,
+            114,
+            2291,
+            1971,
+            113,
+            1679,
+            10710,
+            112,
+            109,
+            993,
+            67158,
+            108,
+            125,
+            346,
+            11518,
+            120,
+            81991,
+            12596,
+            211,
+            2610,
+            109,
+            1679,
+            10710,
+            112,
+            14058,
+            5503,
+            143,
+            76757,
+            6797,
+            158,
+            112,
+            129,
+            2061,
+            316,
+            269,
+            270,
+            33259,
+            112,
+            1084,
+            33485,
+            11661,
+            497,
+            132,
+            17542,
+            3549,
+            107,
+            240,
+            119,
+            133,
+            189,
+            574,
+            528,
+            443,
+            213,
+            134,
+            33625,
+            43573,
+            107,
+            2556,
+            119,
+            118,
+            128,
+            1090,
+            112,
+            136,
+            841,
+            107,
+            1,
+        ]
         ids = tokenizer([raw_input_str], return_tensors=None).input_ids[0]
         self.assertListEqual(desired_result, ids)
