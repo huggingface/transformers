@@ -22,7 +22,7 @@ An example of training adapters in BERT's encoders for MRPC classification task:
 python run_tf_adapter_bert.py \
   --casing bert-base-uncased \
   --bottleneck_size 32\
-  --non_linearity gelu\
+  --non_linearity gelu_new\
   --task mrpc \
   --batch_size 32 \
   --epochs 10 \
