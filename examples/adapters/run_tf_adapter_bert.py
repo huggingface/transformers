@@ -1,4 +1,4 @@
-import modeling
+import modeling_tf_adapter_bert
 import utility
 import os
 import tensorflow as tf
@@ -30,7 +30,7 @@ def main():
 
   parser.add_argument('--casing', type=str, default="bert-base-uncased", help='BERT model')
   parser.add_argument('--bottleneck_size', type=int, default=64, help='Bottleneck size of adapters')
-  parser.add_argument('--non_linearity', type=str, default='gelu', help='non_linearity function in adapters')
+  parser.add_argument('--non_linearity', type=str, default='gelu_new', help='non_linearity function in adapters')
   parser.add_argument('--task', type=str, default='mrpc', help='GLUE task')
   parser.add_argument('--batch_size', type=int, default=32, help='batch size')
   parser.add_argument('--epochs', type=int, default=10, help='The number of training epochs')
@@ -71,7 +71,7 @@ def main():
 
   tokenizer = BertTokenizer.from_pretrained(args.casing)
   bert_model = TFBertModel(config).from_pretrained(args.casing)
-  model = modeling.AdapterBertModel(bert_model, num_labels)
+  model = modeling_tf_adapter_bert.AdapterBertModel(bert_model, num_labels)
 
   data, info = tensorflow_datasets.load(TFDS_TASK, with_info=True)
   train_examples = info.splits["train"].num_examples
@@ -90,13 +90,15 @@ def main():
   # Add Adapters
   for i in range(config.num_hidden_layers):
     # instantiate
-    model.bert.bert.encoder.layer[i] = modeling.TFBertLayer(model.bert.bert.encoder.layer[i].attention.self_attention,
+    model.bert.bert.encoder.layer[i].attention.dense_output = modeling_tf_adapter_bert.TFBertSelfOutput(
                                                   model.bert.bert.encoder.layer[i].attention.dense_output.dense,
                                                   model.bert.bert.encoder.layer[i].attention.dense_output.LayerNorm,
-                                                  model.bert.bert.encoder.layer[i].intermediate,
-                                                  model.bert.bert.encoder.layer[i].bert_output.dense,
-                                                  model.bert.bert.encoder.layer[i].bert_output.LayerNorm,
                                                   config)
+    model.bert.bert.encoder.layer[i].bert_output = modeling_tf_adapter_bert.TFBertOutput(
+                                                  model.bert.bert.encoder.layer[i].bert_output.dense,
+                                                  model.bert.bert.encoder.layer[i].bert_output.LayerNorm, 
+                                                  config)
+  
     
   # Freeze BERT
   model.bert.bert.embeddings.trainable = False
@@ -135,7 +137,7 @@ def main():
                         weight_decay_rate = 0)
   model.compile(optimizer=opt, loss=loss, metrics=metric)
 
-  # Callback
+  # Callback to save the best model
   checkpoint = utility.ModelCheckpoint(monitor, os.path.join(args.saved_models_dir, args.task))
 
   # Fine-tuning
