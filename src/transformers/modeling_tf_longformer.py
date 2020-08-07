@@ -1152,7 +1152,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
     combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
     memory and compute.
 
-    The self-attention module `LongformerSelfAttention` implemented here supports the combination of local and
+    The self-attention module :obj:`LongformerSelfAttention` implemented here supports the combination of local and
     global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
     and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
     tasks. Future release will add support for autoregressive attention, but the support for dilated attention
