@@ -201,7 +201,7 @@ class TFAlbertModelTester:
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
 
     def create_and_check_albert_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = TFAlbertForTokenClassification(config=config)
@@ -239,7 +239,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             TFAlbertForSequenceClassification,
             TFAlbertForQuestionAnswering,
             TFAlbertForTokenClassification,
-            TFAlbertForMultipleChoice
+            TFAlbertForMultipleChoice,
         )
         if is_tf_available()
         else ()
