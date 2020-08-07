@@ -112,7 +112,7 @@ class GLUETransformer(BaseTransformer):
         return {"val_loss": tmp_eval_loss.detach().cpu(), "pred": preds, "target": out_label_ids}
 
     def _eval_end(self, outputs) -> tuple:
-        val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean().detach().cpu().item()
+        val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean().detach().cpu()
         preds = np.concatenate([x["pred"] for x in outputs], axis=0)
 
         if self.hparams.glue_output_mode == "classification":
