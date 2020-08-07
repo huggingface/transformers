@@ -117,11 +117,26 @@ class LineByLineWithSOPTextDataset(Dataset):
             for file_name in os.listdir(os.path.join(file_dir, subfolder)):
                 file_path = os.path.join(file_dir, subfolder, file_name)
                 assert os.path.isfile(file_path)
+                article_open = False
                 with open(file_path, encoding="utf-8") as f:
-                    document = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line)) 
-                                for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
-                    examples = self.create_examples_from_document(document, block_size, tokenizer)
-                    self.examples.extend(examples)
+                    original_lines = f.readlines()
+                    article_lines = []
+                    for line in original_lines:
+                        if '<doc id=' in line:
+                            article_open = True
+                        elif '</doc>' in line:
+                            article_open = False
+                            print(article_lines[1:])
+                            document = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line)) 
+                                        for line in article_lines[1:] if (len(line) > 0 and not line.isspace())]
+
+                            examples = self.create_examples_from_document(document, block_size, tokenizer)
+                            self.examples.extend(examples)
+                            article_lines = []
+                        else:
+                            if article_open:
+                                article_lines.append(line)
+
         logger.info(f"Dataset parse finished.")
 
     def create_examples_from_document(self, document, block_size, tokenizer, short_seq_prob=0.1):
