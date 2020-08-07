@@ -22,17 +22,17 @@ class ModelCheckpoint(tf.keras.callbacks.Callback):
     super(ModelCheckpoint, self).__init__()
     self.monitor = monitor
     self.save_path = save_path
-    self.bestScore = -np.Inf
-    self.bestLoss = np.Inf
+    self.best_score = -np.Inf
+    self.best_loss = np.Inf
 
   def on_epoch_end(self, epoch, logs):
     score = logs.get(self.monitor)
     loss = logs.get("val_loss")
-    if score > self.bestScore or (score == self.bestScore and loss < self.bestLoss):
+    if score > self.best_score or (score == self.best_score and loss < self.best_loss):
       path = os.path.join(self.save_path, str(epoch+1))
       os.makedirs(path)
       self.model.save_weights(path+'/best_weights.h5')
-      self.bestScore = score
-      self.bestLoss = loss
+      self.best_score = score
+      self.best_loss = loss
       print("\nModel saved as the best model")
 
