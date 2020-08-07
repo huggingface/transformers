@@ -12,14 +12,11 @@ from transformers import (
     OpenAIGPTTokenizer,
     PreTrainedTokenizer,
     RobertaTokenizer,
-    TransfoXLTokenizer,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
-from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -878,17 +875,3 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
         self.assertRaises(
             ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, padding="max_length",
         )
-
-
-class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
-    TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file", None, None)]
-    )
-
-    @require_torch
-    def test_all_tokenizers(self):
-        super().test_all_tokenizers()
-
-    @require_torch
-    def test_pretokenized_tokenizers(self):
-        super().test_pretokenized_tokenizers()
