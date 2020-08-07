@@ -129,7 +129,7 @@ def get_model_test_files():
 # nested list _ignore_module of this function.
 def get_model_doc_files():
     """ Get the model doc files."""
-    _ignore_files = [
+    _ignore_modules = [
         "auto",
         "dialogpt",
         "marian",
@@ -137,7 +137,7 @@ def get_model_doc_files():
     ]
     doc_files = []
     for filename in os.listdir(PATH_TO_DOC):
-        if os.path.isfile(f"{PATH_TO_DOC}/{filename}") and not filename[:-4] in _ignore_files:
+        if os.path.isfile(f"{PATH_TO_DOC}/{filename}") and not filename[:-4] in _ignore_modules:
             doc_files.append(filename)
     return doc_files
 
