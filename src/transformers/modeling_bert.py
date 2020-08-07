@@ -50,9 +50,9 @@ from .modeling_outputs import (
 )
 from .modeling_utils import (
     PreTrainedModel,
+    apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
-    apply_chunking_to_forward,
 )
 
 
@@ -93,6 +93,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
     """
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
