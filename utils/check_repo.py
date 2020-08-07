@@ -63,10 +63,10 @@ transformers = spec.loader.load_module()
 
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
-# _ignore_module of this function.
+# _ignore_modules of this function.
 def get_model_modules():
     """ Get the model modules inside the transformers library. """
-    _ignore_module = [
+    _ignore_modules = [
         "modeling_auto",
         "modeling_encoder_decoder",
         "modeling_marian",
@@ -83,7 +83,7 @@ def get_model_modules():
     ]
     modules = []
     for attr_name in dir(transformers):
-        if attr_name.startswith("modeling") and attr_name not in _ignore_module:
+        if attr_name.startswith("modeling") and attr_name not in _ignore_modules:
             module = getattr(transformers, attr_name)
             if inspect.ismodule(module):
                 modules.append(module)
@@ -103,8 +103,8 @@ def get_models(module):
     return models
 
 
-# If some test_modeling files should be ignored for the check models are tested, they should be added in the
-# nested list _ignore_module of this function.
+# If some test_modeling files should be ignored when checking models are all tested, they should be added in the
+# nested list _ignore_files of this function.
 def get_model_test_files():
     """ Get the model test files."""
     _ignore_files = [
@@ -119,14 +119,14 @@ def get_model_test_files():
         if (
             os.path.isfile(f"{PATH_TO_TESTS}/{filename}")
             and filename.startswith("test_modeling")
-            and not filename[:-3] in _ignore_files
+            and not os.path.splitext(filename)[0] in _ignore_files
         ):
             test_files.append(filename)
     return test_files
 
 
-# If some doc files should be ignored for the check models are documented, they should be added in the
-# nested list _ignore_module of this function.
+# If some doc source files should be ignored when checking models are all documented, they should be added in the
+# nested list _ignore_modules of this function.
 def get_model_doc_files():
     """ Get the model doc files."""
     _ignore_modules = [
@@ -137,7 +137,7 @@ def get_model_doc_files():
     ]
     doc_files = []
     for filename in os.listdir(PATH_TO_DOC):
-        if os.path.isfile(f"{PATH_TO_DOC}/{filename}") and not filename[:-4] in _ignore_modules:
+        if os.path.isfile(f"{PATH_TO_DOC}/{filename}") and not os.path.splitext(filename)[0] in _ignore_modules:
             doc_files.append(filename)
     return doc_files
 
