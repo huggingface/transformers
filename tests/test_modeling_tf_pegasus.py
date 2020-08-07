@@ -152,19 +152,22 @@ class TFPegasusModelIntegrationTest(unittest.TestCase):
                 target_ids = tf.reshape(target_ids, [1, 32])
 
                 output_ids = model.predict(
-                    {"inputs": input_ids, "targets": target_ids,}, 32, config.num_beams, beam_alpha=0.6
+                    {"inputs": input_ids, "targets": target_ids}, 32, config.num_beams, beam_alpha=0.6
                 )
                 self.assertEqual(output_ids["outputs"].shape, [1, 32])
-
                 # decode to str
                 output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
-
                 sess.run(tf.compat.v1.global_variables_initializer())
-
-
-                results = sess.run([output_str, model._emb],
+                results, emb = sess.run([output_str, model._emb],
                                feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]})
-                print(results)
+
+                after_time, after_stack, logits  = sess.run([model.after_time_signal, model.after_stack, model.logits],
+                               feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]})
+
+        print(results)
+        print(f'after_time: {after_time}')
+        print(f'after_stack: {after_time}')
+        print(f'logits: {logits}')
 
 
     def test_eager_pegasus(self):

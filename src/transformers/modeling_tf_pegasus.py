@@ -726,10 +726,12 @@ class TFPegasusLegacyModel:
 
         #import ipdb; ipdb.set_trace()
         bias_1xTxT = upper_triangle_bias(tf.shape(input=targets_BxT)[1], self._dtype)
+        self.upper_tri_bias = bias_1xTxT
         states_BxTxD = self._embedding_layer(targets_BxT, True)
         self._emb = states_BxTxD
         states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
         states_BxTxD = add_time_signal(states_BxTxD)
+        self.after_time_signal = states_BxTxD
         #self._time_signal =
         states_BxTxD = self._dropout_fn(states_BxTxD, training)
         with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
@@ -737,7 +739,9 @@ class TFPegasusLegacyModel:
                 self._decoder_layers, training, states_BxTxD, bias_1xTxT, context["memory"], context["memory_bias"]
             )
             states_BxTxD = self._layer_norm_decoder(states_BxTxD)
+        self.after_stack = states_BxTxD
         logits_BxTxV = self._embedding_layer(states_BxTxD, False)
+        self.logits = logits_BxTxV
         targets_mask_BxT = tf.cast(tf.greater(targets_BxT, 0), self._dtype)
         loss = tf.compat.v1.losses.softmax_cross_entropy(
             tf.one_hot(targets_BxT, self._vocab_size),
