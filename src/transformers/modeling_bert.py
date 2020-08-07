@@ -378,34 +378,17 @@ class BertOutput(nn.Module):
         return hidden_states
 
 
-class ChunkFeedForward(nn.Module):
+class BertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-
-        self.dense = BertIntermediate(config)
-        self.output = BertOutput(config)
-
-    def forward(self, attention_output):
-        return apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.forward_chunk, attention_output,
-        )
-
-    def forward_chunk(self, attention_output):
-        intermediate_output = self.dense(attention_output)
-        return self.output(intermediate_output, attention_output)
-
-
-class BertLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
         self.attention = BertAttention(config)
         self.is_decoder = config.is_decoder
         if self.is_decoder:
             self.crossattention = BertAttention(config)
-
-        self.feed_forward = ChunkFeedForward(config)
+        self.intermediate = BertIntermediate(config)
+        self.output = BertOutput(config)
 
     def forward(
         self,
@@ -434,9 +417,16 @@ class BertLayer(nn.Module):
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
-        layer_output = self.feed_forward(attention_output)
+        layer_output = apply_chunking_to_forward(
+            self.chunk_size_feed_forward, self.seq_len_dim, self.feed_forward_chunk, attention_output
+        )
         outputs = (layer_output,) + outputs
         return outputs
+
+    def feed_forward_chunk(self, attention_output):
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+        return layer_output
 
 
 class BertEncoder(nn.Module):

@@ -160,7 +160,7 @@ class PretrainedConfig(object):
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 1)
+        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
