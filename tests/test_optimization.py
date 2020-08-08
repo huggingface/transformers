@@ -123,9 +123,14 @@ class ScheduleInitTest(unittest.TestCase):
             lrs_1 = unwrap_schedule(scheduler, self.num_steps)
             self.assertEqual(len(lrs_1[0]), 1)
             self.assertListAlmostEqual(
-                [l[0] for l in lrs_1], expected_learning_rates, tol=1e-2, msg=f"failed for {scheduler_func}"
+                [l[0] for l in lrs_1],
+                expected_learning_rates,
+                tol=1e-2,
+                msg=f"failed for {scheduler_func} in normal scheduler",
             )
 
             scheduler = scheduler_func(self.optimizer, **kwargs)
             lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
-            self.assertListEqual([l[0] for l in lrs_1], [l[0] for l in lrs_2], msg=f"failed for {scheduler_func}")
+            self.assertListEqual(
+                [l[0] for l in lrs_1], [l[0] for l in lrs_2], msg=f"failed for {scheduler_func} in save and reload"
+            )
