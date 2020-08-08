@@ -246,6 +246,10 @@ class ModelTesterMixin:
 
             try:
                 if model.config.is_encoder_decoder:
+                    # Bart cannot trace decoder cache for now.
+                    # see: https://github.com/huggingface/transformers/issues/6348
+                    # TODO: Remove following line when issue is fixed.
+                    model.config.use_cache = False
                     traced_model = torch.jit.trace(model, (inputs, inputs))
                 else:
                     traced_model = torch.jit.trace(model, inputs)
