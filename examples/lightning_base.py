@@ -277,11 +277,6 @@ def add_generic_args(parser, root_dir) -> None:
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
-
-    parser.add_argument(
-        "--gpus", default=0, type=int, help="The number of GPUs allocated for this, it is by default 0 meaning none",
-    )
-
     parser.add_argument(
         "--fp16",
         action="store_true",
