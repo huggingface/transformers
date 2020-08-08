@@ -19,8 +19,9 @@ import logging
 import os
 import sys
 import unittest
+import torch
 from unittest.mock import patch
-
+from transformers.trainer import is_apex_available
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
@@ -48,6 +49,10 @@ def get_setup_file():
     return args.f
 
 
+def is_cuda_and_apex_avaliable():
+    return torch.cuda.is_available() and is_apex_available()
+
+
 class ExamplesTests(unittest.TestCase):
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -69,8 +74,11 @@ class ExamplesTests(unittest.TestCase):
             --overwrite_output_dir
             --seed=42
             --max_seq_length=128
-            --fp16
             """.split()
+
+        if is_cuda_and_apex_avaliable():
+            testargs.append("--fp16")
+
         with patch.object(sys, "argv", testargs):
             result = run_glue.main()
             del result["eval_loss"]
@@ -130,7 +138,11 @@ class ExamplesTests(unittest.TestCase):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
-        testargs = ["run_generation.py", "--prompt=Hello", "--length=10", "--seed=42", "--fp16"]
+        testargs = ["run_generation.py", "--prompt=Hello", "--length=10", "--seed=42"]
+
+        if is_cuda_and_apex_avaliable():
+            testargs.append("--fp16")
+
         model_type, model_name = ("--model_type=gpt2", "--model_name_or_path=sshleifer/tiny-gpt2")
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
             result = run_generation.main()

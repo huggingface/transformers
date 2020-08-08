@@ -38,7 +38,6 @@ from transformers import (
     XLNetLMHeadModel,
     XLNetTokenizer,
 )
-from transformers.trainer import is_apex_available
 
 
 logging.basicConfig(
@@ -185,7 +184,6 @@ def main():
     parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-    parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for distributed training on gpus")
     parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
     parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
     parser.add_argument(
@@ -193,28 +191,13 @@ def main():
         action="store_true",
         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
     )
-    parser.add_argument(
-        "--fp16_opt_level",
-        type=str,
-        default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
-    )
     args = parser.parse_args()
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
 
-    if "cuda" not in str(args.device) or not is_apex_available():
-        args.fp16 = False
-
     logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-        args.local_rank,
-        args.device,
-        args.n_gpu,
-        bool(args.local_rank != -1),
-        args.fp16,
+        "device: %s, n_gpu: %s, 16-bits training: %s", args.device, args.n_gpu, args.fp16,
     )
 
     set_seed(args)

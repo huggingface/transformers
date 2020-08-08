@@ -36,7 +36,6 @@ from transformers import (
     glue_tasks_num_labels,
     set_seed,
 )
-from transformers.trainer import is_apex_available
 
 
 logger = logging.getLogger(__name__)
@@ -85,9 +84,6 @@ def main():
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
-
-    if "cuda" not in str(training_args.device) or not is_apex_available():
-        training_args.fp16 = False
 
     # Setup logging
     logging.basicConfig(
