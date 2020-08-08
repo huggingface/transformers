@@ -1065,10 +1065,6 @@ class TokenizerTesterMixin:
                 self.assertIsInstance(vocab, dict)
                 self.assertEqual(len(vocab), len(tokenizer))
 
-                for word, ind in vocab.items():
-                    self.assertEqual(tokenizer.convert_tokens_to_ids(word), ind)
-                    self.assertEqual(tokenizer.convert_ids_to_tokens(ind), word)
-
                 tokenizer.add_tokens(["asdfasdfasdfasdf"])
                 vocab = tokenizer.get_vocab()
                 self.assertIsInstance(vocab, dict)

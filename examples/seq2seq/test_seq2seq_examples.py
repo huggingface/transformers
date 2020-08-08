@@ -8,18 +8,20 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import pytorch_lightning as pl
 import torch
 from pytest import param
 from torch.utils.data import DataLoader
 
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, MBartTokenizer
+import lightning_base
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import require_multigpu
 
 from .distillation import distill_main, evaluate_checkpoint
-from .finetune import main
+from .finetune import SummarizationModule, main
 from .pack_dataset import pack_data_dir
 from .run_eval import generate_summaries_or_translations, run_generate
-from .utils import MBartDataset, Seq2SeqDataset, label_smoothed_nll_loss, lmap, load_json
+from .utils import Seq2SeqDataset, TranslationDataset, label_smoothed_nll_loss, lmap, load_json
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -60,6 +62,7 @@ CHEAP_ARGS = {
     "tokenizer_name": "facebook/bart-large",
     "do_lower_case": False,
     "learning_rate": 0.3,
+    "lr_scheduler": "linear",
     "weight_decay": 0.0,
     "adam_epsilon": 1e-08,
     "warmup_steps": 0,
@@ -326,6 +329,66 @@ def test_finetune_extra_model_args():
     assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
 
 
+@unittest.skip("Conflict with different add_argparse_args - needs a serious sync")
+def test_finetune_lr_shedulers(capsys):
+    args_d: dict = CHEAP_ARGS.copy()
+
+    task = "summarization"
+    tmp_dir = make_test_data_dir()
+
+    model = BART_TINY
+    output_dir = tempfile.mkdtemp(prefix="output_1_")
+
+    args_d.update(
+        data_dir=tmp_dir,
+        model_name_or_path=model,
+        output_dir=output_dir,
+        tokenizer_name=None,
+        train_batch_size=2,
+        eval_batch_size=2,
+        do_predict=False,
+        task=task,
+        src_lang="en_XX",
+        tgt_lang="ro_RO",
+        freeze_encoder=True,
+        freeze_embeds=True,
+    )
+
+    # emulate finetune.py
+    parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
+    parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
+    args = {"--help": True}
+
+    # --help test
+    with pytest.raises(SystemExit) as excinfo:
+        args = parser.parse_args(args)
+        assert False, "--help is expected to sys.exit"
+    assert excinfo.type == SystemExit
+    captured = capsys.readouterr()
+    expected = lightning_base.arg_to_scheduler_metavar
+    assert expected in captured.out, "--help is expected to list the supported schedulers"
+
+    # --lr_scheduler=non_existing_scheduler test
+    unsupported_param = "non_existing_scheduler"
+    args = {f"--lr_scheduler={unsupported_param}"}
+    with pytest.raises(SystemExit) as excinfo:
+        args = parser.parse_args(args)
+        assert False, "invalid argument is expected to sys.exit"
+    assert excinfo.type == SystemExit
+    captured = capsys.readouterr()
+    expected = f"invalid choice: '{unsupported_param}'"
+    assert expected in captured.err, f"should have bailed on invalid choice of scheduler {unsupported_param}"
+
+    # --lr_scheduler=existing_scheduler test
+    supported_param = "cosine"
+    args_d1 = args_d.copy()
+    args_d1["lr_scheduler"] = supported_param
+    args = argparse.Namespace(**args_d1)
+    model = main(args)
+    assert getattr(model.hparams, "lr_scheduler") == supported_param, f"lr_scheduler={supported_param} shouldn't fail"
+
+
 def test_pack_dataset():
     tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
@@ -344,8 +407,9 @@ def test_pack_dataset():
     assert orig_paths == new_paths
 
 
-def test_mbart_dataset_truncation():
-    tokenizer = MBartTokenizer.from_pretrained(MBART_TINY)
+@pytest.mark.parametrize(["tok_name"], [pytest.param(MBART_TINY), pytest.param(MARIAN_TINY)])
+def test_mbart_dataset_truncation(tok_name):
+    tokenizer = AutoTokenizer.from_pretrained(tok_name)
     tmp_dir = make_test_data_dir()
     max_len_source = max(len(tokenizer.encode(a)) for a in ARTICLES)
     max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
@@ -354,7 +418,7 @@ def test_mbart_dataset_truncation():
     assert max_len_target > max_src_len  # Truncated
     assert max_len_source > max_src_len
     src_lang, tgt_lang = "ro_RO", "de_DE"  # NOT WHAT IT WAS TRAINED ON
-    train_dataset = MBartDataset(
+    train_dataset = TranslationDataset(
         tokenizer,
         data_dir=tmp_dir,
         type_path="train",
@@ -371,6 +435,8 @@ def test_mbart_dataset_truncation():
         assert batch["input_ids"].shape[1] == max_src_len
         # show that targets are the same len
         assert batch["decoder_input_ids"].shape[1] == max_tgt_len
+        if tok_name == MARIAN_TINY:
+            continue
         # check language codes in correct place
         assert batch["decoder_input_ids"][0, 0].item() == tokenizer.lang_code_to_id[tgt_lang]
         assert batch["decoder_input_ids"][0, -1].item() == tokenizer.eos_token_id

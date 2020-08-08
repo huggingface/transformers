@@ -20,6 +20,7 @@ jobs:
         python-version: 3.7
     - name: Install dependencies
       run: |
+        pip install --upgrade pip
         pip install torch
         pip install numpy tokenizers filelock requests tqdm regex sentencepiece sacremoses packaging
 

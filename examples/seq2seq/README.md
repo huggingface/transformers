@@ -63,7 +63,7 @@ Summarization Tips:
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
 
 **Update 2018-07-18**
-Datasets: Seq2SeqDataset will be used for all models besides MBart, for which MBartDataset will be used.**
+Datasets: `Seq2SeqDataset` should be used for all tokenizers without a `prepare_translation_batch` method. For those who do (like Marian, MBart), `TranslationDataset` should be used.**
 A new dataset is needed to support multilingual tasks.
 
 
@@ -113,22 +113,20 @@ Best performing command:
 # optionally
 export ENRO_DIR='wmt_en_ro' # Download instructions above
 # export WANDB_PROJECT="MT" # optional
-export MAX_LEN=200
+export MAX_LEN=128
 export BS=4
-export GAS=8 # gradient accumulation steps
 ./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb --sortish_sampler
 ```
-This should take < 6h/epoch on a 16GB v100 and achieve val_avg_ BLEU score above 25. (you can see metrics in wandb or metrics.json).
-To get results in line with fairseq, you need to do some postprocessing.
+This should take < 6h/epoch on a 16GB v100 and achieve test BLEU above 26
+To get results in line with fairseq, you need to do some postprocessing. (see `romanian_postprocessing.md`)
 
 MultiGPU command
 (using 8 GPUS as an example)
 ```bash
 export ENRO_DIR='wmt_en_ro' # Download instructions above
  # export WANDB_PROJECT="MT" # optional
-export MAX_LEN=200
+export MAX_LEN=128
 export BS=4
-export GAS=1  # gradient accumulation steps
 ./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --gpus 8 --logger_name wandb
 ```
 ### Finetuning Outputs

@@ -41,3 +41,9 @@ The other methods that are common to each model are defined in :class:`~transfor
 
 .. autoclass:: transformers.modeling_tf_utils.TFModelUtilsMixin
     :members:
+
+
+Generative models
+~~~~~~~~~~~~~~~~~
+
+Coming soon
