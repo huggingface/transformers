@@ -100,7 +100,7 @@ class ExamplesTests(unittest.TestCase):
             # for now just testing that the script can run to a completion
             self.assertGreater(result["acc"], 0.25)
             #
-            # TODO: this fails on CI - doesn't get acc/f1>=0.5:
+            # TODO: this fails on CI - doesn't get acc/f1>=0.75:
             #
             #     # remove all the various *loss* attributes
             #     result = {k: v for k, v in result.items() if "loss" not in k}
