@@ -33,7 +33,6 @@ def pack_examples(tok, src_examples, tgt_examples, max_tokens=1024):
             new_src, new_tgt = src, tgt
         else:  # can fit, keep adding
             new_src, new_tgt = cand_src, cand_tgt
-        #
 
     # cleanup
     if new_src:
