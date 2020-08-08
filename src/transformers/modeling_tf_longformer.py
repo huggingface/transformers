@@ -19,8 +19,9 @@ import logging
 import tensorflow as tf
 
 from .configuration_longformer import LongformerConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertSelfOutput
+from .modeling_tf_outputs import TFBaseModelOutputWithPooling, TFMaskedLMOutput, TFQuestionAnsweringModelOutput
 from .modeling_tf_roberta import TFRobertaEmbeddings, TFRobertaLMHead
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
@@ -882,6 +883,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.return_dict = config.use_return_dict
         self.pad_token_id = config.pad_token_id
         self.attention_window = config.attention_window
 
@@ -913,6 +915,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -924,7 +927,8 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
             output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            assert len(inputs) <= 8, "Too many inputs."
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -934,12 +938,14 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 8, "Too many inputs."
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -998,10 +1004,15 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
             sequence_output = sequence_output[:, :-padding_len]
 
-        outputs = (sequence_output, pooled_output) + encoder_outputs[
-            1:
-        ]  # add hidden_states and attentions if they are here
-        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+        if not return_dict:
+            return (sequence_output, pooled_output,) + encoder_outputs[1:]
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
     def _pad_to_window_size(
         self, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds, pad_token_id,
@@ -1153,6 +1164,9 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -1198,6 +1212,12 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         return self.lm_head.decoder
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="allenai/longformer-base-4096",
+        output_type=TFMaskedLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs=None,
@@ -1208,6 +1228,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -1217,31 +1238,12 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
-
-    Returns:
-
-    Examples::
-
-        >>> import tensorflow as tf
-        >>> from transformers import TFLongformerForMaskedLM, LongformerTokenizer
-
-        >>> model = TFLongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
-        >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
-
-        >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
-        >>> input_ids = tf.convert_to_tensor(tokenizer.encode(SAMPLE_TEXT))[None, :]  # batch of size 1
-
-        >>> attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
-        ...                        # check ``LongformerModel.forward`` for more details how to set `attention_mask`
-        >>> outputs = model(input_ids, attention_mask=attention_mask, labels=input_ids)
-        >>> loss = outputs[0]
-        >>> prediction_logits = outputs[1]
         """
-
+        return_dict = return_dict if return_dict is not None else self.longformer.return_dict
         if isinstance(inputs, (tuple, list)):
-            labels = inputs[8] if len(inputs) > 8 else labels
-            if len(inputs) > 8:
-                inputs = inputs[:8]
+            labels = inputs[9] if len(inputs) > 9 else labels
+            if len(inputs) > 9:
+                inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
@@ -1254,19 +1256,22 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output, training=training)
 
-        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+        loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
-        if labels is not None:
-            loss = self.compute_loss(labels, prediction_scores)
-            outputs = (loss,) + outputs
+        if not return_dict:
+            output = (prediction_scores,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
-        return outputs  # (loss), prediction_scores, (hidden_states), (attentions)
+        return TFMaskedLMOutput(
+            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1285,6 +1290,12 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         )
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="allenai/longformer-large-4096-finetuned-triviaqa",
+        output_type=TFQuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs=None,
@@ -1295,6 +1306,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         start_positions=None,
         end_positions=None,
         training=False,
@@ -1308,40 +1320,15 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-    Returns:
-
-    Examples::
-
-        >>> from transformers import LongformerTokenizer, TFLongformerForQuestionAnswering
-        >>> import tensorflow as tf
-
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
-        >>> model = TFLongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
-
-        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        >>> encoding = tokenizer(question, text, return_tensors="tf")
-        >>> input_ids = encoding["input_ids"]
-
-        >>> # default is local attention everywhere
-        >>> # the forward method will automatically set global attention on question tokens
-        >>> attention_mask = encoding["attention_mask"]
-
-        >>> outputs = model(input_ids, attention_mask=attention_mask)
-        >>> start_logits = outputs[0]
-        >>> end_logits = outputs[1]
-        >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].numpy().tolist())
-
-        >>> answer_tokens = all_tokens[tf.argmax(start_logits, axis=-1).numpy().item() :tf.argmax(end_logits, axis=-1).numpy().item() + 1]
-        >>> answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
-
         """
+        return_dict = return_dict if return_dict is not None else self.longformer.return_dict
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             global_attention_mask = inputs[2]
-            start_positions = inputs[8] if len(inputs) > 8 else start_positions
-            end_positions = inputs[9] if len(inputs) > 9 else end_positions
-            if len(inputs) > 8:
-                inputs = inputs[:8]
+            start_positions = inputs[9] if len(inputs) > 9 else start_positions
+            end_positions = inputs[10] if len(inputs) > 10 else end_positions
+            if len(inputs) > 9:
+                inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids", inputs)
             global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
@@ -1375,6 +1362,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
@@ -1385,12 +1373,20 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
-        outputs = (start_logits, end_logits,) + outputs[2:]
-
+        loss = None
         if start_positions is not None and end_positions is not None:
             labels = {"start_position": start_positions}
             labels["end_position"] = end_positions
-            loss = self.compute_loss(labels, outputs[:2])
-            outputs = (loss,) + outputs
+            loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFQuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
