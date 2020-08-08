@@ -18,29 +18,40 @@
 import logging
 import sys
 from collections import namedtuple
+from dataclasses import dataclass
 from functools import reduce
 from operator import mul
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import nn
 from torch.autograd.function import Function
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import gelu, gelu_fast, gelu_new, swish
 from .configuration_reformer import ReformerConfig
 from .file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
+)
+from .modeling_outputs import (
+    BaseModelOutput,
+    CausalLMOutput,
+    MaskedLMOutput,
+    QuestionAnsweringModelOutput,
+    SequenceClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
 
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "ReformerConfig"
 _TOKENIZER_FOR_DOC = "ReformerTokenizer"
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -72,7 +83,18 @@ ReformerOutput = namedtuple("ReformerOutput", ["hidden_states", "attn_output", "
 ReformerBackwardOutput = namedtuple(
     "ReformerBackwardOutput", ["attn_output", "hidden_states", "grad_attn_output", "grad_hidden_states"]
 )
-ReformerEncoderOutput = namedtuple("ReformerEncoderOutput", ["hidden_states", "all_hidden_states", "all_attentions"])
+ReformerEncoderOutput = namedtuple(
+    "ReformerEncoderOutput", ["hidden_states", "all_hidden_states", "all_attentions", "past_buckets_states"],
+)
+
+
+def _stable_argsort(vector, dim):
+    # this function scales the vector so that torch.argsort is stable.
+    # torch.argsort is not stable on its own
+    scale_offset = torch.arange(vector.shape[dim], device=vector.device).view(1, 1, -1)
+    scale_offset = scale_offset.expand(vector.shape)
+    scaled_vector = vector.shape[dim] * vector + (scale_offset % vector.shape[dim])
+    return torch.argsort(scaled_vector, dim=dim)
 
 
 def _get_least_common_mult_chunk_len(config):
@@ -84,6 +106,23 @@ def _get_least_common_mult_chunk_len(config):
         return config.local_attn_chunk_length
     elif len(attn_types_set) == 2 and attn_types_set == set(["lsh", "local"]):
         return np.lcm(config.lsh_attn_chunk_length, config.local_attn_chunk_length)
+    else:
+        raise NotImplementedError(
+            "Only attn layer types 'lsh' and 'local' exist, but `config.attn_layers`: {}. Select attn layer types from ['lsh', 'local'] only.".format(
+                config.attn_layers
+            )
+        )
+
+
+def _get_min_chunk_len(config):
+    attn_types = config.attn_layers
+    attn_types_set = set(attn_types)
+    if len(attn_types_set) == 1 and attn_types[0] == "lsh":
+        return config.lsh_attn_chunk_length
+    elif len(attn_types_set) == 1 and attn_types[0] == "local":
+        return config.local_attn_chunk_length
+    elif len(attn_types_set) == 2 and attn_types_set == set(["lsh", "local"]):
+        return min(config.lsh_attn_chunk_length, config.local_attn_chunk_length)
     else:
         raise NotImplementedError(
             "Only attn layer types 'lsh' and 'local' exist, but `config.attn_layers`: {}. Select attn layer types from ['lsh', 'local'] only.".format(
@@ -163,15 +202,23 @@ class AxialPositionEmbeddings(nn.Module):
             )
 
             # compute how many columns are needed
-            required_pos_encodings_columns = -(-sequence_length // self.axial_pos_shape[1])
+            max_position_id = position_ids.max().item()
+            required_pos_encodings_columns = -(-(max_position_id + 1) // self.axial_pos_shape[1])
 
             # cut to columns that are needed
             position_encodings = torch.cat(
                 [weight[:, :required_pos_encodings_columns] for weight in broadcasted_weights], dim=-1
             )
-            position_encodings = torch.reshape(position_encodings, (batch_size, -1, position_encodings.shape[-1]))[
-                :, :sequence_length
-            ]
+            position_encodings = torch.reshape(position_encodings, (batch_size, -1, position_encodings.shape[-1]))
+
+            # select correct position encodings
+            position_encodings = torch.cat(
+                [
+                    torch.index_select(position_encodings[i], 0, position_ids[i]).unsqueeze(0)
+                    for i in range(batch_size)
+                ],
+                dim=0,
+            )
 
         return position_encodings
 
@@ -205,7 +252,7 @@ class ReformerEmbeddings(nn.Module):
             AxialPositionEmbeddings(config) if config.axial_pos_embds else PositionEmbeddings(config)
         )
 
-    def forward(self, input_ids=None, position_ids=None, inputs_embeds=None):
+    def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, start_idx_pos_encodings=0):
         if input_ids is not None:
             input_shape = input_ids.size()
             device = input_ids.device
@@ -215,7 +262,9 @@ class ReformerEmbeddings(nn.Module):
 
         seq_length = input_shape[1]
         if position_ids is None:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                start_idx_pos_encodings, start_idx_pos_encodings + seq_length, dtype=torch.long, device=device
+            )
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
 
         if inputs_embeds is None:
@@ -331,8 +380,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
-        output_attentions=False,
         buckets=None,
+        past_buckets_states=None,
+        use_cache=False,
+        output_attentions=False,
         **kwargs
     ):
         sequence_length = hidden_states.shape[1]
@@ -341,17 +392,72 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # num hashes can optionally be overwritten by user
         num_hashes = num_hashes if num_hashes is not None else self.num_hashes
 
-        # project hidden_states to query_key and value
-        query_key_vectors = self.query_key(hidden_states)
-        value_vectors = self.value(hidden_states)
+        do_cached_attention = use_cache and past_buckets_states[1] is not None
+
+        # check if cache shall be used and that hidden states are already cached
+        if do_cached_attention:
+            assert (
+                sequence_length == 1
+            ), f"At the moment, auto-regressive language generation is only possible one word at a time. Make sure that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
+            past_buckets = past_buckets_states[0]
+            past_states = past_buckets_states[1]
+
+            # get query vector
+            query_vectors = self.query_key(hidden_states)
+            query_vectors = self._split_hidden_size_dim(
+                query_vectors, self.num_attention_heads, self.attention_head_size
+            )
+
+            if past_buckets is not None:
+                key_value_hidden_states, sorted_bucket_idx, buckets = self._get_relevant_hid_states_and_buckets(
+                    query_vectors=query_vectors,
+                    attention_mask=attention_mask,
+                    num_hashes=num_hashes,
+                    hidden_states=hidden_states,
+                    past_states=past_states,
+                    past_buckets=past_buckets,
+                )
+
+                query_key_vectors = self._query_per_attn_head(key_value_hidden_states)
+                value_vectors = self._value_per_attn_head(key_value_hidden_states)
+
+                # split key & value vectors by num hashes to apply
+                # self attention on each separately
+                query_key_vectors = self._split_seq_length_dim_to(
+                    query_key_vectors, num_hashes, -1, self.num_attention_heads, self.attention_head_size,
+                )
+                value_vectors = self._split_seq_length_dim_to(
+                    value_vectors, num_hashes, -1, self.num_attention_heads, self.attention_head_size,
+                )
+                # repeat query vectors across hash dimension
+                query_vectors = query_vectors.unsqueeze(2).repeat(1, 1, num_hashes, 1, 1)
+            else:
+                key_value_hidden_states = torch.cat([past_states, hidden_states], dim=1)
+
+                query_key_vectors = self.query_key(key_value_hidden_states)
+                value_vectors = self.value(key_value_hidden_states)
+
+        else:
+            # project hidden_states to query_key and value
+            query_vectors = None
+            query_key_vectors = self.query_key(hidden_states)
+            value_vectors = self.value(hidden_states)
+
+        # if query key is not already split
+        if not do_cached_attention or past_buckets is None:
+            query_key_vectors = self._split_hidden_size_dim(
+                query_key_vectors, self.num_attention_heads, self.attention_head_size
+            )
+            value_vectors = self._split_hidden_size_dim(
+                value_vectors, self.num_attention_heads, self.attention_head_size
+            )
+
+        # cache buckets for next incremental decoding
+        if do_cached_attention and past_buckets is None and key_value_hidden_states.shape[1] >= self.chunk_length:
+            buckets = self._hash_vectors(query_key_vectors, num_hashes, attention_mask)
 
         # free memory
         del hidden_states
-
-        query_key_vectors = self._split_hidden_size_dim(
-            query_key_vectors, self.num_attention_heads, self.attention_head_size
-        )
-        value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
         assert (
             query_key_vectors.shape[-1] == self.attention_head_size
@@ -364,8 +470,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             value_vectors.shape[-1], self.attention_head_size
         )
 
+        do_standard_self_attention = (sequence_length <= self.chunk_length) or (
+            use_cache and past_buckets_states[1] is not None
+        )
         # LSH attention only makes sense if chunked attention should be performed
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             # set `num_buckets` on the fly, recommended way to do it
             if self.num_buckets is None:
                 self._set_num_buckets(sequence_length)
@@ -373,7 +482,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # use cached buckets for backprop only
             if buckets is None:
                 # hash query key vectors into buckets
-                buckets = self._hash_vectors(query_key_vectors, num_hashes)
+                buckets = self._hash_vectors(query_key_vectors, num_hashes, attention_mask)
+            else:
+                # make sure buckets has correct shape for LSH attention
+                buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes * sequence_length)
 
             assert (
                 int(buckets.shape[-1]) == num_hashes * sequence_length
@@ -389,7 +501,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # cluster query key value vectors according to hashed buckets
             query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx_per_hash, num_hashes)
             value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx_per_hash, num_hashes)
-
             query_key_vectors = self._split_seq_length_dim_to(
                 query_key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
             )
@@ -401,6 +512,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 assert (
                     self.num_chunks_before == 0 and self.num_chunks_after == 0
                 ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+        elif do_cached_attention and past_buckets is not None:
+            # use max sequence length
+            sorted_bucket_idx_per_hash = sorted_bucket_idx
         else:
             # get sequence length indices
             sorted_bucket_idx_per_hash = torch.arange(sequence_length, device=query_key_vectors.device).repeat(
@@ -410,25 +524,33 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # scale key vectors
         key_vectors = self._len_and_dim_norm(query_key_vectors)
 
+        # set query_vectors to query key vectors if LSH self attention
+        query_vectors = query_vectors if query_vectors is not None else query_key_vectors
+
+        # free memory
+        del query_key_vectors
+
         # get attention probs
         out_vectors, logits, attention_probs = self._attend(
-            query_vectors=query_key_vectors,
+            query_vectors=query_vectors,
             key_vectors=key_vectors,
             value_vectors=value_vectors,
             sorted_bucket_idx_per_hash=sorted_bucket_idx_per_hash,
             attention_mask=attention_mask,
             head_mask=head_mask,
-            sequence_length=sequence_length,
+            do_standard_self_attention=do_standard_self_attention,
+            do_cached_attention=do_cached_attention,
         )
 
         # free memory
-        del query_key_vectors, key_vectors, value_vectors
+        del key_vectors, value_vectors
 
         # re-order out_vectors and logits
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             # sort clusters back to correct ordering
             out_vectors, logits = ReverseSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
+        if not do_standard_self_attention or (do_cached_attention and past_buckets is not None):
             # sum up all hash rounds
             if num_hashes > 1:
                 out_vectors = self._split_seq_length_dim_to(
@@ -458,9 +580,28 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if output_attentions is False:
             attention_probs = ()
 
+        if buckets is not None:
+            buckets = buckets.view(batch_size, self.num_attention_heads, num_hashes, -1)
+
         return LSHSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs, buckets=buckets)
 
-    def _hash_vectors(self, vectors, num_hashes):
+    def _query_per_attn_head(self, hidden_states):
+        per_head_query_key = self.query_key.weight.reshape(
+            self.num_attention_heads, self.attention_head_size, self.hidden_size
+        ).transpose(-2, -1)
+        # only relevant for inference and no bias => we can use einsum here
+        query_key_vectors = torch.einsum("balh,ahr->balr", hidden_states, per_head_query_key)
+        return query_key_vectors
+
+    def _value_per_attn_head(self, hidden_states):
+        per_head_value = self.value.weight.reshape(
+            self.num_attention_heads, self.attention_head_size, self.hidden_size
+        ).transpose(-2, -1)
+        # only relevant for inference and no bias => we can use einsum here
+        value_vectors = torch.einsum("balh,ahr->balr", hidden_states, per_head_value)
+        return value_vectors
+
+    def _hash_vectors(self, vectors, num_hashes, attention_mask, increase_num_buckets=False):
         batch_size = vectors.shape[0]
 
         # See https://arxiv.org/pdf/1509.02897.pdf
@@ -506,13 +647,23 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 rotated_vectors_factor = rotated_vectors[..., cur_sum : cur_sum + (bucket_factor // 2)]
                 cur_sum = cur_sum + bucket_factor // 2
                 rotated_vectors_factor = torch.cat([rotated_vectors_factor, -rotated_vectors_factor], dim=-1)
-
                 if buckets is None:
                     buckets = torch.argmax(rotated_vectors_factor, dim=-1)
                 else:
                     buckets = buckets + (cur_product * torch.argmax(rotated_vectors_factor, dim=-1))
 
                 cur_product = cur_product * bucket_factor
+
+        if attention_mask is not None and (attention_mask.sum().item() < batch_size * attention_mask.shape[-1]):
+            # add an extra bucket for padding tokens only
+            num_buckets = num_buckets + 1
+            # assign padding tokens extra bucket
+            buckets_mask = attention_mask.to(torch.uint8)[:, None, None, :].expand(buckets.shape)
+            buckets = torch.where(
+                buckets_mask, buckets, torch.tensor(num_buckets - 1, dtype=torch.long, device=buckets.device)
+            )
+        elif increase_num_buckets:
+            num_buckets = num_buckets + 1
 
         # buckets is now (Batch_size x Num_Attn_Heads x Num_Hashes x Seq_Len).
         # Next we add offsets so that bucket numbers from different hashing rounds don't overlap.
@@ -528,20 +679,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
     def _get_sorted_bucket_idx_and_undo_sorted_bucket_idx(self, sequence_length, buckets, num_hashes):
         # no gradients are needed
         with torch.no_grad():
-            batch_size = buckets.shape[0]
-
-            # arange and expand
-            orig_indices = torch.arange(num_hashes * sequence_length, device=buckets.device).view(1, 1, -1)
-            orig_indices = orig_indices.expand(batch_size, self.num_attention_heads, orig_indices.shape[-1])
-
-            # scale buckets
-            scaled_buckets = sequence_length * buckets + (orig_indices % sequence_length)
-
-            # remove gradient
-            scaled_buckets = scaled_buckets.detach()
-
-            # Hash-based sort
-            sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
+            # hash-based sort
+            sorted_bucket_idx = _stable_argsort(buckets, dim=-1)
 
             # create simple indices to scatter to, to have undo sort
             indices = (
@@ -583,26 +722,37 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         sorted_bucket_idx_per_hash,
         attention_mask,
         head_mask,
-        sequence_length,
+        do_standard_self_attention,
+        do_cached_attention,
     ):
-
         # look at previous and following chunks if chunked attention
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
             value_vectors = self._look_adjacent(value_vectors, self.num_chunks_before, self.num_chunks_after)
 
         # get logits and dots
+        # (BS, NumAttn, NumHash x NumChunk, Chunk_L x Hidden),(BS, NumAttn, NumHash x NumChunk, Chunk_L * (Num_bef + Num_aft + 1) x Hidden) -> (BS, NumAttn, NumHash x NumChunk, Chunk_L, Chunk_L * (1 + Num_bef + Num_aft))
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
 
         # free memory
         del query_vectors, key_vectors
 
         # if chunked attention split bucket idxs to query and key
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             query_bucket_idx = self._split_seq_length_dim_to(
                 sorted_bucket_idx_per_hash, -1, self.chunk_length, self.num_attention_heads
             )
             key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
+        elif do_cached_attention and query_key_dots.ndim > 4:
+            key_value_bucket_idx = sorted_bucket_idx_per_hash
+            query_bucket_idx = (
+                key_value_bucket_idx.new_ones(key_value_bucket_idx.shape[:-1] + (1,)) * key_value_bucket_idx.max()
+            )
+        elif do_cached_attention and query_key_dots.ndim <= 4:
+            query_bucket_idx = (query_key_dots.shape[-1] - 1) * torch.ones_like(query_key_dots)[:, :, :, -1]
+            key_value_bucket_idx = torch.arange(
+                query_key_dots.shape[-1], dtype=torch.long, device=query_key_dots.device
+            )[None, None, :].expand(query_bucket_idx.shape[:2] + (-1,))
         else:
             query_bucket_idx = key_value_bucket_idx = sorted_bucket_idx_per_hash
 
@@ -614,13 +764,20 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
 
-        mask = self._compute_attn_mask(query_bucket_idx, key_value_bucket_idx, attention_mask, sequence_length)
+        if not do_cached_attention:
+            mask = self._compute_attn_mask(
+                query_bucket_idx,
+                key_value_bucket_idx,
+                attention_mask,
+                query_key_dots.shape,
+                do_standard_self_attention,
+            )
 
-        if mask is not None:
-            query_key_dots = torch.where(mask, query_key_dots, mask_value)
+            if mask is not None:
+                query_key_dots = torch.where(mask, query_key_dots, mask_value)
 
-        # free memory
-        del mask
+            # free memory
+            del mask
 
         # Self mask is ALWAYS applied.
         # From the reformer paper (https://arxiv.org/pdf/2001.04451.pdf):
@@ -663,51 +820,135 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         del value_vectors
 
         # merge chunk length
-        if self.chunk_length < sequence_length:
+        if out_vectors.ndim > 4:
             logits = logits.flatten(start_dim=2, end_dim=3).squeeze(-1)
             out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
         return out_vectors, logits, attention_probs
 
-    def _compute_attn_mask(self, query_indices, key_indices, attention_mask, sequence_length):
-        mask = None
-
-        # Causal mask
-        if self.is_decoder:
-            mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
-
-        # Attention mask: chunk, look up correct mask value from key_value_bucket_idx
-        # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
+    def _compute_attn_mask(
+        self, query_indices, key_indices, attention_mask, query_key_dot_shape, do_standard_self_attention
+    ):
+        # attention mask for LSH
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
-            if sequence_length > self.chunk_length:
-                attention_mask = attention_mask.to(torch.uint8)[:, None, None, :]
+            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
+            if not do_standard_self_attention:
                 # expand attn_mask to fit with key_value_bucket_idx shape
+                attention_mask = attention_mask[:, None, :]
                 attention_mask = attention_mask.expand(query_indices.shape[:-1] + (-1,))
-                key_attn_mask = torch.gather(attention_mask, -1, key_indices)
-                query_attn_mask = torch.gather(attention_mask, -1, query_indices)
-                # expand to query_key_dots shape: duplicate along query axis since key sorting is the same for each query position in chunk
-                attn_mask = query_attn_mask.unsqueeze(-1) * key_attn_mask.unsqueeze(-2)
+                # extract attention mask from LSH sorted key_indices
+                attention_mask = torch.gather(attention_mask, -1, key_indices)
 
-                # free memory
-                del query_attn_mask, key_attn_mask
+            attention_mask = attention_mask.unsqueeze(-2).expand(query_key_dot_shape)
+
+        # Causal mask
+        if self.is_decoder is True:
+            causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
+
+            # add attention mask if not None
+            if attention_mask is not None:
+                attention_mask = causal_mask * attention_mask
             else:
-                # usual attention mask creation
-                attention_mask = attention_mask.to(torch.uint8)[:, None, :]
-                attn_mask = (attention_mask.unsqueeze(-1) * attention_mask.unsqueeze(-2)).expand(
-                    query_indices.shape + attention_mask.shape[-1:]
-                )
+                attention_mask = causal_mask
 
-            # free memory
-            del attention_mask
+        return attention_mask
 
-            # multiply by casaul mask if necessary
-            if mask is not None:
-                mask = mask * attn_mask
-            else:
-                mask = attn_mask
+    def _get_relevant_hid_states_and_buckets(
+        self, query_vectors, attention_mask, num_hashes, hidden_states, past_states, past_buckets
+    ):
+        # concat hidden states
+        hidden_states = torch.cat([past_states, hidden_states], dim=1)
 
-        return mask
+        # batch_size hidden
+        batch_size = hidden_states.shape[0]
+        sequence_length = hidden_states.shape[1]
+
+        # check if cached buckets include pad bucket
+        max_bucket = self.num_buckets if isinstance(self.num_buckets, int) else reduce(mul, self.num_buckets)
+
+        # if pad bucket was cached => need to increase num buckets for caching
+        increase_num_buckets = past_buckets.max() > num_hashes * max_bucket - 1
+
+        # retrieve query buckets
+        query_buckets = self._hash_vectors(
+            query_vectors, num_hashes, attention_mask, increase_num_buckets=increase_num_buckets
+        )
+
+        # concat buckets
+        concat_buckets = torch.cat([past_buckets, query_buckets.unsqueeze(-1)], dim=-1)
+
+        # hash-based sort
+        bucket_idx = _stable_argsort(concat_buckets, dim=-1)
+
+        # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
+        assert bucket_idx.shape == (
+            batch_size,
+            self.num_attention_heads,
+            num_hashes,
+            sequence_length,
+        ), f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but has shape {bucket_idx.shape}."
+
+        # find indices of new bucket indices
+        relevant_bucket_idx = (bucket_idx == (bucket_idx.shape[-1] - 1)).nonzero()
+
+        # expand relevant bucket indices to its chunks
+        relevant_bucket_idx_chunk = self._expand_to_indices_in_relevant_chunk(relevant_bucket_idx, sequence_length)
+        relevant_bucket_idx_chunk = bucket_idx[tuple(relevant_bucket_idx_chunk.transpose(0, 1))]
+
+        # adapt bucket_idx for batch and hidden states for index select
+        bucket_idx_batch_offset = sequence_length * (
+            batch_size
+            * torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long)
+            // relevant_bucket_idx_chunk.shape[-1]
+        )
+
+        # add batch offset
+        relevant_bucket_idx_chunk_all_batch = relevant_bucket_idx_chunk + bucket_idx_batch_offset
+        hidden_states = hidden_states.reshape((-1, self.hidden_size))
+
+        # select all relevant hidden states
+        relevant_hidden_states = hidden_states.index_select(0, relevant_bucket_idx_chunk_all_batch)
+
+        # reshape hidden states and bucket_idx to correct output
+        relevant_hidden_states = relevant_hidden_states.reshape(
+            batch_size, self.num_attention_heads, -1, self.hidden_size
+        )
+        relevant_bucket_idx_chunk = relevant_bucket_idx_chunk.reshape(
+            batch_size, self.num_attention_heads, num_hashes, -1
+        )
+
+        assert (
+            relevant_hidden_states.shape[2]
+            == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes
+        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length * num_hashes} `hidden_states`, there are {relevant_hidden_states.shape[2]} `hidden_states`."
+
+        assert (
+            relevant_bucket_idx_chunk.shape[-1]
+            == (self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length
+        ), f"There should be {(self.num_chunks_before + self.num_chunks_after + 1) * self.chunk_length} `hidden_states`, there are {relevant_bucket_idx_chunk.shape[-1]} `bucket_idx`."
+
+        return relevant_hidden_states, relevant_bucket_idx_chunk, query_buckets
+
+    def _expand_to_indices_in_relevant_chunk(self, indices, sequence_length):
+        # get relevant indices of where chunk starts and its size
+        start_indices_chunk = ((indices[:, -1] // self.chunk_length) - self.num_chunks_before) * self.chunk_length
+        total_chunk_size = self.chunk_length * (1 + self.num_chunks_before + self.num_chunks_after)
+
+        # expand start indices and add correct chunk offset via arange
+        expanded_start_indices = start_indices_chunk.unsqueeze(-1).expand(indices.shape[0], total_chunk_size)
+        chunk_sequence_indices = expanded_start_indices + torch.arange(
+            total_chunk_size, device=indices.device, dtype=torch.long
+        ).unsqueeze(0).expand(indices.shape[0], total_chunk_size)
+
+        # make sure that circular logic holds via % seq len
+        chunk_sequence_indices = chunk_sequence_indices.flatten() % sequence_length
+
+        # expand indices and set indices correctly
+        indices = indices.unsqueeze(1).expand((indices.shape[0], total_chunk_size, -1)).flatten(0, 1).clone()
+        indices[:, -1] = chunk_sequence_indices
+
+        return indices
 
     def _len_and_dim_norm(self, vectors):
         """
@@ -797,14 +1038,42 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.register_buffer("mask_value_float16", torch.tensor(-1e4))
         self.register_buffer("mask_value_float32", torch.tensor(-1e9))
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, **kwargs):
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        past_buckets_states=None,
+        use_cache=False,
+        output_attentions=False,
+        **kwargs
+    ):
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
 
-        # project hidden_states to query, key and value
-        query_vectors = self.query(hidden_states)
-        key_vectors = self.key(hidden_states)
-        value_vectors = self.value(hidden_states)
+        # check if cache shall be used and that hidden states are already cached
+        if use_cache and past_buckets_states[1] is not None:
+            assert (
+                past_buckets_states[0] is None
+            ), "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching hidden_states_and_buckets."
+            key_value_hidden_states = self._retrieve_relevant_hidden_states(
+                past_buckets_states[1], self.chunk_length, self.num_chunks_before
+            )
+            key_value_hidden_states = torch.cat([key_value_hidden_states, hidden_states], dim=1)
+
+            # only query vector for last token
+            query_vectors = self.query(hidden_states)
+            # compute key and value for relevant chunk
+            key_vectors = self.key(key_value_hidden_states)
+            value_vectors = self.value(key_value_hidden_states)
+
+            # free memory
+            del key_value_hidden_states
+        else:
+            # project hidden_states to query, key and value
+            query_vectors = self.query(hidden_states)
+            key_vectors = self.key(hidden_states)
+            value_vectors = self.value(hidden_states)
 
         # split last dim into `config.num_attention_heads` and `config.attention_head_size`
         query_vectors = self._split_hidden_size_dim(query_vectors, self.num_attention_heads, self.attention_head_size)
@@ -842,8 +1111,11 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
             batch_size, self.num_attention_heads, 1
         )
 
+        # if one should do normal n^2 self-attention
+        do_standard_self_attention = sequence_length <= self.chunk_length
+
         # if input should be chunked
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             # chunk vectors
             # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
             query_vectors = self._split_seq_length_dim_to(
@@ -874,7 +1146,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         del query_vectors, key_vectors
 
         mask = self._compute_attn_mask(
-            query_indices, key_indices, attention_mask, query_key_dots.shape, sequence_length
+            query_indices, key_indices, attention_mask, query_key_dots.shape, do_standard_self_attention
         )
 
         if mask is not None:
@@ -910,7 +1182,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         del value_vectors
 
         # merge chunk length
-        if self.chunk_length < sequence_length:
+        if not do_standard_self_attention:
             out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,)
@@ -922,33 +1194,36 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
         return LocalSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs)
 
-    def _compute_attn_mask(self, query_indices, key_indices, attention_mask, query_key_dots_shape, sequence_length):
-        mask = None
+    def _compute_attn_mask(
+        self, query_indices, key_indices, attention_mask, query_key_dots_shape, do_standard_self_attention
+    ):
 
         # chunk attention mask and look before and after
         if attention_mask is not None:
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]
 
-            if self.chunk_length < sequence_length:
+            if not do_standard_self_attention:
                 attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
-                attention_mask_key = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
-            else:
-                attention_mask_key = attention_mask
+                attention_mask = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
+            # create attn_mask
+            attention_mask = attention_mask.unsqueeze(-2).expand(query_key_dots_shape)
 
         # Causal mask
         if self.is_decoder is True:
-            mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
+            causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
 
-        # Attention mask
-        if attention_mask is not None:
-            # create attn_mask
-            attn_mask = (attention_mask.unsqueeze(-1) * attention_mask_key.unsqueeze(-2)).expand(query_key_dots_shape)
-            # multiply by casaul mask if necessary
-            if mask is not None:
-                mask = mask * attn_mask
+            # add attention mask if not None
+            if attention_mask is not None:
+                attention_mask = causal_mask * attention_mask
             else:
-                mask = attn_mask
-        return mask
+                attention_mask = causal_mask
+
+        return attention_mask
+
+    @staticmethod
+    def _retrieve_relevant_hidden_states(previous_hidden_states, chunk_length, num_chunks_before):
+        start_position = ((previous_hidden_states.shape[1] // chunk_length) - num_chunks_before) * chunk_length
+        return previous_hidden_states[:, start_position:]
 
 
 class ReformerSelfOutput(nn.Module):
@@ -997,10 +1272,19 @@ class ReformerAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
+        past_buckets_states=None,
+        use_cache=False,
+        orig_sequence_length=None,
         output_attentions=False,
         buckets=None,
     ):
         hidden_states = self.layer_norm(hidden_states)
+
+        # make sure cached hidden states is set to None for backward pass
+        if past_buckets_states is not None:
+            past_buckets_states_layer = past_buckets_states[self.layer_id]
+        else:
+            past_buckets_states_layer = None
 
         # use cached buckets for backprob if buckets not None for LSHSelfAttention
         self_attention_outputs = self.self_attention(
@@ -1008,16 +1292,39 @@ class ReformerAttention(nn.Module):
             head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
+            past_buckets_states=past_buckets_states_layer,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             buckets=buckets,
         )
-        attention_output = self.output(self_attention_outputs.hidden_states)
 
         # add buckets if necessary
         if hasattr(self_attention_outputs, "buckets"):
             buckets = self_attention_outputs.buckets
         else:
             buckets = None
+
+        # cache hidden states for future use
+        if use_cache:
+            if past_buckets_states[self.layer_id][0] is None:
+                # padded input should not be cached
+                past_buckets = (
+                    buckets[:, :, :, :orig_sequence_length]
+                    if (buckets is not None and orig_sequence_length > 1)
+                    else buckets
+                )
+            else:
+                past_buckets = torch.cat([past_buckets_states[self.layer_id][0], buckets], dim=-1)
+
+            if past_buckets_states[self.layer_id][1] is None:
+                # padded input should not be cached
+                past_states = hidden_states[:, :orig_sequence_length]
+            else:
+                past_states = torch.cat([past_buckets_states[self.layer_id][1], hidden_states], dim=1)
+
+            past_buckets_states[self.layer_id] = (past_buckets, past_states)
+        # compute attention feed forward output
+        attention_output = self.output(self_attention_outputs.hidden_states)
 
         return AttentionOutput(
             hidden_states=attention_output, attention_probs=self_attention_outputs.attention_probs, buckets=buckets,
@@ -1135,6 +1442,9 @@ class ReformerLayer(nn.Module):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
+        past_buckets_states=None,
+        use_cache=False,
+        orig_sequence_length=None,
         output_attentions=False,
     ):
         with torch.no_grad():
@@ -1147,6 +1457,9 @@ class ReformerLayer(nn.Module):
                 head_mask=head_mask,
                 attention_mask=attention_mask,
                 num_hashes=num_hashes,
+                past_buckets_states=past_buckets_states,
+                use_cache=use_cache,
+                orig_sequence_length=orig_sequence_length,
                 output_attentions=output_attentions,
             )
             attn_output = attn_outputs.hidden_states
@@ -1252,6 +1565,9 @@ class _ReversibleFunction(Function):
         num_hashes,
         all_hidden_states,
         all_attentions,
+        past_buckets_states,
+        use_cache,
+        orig_sequence_length,
         output_hidden_states,
         output_attentions,
     ):
@@ -1260,7 +1576,7 @@ class _ReversibleFunction(Function):
         # split duplicated tensor
         hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
 
-        for layer, layer_head_mask in zip(layers, head_mask):
+        for layer_id, (layer, layer_head_mask) in enumerate(zip(layers, head_mask)):
             if output_hidden_states is True:
                 all_hidden_states.append(hidden_states)
 
@@ -1270,8 +1586,12 @@ class _ReversibleFunction(Function):
                 attention_mask=attention_mask,
                 head_mask=layer_head_mask,
                 num_hashes=num_hashes,
+                past_buckets_states=past_buckets_states,
+                use_cache=use_cache,
+                orig_sequence_length=orig_sequence_length,
                 output_attentions=output_attentions,
             )
+
             attn_output = layer_outputs.attn_output
             hidden_states = layer_outputs.hidden_states
             all_buckets = all_buckets + (layer_outputs.buckets,)
@@ -1337,7 +1657,7 @@ class _ReversibleFunction(Function):
 
         # num of return vars has to match num of forward() args
         # return gradient for hidden_states arg and None for other args
-        return grad_hidden_states, None, None, None, None, None, None, None, None
+        return grad_hidden_states, None, None, None, None, None, None, None, None, None, None, None
 
 
 class ReformerEncoder(nn.Module):
@@ -1356,12 +1676,19 @@ class ReformerEncoder(nn.Module):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
+        past_buckets_states=None,
+        use_cache=False,
+        orig_sequence_length=None,
         output_hidden_states=False,
         output_attentions=False,
     ):
         # hidden_states and attention lists to be filled if wished
         all_hidden_states = []
         all_attentions = []
+
+        # init cached hidden states if necessary
+        if past_buckets_states is None:
+            past_buckets_states = [((None), (None)) for i in range(len(self.layers))]
 
         # concat same tensor for reversible ResNet
         hidden_states = torch.cat([hidden_states, hidden_states], dim=-1)
@@ -1373,6 +1700,9 @@ class ReformerEncoder(nn.Module):
             num_hashes,
             all_hidden_states,
             all_attentions,
+            past_buckets_states,
+            use_cache,
+            orig_sequence_length,
             output_hidden_states,
             output_attentions,
         )
@@ -1384,7 +1714,10 @@ class ReformerEncoder(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         return ReformerEncoderOutput(
-            hidden_states=hidden_states, all_hidden_states=all_hidden_states, all_attentions=all_attentions
+            hidden_states=hidden_states,
+            all_hidden_states=all_hidden_states,
+            all_attentions=all_attentions,
+            past_buckets_states=past_buckets_states,
         )
 
 
@@ -1446,6 +1779,85 @@ class ReformerPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
+@dataclass
+class ReformerModelOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.ReformerModel`.
+
+    Args:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_predict, hidden_size)`):
+            Sequence of hidden-states at the last layer of the model.
+
+            ``num_predict`` corresponds to ``target_mapping.shape[1]``. If ``target_mapping`` is ``None``, then
+            ``num_predict`` corresponds to ``sequence_length``.
+        past_buckets_states (:obj:`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tuple(torch.LongTensor, torch.FloatTensor` of length :obj:`config.n_layers`,  with :obj:`tuple(0)` being the previous `buckets` of shape
+            :obj:`(batch_size, num_heads, num_hashes, sequence_length)`)
+            and :obj:`tuple(1)` being the previous `hidden_states` of shape
+            :obj:`(batch_size, sequence_length, hidden_size)`).
+
+            Contains pre-computed buckets and hidden-states that can be used (see
+            ``past_buckets_states`` input) to speed up sequential decoding.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: torch.FloatTensor
+    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class ReformerModelWithLMHeadOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.ReformerModelWithLMHead`.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
+            Language modeling loss (for next-token prediction).
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_predict, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+
+            ``num_predict`` corresponds to ``target_mapping.shape[1]``. If ``target_mapping`` is ``None``, then
+            ``num_predict`` corresponds to ``sequence_length``.
+        past_buckets_states (:obj:`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tuple(torch.LongTensor, torch.FloatTensor` of length :obj:`config.n_layers`,  with :obj:`tuple(0)` being the previous `buckets` of shape
+            :obj:`(batch_size, num_heads, num_hashes, sequence_length)`)
+            and :obj:`tuple(1)` being the previous `hidden_states` of shape
+            :obj:`(batch_size, sequence_length, hidden_size)`).
+
+            Contains pre-computed buckets and hidden-states that can be used (see
+            ``past_buckets_states`` input) to speed up sequential decoding.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor]
+    logits: torch.FloatTensor
+    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 REFORMER_START_DOCSTRING = r"""
     Reformer was proposed in `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.0445>`__
     by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
@@ -1497,8 +1909,21 @@ REFORMER_INPUTS_DOCSTRING = r"""
             bucketing. Setting `num_hashes` overwrites the default `num_hashes` defined
             in `config.num_hashes`.
             For more information, see `num_hashes` in :class:`transformers.ReformerConfig`.
+        past_buckets_states (:obj:`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, `optional`, defaults `None`):
+            List of :obj:`tuple(torch.LongTensor, torch.FloatTensor` of length :obj:`config.n_layers`,  with :obj:`tuple(0)` being the previous `buckets` of shape
+            :obj:`(batch_size, num_heads, num_hashes, sequence_length)`)
+            and :obj:`tuple(1)` being the previous `hidden_states` of shape
+            :obj:`(batch_size, sequence_length, hidden_size)`).
+
+            List of tuples that contains all previous computed hidden states and buckets (only relevant for LSH Self-Attention). Can be used to speed up sequential decoding.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the ``past_buckets_states`` of all attention layers are returned.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
 """
 
 
@@ -1534,7 +1959,12 @@ class ReformerModel(ReformerPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="google/reformer-crime-and-punishment",
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -1543,14 +1973,25 @@ class ReformerModel(ReformerPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         num_hashes=None,
+        past_buckets_states=None,
+        use_cache=None,
         output_hidden_states=None,
         output_attentions=None,
+        return_tuple=None,
     ):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
+        past_buckets_states (:obj:`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tuple(torch.LongTensor, torch.FloatTensor` of length :obj:`config.n_layers`,  with :obj:`tuple(0)` being the previous `buckets` of shape
+            :obj:`(batch_size, num_heads, num_hashes, sequence_length)`)
+            and :obj:`tuple(1)` being the previous `hidden_states` of shape
+            :obj:`(batch_size, sequence_length, hidden_size)`).
+
+            Contains pre-computed buckets and hidden-states that can be used (see
+            ``past_buckets_states`` input) to speed up sequential decoding.
         all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -1564,10 +2005,12 @@ class ReformerModel(ReformerPreTrainedModel):
             heads.
         """
 
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1584,6 +2027,9 @@ class ReformerModel(ReformerPreTrainedModel):
             len(input_shape) == 2
         ), "`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {}".format(input_shape)
 
+        if past_buckets_states is not None:
+            assert not self.training, "`past_buckets_states` can only be used for inference, not for training`."
+
         # prepare head mask
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers, is_attention_chunked=True)
 
@@ -1592,8 +2038,12 @@ class ReformerModel(ReformerPreTrainedModel):
 
         # if needs padding
         least_common_mult_chunk_length = _get_least_common_mult_chunk_len(self.config)
+        min_chunk_length = _get_min_chunk_len(self.config)
+
         must_pad_to_match_chunk_length = (
-            input_shape[-1] % least_common_mult_chunk_length != 0 and input_shape[-1] > least_common_mult_chunk_length
+            input_shape[-1] % least_common_mult_chunk_length != 0
+            and input_shape[-1] > min_chunk_length
+            and past_buckets_states is None
         )
 
         if must_pad_to_match_chunk_length:
@@ -1618,13 +2068,27 @@ class ReformerModel(ReformerPreTrainedModel):
                 device=device,
             )
 
-        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
+        # start index for postion encoding depends on incremental decoding
+        if past_buckets_states is not None:
+            start_idx_pos_encodings = past_buckets_states[0][1].shape[1]
+        else:
+            start_idx_pos_encodings = 0
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            start_idx_pos_encodings=start_idx_pos_encodings,
+        )
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
             head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
+            past_buckets_states=past_buckets_states,
+            use_cache=use_cache,
+            orig_sequence_length=orig_sequence_length,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
@@ -1634,13 +2098,18 @@ class ReformerModel(ReformerPreTrainedModel):
         if must_pad_to_match_chunk_length:
             sequence_output = sequence_output[:, :orig_sequence_length]
 
-        outputs = (sequence_output,)
-        # TODO(PVP): Replace by named tuple after namedtuples are introduced in the library.
-        if output_hidden_states is True:
-            outputs = outputs + (encoder_outputs.all_hidden_states,)
-        if output_attentions is True:
-            outputs = outputs + (encoder_outputs.all_attentions,)
-        return outputs
+        past_buckets_states = encoder_outputs.past_buckets_states if use_cache else None
+        hidden_states = encoder_outputs.all_hidden_states if output_hidden_states else None
+        attentions = encoder_outputs.all_attentions if output_attentions else None
+
+        if return_tuple:
+            return tuple(v for v in [sequence_output, past_buckets_states, hidden_states, attentions] if v is not None)
+        return ReformerModelOutput(
+            last_hidden_state=sequence_output,
+            past_buckets_states=past_buckets_states,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
 
     def _pad_to_mult_of_chunk_length(
         self,
@@ -1665,13 +2134,9 @@ class ReformerModel(ReformerPreTrainedModel):
 
         # Extend `attention_mask`
         if attention_mask is not None:
-            attention_mask = torch.cat(
-                [
-                    attention_mask,
-                    torch.zeros(input_shape[0], padding_length, device=device, dtype=attention_mask.dtype,),
-                ],
-                dim=-1,
-            )
+            pad_attention_mask = torch.zeros(input_shape[0], padding_length, device=device, dtype=attention_mask.dtype)
+
+            attention_mask = torch.cat([attention_mask, pad_attention_mask], dim=-1)
         else:
             attention_mask = torch.cat(
                 [
@@ -1704,7 +2169,14 @@ class ReformerModel(ReformerPreTrainedModel):
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert config.is_decoder, "If you want to use `ReformerLMHeadModel` make sure that `is_decoder=True`."
+        assert config.is_decoder, "If you want to use `ReformerModelWithLMHead` make sure that `is_decoder=True`."
+        assert (
+            "local" not in self.config.attn_layers or config.local_num_chunks_after == 0
+        ), f"If causal mask is enabled, make sure that `config.local_num_chunks_after` is set to 0 and not {config.local_num_chunks_after}."
+        assert (
+            "lsh" not in self.config.attn_layers or config.lsh_num_chunks_after == 0
+        ), f"If causal mask is enabled, make sure that `config.lsh_num_chunks_after` is set to 1 and not {config.lsh_num_chunks_after}."
+
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 
@@ -1718,7 +2190,12 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         pass
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="google/reformer-crime-and-punishment",
+        output_type=CausalLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -1727,9 +2204,12 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         num_hashes=None,
-        labels=None,
+        past_buckets_states=None,
+        use_cache=None,
         output_hidden_states=None,
         output_attentions=None,
+        return_tuple=None,
+        labels=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1737,25 +2217,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
                 Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
                 All labels set to ``-100`` are ignored (masked), the loss is only
                 computed for labels in ``[0, ..., config.vocab_size]``
-
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Classification loss (cross entropy).
-        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -1764,14 +2227,17 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
+            past_buckets_states=past_buckets_states,
+            use_cache=use_cache,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_tuple=return_tuple,
         )
 
         sequence_output = reformer_outputs[0]
         logits = self.lm_head(sequence_output)
-        outputs = (logits,) + reformer_outputs[1:]
 
+        loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
@@ -1779,17 +2245,48 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
-            outputs = (loss,) + outputs
-        return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
+
+        if return_tuple:
+            output = (logits,) + reformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return ReformerModelWithLMHeadOutput(
+            loss=loss,
+            logits=logits,
+            past_buckets_states=reformer_outputs.past_buckets_states,
+            hidden_states=reformer_outputs.hidden_states,
+            attentions=reformer_outputs.attentions,
+        )
 
     def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
-        # TODO(PVP): Add smart caching
-        inputs_dict = {"input_ids": input_ids}
+        # only last token for inputs_ids if past is defined in kwargs
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "past_buckets_states": past,
+            "use_cache": kwargs["use_cache"],
+        }
 
         if "num_hashes" in kwargs:
             inputs_dict["num_hashes"] = kwargs["num_hashes"]
 
         return inputs_dict
+
+    def _reorder_cache(self, past, beam_idx):
+        reord_past_buckets_states = []
+        for layer_past in past:
+            # buckets
+            if layer_past[0] is not None:
+                reord_buckets = layer_past[0].index_select(0, beam_idx)
+            else:
+                reord_buckets = None
+
+            # hidden states
+            reord_hidden_states = layer_past[1].index_select(0, beam_idx)
+            reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
+        return reord_past_buckets_states
 
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top. """, REFORMER_START_DOCSTRING)
@@ -1812,7 +2309,12 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         pass
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="google/reformer-crime-and-punishment",
+        output_type=MaskedLMOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -1824,31 +2326,15 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         labels=None,
         output_hidden_states=None,
         output_attentions=None,
+        return_tuple=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
                 Labels for computing the masked language modeling loss.
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Classification loss (cross entropy).
-        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -1857,20 +2343,132 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
+            use_cache=False,  # no causal mask
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_tuple=return_tuple,
         )
 
         sequence_output = reformer_outputs[0]
         logits = self.lm_head(sequence_output)
-        outputs = (logits,) + reformer_outputs[1:]
 
+        masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
-            outputs = (masked_lm_loss,) + outputs
 
-        return outputs  # (mlm_loss), lm_logits, (hidden_states), (attentions)
+        if return_tuple:
+            output = (logits,) + reformer_outputs[1:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return MaskedLMOutput(
+            loss=masked_lm_loss,
+            logits=logits,
+            hidden_states=reformer_outputs.hidden_states,
+            attentions=reformer_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """Reformer Model transformer with a sequence classification/regression head on top (a linear layer
+    on top of the pooled output) e.g. for GLUE tasks. """,
+    REFORMER_START_DOCSTRING,
+)
+class ReformerForSequenceClassification(ReformerPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.reformer = ReformerModel(config)
+        self.classifier = ReformerClassificationHead(config)
+        if config.is_decoder is True:
+            logger.warning("You might want to disable causal masking for sequence classification")
+
+        self.init_weights()
+
+    def tie_weights(self):
+        # word embeddings are not tied in Reformer
+        pass
+
+    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="google/reformer-crime-and-punishment",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        position_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        num_hashes=None,
+        labels=None,
+        output_hidden_states=None,
+        output_attentions=None,
+        return_tuple=None,
+    ):
+        r"""
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the sequence classification/regression loss.
+                Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+                If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+                If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        outputs = self.reformer(
+            input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            num_hashes=num_hashes,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_tuple=return_tuple,
+        )
+
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if return_tuple:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
+
+
+class ReformerClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(2 * config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+    def forward(self, hidden_states, **kwargs):
+        hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
 
 
 @add_start_docstrings(
@@ -1895,7 +2493,12 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         pass
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="google/reformer-crime-and-punishment")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="google/reformer-crime-and-punishment",
+        output_type=QuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -1908,6 +2511,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         end_positions=None,
         output_hidden_states=None,
         output_attentions=None,
+        return_tuple=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1918,26 +2522,8 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.ReformerConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-        start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-start scores (before SoftMax).
-        end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
-            Span-end scores (before SoftMax).
-        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -1946,8 +2532,10 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
+            use_cache=False,  # no causal mask
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
+            return_tuple=return_tuple,
         )
 
         sequence_output = reformer_outputs[0]
@@ -1957,8 +2545,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        outputs = (start_logits, end_logits,) + reformer_outputs[1:]
-
+        total_loss = None
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
@@ -1974,6 +2561,15 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-            outputs = (total_loss,) + outputs
 
-        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+        if return_tuple:
+            output = (start_logits, end_logits) + reformer_outputs[1:]
+            return ((total_loss,) + output) if total_loss is not None else output
+
+        return QuestionAnsweringModelOutput(
+            loss=total_loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=reformer_outputs.hidden_states,
+            attentions=reformer_outputs.attentions,
+        )

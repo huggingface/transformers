@@ -11,7 +11,7 @@ In order to achieve best results, make sure to use the same text preprocessing a
 ## Example usage
 ```python
 tokenizer = AutoTokenizer.from_pretrained("digitalepidemiologylab/covid-twitter-bert")
-model = TFAutoModel.from_pretrained("digitalepidemiologylab/covid-twitter-bert")
+model = AutoModel.from_pretrained("digitalepidemiologylab/covid-twitter-bert")
 ```
 
 ## References

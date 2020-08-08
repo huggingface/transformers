@@ -47,6 +47,13 @@ AlbertTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+Albert specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_albert.AlbertForPretrainingOutput
+    :members:
+
+
 AlbertModel
 ~~~~~~~~~~~~~~~~~~~~
 

@@ -91,8 +91,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assert_padding(tokenizer_r, tokenizer_p)
         self.assert_create_token_type_ids(tokenizer_r, tokenizer_p)
         self.assert_prepare_for_model(tokenizer_r, tokenizer_p)
-        # TODO: enable for v3.0.0
-        # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
 
     def fast_only(self, tokenizer_r):
         # Ensure None raise an error
@@ -748,29 +746,41 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
             add_special_tokens=True,
         )
 
-        expected_results = [
-            ((0, 1), "A"),
-            ((1, 2), ","),
-            ((3, 8), "naive"),  # BERT normalizes this away
-            # Append MASK here after lower-casing
-            ((16, 21), "Allen"),
-            ((22, 24), "##NL"),
-            ((24, 25), "##P"),
-            ((26, 34), "sentence"),
-            ((35, 36), "."),
-        ]
-
-        # Check if the tokenizer is uncased
-        if tokenizer_r.init_kwargs.get("do_lower_case"):
-            expected_results = [(offset, token.lower()) for (offset, token) in expected_results]
-
-        # Append the special tokens
-        expected_results.insert(3, ((9, 15), "[MASK]"))
-        expected_results.insert(0, (None, "[CLS]"))
-        expected_results.append((None, "[SEP]"))
+        do_lower_case = tokenizer_r.init_kwargs.get("do_lower_case")
+        expected_results = (
+            [
+                ((0, 0), "[CLS]"),
+                ((0, 1), "A"),
+                ((1, 2), ","),
+                ((3, 5), "na"),
+                ((5, 6), "##ï"),
+                ((6, 8), "##ve"),
+                ((9, 15), "[MASK]"),
+                ((16, 21), "Allen"),
+                ((21, 23), "##NL"),
+                ((23, 24), "##P"),
+                ((25, 33), "sentence"),
+                ((33, 34), "."),
+                ((0, 0), "[SEP]"),
+            ]
+            if not do_lower_case
+            else [
+                ((0, 0), "[CLS]"),
+                ((0, 1), "a"),
+                ((1, 2), ","),
+                ((3, 8), "naive"),
+                ((9, 15), "[MASK]"),
+                ((16, 21), "allen"),
+                ((21, 23), "##nl"),
+                ((23, 24), "##p"),
+                ((25, 33), "sentence"),
+                ((33, 34), "."),
+                ((0, 0), "[SEP]"),
+            ]
+        )
 
         self.assertEqual([e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"]))
-        # self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
+        self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
 
 class RobertaFastTokenizerTest(CommonFastTokenizerTest):

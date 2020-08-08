@@ -7,6 +7,7 @@ from transformers import ElectraConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import (
+    TFMaskedLanguageModelingLoss,
     TFQuestionAnsweringLoss,
     TFTokenClassificationLoss,
     get_initializer,
@@ -506,7 +507,7 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
     the only model of the two to have been trained for the masked language modeling task.""",
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForMaskedLM(TFElectraPreTrainedModel):
+class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -534,9 +535,16 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         training=False,
     ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -553,6 +561,12 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         """
+        if isinstance(input_ids, (tuple, list)):
+            labels = input_ids[8] if len(input_ids) > 8 else labels
+            if len(input_ids) > 8:
+                input_ids = input_ids[:8]
+        elif isinstance(input_ids, (dict, BatchEncoding)):
+            labels = input_ids.pop("labels", labels)
 
         generator_hidden_states = self.electra(
             input_ids,
@@ -570,6 +584,10 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         prediction_scores = self.generator_lm_head(prediction_scores, training=training)
         output = (prediction_scores,)
         output += generator_hidden_states[1:]
+
+        if labels is not None:
+            loss = self.compute_loss(labels, prediction_scores)
+            output = (loss,) + output
 
         return output  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 

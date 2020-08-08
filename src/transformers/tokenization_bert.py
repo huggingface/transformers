@@ -606,7 +606,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         clean_text=True,
         tokenize_chinese_chars=True,
-        strip_accents=True,
+        strip_accents=None,
         wordpieces_prefix="##",
         **kwargs
     ):

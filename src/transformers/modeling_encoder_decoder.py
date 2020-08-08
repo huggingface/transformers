@@ -273,6 +273,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
+                return_tuple=True,
                 **kwargs_encoder,
             )
 
@@ -287,6 +288,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             labels=labels,
+            return_tuple=True,
             **kwargs_decoder,
         )
 

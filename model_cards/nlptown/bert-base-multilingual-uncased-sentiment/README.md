@@ -1,11 +1,11 @@
 ---
 language:
-- english
-- dutch
-- german
-- french
-- italian
-- spanish
+- en
+- nl
+- de
+- fr
+- it
+- es
 ---
 
 # bert-base-multilingual-uncased-sentiment

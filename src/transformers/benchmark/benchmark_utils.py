@@ -386,6 +386,9 @@ def start_memory_tracing(
             elif isinstance(events_to_trace, (list, tuple)) and event not in events_to_trace:
                 return traceit
 
+        if "__name__" not in frame.f_globals:
+            return traceit
+
         # Filter modules
         name = frame.f_globals["__name__"]
         if not isinstance(name, str):

@@ -56,6 +56,13 @@ MobileBertTokenizerFast
     :members:
 
 
+MobileBert specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_mobilebert.MobileBertForPretrainingOutput
+    :members:
+
+
 MobileBertModel
 ~~~~~~~~~~~~~~~~~~~~
 

@@ -1,5 +1,5 @@
 ---
-language: Hindi
+language: hi
 ---
 
 # Hindi-BERT (Discriminator)

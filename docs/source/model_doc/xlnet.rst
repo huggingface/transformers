@@ -50,6 +50,31 @@ XLNetTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+XLNet specific outputs
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_xlnet.XLNetModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetLMHeadModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForSequenceClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForMultipleChoiceOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForTokenClassificationOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
+    :members:
+
+.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringOutput
+    :members:
+
+
 XLNetModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
