@@ -19,9 +19,12 @@ import logging
 import os
 import sys
 import unittest
-import torch
 from unittest.mock import patch
+
+import torch
+
 from transformers.trainer import is_apex_available
+
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
