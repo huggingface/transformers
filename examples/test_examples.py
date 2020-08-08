@@ -20,6 +20,7 @@ import os
 import sys
 import unittest
 from unittest.mock import patch
+import torch
 
 
 SRC_DIRS = [
@@ -95,6 +96,10 @@ class ExamplesTests(unittest.TestCase):
             --seed=42
             --max_seq_length=128
             """.split()
+
+        if torch.cuda.is_available():
+            testargs +=['--fp16', '--gpus=1']
+
         with patch.object(sys, "argv", testargs):
             result = run_pl_glue.main()
             # for now just testing that the script can run to a completion
