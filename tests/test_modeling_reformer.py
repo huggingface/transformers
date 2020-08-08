@@ -555,7 +555,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    test_feed_forward_chunking = True
+    test_chunking = True
 
     def prepare_kwargs(self):
         return {
