@@ -1,3 +1,4 @@
+
 import argparse
 import json
 import os
@@ -185,7 +186,7 @@ def write_model_card(
 def get_clean_model_id_mapping(multiling_model_ids):
     return {x: convert_opus_name_to_hf_name(x) for x in multiling_model_ids}
 
-
+Path.ls =  lambda self: sorted(list(self.iterdir()))
 def make_registry(repo_path="Opus-MT-train/models"):
     if not (Path(repo_path) / "fr-en" / "README.md").exists():
         raise ValueError(
@@ -193,13 +194,31 @@ def make_registry(repo_path="Opus-MT-train/models"):
             "You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git before calling."
         )
     results = {}
-    for p in Path(repo_path).ls():
+    for p in Path(repo_path).iterdir():
         n_dash = p.name.count("-")
         if n_dash == 0:
             continue
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
+    return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
+
+
+def make_tatoeba_registry(repo_path="Tatoeba-Challenge/models"):
+    if not (Path(repo_path) / "zho-eng" / "README.md").exists():
+        raise ValueError(
+            f"repo_path:{repo_path} does not exist: "
+            "You must run: git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git before calling."
+        )
+    results = {}
+    for p in Path(repo_path).ls():
+        if len(p.name) != 7: continue
+        #n_dash = p.parent.name.count("-")
+        #if n_dash == 0:
+         #   continue
+        #else:
+        lns = list(open(p / "README.md").readlines())
+        results[p.name] = _parse_readme(lns)
     return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
 
@@ -544,3 +563,8 @@ def save_json(content: Union[Dict, List], path: str) -> None:
 def unzip(zip_path: str, dest_dir: str) -> None:
     with ZipFile(zip_path, "r") as zipObj:
         zipObj.extractall(dest_dir)
+
+
+if __name__ == '__main__':
+    reg = make_tatoeba_registry()
+    convert_all_sentencepiece_models(model_list=reg)
