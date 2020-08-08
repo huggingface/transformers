@@ -103,7 +103,6 @@ from .modeling_tf_mobilebert import (
     TFMobileBertModel,
 )
 from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
-from .modeling_tf_pegasus import PegasusConfig, TFPegasusLegacyModel
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -236,9 +235,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     ]
 )
 
-TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
-    [(T5Config, TFT5ForConditionalGeneration), (PegasusConfig, TFPegasusLegacyModel)]
-)
+TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict([(T5Config, TFT5ForConditionalGeneration)])
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
@@ -305,7 +302,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 )
 
 
-class TFAutoModel:
+class TFAutoModel(object):
     r"""
         :class:`~transformers.TFAutoModel` is a generic model class
         that will be instantiated as one of the base model classes of the library
