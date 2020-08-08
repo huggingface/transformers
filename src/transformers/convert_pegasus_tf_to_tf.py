@@ -40,7 +40,7 @@ def convert_pegasus_to_bart(tf_weights):
     cfg = PegasusConfig(
         #normalize_embedding=False, add_final_layer_norm=True, static_position_embeddings=True, scale_embedding=True,
         activation_function='relu', attention_dropout=0.1, dropout=0.1, activation_dropout=0.1,
-        vocab_size=96103,
+        vocab_size=96103, num_beams=8,
 
     )
     bart = BartForConditionalGeneration(cfg)
