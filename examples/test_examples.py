@@ -20,6 +20,7 @@ import os
 import sys
 import unittest
 from unittest.mock import patch
+
 import torch
 
 
@@ -98,7 +99,7 @@ class ExamplesTests(unittest.TestCase):
             """.split()
 
         if torch.cuda.is_available():
-            testargs +=['--fp16', '--gpus=1']
+            testargs += ["--fp16", "--gpus=1"]
 
         with patch.object(sys, "argv", testargs):
             result = run_pl_glue.main()
