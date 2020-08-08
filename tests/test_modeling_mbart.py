@@ -24,13 +24,12 @@ RO_CODE = 250020
 
 @require_torch
 class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
-
+    maxDiff = 1000  # longer string compare tracebacks
     checkpoint_name = None
 
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
-        cls.pad_token_id = 1
         return cls
 
     @cached_property
@@ -73,7 +72,7 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
                 ]
             ),
         }
-        net_input["attention_mask"] = net_input["input_ids"].ne(self.pad_token_id)
+        net_input["attention_mask"] = net_input["input_ids"].ne(1)
         with torch.no_grad():
             logits, *other_stuff = model(**net_input)
 

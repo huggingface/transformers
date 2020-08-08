@@ -6,7 +6,7 @@ import tensorflow as tf
 import torch
 from tqdm import tqdm
 
-from transformers import PegasusConfig, PegasusForConditionalGeneration
+from transformers import PegasusConfig, PegasusForConditionalGeneration, PegasusTokenizer
 
 
 PATTERNS = [
@@ -37,13 +37,13 @@ def rename_state_dict_key(k):
 
 
 # See appendix C of paper for all hyperparams
-expected_max_length = {
+max_gen_length = {
     # See appendix C of paper
     "xsum": 64,
     "cnn_dailymail": 128,
     "newsroom": 128,
     "wikihow": 256,
-    "multinews": 256,
+    "multi_news": 256,
     "reddit_tifu": 128,
     "big_patent": 256,
     "arxiv": 256,
@@ -51,7 +51,24 @@ expected_max_length = {
     "gigaword": 32,
     "aeslc": 32,
     "billsum": 256,
+    "large": 256,  # @sshleifer chose arbitrarily
 }
+max_model_length = {
+    "xsum": 512,
+    "cnn_dailymail": 1024,
+    "newsroom": 512,
+    "wikihow": 512,
+    "multi_news": 1024,
+    "reddit_tifu": 512,
+    "big_patent": 1024,
+    "arxiv": 1024,
+    "pubmed": 1024,
+    "gigaword": 128,
+    "aeslc": 512,
+    "billsum": 1024,
+    "large": 1024,
+}
+
 expected_alpha = {
     "multinews": 0.9,
     "wikihow": 0.6,
@@ -61,6 +78,7 @@ expected_alpha = {
     "aeslc": 0.6,
     "billsum": 0.6,
 }  # otherwise 0.8
+# TODO(SS): one constant
 
 
 def convert_pegasus_to_bart(tf_weights: dict, cfg_updates: dict) -> PegasusForConditionalGeneration:
@@ -122,12 +140,18 @@ def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
 
 
 def convert_pegasus_ckpt_to_pytorch(ckpt_path, save_dir):
-    tf_weights = get_tf_weights_as_numpy(ckpt_path)
+    # save tokenizer
     dataset = Path(ckpt_path).parent.name
-    cfg_updates = dict(max_length=expected_max_length[dataset], length_penalty=expected_alpha.get(dataset, 0.8))
+    desired_max_model_length = max_model_length[dataset]
+    tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus", model_max_length=desired_max_model_length)
+    assert tok.model_max_length == desired_max_model_length
+    tok.save_pretrained(save_dir)
+
+    # convert model
+    tf_weights = get_tf_weights_as_numpy(ckpt_path)
+    cfg_updates = dict(max_length=max_gen_length[dataset], length_penalty=expected_alpha.get(dataset, 0.8))
     torch_model = convert_pegasus_to_bart(tf_weights, cfg_updates)
     torch_model.save_pretrained(save_dir)
-    # pickle_save(tf_weights, f'{save_dir}/tf_weights_dict.pkl')#DEL
 
 
 if __name__ == "__main__":

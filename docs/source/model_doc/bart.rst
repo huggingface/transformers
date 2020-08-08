@@ -17,7 +17,8 @@ According to the abstract,
 The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_
 
 
-Implementation Notes:
+Implementation Notes
+~~~~~~~~~~~~~~~~~~~~
 
 - Bart doesn't use :obj:`token_type_ids` for sequence classification. Use BartTokenizer.encode to get the proper splitting.
 - The forward pass of ``BartModel`` will create decoder inputs (using the helper function ``transformers.modeling_bart._prepare_bart_decoder_inputs``)  if they are not passed. This is different than some other modeling APIs.
