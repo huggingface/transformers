@@ -386,6 +386,106 @@ class LxmertModelTester:
 
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def resize_lxmert_num_qa_labels(
+        self,
+        config,
+        input_ids,
+        visual_feats,
+        bounding_boxes,
+        token_type_ids,
+        input_mask,
+        obj_labels,
+        masked_lm_labels,
+        matched_labels,
+        ans,
+        output_attentions,
+    ):
+
+        start_labels = config.num_qa_labels
+        num_large_labels = config.num_qa_labels * 2
+        num_small_labels = int(config.num_qa_labels * 2)
+        less_labels_ans = ids_tensor([self.batch_size], num_small_labels)
+        more_labels_ans = ids_tensor([self.batch_size], num_large_labels)
+        model_pretrain = LxmertForPretraining(config=config)
+        model_qa = LxmertForQuestionAnswering(config=config)
+        config.num_labels = num_small_labels
+        end_labels = config.num_labels
+
+        result_pretrain = model_pretrain(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            ans=ans,
+            return_dict=True,
+        )
+
+        result_qa = model_qa(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            ans,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            return_dict=True,
+        )
+
+        model_pretrain.resize_num_qa_labels(num_small_labels)
+        model_qa.resize_num_qa_labels(num_small_labels)
+
+        result_pretrain_less = model_pretrain(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            ans=less_labels_ans,
+            return_dict=True,
+        )
+
+        result_qa_less = model_qa(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            ans=less_labels_ans,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            return_dict=True,
+        )
+
+        model_pretrain.resize_num_qa_labels(num_large_labels)
+        model_qa.resize_num_qa_labels(num_large_labels)
+
+        result_pretrain_more = model_pretrain(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            ans=more_labels_ans,
+            return_dict=True,
+        )
+
+        result_qa_more = model_qa(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            more_labels_ans,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            return_dict=True,
+        )
+
+        model_qa_labels = model_qa.num_qa_labels
+
+        self.parent.assertNotEqual(start_labels, end_labels)
+        self.parent.assertNotEqual(model_qa_labels, start_labels)
+        self.parent.assertEqual(result_qa.question_answering_score.shape, (self.batch_size, start_labels))
+        self.parent.assertEqual(result_pretrain.question_answering_score.shape, (self.batch_size, start_labels))
+        self.parent.assertEqual(result_qa_less.question_answering_score.shape, (self.batch_size, num_small_labels))
+        self.parent.assertEqual(
+            result_pretrain_less.question_answering_score.shape, (self.batch_size, num_small_labels)
+        )
+        self.parent.assertEqual(result_qa_more.question_answering_score.shape, (self.batch_size, num_large_labels))
+        self.parent.assertEqual(
+            result_pretrain_more.question_answering_score.shape, (self.batch_size, num_large_labels)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -436,6 +536,10 @@ class LxmertModelTest(unittest.TestCase):
     def test_lxmert_pretraning(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lxmert_for_pretraining(*config_and_inputs)
+
+    def test_lxmert_question_answering_labels_resize(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.resize_lxmert_num_qa_labels(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

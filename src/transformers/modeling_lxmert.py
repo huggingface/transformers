@@ -833,6 +833,79 @@ class LxmertForPretraining(LxmertPreTrainedModel):
             }
         self.visual_losses = visual_losses
 
+    def resize_num_qa_labels(self, num_labels):
+        """
+        Build a resized question answering linear layer Module from a provided new linear layer. Increasing the size will add newly
+        initialized weights. Reducing the size will remove weights from the end
+        Args:
+            cur_qa_logit_layer (:obj:`torch.nn.Linear`):
+                Old linear layer to be resized.
+            num_labels (:obj:`int`, `optional`):
+                New number of labels in the linear layer weight matrix.
+                Increasing the size will add newly initialized weights at the end. Reducing the size will remove
+                weights from the end. If not provided or :obj:`None`, just returns a pointer to the qa labels
+                :obj:`torch.nn.Linear`` module of the model wihtout doing anything.
+        Return:
+            :obj:`torch.nn.Linear`: Pointer to the resized Linear layer or the old Linear layer
+        """
+
+        cur_qa_logit_layer = self.get_qa_logit_layer()
+        if num_labels is None or cur_qa_logit_layer is None:
+            return
+        new_qa_logit_layer = self._resize_qa_labels(num_labels)
+        self.config.num_qa_labels = num_labels
+        self.num_qa_labels = num_labels
+
+        return new_qa_logit_layer
+
+    def _resize_qa_labels(self, num_labels):
+        cur_qa_logit_layer = self.get_qa_logit_layer()
+        new_qa_logit_layer = self._get_resized_qa_labels(cur_qa_logit_layer, num_labels)
+        self._set_qa_logit_layer(new_qa_logit_layer)
+        return self.get_qa_logit_layer()
+
+    def get_qa_logit_layer(self) -> nn.Module:
+        """
+        Returns the the linear layer that produces question answering logits
+        Returns:
+            :obj:`nn.Module`: A torch module mapping the question answering prediction hidden states.
+            :obj:`None`: A NoneType object if Lxmert does not have the visual answering head.
+
+        """
+        if hasattr(self, "answer_head"):
+            return self.answer_head.logit_fc[-1]
+
+    def _set_qa_logit_layer(self, qa_logit_layer):
+        self.answer_head.logit_fc[-1] = qa_logit_layer
+
+    def _get_resized_qa_labels(self, cur_qa_logit_layer, num_labels):
+
+        if num_labels is None:
+            return cur_qa_logit_layer
+
+        cur_qa_labels, hidden_dim = cur_qa_logit_layer.weight.size()
+        if cur_qa_labels == num_labels:
+            return cur_qa_logit_layer
+
+        # Build new linear output
+        if getattr(cur_qa_logit_layer, "bias", None) is not None:
+            new_qa_logit_layer = nn.Linear(hidden_dim, num_labels)
+        else:
+            new_qa_logit_layer = nn.Linear(hidden_dim, num_labels, bias=False)
+
+        new_qa_logit_layer.to(cur_qa_logit_layer.weight.device)
+
+        # initialize all new labels
+        self._init_weights(new_qa_logit_layer)
+
+        # Copy labels from the previous weights
+        num_labels_to_copy = min(cur_qa_labels, num_labels)
+        new_qa_logit_layer.weight.data[:num_labels_to_copy, :] = cur_qa_logit_layer.weight.data[:num_labels_to_copy, :]
+        if getattr(cur_qa_logit_layer, "bias", None) is not None:
+            new_qa_logit_layer.bias.data[:num_labels_to_copy] = cur_qa_logit_layer.bias.data[:num_labels_to_copy]
+
+        return new_qa_logit_layer
+
     def forward(
         self,
         input_ids,
@@ -973,6 +1046,80 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
         # Loss function
         self.loss = CrossEntropyLoss(ignore_index=-100)
+
+    def resize_num_qa_labels(self, num_labels):
+        """
+        Build a resized question answering linear layer Module from a provided new linear layer. Increasing the size will add newly
+        initialized weights. Reducing the size will remove weights from the end
+        Args:
+            cur_qa_logit_layer (:obj:`torch.nn.Linear`):
+                Old linear layer to be resized.
+            num_labels (:obj:`int`, `optional`):
+                New number of labels in the linear layer weight matrix.
+                Increasing the size will add newly initialized weights at the end. Reducing the size will remove
+                weights from the end. If not provided or :obj:`None`, just returns a pointer to the qa labels
+                :obj:`torch.nn.Linear`` module of the model wihtout doing anything.
+        Return:
+            :obj:`torch.nn.Linear`: Pointer to the resized Linear layer or the old Linear layer
+        """
+
+        cur_qa_logit_layer = self.get_qa_logit_layer()
+        if num_labels is None or cur_qa_logit_layer is None:
+            return
+        new_qa_logit_layer = self._resize_qa_labels(num_labels)
+        self.config.num_qa_labels = num_labels
+        self.num_qa_labels = num_labels
+
+        return new_qa_logit_layer
+
+    def _resize_qa_labels(self, num_labels):
+        cur_qa_logit_layer = self.get_qa_logit_layer()
+        new_qa_logit_layer = self._get_resized_qa_labels(cur_qa_logit_layer, num_labels)
+        self._set_qa_logit_layer(new_qa_logit_layer)
+        return self.get_qa_logit_layer()
+
+    def get_qa_logit_layer(self) -> nn.Module:
+        """
+        Returns the the linear layer that produces question answering logits
+        Returns:
+            :obj:`nn.Module`: A torch module mapping the question answering prediction hidden states.
+            :obj:`None`: A NoneType object if Lxmert does not have the visual answering head.
+
+        """
+
+        if hasattr(self, "answer_head"):
+            return self.answer_head.logit_fc[-1]
+
+    def _set_qa_logit_layer(self, qa_logit_layer):
+        self.answer_head.logit_fc[-1] = qa_logit_layer
+
+    def _get_resized_qa_labels(self, cur_qa_logit_layer, num_labels):
+
+        if num_labels is None:
+            return cur_qa_logit_layer
+
+        cur_qa_labels, hidden_dim = cur_qa_logit_layer.weight.size()
+        if cur_qa_labels == num_labels:
+            return cur_qa_logit_layer
+
+        # Build new linear output
+        if getattr(cur_qa_logit_layer, "bias", None) is not None:
+            new_qa_logit_layer = nn.Linear(hidden_dim, num_labels)
+        else:
+            new_qa_logit_layer = nn.Linear(hidden_dim, num_labels, bias=False)
+
+        new_qa_logit_layer.to(cur_qa_logit_layer.weight.device)
+
+        # initialize all new labels
+        self._init_weights(new_qa_logit_layer)
+
+        # Copy labels from the previous weights
+        num_labels_to_copy = min(cur_qa_labels, num_labels)
+        new_qa_logit_layer.weight.data[:num_labels_to_copy, :] = cur_qa_logit_layer.weight.data[:num_labels_to_copy, :]
+        if getattr(cur_qa_logit_layer, "bias", None) is not None:
+            new_qa_logit_layer.bias.data[:num_labels_to_copy] = cur_qa_logit_layer.bias.data[:num_labels_to_copy]
+
+        return new_qa_logit_layer
 
     def forward(
         self,
