@@ -945,7 +945,7 @@ def top_k_top_p_filtering(
     return logits
 
 
-class BeamHypotheses:
+class BeamHypotheses(object):
     def __init__(self, num_beams, max_length, length_penalty, early_stopping):
         """
         Initialize n-best list of hypotheses.

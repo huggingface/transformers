@@ -563,8 +563,3 @@ def save_json(content: Union[Dict, List], path: str) -> None:
 def unzip(zip_path: str, dest_dir: str) -> None:
     with ZipFile(zip_path, "r") as zipObj:
         zipObj.extractall(dest_dir)
-
-
-if __name__ == '__main__':
-    reg = make_tatoeba_registry()
-    convert_all_sentencepiece_models(model_list=reg)
