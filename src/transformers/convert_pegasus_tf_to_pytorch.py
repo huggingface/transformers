@@ -124,7 +124,7 @@ def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
 def convert_pegasus_ckpt_to_pytorch(ckpt_path, save_dir):
     tf_weights = get_tf_weights_as_numpy(ckpt_path)
     dataset = Path(ckpt_path).parent.name
-    cfg_updates = dict(max_length=expected_max_length[dataset], beam_alpha=expected_alpha.get(dataset, 0.8))
+    cfg_updates = dict(max_length=expected_max_length[dataset], length_penalty=expected_alpha.get(dataset, 0.8))
     torch_model = convert_pegasus_to_bart(tf_weights, cfg_updates)
     torch_model.save_pretrained(save_dir)
     # pickle_save(tf_weights, f'{save_dir}/tf_weights_dict.pkl')#DEL
