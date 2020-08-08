@@ -79,7 +79,6 @@ class ExamplesTests(unittest.TestCase):
     def test_run_language_modeling(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
-        # TODO: switch to smaller model like sshleifer/tiny-distilroberta-base
 
         testargs = """
             run_language_modeling.py
