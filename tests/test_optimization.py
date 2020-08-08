@@ -86,10 +86,10 @@ class ScheduleInitTest(unittest.TestCase):
     optimizer = AdamW(m.parameters(), lr=10.0) if is_torch_available() else None
     num_steps = 10
 
-    def assertListAlmostEqual(self, list1, list2, tol):
+    def assertListAlmostEqual(self, list1, list2, tol, msg=None):
         self.assertEqual(len(list1), len(list2))
         for a, b in zip(list1, list2):
-            self.assertAlmostEqual(a, b, delta=tol)
+            self.assertAlmostEqual(a, b, delta=tol, msg=msg)
 
     def test_schedulers(self):
 
@@ -122,8 +122,10 @@ class ScheduleInitTest(unittest.TestCase):
             scheduler = scheduler_func(self.optimizer, **kwargs)
             lrs_1 = unwrap_schedule(scheduler, self.num_steps)
             self.assertEqual(len(lrs_1[0]), 1)
-            self.assertListAlmostEqual([l[0] for l in lrs_1], expected_learning_rates, tol=1e-2)
+            self.assertListAlmostEqual(
+                [l[0] for l in lrs_1], expected_learning_rates, tol=1e-2, msg=f"failed for {scheduler_func}"
+            )
 
             scheduler = scheduler_func(self.optimizer, **kwargs)
             lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
-            self.assertListEqual([l[0] for l in lrs_1], [l[0] for l in lrs_2])
+            self.assertListEqual([l[0] for l in lrs_1], [l[0] for l in lrs_2], msg=f"failed for {scheduler_func}")
