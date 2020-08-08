@@ -116,7 +116,10 @@ class LineByLineWithNSPTextDataset(Dataset):
         with open(file_path, encoding="utf-8") as f:
             documents = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
 
-        self.examples = [self.create_examples_from_documents(i, documents, block_size, tokenizer) for i in range(len(documents))]
+        self.examples = []
+        for document_index in range(len(documents)):
+            examples = self.create_examples_from_documents(document_index, documents, block_size, tokenizer)
+            self.examples.extend(examples)
 
     def create_examples_from_documents(self, document_index, documents, block_size, tokenizer, short_seq_prob=0.1):
         """Creates examples for a single document."""
