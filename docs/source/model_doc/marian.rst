@@ -1,14 +1,14 @@
 MarianMT
 ----------------------------------------------------
-**DISCLAIMER:** If you see something strange,
-file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`__ and assign
+**Bugs:** If you see something strange,
+file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__ and assign
 @sshleifer. Translations should be similar, but not identical to, output in the test set linked to in each model card.
 
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~
 - Each model is about 298 MB on disk, there are 1,000+ models.
 - The list of supported language pairs can be found `here <https://huggingface.co/Helsinki-NLP>`__.
-- The 1,000+ models were originally trained by `Jörg Tiedemann <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the `Marian <https://marian-nmt.github.io/>`_ C++ library, which supports fast training and translation.
+- models were originally trained by `Jörg Tiedemann <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the `Marian <https://marian-nmt.github.io/>`_ C++ library, which supports fast training and translation.
 - All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented in a model card.
 - The 80 opus models that require BPE preprocessing are not supported.
 - The modeling code is the same as ``BartForConditionalGeneration`` with a few minor modifications:

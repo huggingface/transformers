@@ -149,37 +149,60 @@ def convert_hf_name_to_opus_name(hf_model_name):
     return remove_prefix(opus_w_prefix, "opus-mt-")
 
 
+
+import git
+import socket
+import time
+
+def get_system_metadata(repo_root):
+    return dict(helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
+                transformers_git_sha=git.Repo(path='.', search_parent_directories=True).head.object.hexsha,
+                port_machine=socket.gethostname(),
+                port_time=time.strftime('%Y-%m-%d-%H:%M'))
+
 def write_model_card(
     hf_model_name: str,
-    repo_path="OPUS-MT-train/models/",
+    repo_root="OPUS-MT-train",
     dry_run=False,
-    model_card_dir=Path("marian_converted/model_cards/Helsinki-NLP/"),
+    save_dir=Path("marian_converted/model_cards/Helsinki-NLP/"),
+    extra_metadata = {}
 ) -> str:
     """Copy the most recent model's readme section from opus, and add metadata.
-    upload command: s3cmd sync --recursive model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/
+    upload command: aws s3 sync model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
     """
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     opus_name: str = convert_hf_name_to_opus_name(hf_model_name)
+    assert repo_root in ('OPUS-MT-train', 'Tatoeba-Challenge')
+    opus_readme_path = Path(repo_root).joinpath('models', opus_name, 'README.md')
+    assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
+
     opus_src, opus_tgt = [x.split("+") for x in opus_name.split("-")]
-    readme_url = OPUS_GITHUB_URL + f"{opus_name}/README.md"
+
+    readme_url = f"https://github.com/Helsinki-NLP/{repo_root}/tree/master/models/{opus_name}/README.md"
+
     s, t = ",".join(opus_src), ",".join(opus_tgt)
     extra_markdown = f"### {hf_model_name}\n\n* source languages: {s}\n* target languages: {t}\n*  OPUS readme: [{opus_name}]({readme_url})\n"
+    metadata = {'hf_name': hf_model_name, 'source_languages': s, 'target_languages': t, 'opus_readme_url': readme_url,
+                   'original_repo': repo_root, 'tags': ['translation']
+                   }
+    metadata.update(extra_metadata)
+    metadata.update(get_system_metadata(repo_root))
+
     # combine with opus markdown
-    opus_readme_path = Path(f"{repo_path}{opus_name}/README.md")
-    assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
+
     content = opus_readme_path.open().read()
     content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
     content = "*".join(content.split("*")[1:])
     content = extra_markdown + "\n* " + content.replace("download", "download original weights")
-    if dry_run:
-        return content
-    # Save string to model_cards/hf_model_name/readme.md
-    model_card_dir.mkdir(exist_ok=True)
-    sub_dir = model_card_dir / hf_model_name
+    #if dry_run:
+    return content, metadata
+    # Save string to save_dir/hf_model_name/README.md
+    save_dir.mkdir(exist_ok=True)
+    sub_dir = save_dir / hf_model_name
     sub_dir.mkdir(exist_ok=True)
     dest = sub_dir / "README.md"
     dest.open("w").write(content)
-    return content
+    return content, metadata
 
 
 def get_clean_model_id_mapping(multiling_model_ids):
