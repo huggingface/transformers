@@ -89,7 +89,7 @@ def run_generate():
     examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path).readlines()]
     if args.n_obs > 0:
         examples = examples[: args.n_obs]
-    Path(args.save_path).mkdir(exist_ok=True)
+    Path(args.save_path).parent.mkdir(exist_ok=True)
     generate_summaries_or_translations(
         examples,
         args.save_path,
