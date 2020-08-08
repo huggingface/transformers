@@ -1,16 +1,10 @@
 import unittest
 from pathlib import Path
-from shutil import copyfile
 
 from transformers.file_utils import cached_property
 from transformers.tokenization_pegasus import PegasusTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .test_tokenization_marian import SAMPLE_SP
-
-
-# SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/pegasus_sentencepiece.model")
-FRAMEWORK = "tf"
 
 
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -19,18 +13,12 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        # vocab = ["</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est", "\u0120", "<pad>"]
-        # vocab_tokens = dict(zip(vocab, range(len(vocab))))
+
         save_dir = Path(self.tmpdirname)
         spm_file = PegasusTokenizer.vocab_files_names["vocab_file"]
         if not (save_dir / spm_file).exists():
             tokenizer = self.default_tokenizer
             tokenizer.save_pretrained(self.tmpdirname)
-        # copyfile(SAMPLE_SP, save_dir / spm_file)
-        # tokenizer = PegasusTokenizer(SAMPLE_SP)
-
-        #
-        #
 
     @cached_property
     def default_tokenizer(self):
