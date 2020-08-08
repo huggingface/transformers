@@ -16,10 +16,20 @@ metrics:
 
 ## Model description
 
-Input for the model: Any codemixed hinglish text  
+Input for the model: Any codemixed hinglish text
 Output for the model: Sentiment. (0 - Negative, 1 - Neutral, 2 - Positive)
 
 I took a bert-base-multilingual-cased model from Huggingface and finetuned it on [SAIL 2017](http://www.dasdipankar.com/SAILCodeMixed.html) dataset.  
+
+Performance of this model on the SAIL 2017 dataset
+
+| metric     |    score |
+|------------|----------|
+| acc        | 0.588889 |
+| f1         | 0.582678 |
+| acc_and_f1 | 0.585783 |
+| precision  | 0.586516 |
+| recall     | 0.588889 |
 
 ## Intended uses & limitations
 
