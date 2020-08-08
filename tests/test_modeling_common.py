@@ -530,9 +530,7 @@ class ModelTesterMixin:
             config = copy.deepcopy(original_config)
             model = model_class(config)
             model.to(torch_device)
-
-            if self.model_tester.is_training is False:
-                model.eval()
+            model.eval()
 
             hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
@@ -540,9 +538,7 @@ class ModelTesterMixin:
             config.chunk_size_feed_forward = 1
             model = model_class(config)
             model.to(torch_device)
-
-            if self.model_tester.is_training is False:
-                model.eval()
+            model.eval()
 
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
             self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
