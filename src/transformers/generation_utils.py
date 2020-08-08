@@ -78,6 +78,7 @@ class GenerationMixin:
         if eos_token_id is not None and cur_len < min_length:
             scores[:, eos_token_id] = -float("inf")
 
+
         if no_repeat_ngram_size > 0:
             # calculate a list of banned tokens to prevent repetitively generating the same ngrams
             num_batch_hypotheses = batch_size * num_beams
@@ -610,6 +611,7 @@ class GenerationMixin:
     ):
         """ Generate sequences for each example with beam search.
         """
+        print(f'min_length: {min_length}, use_cache: {use_cache}')
 
         # generated hypotheses
         generated_hyps = [
@@ -630,13 +632,17 @@ class GenerationMixin:
 
         # done sentences
         done = [False for _ in range(batch_size)]
-
+        from .modeling_bart import print_tensor
         while cur_len < max_length:
+
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
+            print_tensor(f'logits at cur_len={cur_len}', next_token_logits)
+            #print_tensor(f'logits at cur_len={cur_len}', next_token_logits)
+
 
             # if model has past, then set the past variable to speed up decoding
             if self._use_cache(outputs, use_cache):
@@ -646,9 +652,9 @@ class GenerationMixin:
                 next_token_logits = self.adjust_logits_during_generation(
                     next_token_logits, cur_len=cur_len, max_length=max_length
                 )
-
+            print_tensor(f'cur_len={cur_len}. logits after adjust', next_token_logits)
             scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-
+            print_tensor(f'cur_len={cur_len}. after softmax', scores)
             scores = self.postprocess_next_token_scores(
                 scores=scores,
                 input_ids=input_ids,
@@ -662,6 +668,8 @@ class GenerationMixin:
                 batch_size=batch_size,
                 num_beams=num_beams,
             )
+            print_tensor(f'cur_len={cur_len}. after postprocess', scores)
+
 
             assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
                 scores.shape, (batch_size * num_beams, vocab_size)
@@ -757,9 +765,12 @@ class GenerationMixin:
                 assert len(next_sent_beam) == num_beams, "Beam should always be full"
                 next_batch_beam.extend(next_sent_beam)
                 assert len(next_batch_beam) == num_beams * (batch_idx + 1), "We should have added num_beams each step"
+            print_tensor(f'cur_len={cur_len}. next_batch_beam', next_batch_beam)
+            print(f'cur_len={cur_len}, done={done}')
 
             # stop when we are done with each sentence
             if all(done):
+                print(f'cur_len={cur_len}, All done!')
                 break
 
             # sanity check / prepare next batch
@@ -968,6 +979,7 @@ class BeamHypotheses(object):
         Add a new hypothesis to the list.
         """
         score = sum_logprobs / len(hyp) ** self.length_penalty
+        #import ipdb; ipdb.set_trace()
         if len(self) < self.num_beams or score > self.worst_score:
             self.beams.append((score, hyp))
             if len(self) > self.num_beams:

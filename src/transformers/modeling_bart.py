@@ -550,6 +550,7 @@ class BartDecoder(nn.Module):
         if encoder_padding_mask is not None:
             encoder_padding_mask = invert_mask(encoder_padding_mask)
 
+        def print_tensor(msg, x):return  # uncomment to turn on print in this module
         # embed positions
         positions = self.embed_positions(input_ids, use_cache=use_cache)
         print_tensor('target_ids', input_ids)
@@ -1129,7 +1130,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1:
-            self._force_token_ids_generation(logits, self.config.bos_token_id)
+
+           self._force_token_ids_generation(logits, self.config.bos_token_id)
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
             self._force_token_ids_generation(logits, self.config.eos_token_id)
         return logits

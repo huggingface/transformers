@@ -94,13 +94,13 @@ class IntegrationTest(unittest.TestCase):
 
     # TODO: refactor to follow transformers' standard testing pipeline
     # @slow
-    def test_pegasus_aeslc_model(self):
+    def test_legacy_generate(self):
         model_dir = "../pegasus/ckpt/aeslc"
         spm_model = "../pegasus/ckpt/c4.unigram.newline.10pct.96000.model"
         assert os.path.exists(model_dir)
 
         self.assertTrue(tf.compat.v1.train.checkpoint_exists(model_dir))
-        config = PegasusConfig(vocab_size=96000 + 103, d_model=1024, num_beams=8)
+        config = PegasusConfig(vocab_size=96000 + 103, d_model=1024, num_beams=2)
 
         # #hidden_size = 1024
         # #filter_size = 4096
@@ -138,9 +138,6 @@ class IntegrationTest(unittest.TestCase):
                 # define the initialization (but not intialized until global_variables_initializer is called)
                 tf.compat.v1.train.init_from_checkpoint(model_dir, assignment_map)
 
-                # check running
-                raw_input_str = BANK_SNIPPET
-
 
                 input_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
                 target_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
@@ -153,15 +150,16 @@ class IntegrationTest(unittest.TestCase):
                 input_ids = tf.reshape(input_ids, [1, 512])
                 target_ids = tf.reshape(target_ids, [1, 32])
 
-                output_ids = model.predict(
-                    {"inputs": input_ids, "targets": target_ids}, 32, config.num_beams, beam_alpha=0.6
+                generate_outputs: dict = model.predict(
+                    {"inputs": input_ids, "targets": target_ids}, 10, config.num_beams, beam_alpha=0.6
                 )
-                self.assertEqual(output_ids["outputs"].shape, [1, 32])
+                self.assertEqual(generate_outputs["outputs"].shape, [1, 10])
+                self.assertEqual(generate_outputs["hypos"].shape, [1, 10])
                 # decode to str
-                output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
+                output_str = decode(generate_outputs["outputs"], spm_model, encoder_type="sentencepiece")
                 sess.run(tf.compat.v1.global_variables_initializer())
                 # Run it
-                feed_dict = {input_str: [raw_input_str], target_str: [raw_target_str]}
+                feed_dict = {input_str: [BANK_SNIPPET], target_str: [raw_target_str]}
                 results, emb = sess.run([output_str, model.embedded_inputs], feed_dict=feed_dict)
 
                 after_time, after_stack, logits, enc_input, encoder_states, debug_history0, debug_history1, attn_history0 = sess.run(
@@ -179,6 +177,7 @@ class IntegrationTest(unittest.TestCase):
                 )
 
         print(f"Summary: {results}")
+        return
         print_tensor("1. embedded", emb)
         print_tensor("2. after pos", after_time)
         print_tensor("3. 2-1", after_time - emb)
@@ -416,13 +415,15 @@ class IntegrationTest(unittest.TestCase):
         #self.assertEqual(summary, "Bank Resolutions")
     def test_bart_generate(self):
         tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
-        model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed", #"sshleifer/pegasus/aeslc",
+        model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed_v2", #"sshleifer/pegasus/aeslc",
             scale_embedding=True, num_beams=1, #activation='relu',
         ).to(torch_device)
         assert model.config.activation_function == 'relu'
         batch = tok([BANK_SNIPPET], return_tensors="pt").to(torch_device)
-        decoder_ids = tok([raw_target_str], return_tensors="pt").to(torch_device)
-        summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
+        import torch
+        assert model.model.shared(torch.zeros_like(batch.input_ids)).max().item() == 0
+        generated_ids = model.generate(batch.input_ids, early_stopping=False, max_length=10)
+        summary = tok.batch_decode(generated_ids, skip_special_tokens=False)[0]
         self.assertEqual(summary, "Bank Resolutions")
 
     def test_pegasus_config(self):

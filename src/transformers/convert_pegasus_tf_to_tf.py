@@ -57,7 +57,8 @@ def convert_pegasus_to_bart(tf_weights):
             v = v.T
         mapping[new_k] = torch.tensor(v, dtype=sd[new_k].dtype)
         assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
-
+    # make sure embedding.padding_idx is respected
+    mapping['shared.weight'][cfg.pad_token_id] = torch.zeros_like(mapping['shared.weight'][cfg.pad_token_id+1])
     mapping["encoder.embed_tokens.weight"] = mapping["shared.weight"]
     mapping["decoder.embed_tokens.weight"] = mapping["shared.weight"]
     # mapping['decoder.embed_positions'] = sd_new

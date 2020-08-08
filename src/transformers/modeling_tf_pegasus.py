@@ -422,6 +422,7 @@ def left2right_decode(
     # This is due to using 2 * beam_size in grow_topk, and keep the top beam_size
     # ones that haven't reached EOS into alive.
     # In this case, alpha value for length penalty will take effect.
+    init_dec_BxT = tf.zeros([batch_size, max_decode_len], dtype=dtype)
     if beam_size == 1:
 
         def decode_loop(i, decodes_BxT, cache_BxU_dict):
@@ -434,13 +435,14 @@ def left2right_decode(
             finished_B = tf.reduce_any(input_tensor=tf.equal(decodes_BxT, EOS_ID), axis=1)
             return tf.logical_and(i < max_decode_len, tf.logical_not(tf.reduce_all(input_tensor=finished_B)))
 
-        init_dec_BxT = tf.zeros([batch_size, max_decode_len], dtype=dtype)
+
         _, decodes, _ = tf.while_loop(
             cond=loop_cond, body=decode_loop, loop_vars=[tf.constant(0, dtype=dtype), init_dec_BxT, context_BxU_dict]
         )
-        return decodes
+        return decodes, init_dec_BxT
 
     else:
+        #raise ValueError('hitting beam search')
 
         def symbols_to_logits_fn_with_sampling(decodes_BxT, states_BxU_dict, i):
             logits_BxV = symbols_to_logits_fn(decodes_BxT, states_BxU_dict, i)
@@ -457,7 +459,7 @@ def left2right_decode(
             length_norm_fn,
             eos_id,
         )
-        return tf.cast(beams[:, 0, :], dtype)
+        return tf.cast(beams[:, 0, :], dtype), init_dec_BxT
 
 
 class Embedding:
@@ -712,9 +714,9 @@ class TFPegasusLegacyModel:
         # dropout,
         # FIXME(SS): should take config
         # import ipdb; ipdb.set_trace()
-        self._dtype = tf.float32
-        _assert_equal(type(self._dtype), type(tf.float32))
-        self._embedding_layer = Embedding(config.vocab_size, config.d_model, "weights", self._dtype)
+        self.tf_dtype = tf.float32
+        _assert_equal(type(self.tf_dtype), type(tf.float32))
+        self._embedding_layer = Embedding(config.vocab_size, config.d_model, "weights", self.tf_dtype)
         # block_fn = lambda: TransformerBlock(c.d_model, c.encoder_ffn_dim, c.encoder_attention_heads, c.dropout)
         self._encoder_layers = [
             TransformerBlock(config.d_model, config.encoder_ffn_dim, config.encoder_attention_heads, config.dropout)
@@ -735,12 +737,12 @@ class TFPegasusLegacyModel:
         self._decoder_scope_name = "decoder"
         self._layer_norm_encoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
         self._layer_norm_decoder = tf.keras.layers.LayerNormalization(axis=2, epsilon=1e-12, name="LayerNorm")
-        _assert_equal(type(self._dtype), type(tf.float32))
+        _assert_equal(type(self.tf_dtype), type(tf.float32))
 
     def _encode(self, features, training):
         "Run whole encoder"
         inputs_BxI = features["inputs"]
-        assert self._dtype == tf.float32, f"{self._dtype} != tf.float32"
+        assert self.tf_dtype == tf.float32, f"{self.tf_dtype} != tf.float32"
         inputs_bias_Bx1xI = add_attention_mask(inputs_BxI)  # , self._dtype)
         print(f"inputs_bias_Bx1xI : {inputs_bias_Bx1xI.shape}")
         states_BxIxD = self._embedding_layer(inputs_BxI, True)
@@ -769,13 +771,13 @@ class TFPegasusLegacyModel:
         """
         if "inputs" not in features or "targets" not in features:
             raise ValueError("Require inputs and targets keys in features.")
-        _assert_equal(type(self._dtype), type(tf.float32))
+        _assert_equal(type(self.tf_dtype), type(tf.float32))
         context = self._encode(features, training)
         self._context = context
         targets_BxT = features["targets"]
 
         # import ipdb; ipdb.set_trace()
-        bias_1xTxT = upper_triangle_bias(tf.shape(input=targets_BxT)[1], self._dtype)
+        bias_1xTxT = upper_triangle_bias(tf.shape(input=targets_BxT)[1], self.tf_dtype)
         self.upper_tri_bias = bias_1xTxT
         states_BxTxD = self._embedding_layer(targets_BxT, True)
         self._emb = states_BxTxD
@@ -796,7 +798,7 @@ class TFPegasusLegacyModel:
         self.decoder_output = states_BxTxD
         logits_BxTxV = self._embedding_layer(states_BxTxD, False)
         self.logits = logits_BxTxV
-        targets_mask_BxT = tf.cast(tf.greater(targets_BxT, 0), self._dtype)
+        targets_mask_BxT = tf.cast(tf.greater(targets_BxT, 0), self.tf_dtype)
         loss = tf.compat.v1.losses.softmax_cross_entropy(
             tf.one_hot(targets_BxT, self._vocab_size),
             logits_BxTxV,
@@ -811,11 +813,11 @@ class TFPegasusLegacyModel:
         B, _, D = cache["memory"].shape
         T, V, H = max_decode_len, self._vocab_size, self._num_heads
 
-        bias_1xTxT = upper_triangle_bias(T, self._dtype)
+        bias_1xTxT = upper_triangle_bias(T, self.tf_dtype)
         for i in range(len(self._decoder_layers)):
             cache[str(i)] = {
-                "k": tf.zeros([B, H, T, D // H], self._dtype),
-                "v": tf.zeros([B, H, T, D // H], self._dtype),
+                "k": tf.zeros([B, H, T, D // H], self.tf_dtype),
+                "v": tf.zeros([B, H, T, D // H], self.tf_dtype),
             }
 
         def symbols_to_logits_fn(dec_BxT, context, i):
@@ -823,7 +825,7 @@ class TFPegasusLegacyModel:
             dec_Bx1 = tf.slice(dec_BxT, [0, tf.maximum(tf.cast(0, i.dtype), i - 1)], [dec_BxT.shape[0], 1])
             bias_1x1xT = tf.slice(bias_1xTxT, [0, i, 0], [1, 1, T])
             dec_Bx1xD = self._embedding_layer(dec_Bx1, True)
-            dec_Bx1xD *= tf.cast(tf.greater(i, 0), self._dtype)
+            dec_Bx1xD *= tf.cast(tf.greater(i, 0), self.tf_dtype)
             dec_Bx1xD = add_time_signal(dec_Bx1xD, start_index=i)
             with tf.compat.v1.variable_scope(self._decoder_scope_name, reuse=tf.compat.v1.AUTO_REUSE):
                 dec_Bx1xD, self.decoder_states = run_all_layers(
@@ -841,8 +843,8 @@ class TFPegasusLegacyModel:
             logits_BxV = tf.squeeze(logits_Bx1xV, axis=1)
             return logits_BxV
 
-        decodes_BxT = left2right_decode(symbols_to_logits_fn, cache, B, T, V, beam_size, **beam_kwargs)
-        return {"outputs": decodes_BxT}
+        decodes_BxT, hypos = left2right_decode(symbols_to_logits_fn, cache, B, T, V, beam_size, **beam_kwargs)
+        return {"outputs": decodes_BxT, 'hypos': hypos}
 
 
 class TFPegasusPretrainedModel(TFPreTrainedModel):
