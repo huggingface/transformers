@@ -289,6 +289,7 @@ if is_torch_available():
         XLMForMultipleChoice,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+    from .modeling_pegasus import PegasusForConditionalGeneration
     from .modeling_bart import (
         PretrainedBartModel,
         BartForSequenceClassification,

@@ -1,6 +1,5 @@
 """ PEGASUS model configuration """
 
-
 import logging
 
 from .configuration_bart import BartConfig
@@ -48,7 +47,13 @@ class PegasusConfig(BartConfig):
         dropout=0.1,
         pad_token_id=0,
         eos_token_id=1,
-        # normalize_before=True,
+        is_encoder_decoder=True,
+        normalize_before=True,
+        scale_embedding=True,
+        normalize_embedding=False,
+        add_final_layer_norm=True,
+        static_position_embeddings=True,
+        num_beams=8,
         **kwargs
     ):
         super().__init__(
@@ -64,12 +69,12 @@ class PegasusConfig(BartConfig):
             max_position_embeddings=max_position_embeddings,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
-            is_encoder_decoder=True,
-
-            normalize_before=True,
-            scale_embedding=True,
-            normalize_embedding=False,
-            add_final_layer_norm=True,
-            static_position_embeddings=True,
+            is_encoder_decoder=is_encoder_decoder,
+            normalize_before=normalize_before,
+            scale_embedding=scale_embedding,
+            normalize_embedding=normalize_embedding,
+            add_final_layer_norm=add_final_layer_norm,
+            static_position_embeddings=static_position_embeddings,
+            num_beams=num_beams,
             **kwargs,
         )

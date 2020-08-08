@@ -5,6 +5,7 @@ import copy
 import itertools
 import logging
 import math
+from collections import defaultdict
 
 import tensorflow as tf
 
@@ -435,14 +436,13 @@ def left2right_decode(
             finished_B = tf.reduce_any(input_tensor=tf.equal(decodes_BxT, EOS_ID), axis=1)
             return tf.logical_and(i < max_decode_len, tf.logical_not(tf.reduce_all(input_tensor=finished_B)))
 
-
         _, decodes, _ = tf.while_loop(
             cond=loop_cond, body=decode_loop, loop_vars=[tf.constant(0, dtype=dtype), init_dec_BxT, context_BxU_dict]
         )
         return decodes, init_dec_BxT
 
     else:
-        #raise ValueError('hitting beam search')
+        # raise ValueError('hitting beam search')
 
         def symbols_to_logits_fn_with_sampling(decodes_BxT, states_BxU_dict, i):
             logits_BxV = symbols_to_logits_fn(decodes_BxT, states_BxU_dict, i)
@@ -536,16 +536,16 @@ class Attention:
         B, I, _ = input_BxIxDi.shape
         M, H, D = memory_BxMxDi.shape[1], self._num_heads, self._hidden_size
         dtype = memory_BxMxDi.dtype
-        self.debug_history['query'].append(input_BxIxDi)
+        self.debug_history["query"].append(input_BxIxDi)
 
         q_BxHxIxDh = split_heads(self._q_layer(input_BxIxDi), H)
 
         q_BxHxIxDh *= (D // H) ** -0.5
-        self.debug_history['qproj, scaled'].append(q_BxHxIxDh)
+        self.debug_history["qproj, scaled"].append(q_BxHxIxDh)
         k_BxHxMxDh = split_heads(self._k_layer(memory_BxMxDi), H)
-        self.debug_history['kproj'].append(k_BxHxMxDh)
+        self.debug_history["kproj"].append(k_BxHxMxDh)
         v_BxHxMxDh = split_heads(self._v_layer(memory_BxMxDi), H)
-        self.debug_history['vproj'].append(v_BxHxMxDh)
+        self.debug_history["vproj"].append(v_BxHxMxDh)
 
         # cache saves previous activations before time decode_i during TPU decoding.
         if cache is not None and decode_i is not None:
@@ -557,20 +557,20 @@ class Attention:
             cache["v"] = v_BxHxMxDh
         bias_BxHxIxM = tf.expand_dims(bias_BxIxM, axis=1)
         logits_BxHxIxM = tf.matmul(q_BxHxIxDh, k_BxHxMxDh, transpose_b=True)
-        self.debug_history['attn_weights before masking'].append(logits_BxHxIxM)
+        self.debug_history["attn_weights before masking"].append(logits_BxHxIxM)
         logits_BxHxIxM = logits_BxHxIxM + bias_BxHxIxM
-        self.debug_history['attn_weights before softmax'].append(logits_BxHxIxM)
+        self.debug_history["attn_weights before softmax"].append(logits_BxHxIxM)
         alignment_BxHxIxM = tf.nn.softmax(logits_BxHxIxM)
-        self.debug_history['attn_weights after softmax'].append(logits_BxHxIxM)
+        self.debug_history["attn_weights after softmax"].append(logits_BxHxIxM)
         if training:
             alignment_BxHxIxM = tf.compat.v2.nn.dropout(
                 alignment_BxHxIxM, self._attention_dropout, noise_shape=[1, 1, I, M]
             )
         outputs_BxHxIxDh = tf.matmul(alignment_BxHxIxM, v_BxHxMxDh)
-        self.debug_history['attn_output after bmm(probs, v)'].append(outputs_BxHxIxDh)
+        self.debug_history["attn_output after bmm(probs, v)"].append(outputs_BxHxIxDh)
         outputs_BxIxD = tf.reshape(tf.transpose(a=outputs_BxHxIxDh, perm=[0, 2, 1, 3]), [B, I, D])
         outputs_BxIxD = self._output_layer(outputs_BxIxD)
-        self.debug_history['attn after output_layer'].append(outputs_BxHxIxDh)
+        self.debug_history["attn after output_layer"].append(outputs_BxHxIxDh)
         return outputs_BxIxD
 
 
@@ -602,7 +602,6 @@ def upper_triangle_bias(D, dtype=tf.float32):
     tensor_1xDxD = tf.expand_dims(upper_triangle_DxD * min_val, axis=0)
     return tensor_1xDxD
 
-from collections import defaultdict
 
 class TransformerBlock:
     """Transformer block.
@@ -634,42 +633,43 @@ class TransformerBlock:
         self.debug_history = self._self_attn_layer.debug_history
 
     def __call__(self, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, cache=None, decode_i=None):
-        #assert not training, training
-        training=False
+        # assert not training, training
+        training = False
         s_BxIxD = inputs_BxIxD
         with tf.compat.v1.variable_scope("self_attention"):
             y_BxIxD = self._layer_norm_1(s_BxIxD)
-            self.debug_history['after ln1'].append(y_BxIxD)
+            self.debug_history["after ln1"].append(y_BxIxD)
             y_BxIxD = self._self_attn_layer(y_BxIxD, bias_BxIxI, training, cache=cache, decode_i=decode_i)
-            self.debug_history['after self_attn'].append(y_BxIxD)
+            self.debug_history["after self_attn"].append(y_BxIxD)
             s_BxIxD += self._dropout_fn(y_BxIxD, training)
-            self.debug_history['after dropout'].append(s_BxIxD)
+            self.debug_history["after dropout"].append(s_BxIxD)
 
         if memory_BxMxD is not None:
             with tf.compat.v1.variable_scope("memory_attention"):
-                #s_BxIxD
+                # s_BxIxD
 
                 y_BxIxD = self._layer_norm_2(s_BxIxD)
-                self.debug_history['cross_attn_after ln2'].append(s_BxIxD)
+                self.debug_history["cross_attn_after ln2"].append(s_BxIxD)
                 y_BxIxD = self._attn_layer(y_BxIxD, memory_BxMxD, bias_BxIxM, training)
-                self.debug_history['after cross_attn '].append(y_BxIxD)
+                self.debug_history["after cross_attn "].append(y_BxIxD)
                 s_BxIxD += self._dropout_fn(y_BxIxD, training)
-                self.debug_history['after cross_attn dropout'].append(y_BxIxD)
+                self.debug_history["after cross_attn dropout"].append(y_BxIxD)
         with tf.compat.v1.variable_scope("ffn"):
 
             y_BxIxD = self._layer_norm_3(s_BxIxD)
-            self.debug_history['ffn: after ln3'].append(y_BxIxD)
+            self.debug_history["ffn: after ln3"].append(y_BxIxD)
             y_BxIxD = self._dropout_fn(self._relu_layer(y_BxIxD), training)
-            self.debug_history['ffn: after fc1'].append(y_BxIxD)
+            self.debug_history["ffn: after fc1"].append(y_BxIxD)
             output_layer_result = self._output_layer(y_BxIxD)
-            self.debug_history['ffn: after fc2'].append(output_layer_result)
+            self.debug_history["ffn: after fc2"].append(output_layer_result)
             s_BxIxD += self._dropout_fn(output_layer_result, training)
-            self.debug_history['after final add'].append(output_layer_result)
+            self.debug_history["after final add"].append(output_layer_result)
         return s_BxIxD
 
 
 def shift_tokens_right(states_BxTxD):
     return tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+
 
 def run_all_layers(layers, training, inputs_BxIxD, bias_BxIxI, memory_BxMxD, bias_BxIxM, cache=None, decode_i=None):
     """Stack AttentionBlock layers."""
@@ -781,7 +781,7 @@ class TFPegasusLegacyModel:
         self.upper_tri_bias = bias_1xTxT
         states_BxTxD = self._embedding_layer(targets_BxT, True)
         self._emb = states_BxTxD
-        #states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
+        # states_BxTxD = tf.pad(tensor=states_BxTxD, paddings=[[0, 0], [1, 0], [0, 0]])[:, :-1, :]
         self.after_pad = states_BxTxD
         states_BxTxD = add_time_signal(states_BxTxD)
         self.after_time_signal = states_BxTxD
@@ -844,7 +844,7 @@ class TFPegasusLegacyModel:
             return logits_BxV
 
         decodes_BxT, hypos = left2right_decode(symbols_to_logits_fn, cache, B, T, V, beam_size, **beam_kwargs)
-        return {"outputs": decodes_BxT, 'hypos': hypos}
+        return {"outputs": decodes_BxT, "hypos": hypos}
 
 
 class TFPegasusPretrainedModel(TFPreTrainedModel):

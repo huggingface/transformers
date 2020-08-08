@@ -138,7 +138,6 @@ class IntegrationTest(unittest.TestCase):
                 # define the initialization (but not intialized until global_variables_initializer is called)
                 tf.compat.v1.train.init_from_checkpoint(model_dir, assignment_map)
 
-
                 input_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
                 target_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
 
@@ -162,7 +161,16 @@ class IntegrationTest(unittest.TestCase):
                 feed_dict = {input_str: [BANK_SNIPPET], target_str: [raw_target_str]}
                 results, emb = sess.run([output_str, model.embedded_inputs], feed_dict=feed_dict)
 
-                after_time, after_stack, logits, enc_input, encoder_states, debug_history0, debug_history1, attn_history0 = sess.run(
+                (
+                    after_time,
+                    after_stack,
+                    logits,
+                    enc_input,
+                    encoder_states,
+                    debug_history0,
+                    debug_history1,
+                    attn_history0,
+                ) = sess.run(
                     [
                         model.signalled,
                         model.decoder_output,
@@ -182,11 +190,11 @@ class IntegrationTest(unittest.TestCase):
         print_tensor("2. after pos", after_time)
         print_tensor("3. 2-1", after_time - emb)
         print_tensor("4. encoder layer 0 input", enc_input)
-        for k,v in attn_history0.items():
-            msg = 'layer0' + k
+        for k, v in attn_history0.items():
+            msg = "layer0" + k
             for tensor in v:
                 if tensor.shape[0] != 1:
-                    print(f'skipping dummy input result')
+                    print(f"skipping dummy input result")
                     continue
                 print_tensor(msg, tensor)
         print_tensor("5. encoder layer 1 input", encoder_states[0])
@@ -250,7 +258,7 @@ class IntegrationTest(unittest.TestCase):
                 input_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
                 target_str = tf.compat.v1.placeholder(tf.string, shape=[1,], name=None)
                 src_len = 512
-                tgt_len =32
+                tgt_len = 32
                 # tokenization
                 input_ids = encode(input_str, src_len, spm_model, encoder_type="sentencepiece")
                 target_ids = encode(target_str, tgt_len, spm_model, encoder_type="sentencepiece")
@@ -259,16 +267,29 @@ class IntegrationTest(unittest.TestCase):
                 target_ids = tf.reshape(target_ids, [1, tgt_len])
 
                 model_outputs = model(
-                    {"inputs": input_ids, "targets": target_ids}, False #32, config.num_beams, beam_alpha=0.6
+                    {"inputs": input_ids, "targets": target_ids}, False  # 32, config.num_beams, beam_alpha=0.6
                 )
-                #self.assertEqual(output_ids["outputs"].shape, [1, 32])
+                # self.assertEqual(output_ids["outputs"].shape, [1, 32])
                 # decode to str
-                #output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
+                # output_str = decode(output_ids["outputs"], spm_model, encoder_type="sentencepiece")
                 sess.run(tf.compat.v1.global_variables_initializer())
                 # Run it
                 feed_dict = {input_str: [raw_input_str], target_str: [raw_target_str]}
 
-                results, target_ids, emb, after_pad, after_time, dec_last_layer_out, logits, enc_input, encoder_states, decoder_states, dec_input, enc_output = sess.run(
+                (
+                    results,
+                    target_ids,
+                    emb,
+                    after_pad,
+                    after_time,
+                    dec_last_layer_out,
+                    logits,
+                    enc_input,
+                    encoder_states,
+                    decoder_states,
+                    dec_input,
+                    enc_output,
+                ) = sess.run(
                     [
                         model_outputs,
                         target_ids,
@@ -280,31 +301,31 @@ class IntegrationTest(unittest.TestCase):
                         model.encoder_layer_input,
                         model.encoder_states,
                         model.decoder_states,
-                        #model._encoder_layers[0].debug_history, model._encoder_layers[1].debug_history, model._encoder_layers[0]._self_attn_layer.debug_history,
+                        # model._encoder_layers[0].debug_history, model._encoder_layers[1].debug_history, model._encoder_layers[0]._self_attn_layer.debug_history,
                         model.decoder_input,
-                        model.memory_context
+                        model.memory_context,
                     ],
                     feed_dict=feed_dict,
                 )
 
-        #print(f"Summary: {results}")
-        print(f'loss: {results[0]}')
+        # print(f"Summary: {results}")
+        print(f"loss: {results[0]}")
         print_tensor("1. encoder layer 0 input", enc_input)
         print_tensor("2. encoder last layer output", encoder_states[-1])
         print_tensor("3. enc output", enc_output)
-        print_tensor('target_ids', target_ids)
-        print_tensor('decoder after emb layer', emb)
-        print_tensor('decoder after pad', after_pad)
-        print_tensor('decoder after time signal', after_time)
+        print_tensor("target_ids", target_ids)
+        print_tensor("decoder after emb layer", emb)
+        print_tensor("decoder after pad", after_pad)
+        print_tensor("decoder after time signal", after_time)
         print_tensor("dec layer 0 input", dec_input)
         print_tensor("dec layer 1 input", decoder_states[0])
-        print_tensor('decoder last layer output before layernorm', decoder_states[-1])
-        print_tensor('decoder output', dec_last_layer_out)
-        print_tensor("final logits", results[1]['logits'])
+        print_tensor("decoder last layer output before layernorm", decoder_states[-1])
+        print_tensor("decoder output", dec_last_layer_out)
+        print_tensor("final logits", results[1]["logits"])
 
-        #print_tensor("1. embedded", emb)
-        #print_tensor("2. after pos", after_time)
-        #print_tensor("3. 2-1", after_time - emb)
+        # print_tensor("1. embedded", emb)
+        # print_tensor("2. after pos", after_time)
+        # print_tensor("3. 2-1", after_time - emb)
 
         # for k,v in attn_history0.items():
         #     msg = 'layer0' + k
@@ -315,8 +336,6 @@ class IntegrationTest(unittest.TestCase):
         #         print_tensor(msg, tensor)
         # print_tensor("5. encoder layer 1 input", encoder_states[0])
         # print_tensor("6. encoder layer 2 input", encoder_states[1])
-
-
 
         # import ipdb; ipdb.set_trace()
         # print(f'after_time: {after_time}')
@@ -397,30 +416,39 @@ class IntegrationTest(unittest.TestCase):
         # print(sess.run(output_str,
         #                feed_dict={input_str: [raw_input_str], target_str: [raw_target_str]}))
 
-
     def test_bart_logits(self):
         tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
-        model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed", #"sshleifer/pegasus/aeslc",
-            scale_embedding=True, num_beams=1, #activation='relu',
+        model = BartForConditionalGeneration.from_pretrained(
+            "peg_aeslc_bart_transposed",  # "sshleifer/pegasus/aeslc",
+            scale_embedding=True,
+            num_beams=1,  # activation='relu',
         ).to(torch_device)
-        assert model.config.activation_function == 'relu'
+        assert model.config.activation_function == "relu"
         assert model.model.decoder.embed_tokens.padding_idx == tok.pad_token_id
         batch = tok([BANK_SNIPPET], return_tensors="pt").to(torch_device)
         decoder_ids = tok([raw_target_str], return_tensors="pt").to(torch_device)
-        print_tensor('target_ids', decoder_ids.input_ids)
-        output = model.forward(batch.input_ids, attention_mask=batch.attention_mask,
-                               decoder_input_ids=decoder_ids.input_ids, use_cache=False)
+        print_tensor("target_ids", decoder_ids.input_ids)
+        output = model.forward(
+            batch.input_ids,
+            attention_mask=batch.attention_mask,
+            decoder_input_ids=decoder_ids.input_ids,
+            use_cache=False,
+        )
 
-        #summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
-        #self.assertEqual(summary, "Bank Resolutions")
+        # summary = tok.batch_decode(model.generate(batch.input_ids), skip_special_tokens=False)[0]
+        # self.assertEqual(summary, "Bank Resolutions")
+
     def test_bart_generate(self):
         tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus")
-        model = BartForConditionalGeneration.from_pretrained("peg_aeslc_bart_transposed_v2", #"sshleifer/pegasus/aeslc",
-            scale_embedding=True, num_beams=1, #activation='relu',
+        model = BartForConditionalGeneration.from_pretrained(
+            "peg_aeslc_bart_transposed_v2",  # "sshleifer/pegasus/aeslc",
+            scale_embedding=True,
+            num_beams=1,  # activation='relu',
         ).to(torch_device)
-        assert model.config.activation_function == 'relu'
+        assert model.config.activation_function == "relu"
         batch = tok([BANK_SNIPPET], return_tensors="pt").to(torch_device)
         import torch
+
         assert model.model.shared(torch.zeros_like(batch.input_ids)).max().item() == 0
         generated_ids = model.generate(batch.input_ids, early_stopping=False, max_length=10)
         summary = tok.batch_decode(generated_ids, skip_special_tokens=False)[0]
@@ -429,7 +457,7 @@ class IntegrationTest(unittest.TestCase):
     def test_pegasus_config(self):
         ckpt = "peg_aeslc_bart_transposed"
         config = PegasusConfig.from_pretrained(ckpt)
-        assert config.activation_function == 'relu'
+        assert config.activation_function == "relu"
         assert config.scale_embedding
         assert config.dropout > 0
         assert config.activation_dropout == config.dropout
@@ -437,15 +465,18 @@ class IntegrationTest(unittest.TestCase):
         assert config.normalize_before
         assert not config.normalize_embedding
         assert config.num_beams == 8
-        #assert co
+        # assert co
 
 
 def print_tensor(msg, t):
     # assert t.shape
-    ndim  = len(t.shape)
-    if ndim == 1:   slice = t[:3]
-    elif ndim == 2: slice = t[:3, :3]
-    elif ndim == 3: slice = t[:3, :3, :3]
-    elif ndim == 4: slice = t[:3, :3, :3, :3]
+    ndim = len(t.shape)
+    if ndim == 1:
+        slice = t[:3]
+    elif ndim == 2:
+        slice = t[:3, :3]
+    elif ndim == 3:
+        slice = t[:3, :3, :3]
+    elif ndim == 4:
+        slice = t[:3, :3, :3, :3]
     print(f"{msg}: shape: {t.shape}, slice: {slice}")
-

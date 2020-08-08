@@ -23,7 +23,7 @@ RO_CODE = 250020
 
 
 @require_torch
-class AbstractMBartIntegrationTest(unittest.TestCase):
+class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
     checkpoint_name = None
 
@@ -43,7 +43,7 @@ class AbstractMBartIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
+class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-en-ro"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
@@ -125,7 +125,7 @@ class MBartEnroIntegrationTest(AbstractMBartIntegrationTest):
 
 
 @require_torch
-class MBartCC25IntegrationTest(AbstractMBartIntegrationTest):
+class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-cc25"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
