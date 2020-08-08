@@ -193,13 +193,28 @@ def make_registry(repo_path="Opus-MT-train/models"):
             "You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git before calling."
         )
     results = {}
-    for p in Path(repo_path).ls():
+    for p in Path(repo_path).iterdir():
         n_dash = p.name.count("-")
         if n_dash == 0:
             continue
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
+    return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
+
+
+def make_tatoeba_registry(repo_path="Tatoeba-Challenge/models"):
+    if not (Path(repo_path) / "zho-eng" / "README.md").exists():
+        raise ValueError(
+            f"repo_path:{repo_path} does not exist: "
+            "You must run: git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git before calling."
+        )
+    results = {}
+    for p in Path(repo_path).iterdir():
+        if len(p.name) != 7:
+            continue
+        lns = list(open(p / "README.md").readlines())
+        results[p.name] = _parse_readme(lns)
     return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
 
@@ -516,19 +531,6 @@ def convert(source_dir: Path, dest_dir):
     model.from_pretrained(dest_dir)  # sanity check
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model dir", default="en-de")
-    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
-    args = parser.parse_args()
-
-    source_dir = Path(args.src)
-    assert source_dir.exists(), f"Source directory {source_dir} not found"
-    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
-    convert(source_dir, dest_dir)
-
-
 def load_yaml(path):
     import yaml
 
@@ -544,3 +546,23 @@ def save_json(content: Union[Dict, List], path: str) -> None:
 def unzip(zip_path: str, dest_dir: str) -> None:
     with ZipFile(zip_path, "r") as zipObj:
         zipObj.extractall(dest_dir)
+
+
+if __name__ == "__main__":
+    """
+    To bulk convert, run
+    >>> from transformers.convert_marian_to_pytorch import make_tatoeba_registry, convert_all_sentencepiece_models
+    >>> reg = make_tatoeba_registry()
+    >>> convert_all_sentencepiece_models(model_list=reg)  # saves to marian_converted
+    (bash) aws s3 sync marian_converted s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
+    """
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument("--src", type=str, help="path to marian model dir", default="en-de")
+    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
+    args = parser.parse_args()
+
+    source_dir = Path(args.src)
+    assert source_dir.exists(), f"Source directory {source_dir} not found"
+    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
+    convert(source_dir, dest_dir)

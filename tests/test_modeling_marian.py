@@ -205,6 +205,13 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+class TestMarian_ara_eng(MarianIntegrationTest):
+    src = "ara"
+    tgt = "eng"
+    src_text = ["واحد اسمه هنري كال يريد يشوفك."]
+    expected_text = ["Someone named Henry wanted to see you."]
+
+
 class TestMarian_en_ROMANCE(MarianIntegrationTest):
     """Multilingual on target side."""
 
