@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-
+export PYTHONPATH="../":"${PYTHONPATH}"
 
 # From appendix C of paper https://arxiv.org/abs/1912.08777
 # Set --gradient_accumulation_steps  so that effective batch size is 256
