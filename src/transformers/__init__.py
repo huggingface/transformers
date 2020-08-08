@@ -594,12 +594,6 @@ if is_tf_available():
         TFOpenAIGPTPreTrainedModel,
     )
 
-    from .modeling_tf_pegasus import (
-        TF_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFPegasusLegacyModel,
-        TFPegasusPretrainedModel,
-    )
-
     from .modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,
