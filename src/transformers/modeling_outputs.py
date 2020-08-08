@@ -632,8 +632,8 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
             heads.
     """
 
-    loss: [torch.FloatTensor] = None
-    question_answering_score: Optional[torch.FloatTensor] = None
+    question_answering_score: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
     attentions_v_encoder: Optional[Tuple[torch.FloatTensor]] = None
     attentions_l_encoder: Optional[Tuple[torch.FloatTensor]] = None
     attentions_x_encoder: Optional[Tuple[torch.FloatTensor]] = None

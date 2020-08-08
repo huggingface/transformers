@@ -1125,7 +1125,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         self,
         input_ids,
         visual_feats,
-        ans,
+        ans=None,
         token_type_ids=None,
         attention_mask=None,
         output_attentions=False,
@@ -1168,7 +1168,9 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         )
 
         answer_score = self.answer_head(pooled_output)
-        loss = self.loss(answer_score.view(-1, self.num_qa_labels), ans.view(-1))
+        loss = None
+        if ans is not None:
+            loss = self.loss(answer_score.view(-1, self.num_qa_labels), ans.view(-1))
 
         if not return_dict:
             output = (
