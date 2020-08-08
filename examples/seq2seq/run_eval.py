@@ -49,7 +49,7 @@ def generate_summaries_or_translations(
     for batch in tqdm(list(chunks(examples, batch_size))):
         if "t5" in model_name:
             batch = [model.config.prefix + text for text in batch]
-        batch = tokenizer(batch, return_tensors="pt", truncation=True, padding="max_length").to(device)
+        batch = tokenizer(batch, return_tensors="pt", truncation=True, padding=True).to(device)
         input_ids, attention_mask = trim_batch(**batch, pad_token_id=tokenizer.pad_token_id)
         summaries = model.generate(
             input_ids=input_ids,

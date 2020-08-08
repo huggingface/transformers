@@ -35,8 +35,6 @@ class PegasusConfig(BartConfig):
         self,
         vocab_size=96000,
         max_position_embeddings=512,
-        max_target_len=256,
-        max_decode_len=256,
         d_model=1024,
         encoder_ffn_dim=4096,
         decoder_ffn_dim=4096,
