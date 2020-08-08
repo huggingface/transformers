@@ -29,6 +29,7 @@ if is_torch_available():
         LxmertConfig,
         LxmertModel,
         LxmertForPretraining,
+        LxmertForQuestionAnswering,
     )
     from transformers.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -247,6 +248,63 @@ class LxmertModelTester:
         )
         self.parent.assertEqual(result.pooled_output_x_encoder.shape, (self.batch_size, self.hidden_size))
 
+    def create_and_check_lxmert_for_question_answering(
+        self,
+        config,
+        input_ids,
+        visual_feats,
+        bounding_boxes,
+        token_type_ids,
+        input_mask,
+        obj_labels,
+        masked_lm_labels,
+        matched_labels,
+        ans,
+        output_attentions,
+    ):
+        model = LxmertForQuestionAnswering(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            ans,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+            output_attentions=output_attentions,
+            return_dict=True,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            ans,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            output_attentions=not output_attentions,
+            return_dict=False,
+        )
+        result = model(input_ids, (visual_feats, bounding_boxes), ans)
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            ans,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            output_attentions=output_attentions,
+        )
+        result = model(
+            input_ids,
+            (visual_feats, bounding_boxes),
+            ans,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            output_attentions=not output_attentions,
+            return_dict=True,
+        )
+
+        self.parent.assertEqual(result.question_answering_score.shape, (self.batch_size, self.num_qa_labels))
+
     def create_and_check_lxmert_for_pretraining(
         self,
         config,
@@ -371,12 +429,16 @@ class LxmertModelTest(unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lxmert_model(*config_and_inputs)
 
+    def test_lxmert_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_lxmert_for_question_answering(*config_and_inputs)
+
     def test_lxmert_pretraning(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lxmert_for_pretraining(*config_and_inputs)
 
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     for model_name in LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-    #         model = LxmertModel.from_pretrained(model_name)
-    #         self.assertIsNotNone(model)
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = LxmertModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)

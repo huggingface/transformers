@@ -28,15 +28,15 @@ from torch.nn import CrossEntropyLoss, SmoothL1Loss
 from .activations import gelu, swish
 from .configuration_lxmert import LxmertConfig
 from .file_utils import ModelOutput, add_start_docstrings
-from .modeling_outputs import LxmertModelOutput
+from .modeling_outputs import LxmertForQuestionAnsweringOutput, LxmertModelOutput
 from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
-LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "lxmert-base-uncased": "",
-}
+LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "unc-nlp/lxmert-base-uncased",
+]
 
 
 class GeLU(nn.Module):
@@ -944,6 +944,95 @@ class LxmertForPretraining(LxmertPreTrainedModel):
             question_answering_score=answer_score.detach(),
             prediction_logits=lang_prediction_scores,
             cross_relationship_score=cross_relationship_score,
+            attentions_v_encoder=attentions_v_encoder,
+            attentions_l_encoder=attentions_l_encoder,
+            attentions_x_encoder=attentions_x_encoder,
+        )
+
+
+@add_start_docstrings(
+    """Lxmert Model with a visual-answering head on top for downstream QA tasks""",
+    LXMERT_START_DOCSTRING,
+    LXMERT_INPUTS_DOCSTRING,
+)
+class LxmertForQuestionAnswering(LxmertPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        # Configuration
+        self.config = config
+        self.num_qa_labels = config.num_qa_labels
+        self.visual_loss_normalizer = config.visual_loss_normalizer
+
+        # Lxmert backbone
+        self.bert = LxmertModel(config)
+
+        self.answer_head = LxmertVisualAnswerHead(config, self.num_qa_labels)
+
+        # Weight initialization
+        self.init_weights()
+
+        # Loss function
+        self.loss = CrossEntropyLoss(ignore_index=-100)
+
+    def forward(
+        self,
+        input_ids,
+        visual_feats,
+        ans,
+        token_type_ids=None,
+        attention_mask=None,
+        output_attentions=False,
+        return_dict=False,
+        **kwargs
+    ):
+
+        (visual_feats, pos) = visual_feats
+
+        r"""
+        input_ids (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``):
+            Indices of input sequence tokens in the vocabulary.
+            To match pre-training, LXMERT input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            Indices can be obtained using :class:`transformers.LxmertTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        visual_feats: (:obj: `Tuple[torch.FloatTensor, torch.FloatTensor]`):
+            the first item in the tuple represents the actual visual features
+            (ROI pooled object features from bounding boxes using a faster-RCNN model) of shape ՝(batch_size, num_visual_features, visual_feat_dim)՝
+            and where the second item represents the normalized bounding boxes on a scale of 0~1  of shape ՝(batch_size, 4)՝.
+            These are currently not provided by the transformers library
+        ans: (``Torch.Tensor`` of shape ``(batch_size)``):
+            a one hot representation hof the correct answer `optional`
+        kwargs: (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
+
+        Returns:
+        """
+
+        (
+            (lang_output, visn_output, pooled_output),
+            x_encoder_outputs,
+            (attentions_v_encoder, attentions_l_encoder, attentions_x_encoder),
+        ) = self.bert(
+            input_ids=input_ids,
+            visual_feats=(visual_feats, pos),
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+
+        answer_score = self.answer_head(pooled_output)
+        loss = self.loss(answer_score.view(-1, self.num_qa_labels), ans.view(-1))
+
+        if not return_dict:
+            output = (
+                (answer_score.detach()),
+                (attentions_v_encoder, attentions_l_encoder, attentions_x_encoder),
+            )
+            return (loss,) + output
+
+        return LxmertForQuestionAnsweringOutput(
+            loss=loss,
+            question_answering_score=answer_score.detach(),
             attentions_v_encoder=attentions_v_encoder,
             attentions_l_encoder=attentions_l_encoder,
             attentions_x_encoder=attentions_x_encoder,

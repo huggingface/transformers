@@ -603,3 +603,37 @@ class LxmertModelOutput(ModelOutput):
     attentions_x_encoder: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_l: Optional[Tuple[torch.FloatTensor]] = None
     attentions_l_encoder: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class LxmertForQuestionAnsweringOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.LxmertForQuestionAnswering`.
+
+    Args:
+        loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.k.
+        question_answering_score: (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, n_qa_answers)`):
+            Prediction scores of question answering objective (classification).
+        attentions_l_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        attentions_v_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        attentions_x_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: [torch.FloatTensor] = None
+    question_answering_score: Optional[torch.FloatTensor] = None
+    attentions_v_encoder: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_l_encoder: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_x_encoder: Optional[Tuple[torch.FloatTensor]] = None

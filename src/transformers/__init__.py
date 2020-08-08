@@ -426,6 +426,7 @@ if is_torch_available():
         LxmertEncoder,
         LxmertXLayer,
         LxmertVisualFeatEncoder,
+        LxmertForQuestionAnswering,
     )
 
     # Optimization
