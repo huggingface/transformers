@@ -32,7 +32,6 @@ def rename_state_dict_key(k):
 
     for pegasus_name, bart_name in PATTERNS:
         k = k.replace(pegasus_name, bart_name)
-    # if k == 'embeddings.weight': return 'shared.weight'
     return k
 
 
@@ -84,7 +83,6 @@ expected_alpha = {
 def convert_pegasus_to_bart(tf_weights: dict, cfg_updates: dict) -> PegasusForConditionalGeneration:
 
     cfg = PegasusConfig(
-        # normalize_embedding=False, add_final_layer_norm=True, static_position_embeddings=True, scale_embedding=True,
         activation_function="relu",
         attention_dropout=0.1,
         dropout=0.1,
@@ -97,11 +95,9 @@ def convert_pegasus_to_bart(tf_weights: dict, cfg_updates: dict) -> PegasusForCo
     sd = bart.model.state_dict()
     mapping = {}
     for k, v in tf_weights.items():
-        # if k in IGNORE_KEYS:
-        #    continue
         new_k = rename_state_dict_key(k)
         if new_k not in sd:
-            raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k}")
+            raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
 
         if "dense" in k or "proj" in new_k:
             v = v.T
@@ -111,22 +107,19 @@ def convert_pegasus_to_bart(tf_weights: dict, cfg_updates: dict) -> PegasusForCo
     mapping["shared.weight"][cfg.pad_token_id] = torch.zeros_like(mapping["shared.weight"][cfg.pad_token_id + 1])
     mapping["encoder.embed_tokens.weight"] = mapping["shared.weight"]
     mapping["decoder.embed_tokens.weight"] = mapping["shared.weight"]
-    # mapping['decoder.embed_positions'] = sd_new
     empty_biases = {k: torch.zeros_like(v) for k, v in sd.items() if k.endswith("bias") and k not in mapping}
     mapping.update(**empty_biases)
     missing, extra = bart.model.load_state_dict(mapping, strict=False)
-    # missing_bias_keys =[k for k in missing]
     unexpected_missing = [
         k for k in missing if k not in ["encoder.embed_positions.weight", "decoder.embed_positions.weight"]
     ]
-    assert unexpected_missing == []
-    assert extra == []
+    assert unexpected_missing == [], f'no matches found for the following torch keys {unexpected_missing}'
+    assert extra == [], f'no matches found for the following tf keys {extra}'
     return bart
 
 
 def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
     init_vars = tf.train.list_variables(path)
-    names = []
     tf_weights = {}
     ignore_name = ["Adafactor", "global_step"]
     for name, shape in tqdm(init_vars, desc="converting tf checkpoint to dict"):
@@ -134,13 +127,12 @@ def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
         if skip_key:
             continue
         array = tf.train.load_variable(path, name)
-        names.append(name)
         tf_weights[name] = array
     return tf_weights
 
 
 def convert_pegasus_ckpt_to_pytorch(ckpt_path, save_dir):
-    # save tokenizer
+    # save tokenizer first
     dataset = Path(ckpt_path).parent.name
     desired_max_model_length = max_model_length[dataset]
     tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus", model_max_length=desired_max_model_length)
