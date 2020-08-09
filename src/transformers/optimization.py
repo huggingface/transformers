@@ -194,6 +194,7 @@ def get_polynomial_decay_schedule_with_warmup(
     """
 
     lr_init = optimizer.defaults["lr"]
+    assert lr_init > lr_end, f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})"
 
     def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
