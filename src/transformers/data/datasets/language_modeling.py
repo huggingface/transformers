@@ -109,12 +109,20 @@ class LineByLineWithNSPTextDataset(Dataset):
     Expected input file format has one sentence per line and blank lines between documents.
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, random_seed: int):
+    def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         logger.info("Creating features from dataset file at %s", file_path)
 
+        documents = []
         with open(file_path, encoding="utf-8") as f:
-            documents = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+            document = []
+            for line in f.readlines():
+                if line != '\n':
+                    tokens = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line.strip()))
+                    document.append(tokens)
+                else:
+                    documents.append(document)
+                    document = []
 
         self.examples = []
         for document_index in range(len(documents)):
@@ -142,14 +150,15 @@ class LineByLineWithNSPTextDataset(Dataset):
             current_length += len(segment)
             # if current length goes to the target length or reaches the end of file, start building token a and b
             if line_index == len(document) - 1 or current_length >= target_seq_length:
-                if current_chunk:
+                if current_chunk and len(current_chunk) > 1:
                     # determine whether or not token_b is next to token_a
                     is_next = random.random() < 0.5
 
                     # number of segments from current_chunk that will go into the first sentence
                     a_end = 1
-                    if len(current_chunk) >= 2:  
-                        a_end = random.randint(1, len(current_chunk) - 1)
+                    if len(current_chunk) >= 2:
+                        # leave at least one out in case is_next is True
+                        a_end = random.randint(1, len(current_chunk) - 2) if len(current_chunk) > 2 else 1
                     tokens_a = []
                     for j in range(a_end):
                         tokens_a.extend(current_chunk[j])
@@ -163,26 +172,29 @@ class LineByLineWithNSPTextDataset(Dataset):
                         # use a negative (random) sample of data
                         numbers = list(range(len(documents)))
                         numbers.remove(document_index)
-                        neg_doc_index = random.choice(numbers)
-                        neg_doc = documents[neg_doc_index]
+                        len_neg_doc = 0
+                        while len_neg_doc < 1:
+                            neg_doc = documents[random.choice(numbers)]
+                            len_neg_doc = len(neg_doc)
                         # add a segment to the negative chunk
-                        neg_segment  = neg_doc[random.randint(range(len(neg_doc)))]
-                        tokens_b = [neg_segment]
+                        idx = random.randint(1, len(neg_doc) - 1) if len(neg_doc) > 1 else 0
+                        tokens_b  = neg_doc[idx]
 
-                        # truncate if too long 
+                    # truncate if too long 
                     def truncate_seq_pair(tokens_a, tokens_b, max_num_tokens):
                         """Truncates a pair of sequences to a maximum sequence length."""
                         while True:
                             total_length = len(tokens_a) + len(tokens_b)
-                            if total_length > max_num_tokens:
-                                trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
-                                assert len(trunc_tokens) >= 1
-                                # We want to sometimes truncate from the front and sometimes from the
-                                # back to add more randomness and avoid biases.
-                                if random.random() < 0.5:
-                                    del trunc_tokens[0]
-                                else:
-                                    trunc_tokens.pop()
+                            if total_length <= max_num_tokens:
+                                break
+                            trunc_tokens = tokens_a if len(tokens_a) > len(tokens_b) else tokens_b
+                            assert len(trunc_tokens) >= 1
+                            # We want to sometimes truncate from the front and sometimes from the
+                            # back to add more randomness and avoid biases.
+                            if random.random() < 0.5:
+                                del trunc_tokens[0]
+                            else:
+                                trunc_tokens.pop()
 
                     truncate_seq_pair(tokens_a, tokens_b, max_num_tokens)
 
