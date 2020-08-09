@@ -1,3 +1,7 @@
+---
+language: tr
+---
+
 ## What is this
 
 A NER model for Turkish with 48 categories trained on the dataset [Shrinked TWNERTC Turkish NER Data](https://www.kaggle.com/behcetsenturk/shrinked-twnertc-turkish-ner-data-by-kuzgunlar) by Behçet Şentürk, which is itself a filtered and cleaned version of the following automatically labeled dataset:
