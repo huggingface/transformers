@@ -169,7 +169,9 @@ class NERTransformer(BaseTransformer):
             help="Path to a file containing all labels. If not specified, CoNLL-2003 labels are used.",
         )
         parser.add_argument(
-            "--gpus", default=0, type=int,
+            "--gpus",
+            default=0,
+            type=int,
             help="The number of GPUs allocated for this, it is by default 0 meaning none",
         )
 
