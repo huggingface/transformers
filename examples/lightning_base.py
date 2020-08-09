@@ -25,6 +25,7 @@ from transformers.optimization import (
     get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
     get_linear_schedule_with_warmup,
+    get_polynomial_decay_schedule_with_warmup,
 )
 
 
@@ -48,7 +49,7 @@ arg_to_scheduler = {
     "linear": get_linear_schedule_with_warmup,
     "cosine": get_cosine_schedule_with_warmup,
     "cosine_w_restarts": get_cosine_with_hard_restarts_schedule_with_warmup,
-    # polynomial': '',                       # TODO
+    "polynomial": get_polynomial_decay_schedule_with_warmup,
     # '': get_constant_schedule,             # not supported for now
     # '': get_constant_schedule_with_warmup, # not supported for now
 }
