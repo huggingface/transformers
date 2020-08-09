@@ -164,4 +164,4 @@ class ScheduleInitTest(unittest.TestCase):
             self.optimizer, num_warmup_steps=2, num_training_steps=10, power=2.0, lr_end=1e-7
         )
         lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
-        self.assertListAlmostEqual([l[0] for l in lrs], [l[0] for l in lrs_2], tol=1e-2)
+        self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
