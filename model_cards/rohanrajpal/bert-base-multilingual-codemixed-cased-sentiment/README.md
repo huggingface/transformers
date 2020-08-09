@@ -1,5 +1,7 @@
 ---
-language: "multilingual"
+language:
+- hi
+- en
 tags:
 - hi
 - en
