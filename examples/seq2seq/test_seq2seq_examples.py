@@ -329,7 +329,6 @@ def test_finetune_extra_model_args():
     assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
 
 
-@unittest.skip("Conflict with different add_argparse_args - needs a serious sync")
 def test_finetune_lr_shedulers(capsys):
     args_d: dict = CHEAP_ARGS.copy()
 
