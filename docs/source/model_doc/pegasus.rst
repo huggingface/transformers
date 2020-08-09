@@ -19,8 +19,12 @@ The Authors' code can be found `here <https://github.com/google-research/pegasus
 
 Checkpoints
 ~~~~~~~~~~~
-The finetuned checkpoints can be found `here <https://huggingface.co/models?search=pegasus>`_
-All but ``pegasus-large`` are finetuned from ``pegasus-large``.
+The `checkpoints <https://huggingface.co/models?search=pegasus>`_ all checkpoints are finetuned for summarization, besides ``pegasus-large``, whence the other checkpoints are finetuned.
+- Each checkpoint is 2.2 GB on disk and 568M parameters.
+- FP16 is not supported (help/ideas on this appreciated!).
+- Summarizing xsum in fp32 takes about 400ms/sample, with default parameters.
+- For XSUM, The paper reports rouge1,rouge2, rougeL of paper: 47.21/24.56/39.25. As of Aug 9, this port scores 46.91/24.34/39.1.
+The gap is likely because of different alpha/length_penalty implementations in beam search.
 
 
 Implementation Notes
@@ -28,17 +32,17 @@ Implementation Notes
 
 - All models are transformer encoder-decoders with 16 layers in each component.
 - The implementation is completely inherited from ``BartForConditionalGeneration``
-- Same as bart, besides...
-    - static (sinusoid) positional embeddings (``PegasusConfig.static_position_embeddings=True``)
-    - no layernorm_embedding (``PegasusConfig.normalize_embedding=False``)
+- Some key configuration differences:
+
+    - static, sinusoidal position embeddings
+    - no ``layernorm_embedding`` (``PegasusConfig.normalize_embedding=False``)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
     - ``num_beams=8``
-    - 16 layer encoder, decoder.
 - All pretrained pegasus checkpoints are the same besides three attributes: ``tokenizer.model_max_length`` (max input size),  ``max_length`` (max num tokens to generate) and ``length_penalty``
 - Code to convert checkpoints trained in the author's `repo <https://github.com/google-research/pegasus>`_ can be found in ``convert_pegasus_tf_to_pytorch.py``
-- Each checkpoint is about 2.2 GB on disk.
-- FP16 is not supported (help/ideas on this appreciated!).
-- Summarizing xsum in fp32 takes about 400ms/Sample.
+
+
+
 
 
 Usage Example
@@ -58,6 +62,16 @@ Usage Example
     translated = model.generate(**batch)
     tgt_text = tokenizer.decode_batch(t, skip_special_tokens=True)
 
+PegasusForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The model implementation inherits completely from ``BartForConditionalGeneration``
+Available models are listed at `Model List <https://huggingface.co/models?search=pegasus>`__
+This class inherits all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
+
+.. autoclass:: transformers.PegasusForConditionalGeneration
+    :members: forward
+
 PegasusConfig
 ~~~~~~~~~~~~~~~~~~~
 .. autoclass:: transformers.PegasusConfig
@@ -66,17 +80,10 @@ PegasusConfig
 
 PegasusTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+warning: ``add_tokens`` does not work at the moment.
 
 .. autoclass:: transformers.PegasusTokenizer
-    :members:
+    :members: __call__, prepare_seq2seq_batch
 
 
-PegasusForConditionalGeneration
-~~~~~~~~~~~~~
 
-The model implementation inherits completely from ``BartForConditionalGeneration``
-Available models are listed at `Model List <https://huggingface.co/models?search=pegasus>`__
-This class inherits all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
-
-.. autoclass:: transformers.PegasusForConditionalGeneration
-    :members:

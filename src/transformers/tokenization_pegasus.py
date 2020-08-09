@@ -45,47 +45,6 @@ class PegasusTokenizer(ReformerTokenizer):
             token = self.sp_model.IdToPiece(index - self.offset)
         return token
 
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        pad_to_max_length: bool = True,
-        return_tensors: str = "pt",
-        truncation_strategy="only_first",
-        padding="longest",
-    ) -> BatchEncoding:
-        """Prepare model inputs for translation. For best performance, translate one sentence at a time.
-        Arguments:
-            src_texts: list of src language texts
-            tgt_texts: list of tgt language texts
-            max_length: (None) defer to config (1024 for mbart-large-en-ro)
-            pad_to_max_length: (bool)
-            return_tensors: (str) default "pt" returns pytorch tensors, pass None to return lists.
-
-        Returns:
-            BatchEncoding: with keys [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]
-            all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
-            If no tgt_text is specified, the only keys will be input_ids and attention_mask.
-        """
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-        tokenizer_kwargs = dict(
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            pad_to_max_length=pad_to_max_length,
-            truncation_strategy=truncation_strategy,
-            padding=padding,
-        )
-        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
-        if tgt_texts is None:
-            return model_inputs
-        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
-        return model_inputs
-
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model) + self.offset
@@ -122,3 +81,44 @@ class PegasusTokenizer(ReformerTokenizer):
             return token_ids_0 + [self.eos_token_id]
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
+
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        pad_to_max_length: bool = True,
+        return_tensors: str = "pt",
+        truncation=True,
+        padding="longest",
+    ) -> BatchEncoding:
+        """Prepare model inputs for translation. For best performance, translate one sentence at a time.
+        Arguments:
+            src_texts: list of src language texts
+            tgt_texts: list of tgt language texts
+            max_length: (None) defer to config (1024 for mbart-large-en-ro)
+            pad_to_max_length: (bool)
+            return_tensors: (str) default "pt" returns pytorch tensors, pass None to return lists.
+
+        Returns:
+            BatchEncoding: with keys [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]
+            all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
+            If no tgt_text is specified, the only keys will be input_ids and attention_mask.
+        """
+        if "" in src_texts:
+            raise ValueError(f"found empty string in src_texts: {src_texts}")
+        tokenizer_kwargs = dict(
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            pad_to_max_length=pad_to_max_length,
+            truncation=truncation,
+            padding=padding,
+        )
+        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
+        if tgt_texts is None:
+            return model_inputs
+        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
+        return model_inputs
