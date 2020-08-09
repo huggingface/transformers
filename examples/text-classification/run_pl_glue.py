@@ -155,7 +155,10 @@ class GLUETransformer(BaseTransformer):
         parser.add_argument(
             "--task", default="", type=str, required=True, help="The GLUE task to run",
         )
-
+        parser.add_argument(
+            "--gpus", default=0, type=int,
+            help="The number of GPUs allocated for this, it is by default 0 meaning none",
+        )
         parser.add_argument(
             "--data_dir",
             default=None,
