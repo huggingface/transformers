@@ -25,7 +25,6 @@ try:
     from .initialization_utils import init_student, copy_layers
     from .utils import (
         use_task_specific_params,
-        MBartDataset,
         pickle_load,
         freeze_params,
         assert_all_frozen,
@@ -39,7 +38,6 @@ except ImportError:
     from initialization_utils import init_student, copy_layers
     from utils import (
         use_task_specific_params,
-        MBartDataset,
         pickle_load,
         freeze_params,
         assert_all_frozen,
@@ -263,7 +261,6 @@ def add_distill_args(parser):
     parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
     parser.add_argument("--alpha_ce", default=0.8, type=float)
     parser.add_argument("--alpha_mlm", default=0.2, type=float)
-    # parser.add_argument("--alpha_cos", default=0.0, type=float)
     parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
     parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
     parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
@@ -296,11 +293,6 @@ class BartTranslationDistiller(BartSummarizationDistiller):
         TranslationModule.add_model_specific_args(parser, root_dir)
         add_distill_args(parser)
         return parser
-
-    def get_dataset(self, type_path) -> MBartDataset:
-        n_obs = self.n_obs[type_path]
-        dataset = MBartDataset(self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs)
-        return dataset
 
 
 class T5SummarizationDistiller(BartSummarizationDistiller):
