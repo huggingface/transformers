@@ -113,8 +113,8 @@ def convert_pegasus_to_bart(tf_weights: dict, cfg_updates: dict) -> PegasusForCo
     unexpected_missing = [
         k for k in missing if k not in ["encoder.embed_positions.weight", "decoder.embed_positions.weight"]
     ]
-    assert unexpected_missing == [], f'no matches found for the following torch keys {unexpected_missing}'
-    assert extra == [], f'no matches found for the following tf keys {extra}'
+    assert unexpected_missing == [], f"no matches found for the following torch keys {unexpected_missing}"
+    assert extra == [], f"no matches found for the following tf keys {extra}"
     return bart
 
 
