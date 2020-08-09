@@ -7,22 +7,6 @@ from .configuration_bart import BartConfig
 
 logger = logging.getLogger(__name__)
 
-PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "pegasus-large": "placeholder",
-    "pegasus-large-cnn_dailymail": "placeholder",
-    "pegasus-large-newsroom": "placeholder",
-    "pegasus-large-aeslc": "placeholder",
-    "pegasus-large-big_patent": "placeholder",
-    "pegasus-large-gigaword": "placeholder",
-    "pegasus-large-reddit_tifu_long": "placeholder",
-    "pegasus-large-wikihow_all": "placeholder",
-    "pegasus-large-xsum": "placeholder",
-    "pegasus-large-arxiv": "placeholder",
-    "pegasus-large-pubmed": "placeholder",
-    "pegasus-large-multi_news": "placeholder",
-    "pegasus-large-billsum": "placeholder",
-}
-
 
 class PegasusConfig(BartConfig):
     r"""
@@ -33,7 +17,7 @@ class PegasusConfig(BartConfig):
 
     def __init__(
         self,
-        vocab_size=96000,
+        vocab_size=96103,
         max_position_embeddings=512,
         d_model=1024,
         encoder_ffn_dim=4096,
