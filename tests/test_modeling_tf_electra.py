@@ -202,6 +202,7 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
             TFElectraForTokenClassification,
             TFElectraForMultipleChoice,
             TFElectraForSequenceClassification,
+            TFElectraForQuestionAnswering,
         )
         if is_tf_available()
         else ()

@@ -265,6 +265,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         (
             TFBertModel,
             TFBertForMaskedLM,
+            TFBertLMHeadModel,
             TFBertForNextSentencePrediction,
             TFBertForPreTraining,
             TFBertForQuestionAnswering,
