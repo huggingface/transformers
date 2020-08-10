@@ -176,6 +176,7 @@ class BertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
+        config.add_cross_attention = True
         model = BertModel(config)
         model.to(torch_device)
         model.eval()
@@ -235,6 +236,7 @@ class BertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
+        config.add_cross_attention = True
         model = BertLMHeadModel(config=config)
         model.to(torch_device)
         model.eval()
