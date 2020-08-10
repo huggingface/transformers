@@ -61,7 +61,7 @@ T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
 ####################################################
-def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
+def load_tf_weights_in_t5(model, config, tf_checkpoint_path, is_tied=True):
     """ Load tf checkpoints in a pytorch model.
     """
     try:
@@ -102,7 +102,12 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
             tf_weights.pop(txt_name, None)
             continue
         pointer = model
+        enc_pointer = model
         array = tf_weights[txt_name]
+        if is_tied:
+            no_encoder = False
+        else:
+            no_encoder = True
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
                 scope_names = re.split(r"_(\d+)", m_name)
@@ -110,23 +115,57 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
                 scope_names = [m_name]
             if scope_names[0] in ["kernel", "scale", "embedding"]:
                 pointer = getattr(pointer, "weight")
-            # elif scope_names[0] == 'scale':
-            #     pointer = getattr(pointer, 'weight')
-            # elif scope_names[0] == 'output_bias' or scope_names[0] == 'beta':
-            #     pointer = getattr(pointer, 'bias')
-            # elif scope_names[0] == 'squad':
-            #     pointer = getattr(pointer, 'classifier')
+                if not no_encoder:
+                    enc_pointer = getattr(enc_pointer, "weight")
+            elif scope_names[0] == "self_attention":
+                pointer = getattr(pointer, "layer")
+                pointer = pointer[0]
+                if not no_encoder:
+                    enc_pointer = getattr(enc_pointer, "layer")
+                    enc_pointer = enc_pointer[0]
+            elif scope_names[0] == "enc_dec_attention":
+                pointer = getattr(pointer, "layer")
+                pointer = pointer[1]
+                no_encoder = True
+            elif scope_names[0] == "dense_relu_dense":
+                pointer = getattr(pointer, "layer")
+                pointer = pointer[2]
+                if not no_encoder:
+                    enc_pointer = getattr(enc_pointer, "layer")
+                    enc_pointer = enc_pointer[1]
+            elif scope_names[0] == "rms_norm":
+                if hasattr(pointer, "layer_norm"):
+                    pointer = getattr(pointer, "layer_norm")
+                    if not no_encoder:
+                        enc_pointer = getattr(enc_pointer, "layer_norm")
+                elif hasattr(pointer, "final_layer_norm"):
+                    pointer = getattr(pointer, "final_layer_norm")
+                    if not no_encoder:
+                        enc_pointer = getattr(enc_pointer, "final_layer_norm")
+            elif scope_names[0] == "decoder" and name[1] == "logits":
+                continue
+            elif scope_names[0] == "logits":
+                pointer = getattr(pointer, "lm_head")
+                no_encoder = True
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
+                    if scope_names[0] == "decoder":
+                        enc_pointer = getattr(model, "encoder")
+                    elif not no_encoder:
+                        enc_pointer = getattr(enc_pointer, scope_names[0])
                 except AttributeError:
                     logger.info("Skipping {}".format("/".join(name)))
                     continue
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
                 pointer = pointer[num]
+                if not no_encoder:
+                    enc_pointer = enc_pointer[num]
         if scope_names[0] not in ["kernel", "scale", "embedding"]:
             pointer = getattr(pointer, "weight")
+            if not no_encoder:
+                enc_pointer = getattr(enc_pointer, "weight")
         if scope_names[0] != "embedding":
             logger.info("Transposing numpy weight of shape {} for {}".format(array.shape, name))
             array = np.transpose(array)
@@ -139,6 +178,8 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
             raise
         logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array.astype(np.float32))
+        if not no_encoder:
+            enc_pointer.data = torch.from_numpy(array.astype(np.float32))
         tf_weights.pop(txt_name, None)
 
     logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
@@ -1049,6 +1090,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         self.init_weights()
+
+    def tie_weights(self):
+        # for COVID-19 3B input & output
+        # embeddings don't seem to be shared
+        # word embeddings are not tied in Reformer
+        pass
 
     def get_input_embeddings(self):
         return self.shared
