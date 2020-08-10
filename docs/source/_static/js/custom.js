@@ -98,13 +98,14 @@ function addColabLink() {
     const pageName = parts[parts.length - 1].split(".")[0];
 
     if (hasNotebook.includes(pageName)) {
+        const baseURL = "https://colab.research.google.com/github/huggingface/notebooks/blob/master/transformers_doc/"
         const linksColab = `
         <div class="colab-dropdown">
             <img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg">
             <div class="colab-dropdown-content">
-                <button onclick=" window.open('https://colab.research.google.com/github/sgugger/test_nbs/blob/master/${pageName}.ipynb')">Mixed</button>
-                <button onclick=" window.open('https://colab.research.google.com/github/sgugger/test_nbs/blob/master/pytorch/${pageName}.ipynb')">PyTorch</button>
-                <button onclick=" window.open('https://colab.research.google.com/github/sgugger/test_nbs/blob/master/tensorflow/${pageName}.ipynb')">TensorFlow</button>
+                <button onclick=" window.open('${baseURL}${pageName}.ipynb')">Mixed</button>
+                <button onclick=" window.open('${baseURL}pytorch/${pageName}.ipynb')">PyTorch</button>
+                <button onclick=" window.open('${baseURL}tensorflow/${pageName}.ipynb')">TensorFlow</button>
             </div>
         </div>`
         const leftMenu = document.querySelector(".wy-breadcrumbs-aside")
