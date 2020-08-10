@@ -23,7 +23,7 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "lxmert-base-uncased": "",
+    "unc-nlp/lxmert-base-uncased": "",
 }
 
 
