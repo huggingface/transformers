@@ -115,6 +115,10 @@ class ScheduleInitTest(unittest.TestCase):
                 {**common_kwargs, "num_cycles": 2},
                 [5.0, 10.0, 8.53, 5.0, 1.46, 10.0, 8.53, 5.0, 1.46, 0.0],
             ),
+            get_polynomial_decay_schedule_with_warmup: (
+                {**common_kwargs, "power": 2.0, "lr_end": 1e-7},
+                [5.0, 7.656, 5.625, 3.906, 2.5, 1.406, 0.625, 0.1563, 1e-05, 0.1563],
+            ),
         }
 
         for scheduler_func, data in scheds.items():
@@ -135,18 +139,3 @@ class ScheduleInitTest(unittest.TestCase):
             self.assertListEqual(
                 [l[0] for l in lrs_1], [l[0] for l in lrs_2], msg=f"failed for {scheduler_func} in save and reload"
             )
-
-    def test_warmup_polynomial_decay_scheduler(self):
-        scheduler = get_polynomial_decay_schedule_with_warmup(
-            self.optimizer, num_warmup_steps=2, num_training_steps=10, power=2.0, lr_end=1e-7
-        )
-        lrs = unwrap_schedule(scheduler, self.num_steps)
-        expected_learning_rates = [5.0, 7.656, 5.625, 3.906, 2.5, 1.406, 0.625, 0.1563, 1e-05, 0.1563]
-        self.assertEqual(len(lrs[0]), 1)
-        self.assertListAlmostEqual([l[0] for l in lrs], expected_learning_rates, tol=1e-2)
-
-        scheduler = get_polynomial_decay_schedule_with_warmup(
-            self.optimizer, num_warmup_steps=2, num_training_steps=10, power=2.0, lr_end=1e-7
-        )
-        lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
-        self.assertListEqual([l[0] for l in lrs], [l[0] for l in lrs_2])
