@@ -76,7 +76,7 @@ class LxmertConfig(PretrainedConfig):
             visual_loss_normalizer (:obj:`float`, optional, defaults to 1/15):
                 This represents the scaling factor in which each visual loss is multiplied by if during pretraining,
                 one decided to train with multiple vision-based loss objectives.
-            num_qa_labels (:obj:`int`, optional, defaults to 3129):
+            num_qa_labels (:obj:`int`, optional, defaults to 9500):
                 This represents the total number of different question answering (QA) labels there are. If using more than one dataset with QA,
                 the user will need to account for the total number of labels that all of the datasets have in total.
             num_object_labels (:obj:`int`, optional, defaults to 1600):
@@ -116,7 +116,7 @@ class LxmertConfig(PretrainedConfig):
         hidden_size=768,
         num_attention_heads=12,
         num_labels=2,
-        num_qa_labels=3129,
+        num_qa_labels=9500,
         num_object_labels=1600,
         num_attr_labels=400,
         intermediate_size=3072,

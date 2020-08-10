@@ -338,7 +338,7 @@ class LxmertOutput(nn.Module):
 class LxmertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = LxmertAttention(config)
+        self.attention = LxmertSelfattLayer(config)
         self.intermediate = LxmertIntermediate(config)
         self.output = LxmertOutput(config)
 
