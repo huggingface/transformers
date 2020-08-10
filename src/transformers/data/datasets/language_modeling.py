@@ -126,7 +126,6 @@ class LineByLineWithSOPTextDataset(Dataset):
                             article_open = True
                         elif '</doc>' in line:
                             article_open = False
-                            print(article_lines[1:])
                             document = [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(line)) 
                                         for line in article_lines[1:] if (len(line) > 0 and not line.isspace())]
 
