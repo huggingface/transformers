@@ -13,6 +13,14 @@ jobs:
     runs-on: self-hosted
     steps:
     - uses: actions/checkout@v2
+
+    - name: Loading cache.
+      uses: actions/cache@v2
+      id: cache
+      with:
+        path: .env
+        key: v0-slow_tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+
     - name: Python version
       run: |
         which python
@@ -22,6 +30,7 @@ jobs:
       run: pwd
     - run: nvidia-smi
     - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+      if: steps.cache.outputs.cache-hit != 'true'
       run: |
         python -m venv .env
         source .env/bin/activate
@@ -32,7 +41,7 @@ jobs:
       run: |
         source .env/bin/activate
         pip install --upgrade pip
-        pip install torch!=1.6.0 --no-cache-dir
+        pip install torch!=1.6.0
         pip install .[sklearn,testing]
 
     - name: Are GPUs recognized by our DL frameworks
