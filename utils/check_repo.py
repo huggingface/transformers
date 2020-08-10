@@ -18,12 +18,6 @@ IGNORE_NON_TESTED = [
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
-    "TFAlbertForMultipleChoice",  # TODO: fix
-    "TFAlbertForTokenClassification",  # TODO: fix
-    "TFBertLMHeadModel",  # TODO: fix
-    "TFElectraForMultipleChoice",  # Fix is in #6284
-    "TFElectraForQuestionAnswering",  # TODO: fix
-    "TFElectraForSequenceClassification",  # Fix is in #6284
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
 ]
