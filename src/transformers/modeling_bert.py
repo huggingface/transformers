@@ -702,7 +702,7 @@ class BertModel(BertPreTrainedModel):
     To behave as an decoder the model needs to be initialized with the
     :obj:`is_decoder` argument of the configuration set to :obj:`True`.
     To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`;an
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an
     :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _`Attention is all you need`:
