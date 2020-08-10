@@ -176,7 +176,6 @@ class EncoderDecoderModel(PreTrainedModel):
                     decoder_config.add_cross_attention = True
 
                 kwargs_decoder["config"] = decoder_config
-                # make sure that cross-attention layers are added
 
             if kwargs_decoder["config"].is_decoder is False or decoder_config.add_cross_attention is False:
                 logger.warning(
