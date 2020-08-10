@@ -117,7 +117,7 @@ class ScheduleInitTest(unittest.TestCase):
             ),
             get_polynomial_decay_schedule_with_warmup: (
                 {**common_kwargs, "power": 2.0, "lr_end": 1e-7},
-                [5.0, 7.656, 5.625, 3.906, 2.5, 1.406, 0.625, 0.1563, 1e-05, 0.1563],
+                [5.0, 10.0, 7.656, 5.625, 3.906, 2.5, 1.406, 0.625, 0.156, 1e-07],
             ),
         }
 
