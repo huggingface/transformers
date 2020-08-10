@@ -862,8 +862,8 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
-            logger.warning(
-                "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for "
+            logger.info(
+                "If you want to use `TFBertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
