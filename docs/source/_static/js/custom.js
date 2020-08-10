@@ -98,13 +98,17 @@ function addColabLink() {
     const pageName = parts[parts.length - 1].split(".")[0];
 
     if (hasNotebook.includes(pageName)) {
-        const linkColab = `
-        <a 
-            href="https://colab.research.google.com/github/sgugger/test_nbs/blob/master/${pageName}.ipynb">
+        const linksColab = `
+        <div class="colab-dropdown">
             <img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg">
-        </a>`
+            <div class="colab-dropdown-content">
+                <button onclick=" window.open('https://colab.research.google.com/github/sgugger/test_nbs/blob/master/${pageName}.ipynb')">Mixed</button>
+                <button onclick=" window.open('https://colab.research.google.com/github/sgugger/test_nbs/blob/master/pytorch/${pageName}.ipynb')">PyTorch</button>
+                <button onclick=" window.open('https://colab.research.google.com/github/sgugger/test_nbs/blob/master/tensorflow/${pageName}.ipynb')">TensorFlow</button>
+            </div>
+        </div>`
         const leftMenu = document.querySelector(".wy-breadcrumbs-aside")
-        leftMenu.innerHTML = linkColab + '\n' + leftMenu.innerHTML
+        leftMenu.innerHTML = linksColab + '\n' + leftMenu.innerHTML
     }
 }
 
