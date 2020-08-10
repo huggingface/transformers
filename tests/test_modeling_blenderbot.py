@@ -159,7 +159,7 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [268, 343, 2])  
-      
+
   @torch.no_grad()
   @slow
   def test_generation_from_short_input_same_as_parlai_3B(self):
