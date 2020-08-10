@@ -438,6 +438,7 @@ if is_torch_available():
         DataCollator,
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorWithPadding,
     )
     from .data.datasets import (
         GlueDataset,
