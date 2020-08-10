@@ -24,13 +24,13 @@ import os
 import warnings
 from collections import UserDict
 from enum import Enum
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Text, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
-import jsonpickle
 import numpy as np
 from tokenizers import AddedToken
 from tokenizers import Encoding as EncodingFast
 
+from .file_io import json_pickle_dump, json_pickle_load
 from .file_utils import (
     add_end_docstrings,
     cached_path,
@@ -1510,24 +1510,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             else:
                 logger.info("loading file {} from cache at {}".format(file_path, resolved_vocab_files[file_id]))
 
-        def decode_pickled_json(json_obj: Text) -> Dict[Text, Any]:
-            """
-            Decode a pickled JSON object into a dictionary.
-
-            Args:
-                json_obj (:obj:`Text`): A pickled JSON object read from file.
-
-            Returns:
-                :obj:`Dict[Text, Any]`: A dictionary with JSON values.
-            """
-            return jsonpickle.decode(json_obj)
-
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
         if tokenizer_config_file is not None:
-            with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
-                init_kwargs = decode_pickled_json(tokenizer_config_handle.read())
+            init_kwargs = json_pickle_load(tokenizer_config_file)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -1567,17 +1554,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         if special_tokens_map_file is not None:
-            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = decode_pickled_json(special_tokens_map_handle.read())
-
+            special_tokens_map = json_pickle_load(special_tokens_map_file)
             for key, value in special_tokens_map.items():
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
         special_tokens = tokenizer.all_special_tokens
         if added_tokens_file is not None:
-            with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                added_tok_encoder = decode_pickled_json(added_tokens_handle.read())
+            added_tok_encoder = json_pickle_load(added_tokens_file)
             # Sort added tokens by index
             added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
 
@@ -1633,28 +1617,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
-        def encode_json_values(values: Dict[Text, Any]) -> Text:
-            """
-            Encode a dictionary with JSON values into a pickled object.
-
-            Args:
-                values (:obj:`Dict[Text, Any]`): A dictionary with JSON values.
-
-            Returns:
-                :obj:`Text`: The pickled object to save.
-            """
-            return jsonpickle.encode(values)
-
-        with open(tokenizer_config_file, "w", encoding="utf-8") as f:
-            f.write(encode_json_values(tokenizer_config))
-
-        with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            f.write(encode_json_values(self.special_tokens_map_extended))
+        # save tokenizer_config
+        json_pickle_dump(tokenizer_config_file, tokenizer_config)
+        # save special_tokens_map
+        json_pickle_dump(special_tokens_map_file, self.special_tokens_map_extended)
 
         added_vocab = self.get_added_vocab()
         if added_vocab:
-            with open(added_tokens_file, "w", encoding="utf-8") as f:
-                f.write(encode_json_values(added_vocab))
+            # save added_tokens
+            json_pickle_dump(added_tokens_file, added_vocab)
 
         vocab_files = self.save_vocabulary(save_directory)
 
