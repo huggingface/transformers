@@ -159,7 +159,71 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [268, 343, 2])  
-
+    
+  @torch.no_grad() 
+  def test_forward_3B_same_as_parlai(self):
+      torch.manual_seed(0)
+      config = BlenderbotConfig(
+              d_model=16,
+              vocab_size=50,
+              encoder_attention_heads=2,
+              decoder_attention_heads=2,
+              encoder_layers=2,
+              decoder_layers=2,
+              encoder_ffn_dim=4,
+              decoder_ffn_dim=4,
+              variant='prelayernorm',
+              scale_embedding=True,
+              normalize_embedding=True,
+              max_position_embeddings=50,
+              activation_function='gelu',
+              normalize_before=False,
+              static_position_embeddings=True,
+              dropout=0.1
+          )
+      input_ids = torch.tensor(
+                  [
+                      [
+                          49,
+                          12,
+                          38,
+                          24,
+                          13,
+                          25,
+                          10,
+                          28,
+                          37,
+                          7,
+                          44,
+                          7,
+                          2,
+                          3
+                      ]
+                  ],
+                  dtype=torch.long,
+                  device=torch_device,
+              )
+      model = BlenderbotForConditionalGeneration(config)
+      model.eval()
+      
+      # output from parlai model after copying the same blenderbot weight in parlai and setting a manual_seed
+      expected_logits = torch.tensor([[[-1.0000e+20,  0.0000e+00,  2.6462e-02,  9.7588e-02, -5.6271e-02,
+                                      -1.1409e-01, -3.3294e-02, -1.0423e-01, -4.8363e-02, -1.2610e-01,
+                                      -3.4125e-02, -2.9841e-02,  8.6975e-02,  2.5547e-02,  2.0425e-03,
+                                      -5.9153e-02,  1.4392e-02, -1.4324e-02,  1.2774e-01, -5.3284e-02,
+                                      -1.5876e-02,  9.1752e-02, -3.0166e-02, -3.1726e-02,  9.9600e-02,
+                                      1.0991e-01,  8.0946e-03,  3.5396e-03, -2.5164e-02, -4.0277e-02,
+                                      -3.6360e-02,  7.5158e-02,  4.3379e-02,  1.3465e-01, -1.3209e-01,
+                                      -1.1706e-01,  5.6180e-02, -3.6239e-02,  6.6490e-02,  4.9879e-02,
+                                      1.0979e-02, -2.7895e-02, -8.4691e-02,  4.5857e-02,  2.0233e-02,
+                                      9.2533e-02, -6.4260e-02, -5.0988e-02, -4.0852e-02,  1.9867e-02]]])
+      
+      
+      decoder_inputs = torch.LongTensor([1]).expand(1,1).to(torch_device)
+      logits = model(input_ids, decoder_input_ids=decoder_inputs)['logits']
+      assert torch.allclose(expected_logits, logits, atol=1e-4)
+      
+      
   @torch.no_grad()
   @slow
   def test_generation_from_short_input_same_as_parlai_3B(self):
@@ -231,7 +295,69 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [1384])  
-       
+  
+  @torch.no_grad() 
+  def test_forward_90M_same_as_parlai(self):
+      torch.manual_seed(0)
+      config = BlenderbotConfig(
+              d_model=16,
+              vocab_size=50,
+              encoder_attention_heads=2,
+              decoder_attention_heads=2,
+              encoder_layers=2,
+              decoder_layers=2,
+              encoder_ffn_dim=4,
+              decoder_ffn_dim=4,
+              variant='xlm',
+              scale_embedding=True,
+              normalize_embedding=True,
+              max_position_embeddings=50,
+              activation_function='gelu',
+              normalize_before=False,
+              static_position_embeddings=False,
+              dropout=0.1
+          )
+      input_ids = torch.tensor(
+                  [
+                      [
+                          49,
+                          12,
+                          38,
+                          24,
+                          13,
+                          25,
+                          10,
+                          28,
+                          37,
+                          7,
+                          44,
+                          7,
+                          2,
+                          3
+                      ]
+                  ],
+                  dtype=torch.long,
+                  device=torch_device,
+              )
+      model = BlenderbotForConditionalGeneration(config)
+      model.eval()
+      model.to(torch_device)
+      # output from parlai model after copying the same blenderbot weight in parlai and setting a manual_seed
+      expected_logits = torch.tensor([[[-1.0000e+20,  0.0000e+00, -8.3858e-03,  5.3556e-02, -6.7345e-02,
+                                      -1.1861e-01, -4.7368e-02, -8.6005e-02, -6.6010e-02, -1.1263e-01,
+                                      -1.2138e-02, -5.0588e-02,  1.1818e-01,  3.8662e-03,  2.3491e-02,
+                                      -1.0256e-01,  1.9944e-02, -2.8050e-02,  1.2771e-01, -5.6630e-02,
+                                      -3.7779e-02,  6.9132e-02, -8.2159e-04, -6.3877e-02,  1.1591e-01,
+                                      9.1973e-02,  3.8424e-03,  5.4423e-02, -3.4574e-02,  3.1875e-02,
+                                      -3.2030e-02,  6.0317e-02,  6.8307e-02,  1.3964e-01, -1.2045e-01,
+                                      -1.1150e-01,  7.3168e-02, -4.0991e-02,  3.8692e-04,  5.9230e-02,
+                                      -2.0674e-02, -3.2628e-02, -9.5583e-02,  6.5901e-02,  5.8617e-02,
+                                      9.2186e-02, -4.5951e-02, -3.7279e-02, -1.5638e-02,  3.7328e-02]]])
+      decoder_inputs = torch.LongTensor([1]).expand(1,1).to(torch_device)
+      logits = model(input_ids, decoder_input_ids=decoder_inputs)['logits']
+    
+      assert torch.allclose(expected_logits, logits, atol=1e-4)
+      
 
   @torch.no_grad()
   @slow

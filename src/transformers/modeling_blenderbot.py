@@ -110,7 +110,7 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
         use_cache=True,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_tuple=None,
     ):
         if decoder_input_ids is None:
             use_cache = False
@@ -120,7 +120,7 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -128,10 +128,10 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_tuple=return_tuple,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
-        elif not return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_tuple=False
+        elif not return_tuple and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
