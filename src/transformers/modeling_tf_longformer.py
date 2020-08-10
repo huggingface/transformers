@@ -1176,7 +1176,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 )
 class TFLongformerModel(TFLongformerPreTrainedModel):
     """
-    This class copied code from :class:`~transformers.RobertaModel` and overwrote standard self-attention with longformer self-attention to provide the ability to process
+    This class copies code from :class:`~transformers.RobertaModel` and overwrites standard self-attention with longformer self-attention to provide the ability to process
     long sequences following the self-attention approach described in `Longformer: the Long-Document Transformer
     <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer self-attention
     combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
