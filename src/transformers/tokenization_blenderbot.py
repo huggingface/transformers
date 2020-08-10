@@ -22,12 +22,12 @@ VOCAB_FILES_NAMES = {
 # will update paths once uploded files on S3
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/blenderbot-3B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/vocab.json",
-        "facebook/blenderbot-9B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/vocab.json",  # uses the same vocab and merges files as the 3B model
+        "facebook/blenderbot-3B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/vocab.json",
+        "facebook/blenderbot-9B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/vocab.json",  # uses the same vocab and merges files as the 3B model
     },
     "merges_file": {
-        "facebook/blenderbot-3B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/merges.txt",
-        "facebook/blenderbot-9B": "https://cdn.huggingface.co/sshleifer/blenderbot-3B/merges.txt",
+        "facebook/blenderbot-3B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/merges.txt",
+        "facebook/blenderbot-9B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/merges.txt",
     },
 }
 
@@ -109,8 +109,8 @@ class BlenderbotTokenizer(RobertaTokenizer):
 
 
 BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/sshleifer/blenderbot-90M/vocab.json"},
-    "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/sshleifer/blenderbot-90M/merges.txt"},
+    "vocab_file": {"facebook/blenderbot-90M": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-90M/vocab.json"},
+    "merges_file": {"facebook/blenderbot-90M": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-90M/merges.txt"},
 }
 
 BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {

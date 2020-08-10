@@ -13,6 +13,17 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
  import torch
  from transformers import BlenderbotForConditionalGeneration
+ 
+from parlai.core.opt import Opt
+from parlai.core.dict import DictionaryAgent
+from parlai.core.torch_agent import Batch
+from transformers.modeling_blenderbot import BlenderbotForConditionalGeneration
+from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
+from transformers.configuration_blenderbot import BlenderbotConfig
+from parlai.agents.transformer.modules import TransformerGeneratorModel
+from parlai.agents.transformer.transformer import TransformerGeneratorAgent
+
+import json
 
 
 @require_torch
@@ -208,6 +219,7 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
     21,
     ]
     self.assertListEqual(expected_ids, generated_ids)
+    
 
 
 @require_torch
