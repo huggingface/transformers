@@ -25,6 +25,14 @@ jobs:
     - name: Current dir
       run: pwd
     - run: nvidia-smi
+
+    - name: Loading cache.
+      uses: actions/cache@v2
+      id: cache
+      with:
+        path: .env
+        key: v0-tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+
     - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
       run: |
         python -m venv .env
