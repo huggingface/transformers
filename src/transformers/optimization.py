@@ -181,7 +181,7 @@ def get_polynomial_decay_schedule_with_warmup(
             The number of steps for the warmup phase.
         num_training_steps (:obj:`int`):
             The total number of training steps.
-        lr_end (:obj:`float`, `optional`, defaults to 1e-08):
+        lr_end (:obj:`float`, `optional`, defaults to 1e-7):
             The end LR.
         power (:obj:`float`, `optional`, defaults to 1.0):
             Power factor.
