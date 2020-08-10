@@ -5,7 +5,7 @@ import shutil
 
 # Launch from root of repo
 PATH_TO_DOCS = 'docs/source'
-PATH_TO_DEST = 'docs'
+PATH_TO_DEST = 'doc_notebooks'
 DOC_BASE_URL = "https://huggingface.co/transformers/"
 
 # These are the doc files converted, add any new tutorial to this list if you want it handled by the conversion
