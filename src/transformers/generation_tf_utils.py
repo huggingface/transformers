@@ -937,7 +937,7 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
             # if bad word tokens is just one token always ban it
             return True
         if len(tokens) > len(prev_tokens):
-            # if bad word tokens are longer then prev tokens they can't be equal
+            # if bad word tokens are longer than prev tokens they can't be equal
             return False
 
         if prev_tokens[-len(tokens) :] == tokens:
