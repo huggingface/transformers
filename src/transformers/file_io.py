@@ -17,7 +17,7 @@ def json_pickle_dump(filename: Text, obj: Any) -> None:
         obj (:obj:`Any`): The object to pickle into JSON decodable representation.
     """
     with open(filename, mode="w", encoding=DEFAULT_ENCODING) as output_file:
-        return output_file.write(jsonpickle.encode(obj))
+        output_file.write(jsonpickle.encode(obj))
 
 
 def json_pickle_load(filename: Text) -> Any:
