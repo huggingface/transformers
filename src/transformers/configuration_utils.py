@@ -56,6 +56,8 @@ class PretrainedConfig(object):
                 Whether the model is used as an encoder/decoder or not.
             is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether the model is used as decoder or not (in which case it's used as an encoder).
+            add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether cross-attention layers should be added to the model. Note, this option is only relevant for models that can be used as decoder models withith the `EncoderDecoderModel` class, which consists of all models in `AUTO_MODELS_FOR_CAUSAL_LM`.
             prune_heads (:obj:`Dict[int, List[int]]`, `optional`, defaults to :obj:`{}`):
                 Pruned heads of the model. The keys are the selected layer indices and the associated values, the list
                 of heads to prune in said layer.
@@ -145,6 +147,7 @@ class PretrainedConfig(object):
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
+        self.add_cross_attention = kwargs.pop("add_cross_attention", False)
 
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
