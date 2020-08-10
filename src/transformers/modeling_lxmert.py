@@ -77,12 +77,21 @@ class LxmertForPretrainingOutput(ModelOutput):
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        hidden_states_v (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for input features + one for the output of each cross-modality layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states_l (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for input features + one for the output of each cross-modality layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
     """
 
     loss: [torch.FloatTensor] = None
     prediction_logits: Optional[torch.FloatTensor] = None
     cross_relationship_score: Optional[torch.FloatTensor] = None
     question_answering_score: Optional[torch.FloatTensor] = None
+    hidden_states_l: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_v: Optional[Tuple[torch.FloatTensor]] = None
     attentions_v_encoder: Optional[Tuple[torch.FloatTensor]] = None
     attentions_l_encoder: Optional[Tuple[torch.FloatTensor]] = None
     attentions_x_encoder: Optional[Tuple[torch.FloatTensor]] = None
@@ -675,10 +684,14 @@ LXMERT_INPUTS_DOCSTRING = r"""
              Mask values selected in ``[0, 1]``:
              ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         output_attentions: (:obj:`bool`, `optional`, defaults to :obj:`False`):
-             If set to ``True``, the attentions tensors of all attention layers for the visual, language, and cross-modality encoder are returned. See ``attentions`` under returned tensors for more detail.
+             If set to ``True``, the attentions tensors of all attention layers for the visual, language, and cross-modality encoder are returned.
         return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.LxmertModelOutput` instead of a
             plain tuple.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states for each respective modality will be returned when used as the input vector in the cross-modality encoder.
+
+
 """
 
 
@@ -712,8 +725,12 @@ class LxmertModel(LxmertPreTrainedModel):
         attention_mask=None,
         visual_attention_mask=None,
         output_attentions=False,
+        output_hidden_states=False,
         return_dict=False,
     ):
+
+        output_attentions = True if output_attentions or self.config.output_attentions else False
+        output_hidden_states = True if output_hidden_states or self.config.output_hidden_states else False
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -763,7 +780,7 @@ class LxmertModel(LxmertPreTrainedModel):
         if not return_dict:
             return (
                 (lang_output, visn_output, pooled_output),
-                (v_outputs[0][:-1], l_outputs[0][:-1]),
+                (v_outputs[0] if output_hidden_states else None, l_outputs[0] if output_hidden_states else None),
                 (
                     v_outputs[1:] if output_attentions else None,
                     l_outputs[1:] if output_attentions else None,
@@ -772,13 +789,13 @@ class LxmertModel(LxmertPreTrainedModel):
             )
 
         return LxmertModelOutput(
-            last_hidden_state_l=lang_output,
-            hidden_states_l=l_outputs[0][:-1],
-            attentions_l_encoder=l_outputs[1:] if output_attentions else None,
-            last_hidden_state_v=visn_output,
-            hidden_states_v=v_outputs[0][:-1],
-            attentions_v_encoder=v_outputs[1:] if output_attentions else None,
             pooled_output_x_encoder=pooled_output,
+            last_hidden_state_l=lang_output,
+            last_hidden_state_v=visn_output,
+            hidden_states_l=l_outputs[0] if output_hidden_states else None,
+            hidden_states_v=v_outputs[0] if output_hidden_states else None,
+            attentions_l_encoder=l_outputs[1:] if output_attentions else None,
+            attentions_v_encoder=v_outputs[1:] if output_attentions else None,
             attentions_x_encoder=x_encoder_outputs[2:] if output_attentions else None,
         )
 
@@ -917,10 +934,13 @@ class LxmertForPretraining(LxmertPreTrainedModel):
         matched_label=None,
         ans=None,
         output_attentions=False,
+        output_hidden_states=False,
         return_dict=False,
         **kwargs
     ):
 
+        output_attentions = True if output_attentions or self.config.output_attentions else False
+        output_hidden_states = True if output_hidden_states or self.config.output_hidden_states else False
         (visual_feats, pos) = visual_feats
 
         r"""
@@ -1008,6 +1028,10 @@ class LxmertForPretraining(LxmertPreTrainedModel):
         if not return_dict:
             output = (
                 (lang_prediction_scores, cross_relationship_score, answer_score.detach()),
+                (
+                    x_encoder_outputs[0][:-1] if output_hidden_states else None,
+                    x_encoder_outputs[0][:-1] if output_hidden_states else None,
+                ),
                 (attentions_v_encoder, attentions_l_encoder, attentions_x_encoder),
             )
             return ((total_loss,) + output) if total_loss is not None else output
@@ -1129,9 +1153,13 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         token_type_ids=None,
         attention_mask=None,
         output_attentions=False,
+        output_hidden_states=False,
         return_dict=False,
         **kwargs
     ):
+
+        output_attentions = True if output_attentions or self.config.output_attentions else False
+        output_hidden_states = True if output_hidden_states or self.config.output_hidden_states else False
 
         (visual_feats, pos) = visual_feats
 
@@ -1175,6 +1203,10 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         if not return_dict:
             output = (
                 (answer_score.detach()),
+                (
+                    x_encoder_outputs[0][:-1] if output_hidden_states else None,
+                    x_encoder_outputs[0][:-1] if output_hidden_states else None,
+                ),
                 (attentions_v_encoder, attentions_l_encoder, attentions_x_encoder),
             )
             return (loss,) + output
@@ -1182,6 +1214,8 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         return LxmertForQuestionAnsweringOutput(
             loss=loss,
             question_answering_score=answer_score.detach(),
+            hidden_states_v=x_encoder_outputs[0][:-1],
+            hidden_states_l=x_encoder_outputs[1][:-1],
             attentions_v_encoder=attentions_v_encoder,
             attentions_l_encoder=attentions_l_encoder,
             attentions_x_encoder=attentions_x_encoder,

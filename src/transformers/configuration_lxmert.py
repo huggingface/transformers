@@ -101,6 +101,11 @@ class LxmertConfig(PretrainedConfig):
                 This task specifies whether or not Lxmert will calculate the attribute-prediction loss objective
             visual_feat_loss (:obj:`bool`, optional, defaults to True):
                 This task specifies whether or not Lxmert will calculate the feature-regression loss objective
+            output_attentions (:obj:`bool`, optional, defaults to False):
+                    if True, the vision, langauge, and cross-modality layers will be returned
+            output_hidden_states (:obj:`bool`, optional, defaults to False):
+                    if True, final cross-modality hidden states for language and vision features will be returned
+
     """
 
     model_type = "lxmert"
@@ -136,6 +141,8 @@ class LxmertConfig(PretrainedConfig):
         visual_obj_loss=True,
         visual_attr_loss=True,
         visual_feat_loss=True,
+        output_attentions=False,
+        output_hidden_states=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -167,3 +174,5 @@ class LxmertConfig(PretrainedConfig):
         self.visual_obj_loss = visual_obj_loss
         self.visual_attr_loss = visual_attr_loss
         self.visual_feat_loss = visual_feat_loss
+        self.output_hidden_states = output_hidden_states
+        self.output_attentions = self.output_attentions

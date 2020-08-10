@@ -565,10 +565,6 @@ class LxmertModelOutput(ModelOutput):
     Args:
         last_hidden_state_l (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the language encoder.
-        hidden_states_l (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each language encoder layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the language encoder at the output of each layer plus the initial embedding outputs.
         attentions_l_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
@@ -577,9 +573,11 @@ class LxmertModelOutput(ModelOutput):
         last_hidden_state_v (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the visual encoder.
         hidden_states_v (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each visual encoder layer)
+            Tuple of :obj:`torch.FloatTensor` (one for input features + one for the output of each cross-modality layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the visual encoder at the output of each layer plus the initial embedding outputs.
+        hidden_states_l (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for input features + one for the output of each cross-modality layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
         attentions_v_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
@@ -615,6 +613,12 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.k.
         question_answering_score: (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, n_qa_answers)`):
             Prediction scores of question answering objective (classification).
+        hidden_states_v (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for input features + one for the output of each cross-modality layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        hidden_states_l (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for input features + one for the output of each cross-modality layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
         attentions_l_encoder (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
@@ -634,6 +638,8 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
 
     question_answering_score: torch.FloatTensor
     loss: Optional[torch.FloatTensor] = None
+    hidden_states_l: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_v: Optional[Tuple[torch.FloatTensor]] = None
     attentions_v_encoder: Optional[Tuple[torch.FloatTensor]] = None
     attentions_l_encoder: Optional[Tuple[torch.FloatTensor]] = None
     attentions_x_encoder: Optional[Tuple[torch.FloatTensor]] = None

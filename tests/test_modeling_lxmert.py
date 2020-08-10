@@ -78,6 +78,7 @@ class LxmertModelTester:
         use_token_type_ids=True,
         use_lang_mask=True,
         output_attentions=False,
+        output_hidden_states=False,
         scope=None,
     ):
         self.parent = parent
@@ -117,6 +118,7 @@ class LxmertModelTester:
         self.num_visual_features = num_visual_features
         self.use_token_type_ids = use_token_type_ids
         self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -192,6 +194,8 @@ class LxmertModelTester:
             visual_obj_loss=self.visual_obj_loss,
             visual_attr_loss=self.visual_attr_loss,
             visual_feat_loss=self.visual_feat_loss,
+            output_attentions=self.output_attentions,
+            output_hidden_states=self.output_hidden_states,
         )
 
         return (
