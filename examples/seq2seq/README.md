@@ -63,7 +63,7 @@ Summarization Tips:
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
 
 **Update 2018-07-18**
-Datasets: `Seq2SeqDataset` should be used for all tokenizers without a `prepare_translation_batch` method. For those who do (like Marian, MBart), `TranslationDataset` should be used.**
+Datasets: `Seq2SeqDataset` should be used for all tokenizers without a `prepare_seq2seq_batch` method. For those who do (like Marian, MBart), `TranslationDataset` should be used.**
 A new dataset is needed to support multilingual tasks.
 
 
