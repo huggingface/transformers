@@ -39,7 +39,7 @@ def download_wmt_dataset(src_lang="ro", tgt_lang="en", dataset="wmt16", save_dir
         src_fp = src_path.open("w+")
         tgt_fp = tgt_path.open("w+")
 
-        # reader is the bottleneck so doing one record at a time doesn't slow things down
+        # reader is the bottleneck so writing one record at a time doesn't slow things down
         for x in tqdm(ds[split]):
             ex = x["translation"]
             src_fp.write(ex[src_lang] + "\n")
