@@ -1,11 +1,5 @@
 ---
 language: "ar"
-thumbnail: ""
-tags:
-- text-generation
-- gpt2
-- pytorch
-license: ""
 datasets:
 - Arabic Wikipedia
 metrics:
