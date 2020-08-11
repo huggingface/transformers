@@ -86,6 +86,14 @@ Code to see available pretrained models:
     suffix = [x.split('/')[1] for x in model_ids]
     multi_models = [f'{org}/{s}' for s in suffix if s != s.lower()]
 
+MarianMTModel
+~~~~~~~~~~~~~
+
+Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
+Model API is identical to BartForConditionalGeneration.
+Available models are listed at `Model List <https://huggingface.co/models?search=Helsinki-NLP>`__
+This class inherits nearly all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
+
 MarianConfig
 ~~~~~~~~~~~~~~~~~~~
 .. autoclass:: transformers.MarianConfig
@@ -99,13 +107,5 @@ MarianTokenizer
     :members: prepare_seq2seq_batch
 
 
-MarianMTModel
-~~~~~~~~~~~~~
 
-Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-Model API is identical to BartForConditionalGeneration.
-Available models are listed at `Model List <https://huggingface.co/models?search=Helsinki-NLP>`__
-This class inherits all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
 
-.. autoclass:: transformers.MarianMTModel
-    :members:
