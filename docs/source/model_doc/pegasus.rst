@@ -66,6 +66,10 @@ PegasusForConditionalGeneration
 This class inherits all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
 Available models are listed at `Model List <https://huggingface.co/models?search=pegasus>`__
 
+.. autoclass:: transformers.PegasusForConditionalGeneration
+    :members: generate, forward
+
+
 PegasusConfig
 ~~~~~~~~~~~~~~~~~~~
 This config fully inherits from ``BartConfig``, but pegasus uses different default values:
