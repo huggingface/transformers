@@ -110,6 +110,7 @@ class TFXLNetModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -147,17 +148,10 @@ class TFXLNetModelTester:
         model = TFXLNetModel(config)
 
         inputs = {"input_ids": input_ids_1, "input_mask": input_mask, "token_type_ids": segment_ids}
-
-        _, _ = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids_1, input_mask]
-
-        outputs, mems_1 = model(inputs)
-
-        result = {
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "outputs": outputs.numpy(),
-        }
+        result = model(inputs)
 
         config.mem_len = 0
         model = TFXLNetModel(config)
@@ -165,10 +159,10 @@ class TFXLNetModelTester:
         self.parent.assertEqual(len(no_mems_outputs), 1)
 
         self.parent.assertListEqual(
-            list(result["outputs"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            list(result["last_hidden_state"].shape), [self.batch_size, self.seq_length, self.hidden_size]
         )
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
+            list(list(mem.shape) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -189,16 +183,13 @@ class TFXLNetModelTester:
         model = TFXLNetLMHeadModel(config)
 
         inputs_1 = {"input_ids": input_ids_1, "token_type_ids": segment_ids}
-
-        all_logits_1, mems_1 = model(inputs_1)
+        all_logits_1, mems_1 = model(inputs_1).to_tuple()
 
         inputs_2 = {"input_ids": input_ids_2, "mems": mems_1, "token_type_ids": segment_ids}
-
-        all_logits_2, mems_2 = model(inputs_2)
+        all_logits_2, mems_2 = model(inputs_2).to_tuple()
 
         inputs_3 = {"input_ids": input_ids_q, "perm_mask": perm_mask, "target_mapping": target_mapping}
-
-        logits, _ = model(inputs_3)
+        logits, _ = model(inputs_3).to_tuple()
 
         result = {
             "mems_1": [mem.numpy() for mem in mems_1],
@@ -240,13 +231,7 @@ class TFXLNetModelTester:
         model = TFXLNetForQuestionAnsweringSimple(config)
 
         inputs = {"input_ids": input_ids_1, "attention_mask": input_mask, "token_type_ids": segment_ids}
-        start_logits, end_logits, mems = model(inputs)
-
-        result = {
-            "start_logits": start_logits.numpy(),
-            "end_logits": end_logits.numpy(),
-            "mems": [m.numpy() for m in mems],
-        }
+        result = model(inputs)
 
         self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
         self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
@@ -271,16 +256,11 @@ class TFXLNetModelTester:
     ):
         model = TFXLNetForSequenceClassification(config)
 
-        logits, mems_1 = model(input_ids_1)
-
-        result = {
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "logits": logits.numpy(),
-        }
+        result = model(input_ids_1)
 
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
+            list(list(mem.shape) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -305,16 +285,12 @@ class TFXLNetModelTester:
             "attention_mask": input_mask,
             # 'token_type_ids': token_type_ids
         }
-        logits, mems_1 = model(inputs)
-        result = {
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "logits": logits.numpy(),
-        }
+        result = model(inputs)
         self.parent.assertListEqual(
             list(result["logits"].shape), [self.batch_size, self.seq_length, config.num_labels]
         )
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
+            list(list(mem.shape) for mem in result["mems"]),
             [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
         )
 
@@ -342,11 +318,13 @@ class TFXLNetModelTester:
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
-        (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
+        result = model(inputs)
+
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+        self.parent.assertListEqual(
+            list(list(mem.shape) for mem in result["mems"]),
+            [[self.seq_length, self.batch_size * self.num_choices, self.hidden_size]] * self.num_hidden_layers,
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

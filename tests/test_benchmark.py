@@ -86,7 +86,7 @@ class BenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.time_inference_result)
         self.check_results_dict_not_empty(results.memory_inference_result)
 
-    def test_inference_no_model_no_architecuters(self):
+    def test_inference_no_model_no_architectures(self):
         MODEL_ID = "sshleifer/tiny-gpt2"
         config = AutoConfig.from_pretrained(MODEL_ID)
         # set architectures equal to `None`
@@ -119,7 +119,7 @@ class BenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.time_train_result)
         self.check_results_dict_not_empty(results.memory_train_result)
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_train_no_configs_fp16(self):
         MODEL_ID = "sshleifer/tiny-gpt2"
         benchmark_args = PyTorchBenchmarkArguments(

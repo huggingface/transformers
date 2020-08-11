@@ -78,7 +78,7 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
         num_warmup_steps (:obj:`int`):
             The number of steps for the warmup phase.
         num_training_steps (:obj:`int`):
-            The totale number of training steps.
+            The total number of training steps.
         last_epoch (:obj:`int`, `optional`, defaults to -1):
             The index of the last epoch when resuming training.
 

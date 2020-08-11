@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 
 from transformers import AutoTokenizer, BatchEncoding, MBartTokenizer
@@ -113,9 +114,14 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer: MBartTokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
         cls.pad_token_id = 1
         return cls
+
+    def check_language_codes(self):
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ar_AR"], 250001)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["en_EN"], 250004)
+        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ro_RO"], 250020)
 
     def test_enro_tokenizer_prepare_translation_batch(self):
         batch = self.tokenizer.prepare_translation_batch(
@@ -131,6 +137,18 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         # Test that special tokens are reset
         self.assertEqual(self.tokenizer.prefix_tokens, [])
         self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, EN_CODE])
+
+    def test_max_target_length(self):
+
+        batch = self.tokenizer.prepare_translation_batch(
+            self.src_text, tgt_texts=self.tgt_text, max_length=3, max_target_length=10
+        )
+        self.assertEqual(batch.input_ids.shape[1], 3)
+        self.assertEqual(batch.decoder_input_ids.shape[1], 10)
+        # max_target_length will default to max_length if not specified
+        batch = self.tokenizer.prepare_translation_batch(self.src_text, tgt_texts=self.tgt_text, max_length=3)
+        self.assertEqual(batch.input_ids.shape[1], 3)
+        self.assertEqual(batch.decoder_input_ids.shape[1], 3)
 
     def test_enro_tokenizer_batch_encode_plus(self):
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
@@ -154,3 +172,13 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         self.assertEqual(ids[-2], 2)
         self.assertEqual(ids[-1], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
+
+    def test_mask_token(self):
+        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "ar_AR"]), [250026, 250001])
+
+    def test_special_tokens_unaffacted_by_save_load(self):
+        tmpdirname = tempfile.mkdtemp()
+        original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
+        self.tokenizer.save_pretrained(tmpdirname)
+        new_tok = MBartTokenizer.from_pretrained(tmpdirname)
+        self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
