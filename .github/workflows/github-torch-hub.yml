@@ -18,6 +18,14 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: 3.7
+
+    - name: Loading cache
+      uses: actions/cache@v2
+      id: cache
+      with:
+        path: ~/.cache/pip
+        key: v0-torch_hub-${{ hashFiles('setup.py') }}
+
     - name: Install dependencies
       run: |
         pip install --upgrade pip

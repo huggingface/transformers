@@ -21,6 +21,17 @@ const versionMapping = {
     "v1.1.0": "v1.1.0",
     "v1.0.0": "v1.0.0"
 }
+// The page that have a notebook and therefore should have the open in colab badge.
+const hasNotebook = [
+    "benchmarks",
+    "multilingual",
+    "perplexity",
+    "preprocessing",
+    "quicktour",
+    "task_summary",
+    "tokenizer_summary",
+    "training"
+];
 
 function addIcon() {
     const huggingFaceLogo = "https://huggingface.co/landing/assets/transformers-docs/huggingface_logo.svg";
@@ -80,6 +91,26 @@ function addGithubButton() {
         </div>
     `;
     document.querySelector(".wy-side-nav-search .icon-home").insertAdjacentHTML('afterend', div);
+}
+
+function addColabLink() {
+    const parts = location.toString().split('/');
+    const pageName = parts[parts.length - 1].split(".")[0];
+
+    if (hasNotebook.includes(pageName)) {
+        const baseURL = "https://colab.research.google.com/github/huggingface/notebooks/blob/master/transformers_doc/"
+        const linksColab = `
+        <div class="colab-dropdown">
+            <img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg">
+            <div class="colab-dropdown-content">
+                <button onclick=" window.open('${baseURL}${pageName}.ipynb')">Mixed</button>
+                <button onclick=" window.open('${baseURL}pytorch/${pageName}.ipynb')">PyTorch</button>
+                <button onclick=" window.open('${baseURL}tensorflow/${pageName}.ipynb')">TensorFlow</button>
+            </div>
+        </div>`
+        const leftMenu = document.querySelector(".wy-breadcrumbs-aside")
+        leftMenu.innerHTML = linksColab + '\n' + leftMenu.innerHTML
+    }
 }
 
 function addVersionControl() {
@@ -255,6 +286,7 @@ function onLoad() {
     addGithubButton();
     parseGithubButtons();
     addHfMenu();
+    addColabLink();
     platformToggle();
 }
 
