@@ -109,6 +109,8 @@ class TrainingArguments:
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument ``mems``.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
     """
 
     output_dir: str = field(
@@ -222,6 +224,10 @@ class TrainingArguments:
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
     )
 
+    run_name: Optional[str] = field(
+        default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
+    )
+
     @property
     def train_batch_size(self) -> int:
         """
@@ -310,7 +316,10 @@ class TrainingArguments:
         Sanitized serialization to use with TensorBoard’s hparams
         """
         d = dataclasses.asdict(self)
+        d = {**d, **{"train_batch_size": self.train_batch_size, "eval_batch_size": self.eval_batch_size}}
+
         valid_types = [bool, int, float, str]
         if is_torch_available():
             valid_types.append(torch.Tensor)
+
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}

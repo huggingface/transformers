@@ -169,11 +169,15 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             array = np.transpose(array)
         if isinstance(pointer, list):
             # Here we will split the TF weights
-            assert len(pointer) == array.shape[0]
+            assert (
+                len(pointer) == array.shape[0]
+            ), f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
                 try:
-                    assert p_i.shape == arr_i.shape
+                    assert (
+                        p_i.shape == arr_i.shape
+                    ), f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
@@ -181,7 +185,9 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert pointer.shape == array.shape
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -705,7 +711,7 @@ class XLNetForTokenClassificationOutput(ModelOutput):
 @dataclass
 class XLNetForMultipleChoiceOutput(ModelOutput):
     """
-    Base class for outputs of multiple choice models.
+    Output type of :class:`~transformers.XLNetForMultipleChoice`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -741,7 +747,7 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     """
-    Base class for outputs of question answering models.
+    Output type of :class:`~transformers.XLNetForQuestionAnsweringSimple`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -778,7 +784,7 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringOutput(ModelOutput):
     """
-    Base class for outputs of question answering models using a :obj:`SquadHead`.
+    Output type of :class:`~transformers.XLNetForQuestionAnswering`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
@@ -1221,7 +1227,6 @@ class XLNetModel(XLNetPreTrainedModel):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         output = output.permute(1, 0, 2).contiguous()
 
-        # TODO Teven: fix this test to only use use_cache.
         if not use_cache:
             new_mems = None
 

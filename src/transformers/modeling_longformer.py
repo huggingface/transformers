@@ -71,7 +71,6 @@ def _get_question_end_index(input_ids, sep_token_id):
     assert (
         sep_token_indices.shape[0] == 3 * batch_size
     ), f"There should be exactly three separator tokens: {sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this error."
-
     return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
 
 
@@ -81,7 +80,6 @@ def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=Tru
         before `sep_token_id` if `before_sep_token is True` else after
         `sep_token_id`.
     """
-
     question_end_index = _get_question_end_index(input_ids, sep_token_id)
     question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
     # bool attention mask with True in locations of global attention
@@ -131,6 +129,172 @@ class LongformerSelfAttention(nn.Module):
 
         self.one_sided_attn_window_size = attention_window // 2
 
+    def forward(
+        self, hidden_states, attention_mask=None, output_attentions=False,
+    ):
+        """
+        LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
+        Padding to `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
+
+        The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to
+            -ve: no attention
+              0: local attention
+            +ve: global attention
+
+        """
+        attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
+
+        # is index masked or global attention
+        is_index_masked = attention_mask < 0
+        is_index_global_attn = attention_mask > 0
+        is_global_attn = is_index_global_attn.flatten().any().item()
+
+        hidden_states = hidden_states.transpose(0, 1)
+
+        # project hidden states
+        query_vectors = self.query(hidden_states)
+        key_vectors = self.key(hidden_states)
+        value_vectors = self.value(hidden_states)
+
+        seq_len, batch_size, embed_dim = hidden_states.size()
+        assert (
+            embed_dim == self.embed_dim
+        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
+
+        # normalize query
+        query_vectors /= math.sqrt(self.head_dim)
+
+        query_vectors = query_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+        key_vectors = key_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+
+        # attn_probs = (batch_size, seq_len, num_heads, window*2+1)
+        attn_scores = self._sliding_chunks_query_key_matmul(
+            query_vectors, key_vectors, self.one_sided_attn_window_size
+        )
+
+        # values to pad for attention probs
+        remove_from_windowed_attention_mask = (attention_mask != 0)[:, :, None, None]
+
+        # cast to fp32/fp16 then replace 1's with -inf
+        float_mask = remove_from_windowed_attention_mask.type_as(query_vectors).masked_fill(
+            remove_from_windowed_attention_mask, -10000.0
+        )
+        # diagonal mask with zeros everywhere and -inf inplace of padding
+        diagonal_mask = self._sliding_chunks_query_key_matmul(
+            float_mask.new_ones(size=float_mask.size()), float_mask, self.one_sided_attn_window_size
+        )
+
+        # pad local attention probs
+        attn_scores += diagonal_mask
+
+        assert list(attn_scores.size()) == [
+            batch_size,
+            seq_len,
+            self.num_heads,
+            self.one_sided_attn_window_size * 2 + 1,
+        ], f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
+
+        # compute local attention probs from global attention keys and contact over window dim
+        if is_global_attn:
+            # compute global attn indices required through out forward fn
+            (
+                max_num_global_attn_indices,
+                is_index_global_attn_nonzero,
+                is_local_index_global_attn_nonzero,
+                is_local_index_no_global_attn_nonzero,
+            ) = self._get_global_attn_indices(is_index_global_attn)
+            # calculate global attn probs from global key
+
+            global_key_attn_scores = self._concat_with_global_key_attn_probs(
+                query_vectors=query_vectors,
+                key_vectors=key_vectors,
+                max_num_global_attn_indices=max_num_global_attn_indices,
+                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
+                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
+                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
+            )
+            # concat to attn_probs
+            # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
+            attn_scores = torch.cat((global_key_attn_scores, attn_scores), dim=-1)
+
+            # free memory
+            del global_key_attn_scores
+
+        attn_probs_fp32 = F.softmax(attn_scores, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
+        attn_probs = attn_probs_fp32.type_as(attn_scores)
+
+        # free memory
+        del attn_probs_fp32
+
+        # softmax sometimes inserts NaN if all positions are masked, replace them with 0
+        attn_probs = torch.masked_fill(attn_probs, is_index_masked[:, :, None, None], 0.0)
+
+        # apply dropout
+        attn_probs = F.dropout(attn_probs, p=self.dropout, training=self.training)
+
+        value_vectors = value_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+
+        # compute local attention output with global attention value and add
+        if is_global_attn:
+            # compute sum of global and local attn
+            attn_output = self._compute_attn_output_with_global_indices(
+                value_vectors=value_vectors,
+                attn_probs=attn_probs,
+                max_num_global_attn_indices=max_num_global_attn_indices,
+                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
+                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
+            )
+        else:
+            # compute local attn only
+            attn_output = self._sliding_chunks_matmul_attn_probs_value(
+                attn_probs, value_vectors, self.one_sided_attn_window_size
+            )
+
+        assert attn_output.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
+        attn_output = attn_output.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
+
+        # compute value for global attention and overwrite to attention output
+        # TODO: remove the redundant computation
+        if is_global_attn:
+            global_attn_output = self._compute_global_attn_output_from_hidden(
+                hidden_states=hidden_states,
+                max_num_global_attn_indices=max_num_global_attn_indices,
+                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
+                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
+                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
+                is_index_masked=is_index_masked,
+            )
+
+            # get only non zero global attn output
+            nonzero_global_attn_output = global_attn_output[
+                is_local_index_global_attn_nonzero[0], :, is_local_index_global_attn_nonzero[1]
+            ]
+
+            # overwrite values with global attention
+            attn_output[is_index_global_attn_nonzero[::-1]] = nonzero_global_attn_output.view(
+                len(is_local_index_global_attn_nonzero[0]), -1
+            )
+
+        attn_output = attn_output.transpose(0, 1)
+
+        if output_attentions:
+            if is_global_attn:
+                # With global attention, return global attention probabilities only
+                # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
+                # which is the attention weights from tokens with global attention to all tokens
+                # It doesn't not return local attention
+                # In case of variable number of global attantion in the rows of a batch,
+                # attn_probs are padded with -10000.0 attention scores
+                attn_probs = attn_probs.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
+            else:
+                # without global attention, return local attention probabilities
+                # batch_size x num_heads x sequence_length x window_size
+                # which is the attention weights of every token attending to its neighbours
+                attn_probs = attn_probs.permute(0, 2, 1, 3)
+
+        outputs = (attn_output, attn_probs) if output_attentions else (attn_output,)
+        return outputs
+
     @staticmethod
     def _pad_and_transpose_last_two_dims(hidden_states_padded, padding):
         """pads rows and then flips rows and columns"""
@@ -143,8 +307,20 @@ class LongformerSelfAttention(nn.Module):
         return hidden_states_padded
 
     @staticmethod
-    def _pad_by_window_overlap_except_last_row(chunked_hidden_states):
-        """shift every row 1 step right, converting columns into diagonals"""
+    def _pad_and_diagonalize(chunked_hidden_states):
+        """shift every row 1 step right, converting columns into diagonals.
+           Example:
+                 chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
+                                          -1.8348,  0.7672,  0.2986,  0.0285,
+                                          -0.7584,  0.4206, -0.0405,  0.1599,
+                                          2.0514, -1.1600,  0.5372,  0.2629 ]
+                 window_overlap = num_rows = 4
+                (pad & diagonilize) =>
+                [ 0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000
+                  0.0000,  -1.8348,  0.7672,  0.2986,  0.0285, 0.0000,  0.0000
+                  0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
+                  0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
+        """
         total_num_heads, num_chunks, window_overlap, hidden_dim = chunked_hidden_states.size()
         chunked_hidden_states = F.pad(
             chunked_hidden_states, (0, window_overlap + 1)
@@ -181,7 +357,8 @@ class LongformerSelfAttention(nn.Module):
         chunk_stride[1] = chunk_stride[1] // 2
         return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-    def _mask_invalid_locations(self, input_tensor, affected_seq_len) -> torch.Tensor:
+    @staticmethod
+    def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
         beginning_mask_2d = input_tensor.new_ones(affected_seq_len, affected_seq_len + 1).tril().flip(dims=[0])
         beginning_mask = beginning_mask_2d[None, :, None, :]
         ending_mask = beginning_mask.flip(dims=(1, 3))
@@ -243,6 +420,7 @@ class LongformerSelfAttention(nn.Module):
         diagonal_attention_scores[:, 1:, :, :window_overlap] = diagonal_chunked_attention_scores[
             :, :, -(window_overlap + 1) : -1, window_overlap + 1 :
         ]
+
         diagonal_attention_scores[:, 0, 1:window_overlap, 1:window_overlap] = diagonal_chunked_attention_scores[
             :, 0, : window_overlap - 1, 1 - window_overlap :
         ]
@@ -261,11 +439,13 @@ class LongformerSelfAttention(nn.Module):
         """Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors.
            Returned tensor will be of the same shape as `attn_probs`"""
         batch_size, seq_len, num_heads, head_dim = value.size()
+
         assert seq_len % (window_overlap * 2) == 0
         assert attn_probs.size()[:3] == value.size()[:3]
         assert attn_probs.size(3) == 2 * window_overlap + 1
         chunks_count = seq_len // window_overlap - 1
         # group batch_size and num_heads dimensions into one, then chunk seq_len into chunks of size 2 window overlap
+
         chunked_attn_probs = attn_probs.transpose(1, 2).reshape(
             batch_size * num_heads, seq_len // window_overlap, window_overlap, 2 * window_overlap + 1
         )
@@ -287,177 +467,10 @@ class LongformerSelfAttention(nn.Module):
         )
         chunked_value = padded_value.as_strided(size=chunked_value_size, stride=chunked_value_stride)
 
-        chunked_attn_probs = self._pad_by_window_overlap_except_last_row(chunked_attn_probs)
+        chunked_attn_probs = self._pad_and_diagonalize(chunked_attn_probs)
 
         context = torch.einsum("bcwd,bcdh->bcwh", (chunked_attn_probs, chunked_value))
         return context.view(batch_size, num_heads, seq_len, head_dim).transpose(1, 2)
-
-    def forward(
-        self, hidden_states, attention_mask=None, output_attentions=False,
-    ):
-        """
-        LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
-        Padding to `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
-
-        The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to
-            -ve: no attention
-              0: local attention
-            +ve: global attention
-
-        """
-
-        attention_mask = attention_mask.squeeze(dim=2).squeeze(dim=1)
-
-        # is index masked or global attention
-        is_index_masked = attention_mask < 0
-        is_index_global_attn = attention_mask > 0
-        is_global_attn = is_index_global_attn.flatten().any().item()
-
-        hidden_states = hidden_states.transpose(0, 1)
-
-        # project hidden states
-        query_vectors = self.query(hidden_states)
-        key_vectors = self.key(hidden_states)
-        value_vectors = self.value(hidden_states)
-
-        seq_len, batch_size, embed_dim = hidden_states.size()
-        assert (
-            embed_dim == self.embed_dim
-        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
-
-        # normalize query
-        query_vectors /= math.sqrt(self.head_dim)
-
-        query_vectors = query_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-        key_vectors = key_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-
-        # attn_probs = (batch_size, seq_len, num_heads, window*2+1)
-        attn_scores = self._sliding_chunks_query_key_matmul(
-            query_vectors, key_vectors, self.one_sided_attn_window_size
-        )
-
-        # values to pad for attention probs
-        remove_from_windowed_attention_mask = (attention_mask != 0).unsqueeze(dim=-1).unsqueeze(dim=-1)
-
-        # cast to fp32/fp16 then replace 1's with -inf
-        float_mask = remove_from_windowed_attention_mask.type_as(query_vectors).masked_fill(
-            remove_from_windowed_attention_mask, -10000.0
-        )
-        # diagonal mask with zeros everywhere and -inf inplace of padding
-        diagonal_mask = self._sliding_chunks_query_key_matmul(
-            float_mask.new_ones(size=float_mask.size()), float_mask, self.one_sided_attn_window_size
-        )
-
-        # pad local attention probs
-        attn_scores += diagonal_mask
-
-        assert list(attn_scores.size()) == [
-            batch_size,
-            seq_len,
-            self.num_heads,
-            self.one_sided_attn_window_size * 2 + 1,
-        ], f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads}, {self.one_sided_attn_window_size * 2 + 1}), but is of size {attn_scores.size()}"
-
-        # compute local attention probs from global attention keys and contact over window dim
-        if is_global_attn:
-            # compute global attn indices required through out forward fn
-            (
-                max_num_global_attn_indices,
-                is_index_global_attn_nonzero,
-                is_local_index_global_attn_nonzero,
-                is_local_index_no_global_attn_nonzero,
-            ) = self._get_global_attn_indices(is_index_global_attn)
-            # calculate global attn probs from global key
-            global_key_attn_scores = self._concat_with_global_key_attn_probs(
-                query_vectors=query_vectors,
-                key_vectors=key_vectors,
-                max_num_global_attn_indices=max_num_global_attn_indices,
-                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
-                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
-                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
-            )
-            # concat to attn_probs
-            # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
-            attn_scores = torch.cat((global_key_attn_scores, attn_scores), dim=-1)
-
-            # free memory
-            del global_key_attn_scores
-
-        attn_probs_fp32 = F.softmax(attn_scores, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
-        attn_probs = attn_probs_fp32.type_as(attn_scores)
-
-        # free memory
-        del attn_probs_fp32
-
-        # softmax sometimes inserts NaN if all positions are masked, replace them with 0
-        attn_probs = torch.masked_fill(attn_probs, is_index_masked.unsqueeze(-1).unsqueeze(-1), 0.0)
-
-        # apply dropout
-        attn_probs = F.dropout(attn_probs, p=self.dropout, training=self.training)
-
-        value_vectors = value_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-
-        # compute local attention output with global attention value and add
-        if is_global_attn:
-            # compute sum of global and local attn
-            attn_output = self._compute_attn_output_with_global_indices(
-                value_vectors=value_vectors,
-                attn_probs=attn_probs,
-                max_num_global_attn_indices=max_num_global_attn_indices,
-                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
-                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
-            )
-        else:
-            # compute local attn only
-            attn_output = self._sliding_chunks_matmul_attn_probs_value(
-                attn_probs, value_vectors, self.one_sided_attn_window_size
-            )
-
-        assert attn_output.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
-        attn_output = attn_output.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
-
-        # compute value for global attention and overwrite to attention output
-        # TODO: remove the redundant computation
-        if is_global_attn:
-            global_attn_output = self._compute_global_attn_output_from_hidden(
-                hidden_states=hidden_states,
-                max_num_global_attn_indices=max_num_global_attn_indices,
-                is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
-                is_index_global_attn_nonzero=is_index_global_attn_nonzero,
-                is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
-                is_index_masked=is_index_masked,
-            )
-
-            # get only non zero global attn output
-            nonzero_global_attn_output = global_attn_output[
-                is_local_index_global_attn_nonzero[0], :, is_local_index_global_attn_nonzero[1]
-            ]
-            # overwrite values with global attention
-            attn_output[is_index_global_attn_nonzero[::-1]] = nonzero_global_attn_output.view(
-                len(is_local_index_global_attn_nonzero[0]), -1
-            )
-
-        attn_output = attn_output.transpose(0, 1)
-
-        if output_attentions:
-            if is_global_attn:
-                # With global attention, return global attention probabilities only
-                # batch_size x num_heads x sequence_length x window_size
-                # which is the attention weights from all tokens to all tokens for global attention
-                # It doesn't not return local attention. Only tokens with global attention have values > 0.0
-                attn_probs = attn_probs[:, :, :, :max_num_global_attn_indices]
-                # pad attn_probs to max length with 0.0 since global attn did not attend there
-                window_size = self.one_sided_attn_window_size * 2 + 1
-                attn_probs = F.pad(attn_probs, (0, window_size - max_num_global_attn_indices), value=0.0,)
-                attn_probs = attn_probs.permute(0, 2, 1, 3)
-            else:
-                # without global attention, return local attention probabilities
-                # batch_size x num_heads x sequence_length x window_size
-                # which is the attention weights of every token attending to its neighbours
-                attn_probs = attn_probs.permute(0, 2, 1, 3)
-
-        outputs = (attn_output, attn_probs) if output_attentions else (attn_output,)
-        return outputs
 
     @staticmethod
     def _get_global_attn_indices(is_index_global_attn):
@@ -503,12 +516,16 @@ class LongformerSelfAttention(nn.Module):
         key_vectors_only_global = key_vectors.new_zeros(
             batch_size, max_num_global_attn_indices, self.num_heads, self.head_dim
         )
+
         key_vectors_only_global[is_local_index_global_attn_nonzero] = key_vectors[is_index_global_attn_nonzero]
+
         # (batch_size, seq_len, num_heads, max_num_global_attn_indices)
         attn_probs_from_global_key = torch.einsum("blhd,bshd->blhs", (query_vectors, key_vectors_only_global))
+
         attn_probs_from_global_key[
             is_local_index_no_global_attn_nonzero[0], :, :, is_local_index_no_global_attn_nonzero[1]
         ] = -10000.0
+
         return attn_probs_from_global_key
 
     def _compute_attn_output_with_global_indices(
@@ -600,7 +617,7 @@ class LongformerSelfAttention(nn.Module):
             is_local_index_no_global_attn_nonzero[0], :, is_local_index_no_global_attn_nonzero[1], :
         ] = -10000.0
 
-        global_attn_scores = global_attn_scores.masked_fill(is_index_masked.unsqueeze(1).unsqueeze(2), -10000.0,)
+        global_attn_scores = global_attn_scores.masked_fill(is_index_masked[:, None, None, :], -10000.0,)
 
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
 
@@ -754,7 +771,6 @@ class LongformerPreTrainedModel(PreTrainedModel):
 
 
 LONGFORMER_START_DOCSTRING = r"""
-
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -823,13 +839,13 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 )
 class LongformerModel(LongformerPreTrainedModel):
     """
-    This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
-    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
-    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
+    This class copied code from :class:`~transformers.RobertaModel` and overwrote standard self-attention with longformer self-attention to provide the ability to process
+    long sequences following the self-attention approach described in `Longformer: the Long-Document Transformer
+    <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer self-attention
     combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
     memory and compute.
 
-    The selfattention module `LongformerSelfAttention` implemented here supports the combination of local and
+    The self-attention module `LongformerSelfAttention` implemented here supports the combination of local and
     global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
     and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
     tasks. Future release will add support for autoregressive attention, but the support for dilated attention
@@ -883,7 +899,7 @@ class LongformerModel(LongformerPreTrainedModel):
         inputs_embeds: torch.Tensor,
         pad_token_id: int,
     ):
-        """A helper function to pad tokens and mask to work with implementation of Longformer selfattention."""
+        """A helper function to pad tokens and mask to work with implementation of Longformer self-attention."""
         # padding
         attention_window = (
             self.config.attention_window
@@ -1052,6 +1068,9 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         self.lm_head = RobertaLMHead(config)
 
         self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1315,11 +1334,14 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # set global attention on question tokens
         if global_attention_mask is None:
-            logger.info("Initializing global attention on question tokens...")
-            # put global attention on all tokens until `config.sep_token_id` is reached
-            global_attention_mask = _compute_global_attention_mask(input_ids, self.config.sep_token_id)
+            if input_ids is None:
+                logger.warning(
+                    "It is not possible to automatically generate the `global_attention_mask` because input_ids is None. Please make sure that it is correctly set."
+                )
+            else:
+                # set global attention on question tokens automatically
+                global_attention_mask = _compute_global_attention_mask(input_ids, self.config.sep_token_id)
 
         outputs = self.longformer(
             input_ids,
@@ -1504,7 +1526,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # set global attention on question tokens
-        if global_attention_mask is None:
+        if global_attention_mask is None and input_ids is not None:
             logger.info("Initializing global attention on multiple choice...")
             # put global attention on all tokens after `config.sep_token_id`
             global_attention_mask = torch.stack(
