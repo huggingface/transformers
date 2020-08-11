@@ -402,6 +402,7 @@ if is_torch_available():
         LongformerForMultipleChoice,
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
+        LongformerSelfAttention,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -569,6 +570,14 @@ if is_tf_available():
         TFGPT2MainLayer,
         TFGPT2Model,
         TFGPT2PreTrainedModel,
+    )
+
+    from .modeling_tf_longformer import (
+        TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFLongformerModel,
+        TFLongformerForMaskedLM,
+        TFLongformerForQuestionAnswering,
+        TFLongformerSelfAttention,
     )
 
     from .modeling_tf_mobilebert import (
