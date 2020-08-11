@@ -29,6 +29,7 @@ from .configuration_auto import (
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
+    LongformerConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -93,6 +94,7 @@ from .modeling_tf_flaubert import (
     TFFlaubertWithLMHeadModel,
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
+from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
@@ -149,6 +151,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertModel),
         (CamembertConfig, TFCamembertModel),
         (XLMRobertaConfig, TFXLMRobertaModel),
+        (LongformerConfig, TFLongformerModel),
         (RobertaConfig, TFRobertaModel),
         (BertConfig, TFBertModel),
         (OpenAIGPTConfig, TFOpenAIGPTModel),
@@ -191,6 +194,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
+        (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
@@ -226,6 +230,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
+        (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (MobileBertConfig, TFMobileBertForMaskedLM),
@@ -259,6 +264,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForQuestionAnswering),
         (CamembertConfig, TFCamembertForQuestionAnswering),
         (XLMRobertaConfig, TFXLMRobertaForQuestionAnswering),
+        (LongformerConfig, TFLongformerForQuestionAnswering),
         (RobertaConfig, TFRobertaForQuestionAnswering),
         (BertConfig, TFBertForQuestionAnswering),
         (XLNetConfig, TFXLNetForQuestionAnsweringSimple),

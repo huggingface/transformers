@@ -477,7 +477,7 @@ This outputs a (hopefully) coherent next token following the original sequence, 
 
 .. code-block::
 
-    print(resulting_string)
+    >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
 In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to generate multiple tokens up to a user-defined length.
@@ -604,8 +604,7 @@ expected results:
 
 .. code-block::
 
-    print(nlp(sequence))
-
+    >>> print(nlp(sequence))
     [
         {'word': 'Hu', 'score': 0.9995632767677307, 'entity': 'I-ORG'},
         {'word': '##gging', 'score': 0.9915938973426819, 'entity': 'I-ORG'},
@@ -803,11 +802,6 @@ translation results nevertheless.
 
 Because the translation pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments 
 of ``PretrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
-This outputs the following translation into German:
-
-::
-
-  Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
   
 Here is an example doing translation using a model and a tokenizer. The process is the following:
 

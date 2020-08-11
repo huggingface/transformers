@@ -176,7 +176,7 @@ class GLUETransformer(BaseTransformer):
         return parser
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = GLUETransformer.add_model_specific_args(parser, os.getcwd())
@@ -194,4 +194,8 @@ if __name__ == "__main__":
     if args.do_predict:
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         model = model.load_from_checkpoint(checkpoints[-1])
-        trainer.test(model)
+        return trainer.test(model)
+
+
+if __name__ == "__main__":
+    main()
