@@ -6,7 +6,7 @@ tags:
 - pytorch
 license: ""
 datasets:
-- Arabic poetry from severaal eras
+- Arabic poetry from several eras
 metrics:
 - none
 ---
