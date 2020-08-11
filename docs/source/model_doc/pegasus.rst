@@ -22,7 +22,7 @@ Checkpoints
 The `checkpoints <https://huggingface.co/models?search=pegasus>`_ all checkpoints are finetuned for summarization, besides ``pegasus-large``, whence the other checkpoints are finetuned.
 - Each checkpoint is 2.2 GB on disk and 568M parameters.
 - FP16 is not supported (help/ideas on this appreciated!).
-- Summarizing xsum in fp32 takes about 400ms/sample, with default parameters.
+- Summarizing xsum in fp32 takes about 400ms/sample, with default parameters on a v100 GPU.
 - For XSUM, The paper reports rouge1,rouge2, rougeL of paper: 47.21/24.56/39.25. As of Aug 9, this port scores 46.91/24.34/39.1.
 The gap is likely because of different alpha/length_penalty implementations in beam search.
 

@@ -42,7 +42,7 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
-        extra_pos_embeddings=2,
+        extra_pos_embeddings=2,  # FIXME(@sshleifer): delete?
         activation_function="gelu",
         vocab_size=50265,
         d_model=1024,
@@ -74,6 +74,59 @@ class BartConfig(PretrainedConfig):
     ):
         r"""
             :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
+
+            Args:
+                vocab_size (:obj:`int`, optional, defaults to 30522):
+                    defines the different tokens that can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
+                d_model (:obj:`int`, optional, defaults to 1024 for bart-large, pegasus, mbart. 768 for Marian):
+                    Dimensionality of the layers and the pooler layer.
+                encoder_layers (:obj:`int`, optional, defaults to 12):
+                    number of encoder layers, 16 for pegasus, 6 for bart-base and marian
+                decoder_layers (:obj:`int`, optional, defaults to 16):
+                    number of decoder layers, 16 for pegasus, 6 for bart-base and marian
+                num_attention_heads (:obj:`int`, optional, defaults to 12):
+                    Number of attention heads for each attention layer in the Transformer encoder.
+                decoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+                    Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
+                encoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+                    Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
+                activation_function (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
+                    The non-linear activation function (function or string) in the encoder and pooler.
+                    If string, "gelu", "relu", "swish" and "gelu_new" are supported.
+                dropout (:obj:`float`, optional, defaults to 0.1):
+                    The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+                attention_dropout (:obj:`float`, optional, defaults to 0.1):
+                    The dropout ratio for the attention probabilities.
+                classifier_dropout (:obj:`float`, optional, defaults to 0.1):
+                    The dropout ratio for something lol. Read the code.
+                max_position_embeddings (:obj:`int`, optional, defaults to 1024):
+                    The maximum sequence length that this model might ever be used with.
+                    Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+                init_std (:obj:`float`, optional, defaults to 0.02):
+                    The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+                add_bias_logits (:obj:`int`, optional, defaults to False):
+                    True for marian only
+                normalize_before (:obj:`bool`, optional)
+                    call layernorm before attention ops. True for pegasus, mbart. False for bart. FIXME: marian?
+                normalize_embedding (:obj:`bool`, optional,)
+                    call layernorm after embeddings. Only True for Bart
+                static_position_embeddings (:obj:`bool`, optional,)
+                    dont learn positional embeddings, use sinusoidal. True for marian, pegasus.
+                add_final_layer_norm (:obj:`bool`, optional,)
+                    why not add another layernorm?
+                scale_embedding (:obj:`bool`, optional,)
+                    scale embeddings by diving by sqrt(d_model)
+                eos_token_id (:obj:`int`, optional, defaults to 2)
+                    FIXME
+                pad_token_id (:obj:`int`, optional, defaults to 1)
+                    FIXME
+                bos_token_id (:obj:`int`, optional, defaults to 0)
+                    FIXME
+                encoder_layerdrop: (:obj:`float`, optional, defaults to 0.):
+                    google "layerdrop arxiv" its not explainable in one line.
+                decoder_layerdrop: (:obj:`float`, optional, defaults to 0.):
+                    google "layerdrop arxiv" its not explainable in one line.
+
 
             Examples::
 
