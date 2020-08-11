@@ -1169,6 +1169,16 @@ class TokenizerTesterMixin:
                         encoded_sequences_batch_padded_1[key], encoded_sequences_batch_padded_2[key],
                     )
 
+    def test_added_token_serializable(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            new_token = AddedToken('new_token', lstrip=True)
+            tokenizer.add_special_tokens({'additional_special_tokens': [new_token]})
+
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                tokenizer.save_pretrained(tmp_dir_name)
+                tokenizer.from_pretrained(tmp_dir_name)
+
     def test_batch_encode_plus_padding(self):
         # Test that padded sequences are equivalent between batch_encode_plus and encode_plus
 
