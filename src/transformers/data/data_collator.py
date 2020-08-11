@@ -99,7 +99,7 @@ class DataCollatorWithPadding:
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
 
-    def __call__(self, features):
+    def __call__(self, features: Dict[str, List[int]]) -> Dict[str, torch.Tensor]:
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
