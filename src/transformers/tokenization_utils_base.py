@@ -2128,12 +2128,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Padding side (left/right) padding token ids are defined at the tokenizer level
         (with ``self.padding_side``, ``self.pad_token_id`` and ``self.pad_token_type_id``)
 
+        .. note::
+
+            If the ``encoded_inputs`` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+            result will use the same type unless you provide a different tensor type with ``return_tensors``. In the
+            case of PyTorch tensors, you will lose the specific device of your tensors however.
+
         Args:
             encoded_inputs (:class:`~transformers.BatchEncoding`, list of :class:`~transformers.BatchEncoding`, :obj:`Dict[str, List[int]]`, :obj:`Dict[str, List[List[int]]` or :obj:`List[Dict[str, List[int]]]`):
                 Tokenized inputs. Can represent one input (:class:`~transformers.BatchEncoding` or
                 :obj:`Dict[str, List[int]]`) or a batch of tokenized inputs (list of
                 :class:`~transformers.BatchEncoding`, `Dict[str, List[List[int]]]` or `List[Dict[str, List[int]]]`) so
                 you can use this method during preprocessing as well as in a PyTorch Dataloader collate function.
+
+                Instead of :obj:`List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                see the note above for the return type.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -2183,7 +2192,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
-        # Note that we loose the specific device the tensor may be on for PyTorch
+        # Note that we lose the specific device the tensor may be on for PyTorch
         first_element = encoded_inputs["input_ids"][0]
         if isinstance(first_element, (list, tuple)) and first_element:
             first_element = first_element[0]
