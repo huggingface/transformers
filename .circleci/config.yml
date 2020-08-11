@@ -19,7 +19,7 @@ references:
             command: |
                 gcloud --quiet auth configure-docker
                 cd docker/transformers-pytorch-tpu
-                if [ -z "$CIRCLE_PR_NUMBER" ]; then docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1"; else docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" --build-arg "GITHUB_REF=pull/$CIRCLE_PR_NUMBER/head" . ; fi
+                if [ -z "$CIRCLE_PR_NUMBER" ]; then docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" . ; else docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" --build-arg "GITHUB_REF=pull/$CIRCLE_PR_NUMBER/head" . ; fi
                 docker push "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID"
     deploy_cluster: &deploy_cluster
         run:
@@ -302,15 +302,15 @@ workflows:
             - run_tests_tf
             - build_doc
             - deploy_doc: *workflow_filters
-#    tpu_testing_jobs:
-#        triggers:
-#            - schedule:
-#                # Set to run at the first minute of every hour.
-#                cron: "0 8 * * *"
-#                filters:
-#                    branches:
-#                        only:
-#                            - master
-#        jobs:
-#            - cleanup-gke-jobs
-#            - run_examples_tpu
+    tpu_testing_jobs:
+        triggers:
+            - schedule:
+                # Set to run at the first minute of every hour.
+                cron: "0 8 * * *"
+                filters:
+                    branches:
+                        only:
+                            - master
+        jobs:
+            - cleanup-gke-jobs
+            - run_examples_tpu
