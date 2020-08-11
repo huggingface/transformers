@@ -40,12 +40,12 @@ There are many more parameters that can be configured via the benchmark argument
 ``src/transformers/benchmark/benchmark_args_utils.py``, ``src/transformers/benchmark/benchmark_args.py`` (for PyTorch) and ``src/transformers/benchmark/benchmark_args_tf.py`` (for Tensorflow). 
 Alternatively, running the following shell commands from root will print out a descriptive list of all configurable parameters for PyTorch and Tensorflow respectively.
 
-.. code-block::
+.. code-block:: bash
 
-    >>> ## PYTORCH CODE
+    ## PYTORCH CODE
     python examples/benchmarking/run_benchmark.py --help
 
-    >>> ## TENSORFLOW CODE
+    ## TENSORFLOW CODE
     python examples/benchmarking/run_benchmark_tf.py --help
 
 

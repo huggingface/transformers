@@ -127,7 +127,13 @@ class EncoderDecoderModel(PreTrainedModel):
         Examples::
 
             >>> from transformers import EncoderDecoderModel
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert2bert")
+            >>> # load fine-tuned model
+            >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
+
         """
 
         kwargs_encoder = {
@@ -162,17 +168,18 @@ class EncoderDecoderModel(PreTrainedModel):
                 from .configuration_auto import AutoConfig
 
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
-                if decoder_config.is_decoder is False:
+                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
                     decoder_config.is_decoder = True
+                    decoder_config.add_cross_attention = True
 
                 kwargs_decoder["config"] = decoder_config
 
-            if kwargs_decoder["config"].is_decoder is False:
+            if kwargs_decoder["config"].is_decoder is False or decoder_config.add_cross_attention is False:
                 logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attribute `is_decoder` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` is set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)

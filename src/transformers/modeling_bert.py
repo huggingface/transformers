@@ -48,7 +48,12 @@ from .modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from .modeling_utils import (
+    PreTrainedModel,
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -88,6 +93,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
     """
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
@@ -376,9 +382,13 @@ class BertOutput(nn.Module):
 class BertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
         self.attention = BertAttention(config)
         self.is_decoder = config.is_decoder
-        if self.is_decoder:
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
             self.crossattention = BertAttention(config)
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
@@ -399,6 +409,9 @@ class BertLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.is_decoder and encoder_hidden_states is not None:
+            assert hasattr(
+                self, "crossattention"
+            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -410,10 +423,16 @@ class BertLayer(nn.Module):
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
+        layer_output = apply_chunking_to_forward(
+            self.chunk_size_feed_forward, self.seq_len_dim, self.feed_forward_chunk, attention_output
+        )
         outputs = (layer_output,) + outputs
         return outputs
+
+    def feed_forward_chunk(self, attention_output):
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.output(intermediate_output, attention_output)
+        return layer_output
 
 
 class BertEncoder(nn.Module):
@@ -586,9 +605,9 @@ class BertPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class BertForPretrainingOutput(ModelOutput):
+class BertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.BertForPretrainingModel`.
+    Output type of :class:`~transformers.BertForPreTrainingModel`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -695,8 +714,10 @@ class BertModel(BertPreTrainedModel):
     Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is expected as an input to the forward pass.
+    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
+    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an
+    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _`Attention is all you need`:
         https://arxiv.org/abs/1706.03762
@@ -837,7 +858,7 @@ class BertForPreTraining(BertPreTrainedModel):
         return self.cls.predictions.decoder
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=BertForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -918,7 +939,7 @@ class BertForPreTraining(BertPreTrainedModel):
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return BertForPretrainingOutput(
+        return BertForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
@@ -933,7 +954,9 @@ class BertForPreTraining(BertPreTrainedModel):
 class BertLMHeadModel(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert config.is_decoder, "If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True`."
+
+        if not config.is_decoder:
+            logger.info("If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -1036,9 +1059,12 @@ class BertLMHeadModel(BertPreTrainedModel):
 class BertForMaskedLM(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert (
-            not config.is_decoder
-        ), "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+
+        if config.is_decoder:
+            logger.info(
+                "If you want to use `TFBertForMaskedLM` make sure `config.is_decoder=False` for "
+                "bi-directional self-attention."
+            )
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)

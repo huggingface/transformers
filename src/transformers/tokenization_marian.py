@@ -133,6 +133,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return_tensors: str = "pt",
         truncation_strategy="only_first",
         padding="longest",
+        **unused,
     ) -> BatchEncoding:
         """Prepare model inputs for translation. For best performance, translate one sentence at a time.
         Arguments:
@@ -163,6 +164,9 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         if tgt_texts is None:
             return model_inputs
+        if max_target_length is not None:
+            tokenizer_kwargs["max_length"] = max_target_length
+
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
 

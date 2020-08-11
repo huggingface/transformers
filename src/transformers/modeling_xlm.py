@@ -496,11 +496,13 @@ class XLMModel(XLMPreTrainedModel):
         else:
             bs, slen = inputs_embeds.size()[:-1]
 
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if lengths is None:
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.LongTensor([slen] * bs)
+                lengths = torch.tensor([slen] * bs, device=device)
         # mask = input_ids != self.pad_index
 
         # check inputs

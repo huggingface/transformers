@@ -23,7 +23,7 @@ import json
 import logging
 import os
 import warnings
-from collections import UserDict
+from collections import OrderedDict, UserDict
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -1071,7 +1071,7 @@ class SpecialTokensMixin:
         set_attr = self.special_tokens_map_extended
         for attr_value in set_attr.values():
             all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
-        all_toks = list(set(all_toks))
+        all_toks = list(OrderedDict.fromkeys(all_toks))
         return all_toks
 
     @property
@@ -1562,6 +1562,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             for key, value in special_tokens_map.items():
                 if isinstance(value, dict):
                     value = AddedToken(**value)
+                elif isinstance(value, list):
+                    value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
@@ -1633,6 +1635,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             for key, value in self.special_tokens_map_extended.items():
                 if isinstance(value, AddedToken):
                     write_dict[key] = value.__getstate__()
+                elif isinstance(value, list):
+                    write_dict[key] = [
+                        token.__getstate__() if isinstance(token, AddedToken) else token for token in value
+                    ]
                 else:
                     write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
