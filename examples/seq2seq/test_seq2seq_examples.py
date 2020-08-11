@@ -188,10 +188,6 @@ class TestSummarizationDistiller(unittest.TestCase):
         all_files = list(Path(model.output_dir).glob("best_tfmr/*"))
         assert len(all_files) > 2
         self.assertEqual(len(transformer_ckpts), 2)
-        # examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
-        # out_path = tempfile.mktemp()
-        # generate_summaries_or_translations(examples, out_path, str(model.output_dir / "best_tfmr"))
-        # self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
