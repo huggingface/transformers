@@ -91,7 +91,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
+        A Blenderbot sequence has the following format:
 
         - single sequence: `` X </s>``
 

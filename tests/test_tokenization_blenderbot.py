@@ -49,5 +49,3 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         input_bpe_tokens = [0, 1, 2, 3, 4, 5]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
-        
-
