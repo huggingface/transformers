@@ -2,8 +2,6 @@
 language: "ar"
 tags:
 - text-generation
-- gpt2
-- pytorch
 license: ""
 datasets:
 - Arabic poetry from several eras
