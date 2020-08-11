@@ -213,6 +213,8 @@ def main():
     model = model_class.from_pretrained(args.model_name_or_path)
     model.to(args.device)
 
+    if args.fp16: model.half()
+
     args.length = adjust_length_to_model(args.length, max_sequence_length=model.config.max_position_embeddings)
     logger.info(args)
 
