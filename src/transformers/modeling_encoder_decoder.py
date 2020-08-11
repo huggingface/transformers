@@ -299,15 +299,21 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_outputs = (past,)
 
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids)
-
-        return {
+        input_dict = {
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_inputs["attention_mask"],
             "decoder_input_ids": decoder_inputs["input_ids"],
             "encoder_outputs": encoder_outputs,
         }
 
+        # Ideally all models should have a `use_cache`
+        # leave following to ifs until all have it emplemented
+        if "use_cache" in decoder_inputs:
+            input_dict["decoder_use_cache"] = decoder_inputs["use_cache"]
+
+        if "past_key_values" in decoder_inputs:
+            input_dict["decoder_past_key_values"] = decoder_inputs["past_key_values"]
+
     def _reorder_cache(self, past, beam_idx):
-        # as a default encoder-decoder models do not re-order the past.
-        # TODO(PVP): might have to be updated, e.g. if GPT2 is to be used as a decoder
-        return past
+        # apply decoder cache reordering here
+        return self.decoder._reorder_cache(past, beam_idx)
