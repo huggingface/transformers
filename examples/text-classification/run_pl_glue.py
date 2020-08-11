@@ -162,7 +162,6 @@ class GLUETransformer(BaseTransformer):
             help="The number of GPUs allocated for this, it is by default 0 meaning none",
         )
 
-
         parser.add_argument(
             "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
         )

@@ -111,8 +111,6 @@ class BaseTransformer(pl.LightningModule):
         else:
             self.model = model
 
-
-
     def load_hf_checkpoint(self, *args, **kwargs):
         self.model = self.model_type.from_pretrained(*args, **kwargs)
 
@@ -154,7 +152,7 @@ class BaseTransformer(pl.LightningModule):
     @property
     def total_steps(self) -> int:
         """The number of total training steps that will be run. Used for lr scheduler purposes."""
-        if not hasattr(self, 'train_loader'):
+        if not hasattr(self, "train_loader"):
             self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size)
         num_devices = max(1, self.hparams.gpus)  # TODO: consider num_tpu_cores
         effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
@@ -163,14 +161,13 @@ class BaseTransformer(pl.LightningModule):
     @staticmethod
     def calc_total_steps(dataset_size, effective_batch_size, epochs):
         """Calculate the expected number of optimizer steps. (there can be multiple forward passes per optimizer step.)"""
-        return (dataset_size/effective_batch_size) * epochs
-
+        return (dataset_size / effective_batch_size) * epochs
 
     def setup(self):
         pass
 
     def get_dataloader(self, type_path, batch_size, shuffle=False):
-        raise NotImplementedError('You must implement this for your task')
+        raise NotImplementedError("You must implement this for your task")
 
     def train_dataloader(self):
         return self.train_loader

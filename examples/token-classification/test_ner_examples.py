@@ -2,9 +2,9 @@ import logging
 import sys
 import unittest
 from unittest.mock import patch
-from transformers.testing_utils import slow
 
 import run_ner
+from transformers.testing_utils import slow
 
 
 logging.basicConfig(level=logging.INFO)
@@ -13,7 +13,6 @@ logger = logging.getLogger()
 
 
 class ExamplesTests(unittest.TestCase):
-
     @slow
     def test_run_ner(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -34,7 +33,6 @@ class ExamplesTests(unittest.TestCase):
         with patch.object(sys, "argv", ["run.py"] + testargs):
             result = run_ner.main()
             self.assertLess(result["eval_loss"], 1.5)
-
 
     def test_run_ner_pl(self):
         stream_handler = logging.StreamHandler(sys.stdout)
