@@ -6,11 +6,8 @@ tags:
 - hi
 - en
 - codemix
-license: "any valid license identifier"
 datasets:
 - SAIL 2017
-metrics:
-- array of metric identifiers
 ---
 
 # Model name
