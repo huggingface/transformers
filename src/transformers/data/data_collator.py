@@ -99,7 +99,10 @@ class DataCollatorWithPadding:
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
 
-    def __call__(self, features: Dict[str, List[int]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        features = [
+            {k: (v.tolist() if isinstance(v, torch.Tensor) else v) for k, v in feature.items()} for feature in features
+        ]
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
