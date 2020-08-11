@@ -1,9 +1,8 @@
 import unittest
 
-from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available
+from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available, BlenderbotSmallTokenizer
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_bart import _long_tensor, assert_tensors_close
@@ -13,17 +12,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
  import torch
  from transformers import BlenderbotForConditionalGeneration
- 
-from parlai.core.opt import Opt
-from parlai.core.dict import DictionaryAgent
-from parlai.core.torch_agent import Batch
-from transformers.modeling_blenderbot import BlenderbotForConditionalGeneration
-from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
-from transformers.configuration_blenderbot import BlenderbotConfig
-from parlai.agents.transformer.modules import TransformerGeneratorModel
-from parlai.agents.transformer.transformer import TransformerGeneratorAgent
 
-import json
 
 
 @require_torch
@@ -159,8 +148,7 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [268, 343, 2])  
-    
-  @torch.no_grad() 
+  
   def test_forward_3B_same_as_parlai(self):
       torch.manual_seed(0)
       config = BlenderbotConfig(
@@ -224,7 +212,6 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
       assert torch.allclose(expected_logits, logits, atol=1e-4)
       
       
-  @torch.no_grad()
   @slow
   def test_generation_from_short_input_same_as_parlai_3B(self):
     src_text = [
@@ -253,7 +240,7 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
     self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
 
 
-  @torch.no_grad()
+  
   @slow
   def test_loss_same_as_parlai_3B(self):
     input_ids = _long_tensor([[268, 343, 2]])  # sam
@@ -296,7 +283,7 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [1384])  
   
-  @torch.no_grad() 
+ 
   def test_forward_90M_same_as_parlai(self):
       torch.manual_seed(0)
       config = BlenderbotConfig(
@@ -359,7 +346,6 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
       assert torch.allclose(expected_logits, logits, atol=1e-4)
       
 
-  @torch.no_grad()
   @slow
   def test_generation_from_long_input_same_as_parlai_90M(self):
     src_text = [
@@ -373,7 +359,7 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
    
     self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances)) #test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
     
-  @torch.no_grad()
+  
   @slow
   def test_generation_from_short_input_same_as_parlai_90M(self):
     src_text = [
@@ -388,7 +374,7 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
     self.assertListEqual(tgt_text, generated_txt)
     
   
-  @torch.no_grad()
+
   @slow
   def test_loss_same_as_parlai_90_short_input(self):
     input_ids = _long_tensor([[1384]])  # sam

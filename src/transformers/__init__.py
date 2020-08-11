@@ -128,7 +128,7 @@ from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
-from .tokenization_blenderbot import BlenderbotTokenizer
+from .tokenization_blenderbot import BlenderbotTokenizer, BlenderbotSmallTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -395,8 +395,6 @@ if is_torch_available():
         LongformerForQuestionAnswering,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from .modeling_blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
-
     from .modeling_dpr import (
         DPRPretrainedContextEncoder,
         DPRPretrainedQuestionEncoder,
