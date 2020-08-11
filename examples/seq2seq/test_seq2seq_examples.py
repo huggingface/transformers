@@ -329,7 +329,7 @@ def test_finetune_extra_model_args():
     assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
 
 
-def test_finetune_lr_shedulers():
+def test_finetune_lr_schedulers():
     args_d: dict = CHEAP_ARGS.copy()
 
     task = "summarization"
