@@ -1,5 +1,7 @@
 ---
-language: "ISO 639-1 code for your language, or `multilingual`"
+language:
+- hi
+- en
 tags:
 - hi
 - en
