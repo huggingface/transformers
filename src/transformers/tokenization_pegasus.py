@@ -20,27 +20,21 @@ from .tokenization_utils_base import BatchEncoding
 
 
 class PegasusTokenizer(ReformerTokenizer):
-    offset = 103  # to make embedding size a multiple of 128 I think
+    offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = {"vocab_file": "spiece.model"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Dont use reserved words added_token_encoder, added_tokens_decoder because they
-        # get checked in from_pretrained
+        # Dont use reserved words added_token_encoder, added_tokens_decoder because of
+        # AssertionError: Non-consecutive added token '1' found. in from_pretrained
         assert len(self.added_tokens_decoder) == 0
         self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
+        # entries 2-104 are only used for pretraining and called unk_2, ...unk_104
         self.encoder.update({i: f"unk_{i}" for i in range(2, self.offset + 2)})
-        # self.added_tokens_decoder = self._added_toks
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
-        assert 104 in self.encoder
-        assert 105 not in self.encoder
-        assert self.pad_token_id == 0, "pad should be 0"
-        assert self.eos_token_id == 1, "eos should be 1"
-        assert self.unk_token_id != 2
 
     def _convert_token_to_id(self, token: str) -> int:
         """ Converts a token (str) in an id using the vocab. """
-
         if token in self.decoder:
             return self.decoder[token]
         elif token in self.added_tokens_decoder:
