@@ -299,6 +299,7 @@ if is_torch_available():
     from .tokenization_marian import MarianTokenizer
     from .modeling_roberta import (
         RobertaForMaskedLM,
+        RobertaForCausalLM,
         RobertaModel,
         RobertaForSequenceClassification,
         RobertaForMultipleChoice,

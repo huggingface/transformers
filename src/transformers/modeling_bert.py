@@ -956,7 +956,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.info("If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -976,9 +976,9 @@ class BertLMHeadModel(BertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1061,8 +1061,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.info(
-                "If you want to use `TFBertForMaskedLM` make sure `config.is_decoder=False` for "
+            logger.warning(
+                "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
@@ -1089,9 +1089,9 @@ class BertForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
