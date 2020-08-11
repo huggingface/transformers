@@ -11,11 +11,11 @@ def download_wmt_dataset(src_lang="ro", tgt_lang="en", dataset="wmt16", save_dir
     Args:
         src_lang: <str> source language
         tgt_lang: <str> target language
-        dataset: <str> like wmt16 (if you don't know, try wmt16).
+        dataset: <str> wmt16, wmt17, etc. wmt16 is a good start as it's small. To get the full list run `import nlp; print([d.id for d in nlp.list_datasets() if "wmt" in d.id])`
         save_dir: <str>, where to save the datasets, defaults to f'{dataset}-{src_lang}-{tgt_lang}'
 
     Usage:
-        >>> download_wmt_dataset('en', 'ru', dataset='wmt19') # saves to wmt19_en_ru
+        >>> download_wmt_dataset('ro', 'en', dataset='wmt16') # saves to wmt16-ro-en
     """
     try:
         import nlp
@@ -29,31 +29,23 @@ def download_wmt_dataset(src_lang="ro", tgt_lang="en", dataset="wmt16", save_dir
     save_dir = Path(save_dir)
     save_dir.mkdir(exist_ok=True)
 
-    for split in tqdm(ds.keys()):
+    for split in ds.keys():
         print(f"Splitting {split} with {ds[split].num_rows} records")
 
         # to save to val.source, val.target like summary datasets
         fn = "val" if split == "validation" else split
         src_path = save_dir.joinpath(f"{fn}.source")
-        src_fp = src_path.open("w+")
         tgt_path = save_dir.joinpath(f"{fn}.target")
+        src_fp = src_path.open("w+")
         tgt_fp = tgt_path.open("w+")
 
-        src, tgt = [], []
-        # read/write in chunks so not to consume potentially 100GB of RAM
+        # reader is the bottleneck so doing one record at a time doesn't slow things down
         for x in tqdm(ds[split]):
             ex = x["translation"]
-            src.append(ex[src_lang])
-            tgt.append(ex[tgt_lang])
-            if len(src) == 100000:
-                src_fp.write("\n".join(src))
-                tgt_fp.write("\n".join(src))
-                src, tgt = [], []
-        # any leftovers
-        src_fp.write("\n".join(src))
-        tgt_fp.write("\n".join(src))
+            src_fp.write(ex[src_lang] + "\n")
+            tgt_fp.write(ex[tgt_lang] + "\n")
 
-    print(f"saved dataset to {save_dir}")
+    print(f"Saved {dataset} dataset to {save_dir}")
 
 
 if __name__ == "__main__":
