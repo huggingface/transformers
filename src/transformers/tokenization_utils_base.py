@@ -1310,10 +1310,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 if isinstance(value, dict):
                     value = AddedToken(**value)
                 elif isinstance(value, list):
-                    value = [
-                        AddedToken(**token) if isinstance(token, dict)
-                        else token for token in value
-                    ]
+                    value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
@@ -1378,8 +1375,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     write_dict[key] = value.__getstate__()
                 elif isinstance(value, list):
                     write_dict[key] = [
-                        token.__getstate__() if isinstance(token, AddedToken)
-                        else token for token in value
+                        token.__getstate__() if isinstance(token, AddedToken) else token for token in value
                     ]
                 else:
                     write_dict[key] = value
