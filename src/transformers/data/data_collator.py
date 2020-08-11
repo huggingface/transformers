@@ -100,6 +100,7 @@ class DataCollatorWithPadding:
     pad_to_multiple_of: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        # If PreTrainedTokenizer.pad supports tensors in the future, we will be able to remove that check.
         features = [
             {k: (v.tolist() if isinstance(v, torch.Tensor) else v) for k, v in feature.items()} for feature in features
         ]
