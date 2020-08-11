@@ -370,6 +370,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_chunking = True
 
     def setUp(self):
         self.model_tester = BertModelTester(self)
