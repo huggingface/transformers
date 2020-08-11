@@ -628,8 +628,10 @@ class Trainer:
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                     xm.master_print(met.metrics_report())
                 else:
-                    logger.warning("You enabled PyTorch/XLA debug metrics but you don't have a TPU "
-                                   "configured. Check your training configuration if this is unexpected.")
+                    logger.warning(
+                        "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
+                        "configured. Check your training configuration if this is unexpected."
+                    )
 
         if self.tb_writer:
             self.tb_writer.close()
