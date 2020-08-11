@@ -7,6 +7,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import PegasusConfig, PegasusForConditionalGeneration, PegasusTokenizer
+from transformers.configuration_pegasus import DEFAULTS
 
 
 PATTERNS = [
@@ -81,16 +82,10 @@ expected_alpha = {
 
 
 def convert_pegasus_to_bart(tf_weights: dict, cfg_updates: dict) -> PegasusForConditionalGeneration:
+    cfg_kwargs = DEFAULTS.copy()
+    cfg_kwargs.update(cfg_updates)
 
-    cfg = PegasusConfig(
-        activation_function="relu",
-        attention_dropout=0.1,
-        dropout=0.1,
-        activation_dropout=0.1,
-        vocab_size=96103,
-        num_beams=8,
-        **cfg_updates,
-    )
+    cfg = PegasusConfig(**cfg_updates)
     bart = PegasusForConditionalGeneration(cfg)
     sd = bart.model.state_dict()
     mapping = {}

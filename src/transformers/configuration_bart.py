@@ -18,6 +18,7 @@
 import logging
 
 from .configuration_utils import PretrainedConfig
+from .file_utils import add_start_docstrings_to_callable
 
 
 logger = logging.getLogger(__name__)
@@ -31,17 +32,10 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
     "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
 }
-BART_CONFIG_ARGS_DOC = \
-r"""
+BART_CONFIG_ARGS_DOC = r"""
     Args:
-        activation_dropout (:obj:`float`, optional, defaults to 0.0):
-            The dropout ratio for activations
-        extra_pos_embeddings: ??? (defaults to 2):
-        num_labels: ??? (defaults to 3):
-        is_encoder_decoder ??? (defaults to True):
         vocab_size (:obj:`int`, optional, defaults to 50265):
-            defines the different tokens that can be represented by `inputs_ids` passed to the forward method of 
-            :class:`~transformers.BertModel`.
+            defines the different tokens that can be represented by `inputs_ids` passed to the forward method.
         d_model (:obj:`int`, optional, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, optional, defaults to 12):
@@ -63,6 +57,8 @@ r"""
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, optional, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        activation_dropout (:obj:`float`, optional, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (:obj:`float`, optional, defaults to 0.0):
             The dropout ratio for classifier.
         max_position_embeddings (:obj:`int`, optional, defaults to 1024):
@@ -92,10 +88,15 @@ r"""
             Google "layerdrop arxiv", as its not explainable in one line.
         decoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
+        extra_pos_embeddings: (:obj:`int`, optional, defaults to 2):
+            How many extra learned positional embeddings to use. Should be pad_token_id+1 for bart.
+        num_labels: (:obj:`int`, optional, defaults to 2):
+            for SequenceClassification
+        is_encoder_decoder (:obj:`int`, optional, defaults to True):
+            True
 
 """
 
-from .file_utils import add_start_docstrings_to_callable
 
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class BartConfig(PretrainedConfig):
@@ -212,3 +213,4 @@ class BartConfig(PretrainedConfig):
 
 class MBartConfig(BartConfig):
     model_type = "mbart"
+    """See real config values at https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json."""
