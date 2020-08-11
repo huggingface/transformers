@@ -32,13 +32,12 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
 
         >>> from transformers import PegasusTokenizer, PegasusForConditionalGeneration
         >>> from typing import List
-        >>> sample_text = "Something longer to summarize"
         >>> PGE_ARTICLE = "PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
         >>> mname = "google/pegasus-xsum"
 
         >>> model = PegasusForConditionalGeneration.from_pretrained(mname)
         >>> tok = PegasusTokenizer.from_pretrained(mname)
-        >>> batch = tok(src_texts=[PGE_ARTICLE])  # don't need tgt_text for inference
+        >>> batch = tok.prepare_seq2seq_batch(src_texts=[PGE_ARTICLE])  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
         >>> summary: List[str] = tok.batch_decode(gen, skip_special_tokens=True)
         >>> assert summary == "California's largest electricity provider has turned off power to tens of thousands of customers."

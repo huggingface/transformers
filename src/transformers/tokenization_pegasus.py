@@ -113,7 +113,9 @@ class PegasusTokenizer(ReformerTokenizer):
         truncation=True,
         padding="longest",
     ) -> BatchEncoding:
-        """Prepare model inputs for summarization or translation.
+        """
+        Prepare model inputs for summarization or translation.
+
         Arguments:
             src_texts: (:obj:`list`):
                 list of documents to summarize or source language texts
@@ -129,20 +131,20 @@ class PegasusTokenizer(ReformerTokenizer):
                 If left unset or set to :obj:`None`, this will use the max_length value.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
+
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
                 * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-
             return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
+
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-
-            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
+            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`True`):
                 Activates and controls truncation. Accepts the following values:
 
                 * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
@@ -157,17 +159,19 @@ class PegasusTokenizer(ReformerTokenizer):
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
                   sequence lengths greater than the model maximum admissible input size).
-        Returns:
-            class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+
+        Return:
+            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
 
             - **input_ids** -- List of token ids to be fed to the encoder.
-            - **attention_mask** -- - List of indices specifying which tokens should be attended to by the model.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
             - **decoder_input_ids** -- List of token ids to be fed to the decoder.
             - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
                 This does not include causal mask, which is built by the model.
 
             The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
             will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
+
         """
         if "" in src_texts:
             raise ValueError(f"found empty string in src_texts: {src_texts}")
