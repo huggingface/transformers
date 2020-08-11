@@ -1,6 +1,5 @@
 ---
 language: "ar"
-thumbnail: ""
 tags:
 - text-generation
 - gpt2
