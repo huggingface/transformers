@@ -144,10 +144,10 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
         self.assertEqual(tensor_batch["labels"].shape, (2,))
 
-        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
+        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
         tensor_batch = batch.convert_to_tensors(tensor_type="np", prepend_batch_axis=True)
-        self.assertEqual(tensor_batch["inputs"].shape, (1, 2, 3))
-        self.assertEqual(tensor_batch["labels"].shape, (1, 2))
+        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (1,))
 
     @require_torch
     def test_batch_encoding_with_labels_pt(self):
@@ -156,10 +156,10 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
         self.assertEqual(tensor_batch["labels"].shape, (2,))
 
-        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
+        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
         tensor_batch = batch.convert_to_tensors(tensor_type="pt", prepend_batch_axis=True)
-        self.assertEqual(tensor_batch["inputs"].shape, (1, 2, 3))
-        self.assertEqual(tensor_batch["labels"].shape, (1, 2))
+        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (1,))
 
     @require_tf
     def test_batch_encoding_with_labels_tf(self):
@@ -168,10 +168,10 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
         self.assertEqual(tensor_batch["labels"].shape, (2,))
 
-        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
+        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
         tensor_batch = batch.convert_to_tensors(tensor_type="tf", prepend_batch_axis=True)
-        self.assertEqual(tensor_batch["inputs"].shape, (1, 2, 3))
-        self.assertEqual(tensor_batch["labels"].shape, (1, 2))
+        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (1,))
 
     def test_padding_accepts_tensors(self):
         features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
