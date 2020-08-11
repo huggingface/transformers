@@ -145,7 +145,7 @@ class Seq2SeqDataset(Dataset):
 
 
 class TranslationDataset(Seq2SeqDataset):
-    """A dataset that calls prepare_translation_batch."""
+    """A dataset that calls prepare_seq2seq_batch."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

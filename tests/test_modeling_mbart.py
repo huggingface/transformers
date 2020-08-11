@@ -144,7 +144,7 @@ class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @slow
     def test_fill_mask(self):
-        inputs = self.tokenizer.prepare_translation_batch(["One of the best <mask> I ever read!"]).to(torch_device)
+        inputs = self.tokenizer.prepare_seq2seq_batch(["One of the best <mask> I ever read!"]).to(torch_device)
         outputs = self.model.generate(
             inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id["en_XX"], num_beams=1
         )
