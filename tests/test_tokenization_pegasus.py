@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 
 from transformers.file_utils import cached_property
+from transformers.testing_utils import require_torch
 from transformers.tokenization_pegasus import PegasusTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -55,6 +56,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(desired_result, ids)
         assert tokenizer.convert_ids_to_tokens([0, 1, 2]) == ["<pad>", "</s>", "unk_2"]
 
+    @require_torch
     def test_pegasus_large_seq2seq_truncation(self):
         src_texts = ["This is going to be way too long" * 10000, "short example"]
         tgt_texts = ["not super long but more than 5 tokens", "tiny"]
