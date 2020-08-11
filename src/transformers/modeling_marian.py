@@ -19,9 +19,7 @@ from .configuration_marian import MarianConfig
 from .modeling_bart import BartForConditionalGeneration
 
 
-MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # See all Marian models at https://huggingface.co/models?search=Helsinki-NLP
-]
+# See all Marian models at https://huggingface.co/models?search=Helsinki-NLP
 
 
 class MarianMTModel(BartForConditionalGeneration):
