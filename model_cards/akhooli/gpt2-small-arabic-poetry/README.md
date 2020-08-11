@@ -7,8 +7,6 @@ tags:
 license: ""
 datasets:
 - Arabic poetry from several eras
-metrics:
-- none
 ---
 
 # GPT2-Small-Arabic-Poetry
