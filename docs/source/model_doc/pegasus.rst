@@ -57,6 +57,7 @@ Usage Example
     batch = tokenizer(src_text, truncation=True, padding='longest')
     translated = model.generate(**batch)
     tgt_text = tokenizer.decode_batch(t, skip_special_tokens=True)
+    assert tgt_text == "California's largest electricity provider has turned off power to tens of thousands of customers."
 
 PegasusForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
