@@ -54,6 +54,10 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
         else:
             dtype = torch.long if type(first["label_ids"][0]) is int else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+        # BatchEncoding always returns tensors with 2 dims, and for labels, it can result in shape 1 x bs.
+        # Squeezing this 1.
+        if batch["labels"].ndim == 2:
+            batch["labels"] = batch["labels"].squeeze(0)
 
     # Handling of all other possible keys.
     # Again, we will use the first element to figure out which key/values are not None for this model.
@@ -117,6 +121,10 @@ class DataCollatorWithPadding:
         if "label_ids" in batch:
             batch["labels"] = batch["label_ids"]
             del batch["label_ids"]
+        # BatchEncoding always returns tensors with 2 dims, and for labels, it can result in shape 1 x bs.
+        # Squeezing this 1.
+        if batch["labels"].ndim == 2:
+            batch["labels"] = batch["labels"].squeeze(0)
         return batch
 
 
