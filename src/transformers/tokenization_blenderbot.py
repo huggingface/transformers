@@ -1,12 +1,12 @@
 import json
 import logging
-from typing import List
 import os
+from typing import List
 
 import regex as re
 
-from .tokenization_utils import AddedToken, PreTrainedTokenizer
 from .tokenization_roberta import RobertaTokenizer
+from .tokenization_utils import AddedToken, PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)

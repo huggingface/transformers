@@ -4,17 +4,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-from .file_utils import add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel
-
 from .configuration_blenderbot import BlenderbotConfig
+from .file_utils import add_start_docstrings_to_callable
 from .modeling_bart import (
     BartDecoder,
     BartEncoder,
+    SinusoidalPositionalEmbedding,
     _prepare_bart_decoder_inputs,
     _reorder_buffer,
-    SinusoidalPositionalEmbedding,
 )
 from .modeling_outputs import (
     BaseModelOutput,
@@ -24,6 +21,7 @@ from .modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
+from .modeling_utils import PreTrainedModel
 
 
 class PretrainedBlenderbotModel(PreTrainedModel):
