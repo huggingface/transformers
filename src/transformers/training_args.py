@@ -52,6 +52,8 @@ class TrainingArguments:
             Whether to run predictions on the test set or not.
         evaluate_during_training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run evaluation during training at each logging step or not.
+        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
+            When performing evaluation and predictions, only returns the loss.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
@@ -131,6 +133,9 @@ class TrainingArguments:
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
         default=False, metadata={"help": "Run evaluation during training at each logging step."},
+    )
+    prediction_loss_only: bool = field(
+        default=False, metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
 
     per_device_train_batch_size: int = field(
