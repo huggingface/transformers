@@ -860,9 +860,12 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        assert (
-            not config.is_decoder
-        ), "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+
+        if config.is_decoder:
+            logger.warning(
+                "If you want to use `TFBertForMaskedLM` make sure `config.is_decoder=False` for "
+                "bi-directional self-attention."
+            )
 
         self.bert = TFBertMainLayer(config, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
@@ -936,7 +939,9 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        assert config.is_decoder, "If you want to use `TFBertLMHeadModel` as a standalone, add `is_decoder=True.`"
+
+        if not config.is_decoder:
+            logger.warning("If you want to use `TFBertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.bert = TFBertMainLayer(config, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")

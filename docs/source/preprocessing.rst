@@ -20,7 +20,7 @@ work properly.
 To automatically download the vocab used during pretraining or fine-tuning a given model, you can use the 
 :func:`~transformers.AutoTokenizer.from_pretrained` method:
 
-::
+.. code-block::
 
     from transformers import AutoTokenizer
     tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
@@ -31,33 +31,24 @@ Base use
 A :class:`~transformers.PreTrainedTokenizer` has many methods, but the only one you need to remember for preprocessing
 is its ``__call__``: you just need to feed your sentence to your tokenizer object.
 
-::
+.. code-block::
 
-    encoded_input = tokenizer("Hello, I'm a single sentence!")
-    print(encoded_input)
-
-This will return a dictionary string to list of ints like this one:
-
-::
-
+    >>> encoded_input = tokenizer("Hello, I'm a single sentence!")
+    >>> print(encoded_input)
     {'input_ids': [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102], 
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
+This returns a dictionary string to list of ints.
 The `input_ids <glossary.html#input-ids>`__ are the indices corresponding to each token in our sentence. We will see
 below what the `attention_mask <glossary.html#attention-mask>`__ is used for and in
 :ref:`the next section <sentence-pairs>` the goal of `token_type_ids <glossary.html#token-type-ids>`__.
 
 The tokenizer can decode a list of token ids in a proper sentence:
 
-::
+.. code-block::
 
-    tokenizer.decode(encoded_input["input_ids"])
-
-which should return
-
-::
-
+    >>> tokenizer.decode(encoded_input["input_ids"])
     "[CLS] Hello, I'm a single sentence! [SEP]"
 
 As you can see, the tokenizer automatically added some special tokens that the model expect. Not all model need special
@@ -69,18 +60,13 @@ those special tokens yourself) by passing ``add_special_tokens=False``.
 If you have several sentences you want to process, you can do this efficiently by sending them as a list to the
 tokenizer:
 
-::
+.. code-block::
 
-    batch_sentences = ["Hello I'm a single sentence",
-                       "And another sentence",
-                       "And the very very last one"]
-    encoded_inputs = tokenizer(batch_sentences)
-    print(encoded_inputs)
-
-We get back a dictionary once again, this time with values being list of list of ints:
-
-::
-
+    >>> batch_sentences = ["Hello I'm a single sentence",
+    ...                    "And another sentence",
+    ...                    "And the very very last one"]
+    >>> encoded_inputs = tokenizer(batch_sentences)
+    >>> print(encoded_inputs)
     {'input_ids': [[101, 8667, 146, 112, 182, 170, 1423, 5650, 102],
                    [101, 1262, 1330, 5650, 102],
                    [101, 1262, 1103, 1304, 1304, 1314, 1141, 102]],
@@ -91,6 +77,8 @@ We get back a dictionary once again, this time with values being list of list of
                         [1, 1, 1, 1, 1],
                         [1, 1, 1, 1, 1, 1, 1, 1]]}
 
+We get back a dictionary once again, this time with values being list of list of ints.
+
 If the purpose of sending several sentences at a time to the tokenizer is to build a batch to feed the model, you will
 probably want:
 
@@ -100,19 +88,11 @@ probably want:
 
 You can do all of this by using the following options when feeding your list of sentences to the tokenizer:
 
-::
+.. code-block::
 
-    ## PYTORCH CODE
-    batch = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="pt")
-    print(batch)
-    ## TENSORFLOW CODE
-    batch = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="tf")
-    print(batch)
-
-which should now return a dictionary string to tensor like this:
-
-::
-
+    >>> ## PYTORCH CODE
+    >>> batch = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="pt")
+    >>> print(batch)
     {'input_ids': tensor([[ 101, 8667,  146,  112,  182,  170, 1423, 5650,  102],
                           [ 101, 1262, 1330, 5650,  102,    0,    0,    0,    0],
                           [ 101, 1262, 1103, 1304, 1304, 1314, 1141,  102,    0]]),
@@ -122,9 +102,22 @@ which should now return a dictionary string to tensor like this:
      'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1],
                                [1, 1, 1, 1, 1, 0, 0, 0, 0],
                                [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
+    >>> ## TENSORFLOW CODE
+    >>> batch = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="tf")
+    >>> print(batch)
+    {'input_ids': tf.Tensor([[ 101, 8667,  146,  112,  182,  170, 1423, 5650,  102],
+                          [ 101, 1262, 1330, 5650,  102,    0,    0,    0,    0],
+                          [ 101, 1262, 1103, 1304, 1304, 1314, 1141,  102,    0]]),
+     'token_type_ids': tf.Tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+                               [0, 0, 0, 0, 0, 0, 0, 0, 0]]), 
+     'attention_mask': tf.Tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1],
+                               [1, 1, 1, 1, 1, 0, 0, 0, 0],
+                               [1, 1, 1, 1, 1, 1, 1, 1, 0]])}
 
-We can now see what the `attention_mask <glossary.html#attention-mask>`__ is all about: it points out which tokens the
-model should pay attention to and which ones it should not (because they represent padding in this case).
+It returns a dictionary string to tensor. We can now see what the `attention_mask <glossary.html#attention-mask>`__ is
+all about: it points out which tokens the model should pay attention to and which ones it should not (because they
+represent padding in this case).
 
 
 Note that if your model does not have a maximum length associated to it, the command above will throw a warning. You
@@ -137,26 +130,16 @@ Preprocessing pairs of sentences
 
 Sometimes you need to feed pair of sentences to your model. For instance, if you want to classify if two sentences in a
 pair are similar, or for question-answering models, which take a context and a question. For BERT models, the input is
-then represented like this:
-
-::
-
-    [CLS] Sequence A [SEP] Sequence B [SEP]
+then represented like this: :obj:`[CLS] Sequence A [SEP] Sequence B [SEP]`
 
 You can encode a pair of sentences in the format expected by your model by supplying the two sentences as two arguments
-
 (not a list since a list of two sentences will be interpreted as a batch of two single sentences, as we saw before).
-
-
-::
-
-    encoded_input = tokenizer("How old are you?", "I'm 6 years old")
-    print(encoded_input)
-
 This will once again return a dict string to list of ints:
 
-::
+.. code-block::
 
+    >>> encoded_input = tokenizer("How old are you?", "I'm 6 years old")
+    >>> print(encoded_input)
     {'input_ids': [101, 1731, 1385, 1132, 1128, 136, 102, 146, 112, 182, 127, 1201, 1385, 102], 
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
@@ -169,34 +152,24 @@ using ``return_input_ids`` or ``return_token_type_ids``.
 
 If we decode the token ids we obtained, we will see that the special tokens have been properly added.
 
-::
+.. code-block::
 
-    tokenizer.decode(encoded_input["input_ids"])
-
-will return:
-
-::
-
+    >>> tokenizer.decode(encoded_input["input_ids"])
     "[CLS] How old are you? [SEP] I'm 6 years old [SEP]"
 
 If you have a list of pairs of sequences you want to process, you should feed them as two lists to your tokenizer: the
 list of first sentences and the list of second sentences:
 
-::
+.. code-block::
 
-    batch_sentences = ["Hello I'm a single sentence",
-                       "And another sentence",
-                       "And the very very last one"]
-    batch_of_second_sentences = ["I'm a sentence that goes with the first sentence",
-                                 "And I should be encoded with the second sentence",
-                                 "And I go with the very last one"]
-    encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences)
-    print(encoded_inputs)
-
-will return a dict with the values being list of lists of ints:
-
-::
-
+    >>> batch_sentences = ["Hello I'm a single sentence",
+    ...                    "And another sentence",
+    ...                    "And the very very last one"]
+    >>> batch_of_second_sentences = ["I'm a sentence that goes with the first sentence",
+    ...                              "And I should be encoded with the second sentence",
+    ...                              "And I go with the very last one"]
+    >>> encoded_inputs = tokenizer(batch_sentences, batch_of_second_sentences)
+    >>> print(encoded_inputs)
     {'input_ids': [[101, 8667, 146, 112, 182, 170, 1423, 5650, 102, 146, 112, 182, 170, 5650, 1115, 2947, 1114, 1103, 1148, 5650, 102], 
                    [101, 1262, 1330, 5650, 102, 1262, 146, 1431, 1129, 12544, 1114, 1103, 1248, 5650, 102], 
                    [101, 1262, 1103, 1304, 1304, 1314, 1141, 102, 1262, 146, 1301, 1114, 1103, 1304, 1314, 1141, 102]], 
@@ -207,17 +180,14 @@ will return a dict with the values being list of lists of ints:
                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 
                        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}
 
+As we can see, it returns a dictionary with the values being list of lists of ints.
+
 To double-check what is fed to the model, we can decode each list in `input_ids` one by one:
 
-::
+.. code-block::
 
-    for ids in encoded_inputs["input_ids"]:
-        print(tokenizer.decode(ids))
-
-which will return:
-
-::
-
+    >>> for ids in encoded_inputs["input_ids"]:
+    >>>     print(tokenizer.decode(ids))
     [CLS] Hello I'm a single sentence [SEP] I'm a sentence that goes with the first sentence [SEP]
     [CLS] And another sentence [SEP] And I should be encoded with the second sentence [SEP]
     [CLS] And the very very last one [SEP] And I go with the very last one [SEP]
@@ -225,7 +195,7 @@ which will return:
 Once again, you can automatically pad your inputs to the maximum sentence length in the batch, truncate to the maximum
 length the model can accept and return tensors directly with the following:
 
-::
+.. code-block::
 
     ## PYTORCH CODE
     batch = tokenizer(batch_sentences, batch_of_second_sentences, padding=True, truncation=True, return_tensors="pt")
@@ -316,17 +286,12 @@ predictions in `named entity recognition (NER) <https://en.wikipedia.org/wiki/Na
 `part-of-speech tagging (POS tagging) <https://en.wikipedia.org/wiki/Part-of-speech_tagging>`__.
 
 If you want to use pre-tokenized inputs, just set :obj:`is_pretokenized=True` when passing your inputs to the
-tokenizer. For instance:
+tokenizer. For instance, we have:
 
-::
+.. code-block::
 
-    encoded_input = tokenizer(["Hello", "I'm", "a", "single", "sentence"], is_pretokenized=True)
-    print(encoded_input)
-
-will return:
-
-::
-
+    >>> encoded_input = tokenizer(["Hello", "I'm", "a", "single", "sentence"], is_pretokenized=True)
+    >>> print(encoded_input)
     {'input_ids': [101, 8667, 146, 112, 182, 170, 1423, 5650, 102],
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1]}
@@ -337,7 +302,7 @@ Note that the tokenizer still adds the ids of special tokens (if applicable) unl
 This works exactly as before for batch of sentences or batch of pairs of sentences. You can encode a batch of sentences
 like this:
 
-::
+.. code-block::
 
     batch_sentences = [["Hello", "I'm", "a", "single", "sentence"],
                        ["And", "another", "sentence"],
@@ -346,7 +311,7 @@ like this:
 
 or a batch of pair sentences like this:
 
-::
+.. code-block::
 
     batch_of_second_sentences = [["I'm", "a", "sentence", "that", "goes", "with", "the", "first", "sentence"],
                                  ["And", "I", "should", "be", "encoded", "with", "the", "second", "sentence"],
@@ -355,7 +320,7 @@ or a batch of pair sentences like this:
 
 And you can add padding, truncation as well as directly return tensors like before:
 
-::
+.. code-block::
 
     ## PYTORCH CODE
     batch = tokenizer(batch_sentences,
