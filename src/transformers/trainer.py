@@ -258,26 +258,24 @@ class Trainer:
         Creates an instance of :class:`~transformers.Trainer` from a nlp :obj:`DatasetDict` and `Metric`.
 
         Args:
-        model (:class:`~transformers.PreTrainedModel`):
-            The model to train, evaluate or use for predictions.
-        args (:class:`~transformers.TrainingArguments`):
-            The arguments to tweak training.
-        dataset (:obj:`nlp.dataset_dict.DatasetDict`):
-            The dataset loaded and preprocessed via the :obj:`nlp` library.
-        data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
-            The function to use to form a batch from a list of elements from the :obj:`dataset`.
-        metrics (:obj:`nlp.Metric` or :obj:`List[nlp.Metric]`, `optional`):
-            One or several metrics loaded via the :obj:`nlp` library.
-        final_activation (:obj:`str` or :class:`~transformers.trainer_utils.FinalActivation`, `optional`):
-            The final activation to apply to the model output before feeding them to the :obj:`metrics`.
-        tb_writer (:obj:`SummaryWriter`, `optional`):
-            Object to write to TensorBoard.
-        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
-            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
-            :class:`~transformers.AdamW` on your model and a scheduler given by
-            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
-        kwargs:
-            Deprecated keyword arguments.
+            model (:class:`~transformers.PreTrainedModel`):
+                The model to train, evaluate or use for predictions.
+            args (:class:`~transformers.TrainingArguments`):
+                The arguments to tweak training.
+            dataset (:obj:`nlp.dataset_dict.DatasetDict`):
+                The dataset loaded and preprocessed via the :obj:`nlp` library.
+            data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
+                The function to use to form a batch from a list of elements from the :obj:`dataset`.
+            metrics (:obj:`nlp.Metric` or :obj:`List[nlp.Metric]`, `optional`):
+                One or several metrics loaded via the :obj:`nlp` library.
+            final_activation (:obj:`str` or :class:`~transformers.trainer_utils.FinalActivation`, `optional`):
+                The final activation to apply to the model output before feeding them to the :obj:`metrics`.
+            tb_writer (:obj:`SummaryWriter`, `optional`):
+                Object to write to TensorBoard.
+            optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
+                A tuple containing the optimizer and the scheduler to use. Will default to an instance of
+                :class:`~transformers.AdamW` on your model and a scheduler given by
+                :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
 
         Examples:
 
