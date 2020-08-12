@@ -217,13 +217,15 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
   @slow
   def test_generation_from_long_input_same_as_parlai_3B(self):
     src_text = [
-    "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+    "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
+    i'm going to throw up.\nand why is that?"
     ]
     tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder."]  
 
     
     model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-    generated_utterances = self.model.generate(**model_inputs, min_length=15, length_penalty=0.65, max_length=128, early_stopping=True)
+    generated_utterances = self.model.generate(**model_inputs, min_length=15, length_penalty=0.65, max_length=128, 
+                                               early_stopping=True)
    
     self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
 
@@ -339,14 +341,16 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
   @slow
   def test_generation_from_long_input_same_as_parlai_90M(self):
     src_text = [
-    "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+    "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
+       i'm going to throw up.\nand why is that?"
     ]
     tgt_text = ["__start__ i ' m not sure . i just feel like i ' m going to throw up . __end__"]  
 
     
     model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
     generated_utterances = self.model.generate(**model_inputs, min_length=15, length_penalty=0.65, max_length=128, early_stopping=True)
-    self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances)) #test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
+    self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances)) 
+    #test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
     
   
   #@slow

@@ -21,7 +21,7 @@ VOCAB_FILES_NAMES = {
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
-        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",  # uses the same vocab and merges files as the 3B model
+        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json", 
     },
     "merges_file": {
         "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
@@ -150,8 +150,8 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
          eos_token (:obj:`string`, `optional`, defaults to "__end__"):
             The end of sentence token. 
         unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be 
+            this token instead.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
