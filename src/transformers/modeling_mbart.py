@@ -1,4 +1,4 @@
-from .configuration_bart import MBartConfig
+from .configuration_mbart import MBartConfig
 from .file_utils import add_start_docstrings
 from .modeling_bart import BartForConditionalGeneration
 
@@ -6,7 +6,7 @@ from .modeling_bart import BartForConditionalGeneration
 _CONFIG_FOR_DOC = "MBartConfig"
 _TOKENIZER_FOR_DOC = "MBartTokenizer"
 
-BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mbart-large-cc25",
     "facebook/mbart-large-en-ro",
     # See all BART models at https://huggingface.co/models?filter=mbart
