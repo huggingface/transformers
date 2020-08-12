@@ -16,6 +16,8 @@ import pickle
 import unittest
 from typing import Callable, Optional
 
+import numpy as np
+
 from transformers import BatchEncoding, BertTokenizer, BertTokenizerFast, PreTrainedTokenizer, TensorType
 from transformers.testing_utils import require_tf, require_torch, slow
 from transformers.tokenization_gpt2 import GPT2Tokenizer
@@ -135,3 +137,77 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         with self.subTest("Rust Tokenizer"):
             self.assertTrue(tokenizer_r("Small example to_encode").is_fast)
+
+    def test_batch_encoding_with_labels(self):
+        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
+        tensor_batch = batch.convert_to_tensors(tensor_type="np")
+        self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (2,))
+
+        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
+        tensor_batch = batch.convert_to_tensors(tensor_type="np", prepend_batch_axis=True)
+        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (1,))
+
+    @require_torch
+    def test_batch_encoding_with_labels_pt(self):
+        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
+        tensor_batch = batch.convert_to_tensors(tensor_type="pt")
+        self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (2,))
+
+        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
+        tensor_batch = batch.convert_to_tensors(tensor_type="pt", prepend_batch_axis=True)
+        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (1,))
+
+    @require_tf
+    def test_batch_encoding_with_labels_tf(self):
+        batch = BatchEncoding({"inputs": [[1, 2, 3], [4, 5, 6]], "labels": [0, 1]})
+        tensor_batch = batch.convert_to_tensors(tensor_type="tf")
+        self.assertEqual(tensor_batch["inputs"].shape, (2, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (2,))
+
+        batch = BatchEncoding({"inputs": [1, 2, 3], "labels": 0})
+        tensor_batch = batch.convert_to_tensors(tensor_type="tf", prepend_batch_axis=True)
+        self.assertEqual(tensor_batch["inputs"].shape, (1, 3))
+        self.assertEqual(tensor_batch["labels"].shape, (1,))
+
+    def test_padding_accepts_tensors(self):
+        features = [{"input_ids": np.array([0, 1, 2])}, {"input_ids": np.array([0, 1, 2, 3])}]
+        tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+
+        batch = tokenizer.pad(features, padding=True)
+        self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
+        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        batch = tokenizer.pad(features, padding=True, return_tensors="np")
+        self.assertTrue(isinstance(batch["input_ids"], np.ndarray))
+        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+
+    @require_torch
+    def test_padding_accepts_tensors_pt(self):
+        import torch
+
+        features = [{"input_ids": torch.tensor([0, 1, 2])}, {"input_ids": torch.tensor([0, 1, 2, 3])}]
+        tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+
+        batch = tokenizer.pad(features, padding=True)
+        self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
+        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        batch = tokenizer.pad(features, padding=True, return_tensors="pt")
+        self.assertTrue(isinstance(batch["input_ids"], torch.Tensor))
+        self.assertEqual(batch["input_ids"].tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+
+    @require_tf
+    def test_padding_accepts_tensors_tf(self):
+        import tensorflow as tf
+
+        features = [{"input_ids": tf.constant([0, 1, 2])}, {"input_ids": tf.constant([0, 1, 2, 3])}]
+        tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+
+        batch = tokenizer.pad(features, padding=True)
+        self.assertTrue(isinstance(batch["input_ids"], tf.Tensor))
+        self.assertEqual(batch["input_ids"].numpy().tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
+        batch = tokenizer.pad(features, padding=True, return_tensors="tf")
+        self.assertTrue(isinstance(batch["input_ids"], tf.Tensor))
+        self.assertEqual(batch["input_ids"].numpy().tolist(), [[0, 1, 2, tokenizer.pad_token_id], [0, 1, 2, 3]])
