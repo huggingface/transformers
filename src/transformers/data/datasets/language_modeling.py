@@ -166,6 +166,9 @@ class LineByLineWithSOPTextDataset(Dataset):
         i = 0
         while i < len(document):
             segment = document[i]  # get a segment
+            if not segment:
+                i += 1
+                continue
             current_chunk.append(segment)  # add a segment to current chunk
             current_length += len(segment)  # overall token length
             # if current length goes to the target length or reaches the end of file, start building token a and b
