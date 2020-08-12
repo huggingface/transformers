@@ -59,6 +59,8 @@ class GPT2Config(PretrainedConfig):
                 Number of hidden layers in the Transformer encoder.
             n_head (:obj:`int`, optional, defaults to 12):
                 Number of attention heads for each attention layer in the Transformer encoder.
+            n_inner (:obj:`int`, optional, defaults to None):
+                Dimensionality of the inner feed-forward layers. :obj:`None` will set it to 4 times n_embd
             activation_function (:obj:`str`, optional, defaults to 'gelu'):
                 Activation function selected in the list ["relu", "swish", "gelu", "tanh", "gelu_new"].
             resid_pdrop (:obj:`float`, optional, defaults to 0.1):
@@ -69,7 +71,7 @@ class GPT2Config(PretrainedConfig):
                 The dropout ratio for the attention.
             layer_norm_epsilon (:obj:`float`, optional, defaults to 1e-5):
                 The epsilon to use in the layer normalization layers
-            initializer_range (:obj:`float`, optional, defaults to 16):
+            initializer_range (:obj:`float`, optional, defaults to 0.02):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             summary_type (:obj:`string`, optional, defaults to "cls_index"):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
@@ -122,6 +124,7 @@ class GPT2Config(PretrainedConfig):
         n_embd=768,
         n_layer=12,
         n_head=12,
+        n_inner=None,
         activation_function="gelu_new",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
@@ -145,6 +148,7 @@ class GPT2Config(PretrainedConfig):
         self.n_embd = n_embd
         self.n_layer = n_layer
         self.n_head = n_head
+        self.n_inner = n_inner
         self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop

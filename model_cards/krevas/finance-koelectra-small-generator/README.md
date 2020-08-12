@@ -1,5 +1,5 @@
 ---
-language: korean
+language: ko
 ---
 
 # 📈 Financial Korean ELECTRA model

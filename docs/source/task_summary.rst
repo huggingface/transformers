@@ -98,8 +98,8 @@ of each other. The process is the following:
     >>> paraphrase = tokenizer(sequence_0, sequence_2, return_tensors="pt")
     >>> not_paraphrase = tokenizer(sequence_0, sequence_1, return_tensors="pt")
 
-    >>> paraphrase_classification_logits = model(**paraphrase)[0]
-    >>> not_paraphrase_classification_logits = model(**not_paraphrase)[0]
+    >>> paraphrase_classification_logits = model(**paraphrase).logits
+    >>> not_paraphrase_classification_logits = model(**not_paraphrase).logits
 
     >>> paraphrase_results = torch.softmax(paraphrase_classification_logits, dim=1).tolist()[0]
     >>> not_paraphrase_results = torch.softmax(not_paraphrase_classification_logits, dim=1).tolist()[0]
@@ -375,7 +375,7 @@ Here is an example doing masked language modeling using a model and a tokenizer.
     >>> input = tokenizer.encode(sequence, return_tensors="pt")
     >>> mask_token_index = torch.where(input == tokenizer.mask_token_id)[1]
 
-    >>> token_logits = model(input)[0]
+    >>> token_logits = model(input).logits
     >>> mask_token_logits = token_logits[0, mask_token_index, :]
 
     >>> top_5_tokens = torch.topk(mask_token_logits, 5, dim=1).indices[0].tolist()
@@ -436,7 +436,7 @@ Here is an example using the tokenizer and model and leveraging the :func:`~tran
     >>> input_ids = tokenizer.encode(sequence, return_tensors="pt")
 
     >>> # get logits of last hidden state
-    >>> next_token_logits = model(input_ids)[0][:, -1, :]
+    >>> next_token_logits = model(input_ids).logits[:, -1, :]
 
     >>> # filter
     >>> filtered_next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
@@ -477,7 +477,7 @@ This outputs a (hopefully) coherent next token following the original sequence, 
 
 .. code-block::
 
-    print(resulting_string)
+    >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
 In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to generate multiple tokens up to a user-defined length.
@@ -604,8 +604,7 @@ expected results:
 
 .. code-block::
 
-    print(nlp(sequence))
-
+    >>> print(nlp(sequence))
     [
         {'word': 'Hu', 'score': 0.9995632767677307, 'entity': 'I-ORG'},
         {'word': '##gging', 'score': 0.9915938973426819, 'entity': 'I-ORG'},
@@ -666,7 +665,7 @@ Here is an example doing named entity recognition using a model and a tokenizer.
     >>> tokens = tokenizer.tokenize(tokenizer.decode(tokenizer.encode(sequence)))
     >>> inputs = tokenizer.encode(sequence, return_tensors="pt")
 
-    >>> outputs = model(inputs)[0]
+    >>> outputs = model(inputs).logits
     >>> predictions = torch.argmax(outputs, dim=2)
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelForTokenClassification, AutoTokenizer
@@ -803,11 +802,6 @@ translation results nevertheless.
 
 Because the translation pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments 
 of ``PretrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
-This outputs the following translation into German:
-
-::
-
-  Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
   
 Here is an example doing translation using a model and a tokenizer. The process is the following:
 

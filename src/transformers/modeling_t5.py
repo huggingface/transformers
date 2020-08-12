@@ -131,7 +131,9 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
             logger.info("Transposing numpy weight of shape {} for {}".format(array.shape, name))
             array = np.transpose(array)
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -675,7 +677,7 @@ class T5Stack(T5PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -683,7 +685,7 @@ class T5Stack(T5PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -787,7 +789,7 @@ class T5Stack(T5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(
                 v
                 for v in [hidden_states, present_key_value_states, all_hidden_states, all_attentions]
@@ -868,8 +870,9 @@ T5_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -930,7 +933,7 @@ class T5Model(T5PreTrainedModel):
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs,
     ):
         r"""
@@ -957,7 +960,7 @@ class T5Model(T5PreTrainedModel):
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -968,9 +971,9 @@ class T5Model(T5PreTrainedModel):
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_tuple=return_tuple,
+                return_dict=return_dict,
             )
-        elif not return_tuple and not isinstance(encoder_outputs, BaseModelOutput):
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1005,11 +1008,11 @@ class T5Model(T5PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
-        if return_tuple:
+        if not return_dict:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + encoder_outputs
@@ -1027,6 +1030,8 @@ class T5Model(T5PreTrainedModel):
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class T5ForConditionalGeneration(T5PreTrainedModel):
+    authorized_missing_keys = [r"encoder\.embed_tokens\.weight", r"decoder\.embed_tokens\.weight", r"lm_head\.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model
@@ -1079,7 +1084,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs,
     ):
         r"""
@@ -1098,13 +1103,14 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
 
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
         >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
         >>> outputs = model(input_ids=input_ids, labels=input_ids)
-        >>> loss, prediction_scores = outputs[:2]
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
 
         >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
         >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
         >>> outputs = model.generate(input_ids)
         """
@@ -1124,7 +1130,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1136,9 +1142,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_tuple=return_tuple,
+                return_dict=return_dict,
             )
-        elif not return_tuple and not isinstance(encoder_outputs, BaseModelOutput):
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -1172,7 +1178,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1188,7 +1194,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
-        if return_tuple:
+        if not return_dict:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs

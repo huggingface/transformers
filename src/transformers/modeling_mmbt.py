@@ -23,7 +23,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
-from .modeling_outputs import BaseModelOutputWithPooling
+from .modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from .modeling_utils import ModuleUtilsMixin
 
 
@@ -148,8 +148,9 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -182,7 +183,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         Returns:
@@ -198,7 +199,7 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -257,13 +258,13 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
             encoder_attention_mask=encoder_extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.transformer.pooler(sequence_output)
 
-        if return_tuple:
+        if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
@@ -339,7 +340,9 @@ class MMBTForClassification(nn.Module):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        return_dict=None,
     ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mmbt(
             input_modal=input_modal,
@@ -353,6 +356,7 @@ class MMBTForClassification(nn.Module):
             modal_position_ids=modal_position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            return_dict=return_dict,
         )
 
         pooled_output = outputs[1]
@@ -360,8 +364,7 @@ class MMBTForClassification(nn.Module):
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
-        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-
+        loss = None
         if labels is not None:
             if self.num_labels == 1:
                 #  We are doing regression
@@ -370,6 +373,11 @@ class MMBTForClassification(nn.Module):
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            outputs = (loss,) + outputs
 
-        return outputs  # (loss), logits, (hidden_states), (attentions)
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )

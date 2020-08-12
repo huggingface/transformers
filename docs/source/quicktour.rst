@@ -128,7 +128,7 @@ Under the hood: pretrained models
 Let's now see what happens beneath the hood when using those pipelines. As we saw, the model and tokenizer are created
 using the :obj:`from_pretrained` method:
 
-::
+.. code-block::
 
     >>> ## PYTORCH CODE
     >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -146,7 +146,7 @@ Using the tokenizer
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
-that process (you can learn more about them in the :doc:`tokenizer_summary <tokenizer_summary>`, which is why we need
+that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`, which is why we need
 to instantiate the tokenizer using the name of the model, to make sure we use the same rules as when the model was
 pretrained.
 
@@ -235,9 +235,11 @@ final activations of the model.
     >>> ## TENSORFLOW CODE
     >>> print(tf_outputs)
     (<tf.Tensor: shape=(2, 2), dtype=float32, numpy=
-    array([[-4.0832963 ,  4.3364134 ],
-           [ 0.08181238, -0.04178794]], dtype=float32)>,)
+    array([[-4.0832963 ,  4.336414  ],
+           [ 0.08181786, -0.04179301]], dtype=float32)>,)
 
+The model can return more than just the final activations, which is why the output is a tuple. Here we only asked for
+the final activations, so we get a tuple with one element.
 .. note::
 
     All 🤗 Transformers models (PyTorch or TensorFlow) return the activations of the model *before* the final
@@ -262,7 +264,7 @@ We can see we get the numbers from before:
     >>> print(tf_predictions)
     tf.Tensor(
     [[2.2042994e-04 9.9977952e-01]
-     [5.3086078e-01 4.6913919e-01]], shape=(2, 2), dtype=float32)
+     [5.3086340e-01 4.6913657e-01]], shape=(2, 2), dtype=float32)
     >>> ## PYTORCH CODE
     >>> print(pt_predictions)
     tensor([[2.2043e-04, 9.9978e-01],
@@ -285,9 +287,15 @@ training loop. 🤗 Transformers also provides a :class:`~transformers.Trainer` 
 you are using TensorFlow) class to help with your training (taking care of things such as distributed training, mixed
 precision, etc.). See the :doc:`training tutorial <training>` for more details.
 
+.. note::
+
+    Pytorch model outputs are special dataclasses so that you can get autocompletion for their attributes in an IDE.
+    They also behave like a tuple or a dictionary (e.g., you can index with an integer, a slice or a string) in which
+    case the attributes not set (that have :obj:`None` values) are ignored.
+
 Once your model is fine-tuned, you can save it with its tokenizer in the following way:
 
-::
+.. code-block::
 
     tokenizer.save_pretrained(save_directory)
     model.save_pretrained(save_directory)
@@ -297,14 +305,14 @@ directory name instead of the model name. One cool feature of 🤗 Transformers 
 PyTorch and TensorFlow: any model saved as before can be loaded back either in PyTorch or TensorFlow. If you are
 loading a saved PyTorch model in a TensorFlow model, use :func:`~transformers.TFAutoModel.from_pretrained` like this:
 
-::
+.. code-block::
 
     tokenizer = AutoTokenizer.from_pretrained(save_directory)
     model = TFAutoModel.from_pretrained(save_directory, from_pt=True)
 
 and if you are loading a saved TensorFlow model in a PyTorch model, you should use the following code:
 
-::
+.. code-block::
 
     tokenizer = AutoTokenizer.from_pretrained(save_directory)
     model = AutoModel.from_pretrained(save_directory, from_tf=True)
@@ -312,7 +320,7 @@ and if you are loading a saved TensorFlow model in a PyTorch model, you should u
 Lastly, you can also ask the model to return all hidden states and all attention weights if you need them:
 
 
-::
+.. code-block::
 
     >>> ## PYTORCH CODE
     >>> pt_outputs = pt_model(**pt_batch, output_hidden_states=True, output_attentions=True)
@@ -330,8 +338,8 @@ code is easy to access and tweak if you need to.
 
 In our previous example, the model was called "distilbert-base-uncased-finetuned-sst-2-english", which means it's
 using the :doc:`DistilBERT </model_doc/distilbert>` architecture. As
-:class:`~transformers.AutoModelForSequenceClassification` (or  :class:`~transformers.TFAutoModelForSequenceClassification`
-if you are using TensorFlow)` was used, the model automatically created is then a
+:class:`~transformers.AutoModelForSequenceClassification` (or :class:`~transformers.TFAutoModelForSequenceClassification`
+if you are using TensorFlow) was used, the model automatically created is then a
 :class:`~transformers.DistilBertForSequenceClassification`. You can look at its documentation for all details relevant
 to that specific model, or browse the source code. This is how you would directly instantiate model and tokenizer
 without the auto magic:

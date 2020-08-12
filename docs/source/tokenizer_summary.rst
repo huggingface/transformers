@@ -73,7 +73,7 @@ subwords. This also enables the model to process words it has never seen before,
 subwords it knows. For instance, the base :class:`~transformers.BertTokenizer` will tokenize "I have a new GPU!" like
 this:
 
-::
+.. code-block::
 
     >>> from transformers import BertTokenizer
     >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -87,7 +87,7 @@ predictions and reverse the tokenization).
 
 Another example is when we use the base :class:`~transformers.XLNetTokenizer` to tokenize our previous text:
 
-::
+.. code-block::
 
     >>> from transformers import XLNetTokenizer
     >>> tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')

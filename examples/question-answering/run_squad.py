@@ -313,7 +313,6 @@ def evaluate(args, model, tokenizer, prefix=""):
                     inputs.update(
                         {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
                     )
-
             outputs = model(**inputs)
 
         for i, feature_index in enumerate(feature_indices):

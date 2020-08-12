@@ -1,10 +1,12 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, NewType, Tuple
+from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
 from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils_base import BatchEncoding, PaddingStrategy
+from ..tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -33,7 +35,7 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
     # have the same attributes.
     # So we will look at the first element as a proxy for what attributes exist
     # on the whole batch.
-    if not isinstance(features[0], dict):
+    if not isinstance(features[0], (dict, BatchEncoding)):
         features = [vars(f) for f in features]
 
     first = features[0]
@@ -66,6 +68,55 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
 
 
 @dataclass
+class DataCollatorWithPadding:
+    """
+    Data collator that will dynamically pad the inputs received.
+
+    Args:
+        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+            The tokenizer used for encoding the data.
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding
+            index) among:
+
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+              single sequence if provided).
+            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+              maximum acceptable input length for the model if that argument is not provided.
+            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+              different lengths).
+        max_length (:obj:`int`, `optional`):
+            Maximum length of the returned list and optionally padding length (see above).
+        pad_to_multiple_of (:obj:`int`, `optional`):
+            If set will pad the sequence to a multiple of the provided value.
+
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+            >= 7.5 (Volta).
+    """
+
+    tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
+    padding: Union[bool, str, PaddingStrategy] = True
+    max_length: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+
+    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        batch = self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+        )
+        if "label" in batch:
+            batch["labels"] = batch["label"]
+            del batch["label"]
+        if "label_ids" in batch:
+            batch["labels"] = batch["label_ids"]
+            del batch["label_ids"]
+        return batch
+
+
+@dataclass
 class DataCollatorForLanguageModeling:
     """
     Data collator used for language modeling.
@@ -77,14 +128,17 @@ class DataCollatorForLanguageModeling:
     mlm: bool = True
     mlm_probability: float = 0.15
 
-    def __call__(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def __call__(self, examples: List[Union[torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
         if self.mlm:
             inputs, labels = self.mask_tokens(batch)
             return {"input_ids": inputs, "labels": labels}
         else:
             labels = batch.clone().detach()
-            labels[labels == self.tokenizer.pad_token_id] = -100
+            if self.tokenizer.pad_token_id is not None:
+                labels[labels == self.tokenizer.pad_token_id] = -100
             return {"input_ids": batch, "labels": labels}
 
     def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
@@ -148,7 +202,9 @@ class DataCollatorForPermutationLanguageModeling:
     plm_probability: float = 1 / 6
     max_span_length: int = 5  # maximum length of a span of masked tokens
 
-    def __call__(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def __call__(self, examples: List[Union[torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
         inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}

@@ -45,6 +45,7 @@ if is_torch_available():
         _prepare_bart_decoder_inputs,
         SinusoidalPositionalEmbedding,
     )
+PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
 
 @require_torch
@@ -238,6 +239,7 @@ class BartHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
+            return_dict=True,
         )
         return config, input_ids, batch_size
 
@@ -247,24 +249,20 @@ class BartHeadTests(unittest.TestCase):
         model = BartForSequenceClassification(config)
         model.to(torch_device)
         outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=labels)
-        logits = outputs[1]
         expected_shape = torch.Size((batch_size, config.num_labels))
-        self.assertEqual(logits.shape, expected_shape)
-        loss = outputs[0]
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     def test_question_answering_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = BartForQuestionAnswering(config)
         model.to(torch_device)
-        loss, start_logits, end_logits, _ = model(
-            input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
-        )
+        outputs = model(input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,)
 
-        self.assertEqual(start_logits.shape, input_ids.shape)
-        self.assertEqual(end_logits.shape, input_ids.shape)
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
+        self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     @timeout_decorator.timeout(1)
     def test_lm_forward(self):
@@ -272,10 +270,10 @@ class BartHeadTests(unittest.TestCase):
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
         lm_model = BartForConditionalGeneration(config)
         lm_model.to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=input_ids, labels=lm_labels)
+        outputs = lm_model(input_ids=input_ids, labels=lm_labels)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     def test_lm_uneven_forward(self):
         config = BartConfig(
@@ -288,13 +286,14 @@ class BartHeadTests(unittest.TestCase):
             encoder_ffn_dim=8,
             decoder_ffn_dim=8,
             max_position_embeddings=48,
+            return_dict=True,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
+        outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_generate_beam_search(self):
         input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
@@ -480,7 +479,6 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertFalse(model.config.is_valid_mbart())
         tok = BartTokenizer.from_pretrained("facebook/bart-large")
 
-        PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
         dct = tok.batch_encode_plus(
             [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",

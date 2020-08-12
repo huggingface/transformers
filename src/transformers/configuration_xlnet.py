@@ -82,7 +82,7 @@ class XLNetConfig(PretrainedConfig):
                 Whether to use the same attention length for each token.
             summary_type (:obj:`string`, optional, defaults to "last"):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
-                :class:transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
                 Is one of the following options:
 
                 - 'last' => take the last token hidden state (like XLNet)
@@ -110,6 +110,12 @@ class XLNetConfig(PretrainedConfig):
                 Used in the SQuAD evaluation script for XLM and XLNet.
             end_n_top (:obj:`int`, optional, defaults to 5):
                 Used in the SQuAD evaluation script for XLM and XLNet.
+            use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not the model should return the last pre-computed hidden states.
+
+                .. note::
+                    This flag behaves differently from with other models: it just controls the inference behavior, during
+                    training the model always uses ``use_cache=True``.
 
         Example::
 

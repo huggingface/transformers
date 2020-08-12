@@ -10,32 +10,39 @@ from torch import nn
 from torch.nn import functional as F
 
 from lightning_base import generic_train
-from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Config, T5ForConditionalGeneration
+from transformers import (
+    AdamW,
+    BartConfig,
+    BartForConditionalGeneration,
+    MBartTokenizer,
+    T5Config,
+    T5ForConditionalGeneration,
+)
 
 
 try:
-    from .finetune import SummarizationModule
+    from .finetune import SummarizationModule, TranslationModule
     from .initialization_utils import init_student, copy_layers
     from .utils import (
         use_task_specific_params,
-        SummarizationDataset,
         pickle_load,
         freeze_params,
         assert_all_frozen,
         any_requires_grad,
+        calculate_bleu_score,
     )
     from .finetune import main as ft_main
 except ImportError:
-    from finetune import SummarizationModule
+    from finetune import SummarizationModule, TranslationModule
     from finetune import main as ft_main
     from initialization_utils import init_student, copy_layers
     from utils import (
         use_task_specific_params,
-        SummarizationDataset,
         pickle_load,
         freeze_params,
         assert_all_frozen,
         any_requires_grad,
+        calculate_bleu_score,
     )
 
 
@@ -115,11 +122,6 @@ class BartSummarizationDistiller(SummarizationModule):
         if self.different_encoder:
             copy_layers(teacher.encoder.block, student.encoder.block, e_layers_to_copy)
 
-    def get_dataset(self, type_path) -> SummarizationDataset:
-        n_obs = self.n_obs[type_path]
-        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs)
-        return dataset
-
     def calc_mse_loss(self, teacher_outputs: torch.Tensor, student_outputs: torch.Tensor, mask) -> torch.FloatTensor:
         if mask is not None:
             # mask has False at padding_idx
@@ -177,17 +179,7 @@ class BartSummarizationDistiller(SummarizationModule):
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         SummarizationModule.add_model_specific_args(parser, root_dir)
-        parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
-        parser.add_argument("--alpha_ce", default=0.8, type=float)
-        parser.add_argument("--alpha_mlm", default=0.2, type=float)
-        # parser.add_argument("--alpha_cos", default=0.0, type=float)
-        parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
-        parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
-        parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
-        parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
-        parser.add_argument("--no_teacher", action="store_true", default=False)
-        parser.add_argument("--length_penalty", type=float, default=-1)
-
+        add_distill_args(parser)
         return parser
 
     def _step(self, batch):
@@ -263,6 +255,44 @@ class BartSummarizationDistiller(SummarizationModule):
             for i, j in enumerate(matches)
         ]
         return sum(hidden_losses)
+
+
+def add_distill_args(parser):
+    parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
+    parser.add_argument("--alpha_ce", default=0.8, type=float)
+    parser.add_argument("--alpha_mlm", default=0.2, type=float)
+    parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
+    parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
+    parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
+    parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
+    parser.add_argument("--no_teacher", action="store_true", default=False)
+    parser.add_argument("--length_penalty", type=float, default=-1)
+
+
+class BartTranslationDistiller(BartSummarizationDistiller):
+    mode = "translation"
+    loss_names = ["loss"]
+    metric_names = ["bleu"]
+    val_metric = "bleu"
+
+    def __init__(self, hparams, **kwargs):
+        super().__init__(hparams, **kwargs)
+        assert isinstance(self.tokenizer, MBartTokenizer)
+        assert hparams.src_lang is not None
+        assert hparams.tgt_lang is not None
+        self.dataset_kwargs["src_lang"] = hparams.src_lang
+        self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
+        if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
+            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
+
+    def calc_generative_metrics(self, preds, target) -> dict:
+        return calculate_bleu_score(preds, target)
+
+    @staticmethod
+    def add_model_specific_args(parser, root_dir):
+        TranslationModule.add_model_specific_args(parser, root_dir)
+        add_distill_args(parser)
+        return parser
 
 
 class T5SummarizationDistiller(BartSummarizationDistiller):
@@ -382,15 +412,14 @@ class T5SummarizationDistiller(BartSummarizationDistiller):
 def create_module(args):
     t5 = "t5" in args.model_name_or_path
     if args.no_teacher:
-        assert not args.enc_only
-        module_cls = SummarizationModule
-    elif t5:
+        module_cls = TranslationModule if "translation" in args.task else SummarizationModule
+    elif t5:  # DISTILL T5 WITH TEACHER FOR SUMMARIZATION
+        assert "translation" not in args.task, "t5 translation distillation not supported"
         module_cls = T5SummarizationDistiller
-    elif args.enc_only:
-        raise ValueError("Deleted that")
-    else:
-        module_cls = BartSummarizationDistiller
+    else:  # DISTILL WITH TEACHER
+        module_cls = BartTranslationDistiller if "translation" in args.task else BartSummarizationDistiller
     args.setup_cls: str = module_cls.__name__
+    print(f"using module {args.setup_cls}")
     model = module_cls(args)
     return model
 
@@ -431,6 +460,18 @@ def get_layers_to_copy(n_to_get, tot):
             12: all_layers,
         }
         return layers_to_copy[n_to_get]
+    elif tot == 16:
+        layers_to_copy = {  # maps  num layers in student -> which teacher layers to copy
+            1: [0],
+            2: [0, 8],
+            3: [0, 8, 15],
+            4: [0, 5, 10, 15],
+            6: [0, 3, 6, 9, 12, 15],
+            8: [0, 2, 4, 6, 8, 10, 12, 15],
+            9: [0, 1, 3, 5, 7, 9, 11, 13, 15],
+            16: all_layers,
+        }
+        return layers_to_copy[n_to_get]
     else:
         return all_layers[:n_to_get]  # TODO: better version on theseus-bart branch
 
@@ -446,6 +487,7 @@ def distill_main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
     parser = BartSummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 

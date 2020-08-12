@@ -1,6 +1,6 @@
 ---
 language:
-- russian
+- ru
 ---
 
 # rubert-base-cased-conversational

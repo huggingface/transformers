@@ -124,8 +124,9 @@ BART_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -304,7 +305,7 @@ class BartEncoder(nn.Module):
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
     def forward(
-        self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_tuple=False
+        self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
     ):
         """
         Args:
@@ -359,7 +360,7 @@ class BartEncoder(nn.Module):
         # T x B x C -> B x T x C
         x = x.transpose(0, 1)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
@@ -495,7 +496,7 @@ class BartDecoder(nn.Module):
         use_cache=False,
         output_attentions=False,
         output_hidden_states=False,
-        return_tuple=False,
+        return_dict=False,
         **unused,
     ):
         """
@@ -588,7 +589,7 @@ class BartDecoder(nn.Module):
         else:
             next_cache = None
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=x, past_key_values=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
@@ -628,8 +629,8 @@ class SelfAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
-    def _shape(self, tensor, dim_0, bsz):
-        return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+    def _shape(self, tensor, seq_len, bsz):
+        return tensor.contiguous().view(seq_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
     def forward(
         self,
@@ -648,10 +649,9 @@ class SelfAttention(nn.Module):
         # get here for encoder decoder cause of static_kv
         if layer_state is not None:  # reuse k,v and encoder_padding_mask
             saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state:
+            if "prev_key" in saved_state and static_kv:
                 # previous time steps are cached - no need to recompute key and value if they are static
-                if static_kv:
-                    key = None
+                key = None
         else:
             saved_state = None
             layer_state = {}
@@ -738,37 +738,14 @@ class SelfAttention(nn.Module):
                 v = torch.cat([prev_value, v], dim=1)
         assert k is not None and v is not None
         prev_key_padding_mask: Optional[Tensor] = saved_state.get("prev_key_padding_mask", None)
-        key_padding_mask = self._cat_prev_key_padding_mask(
-            key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv
-        )
-        return k, v, key_padding_mask
-
-    @staticmethod
-    def _cat_prev_key_padding_mask(
-        key_padding_mask: Optional[Tensor],
-        prev_key_padding_mask: Optional[Tensor],
-        batch_size: int,
-        src_len: int,
-        static_kv: bool,
-    ) -> Optional[Tensor]:
-        # saved key padding masks have shape (bsz, seq_len)
         if prev_key_padding_mask is not None:
             if static_kv:
                 new_key_padding_mask = prev_key_padding_mask
             else:
                 new_key_padding_mask = torch.cat([prev_key_padding_mask, key_padding_mask], dim=1)
-
-        elif key_padding_mask is not None:
-            filler = torch.zeros(
-                batch_size,
-                src_len - key_padding_mask.size(1),
-                dtype=key_padding_mask.dtype,
-                device=key_padding_mask.device,
-            )
-            new_key_padding_mask = torch.cat([filler, key_padding_mask], dim=1)
         else:
-            new_key_padding_mask = prev_key_padding_mask
-        return new_key_padding_mask
+            new_key_padding_mask = key_padding_mask
+        return k, v, new_key_padding_mask
 
 
 class BartClassificationHead(nn.Module):
@@ -874,7 +851,7 @@ class BartModel(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs,
     ):
 
@@ -886,7 +863,7 @@ class BartModel(PretrainedBartModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -908,10 +885,10 @@ class BartModel(PretrainedBartModel):
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_tuple=return_tuple,
+                return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_tuple=False
-        elif not return_tuple and not isinstance(encoder_outputs, BaseModelOutput):
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
@@ -929,10 +906,10 @@ class BartModel(PretrainedBartModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
-        if return_tuple:
+        if not return_dict:
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
@@ -962,6 +939,7 @@ class BartModel(PretrainedBartModel):
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
+    authorized_missing_keys = [r"final_logits_bias", r"encoder\.version", r"decoder\.version"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -999,7 +977,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **unused,
     ):
         r"""
@@ -1020,7 +998,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
             model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
             input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            logits = model(input_ids)[0]
+            logits = model(input_ids).logits
 
             masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
             probs = logits[0, masked_index].softmax(dim=0)
@@ -1041,7 +1019,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
                 FutureWarning,
             )
             decoder_past_key_values = unused.pop("decoder_cached_states")
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
             use_cache = False
@@ -1056,17 +1034,17 @@ class BartForConditionalGeneration(PretrainedBartModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
 
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
+            loss_fct = CrossEntropyLoss()
             # TODO(SS): do we need to ignore pad tokens in labels?
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -1169,7 +1147,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1177,7 +1155,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
 
@@ -1190,7 +1168,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_id)
@@ -1201,9 +1179,10 @@ class BartForSequenceClassification(PretrainedBartModel):
 
         loss = None
         if labels is not None:
-            loss = F.cross_entropy(logits.view(-1, self.config.num_labels), labels.view(-1))
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1255,7 +1234,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1267,7 +1246,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if start_positions is not None and end_positions is not None:
             use_cache = False
 
@@ -1280,7 +1259,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1307,7 +1286,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits,) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 

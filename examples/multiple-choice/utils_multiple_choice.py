@@ -204,6 +204,8 @@ if is_tf_available():
             )
 
         def get_dataset(self):
+            self.dataset = self.dataset.apply(tf.data.experimental.assert_cardinality(len(self.features)))
+
             return self.dataset
 
         def __len__(self):

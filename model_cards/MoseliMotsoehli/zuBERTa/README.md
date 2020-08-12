@@ -1,5 +1,5 @@
 ---
-language: zulu
+language: zu
 ---
 
 # zuBERTa

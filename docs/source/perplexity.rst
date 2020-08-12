@@ -123,7 +123,7 @@ are 512 preceding tokens available to condition on).
     stride = 512
 
     lls = []
-    for i in tqdm(range(1, encodings.input_ids.size(1), stride)):
+    for i in tqdm(range(0, encodings.input_ids.size(1), stride)):
         begin_loc = max(i + stride - max_length, 0)
         end_loc = i + stride
         input_ids = encodings.input_ids[:,begin_loc:end_loc].to(device)

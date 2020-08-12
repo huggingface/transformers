@@ -8,6 +8,7 @@ python finetune.py \
 --eval_batch_size=$BS \
 --output_dir=$OUTPUT_DIR \
 --max_source_length=512 \
+--max_target_length=56 \
 --val_check_interval=0.1 --n_val=200 \
 --do_train --do_predict \
  $@

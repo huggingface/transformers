@@ -105,6 +105,13 @@ TFCamembertForSequenceClassification
     :members:
 
 
+TFCamembertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFCamembertForMultipleChoice
+    :members:
+
+
 TFCamembertForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

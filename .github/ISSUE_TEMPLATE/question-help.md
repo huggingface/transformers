@@ -24,4 +24,4 @@ assignees: ''
 
 <!-- You should first ask your question on the forum or SO, and only if
      you didn't get an answer ask it here on GitHub. -->
-**A link to original question on Stack Overflow**:
+**A link to original question on the forum/Stack Overflow**:
