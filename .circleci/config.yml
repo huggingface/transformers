@@ -301,6 +301,7 @@ workflows:
             - run_tests_torch
             - run_tests_tf
             - build_doc
+            - run_examples_tpu
             - deploy_doc: *workflow_filters
     tpu_testing_jobs:
         triggers:
