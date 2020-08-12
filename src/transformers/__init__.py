@@ -243,11 +243,8 @@ if is_torch_available():
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BertLayer,
     )
-    
-    from .modeling_blenderbot import (
-        BlenderbotForConditionalGeneration, 
-        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
-    )
+
+    from .modeling_blenderbot import BlenderbotForConditionalGeneration, BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
     from .modeling_openai import (
         OpenAIGPTPreTrainedModel,
         OpenAIGPTModel,
