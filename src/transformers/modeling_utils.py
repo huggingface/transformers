@@ -917,7 +917,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
     # XXX: fix args/doc
     def calc_qa_loss(self, sequence_output: torch.Tensor, start_positions, end_positions) -> torch.Tensor:
-        """ Calculate QA loss
+        """
+        Calculate QA loss
+
         Args:
             logits (:obj:``torch.Tensor`):
                 logits
