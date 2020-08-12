@@ -93,8 +93,7 @@ class ExamplesTests(unittest.TestCase):
             --output_dir ./tests/fixtures/tests_samples/pl_temp_dir
             --train_batch_size=32
             --learning_rate=1e-4
-            --max_steps=10
-            --warmup_steps=2
+            --num_train_epochs=1
             --seed=42
             --max_seq_length=128
             """.split()
