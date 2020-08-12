@@ -107,7 +107,6 @@ def get_model_test_files():
         "test_modeling_common",
         "test_modeling_encoder_decoder",
         "test_modeling_marian",
-        "test_modeling_mbart",
         "test_modeling_tf_common",
     ]
     test_files = []
