@@ -289,8 +289,8 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
-        (BartConfig, BartForConditionalGeneration),
         (MBartConfig, MBartForConditionalGeneration),
+        (BartConfig, BartForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
     ]
 )
