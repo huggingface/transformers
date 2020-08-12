@@ -16,25 +16,31 @@ class BlenderbotConfig(PretrainedConfig):
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
         for more information.
         Args:
-            embedding_size: (:obj:`int`, default to 512), dimension of the embeddings vector
-            n_layers: (:obj:`int`, default to 8), number of layers
-            ffn_size: (:obj:`int`, default to 2048), size of hidden layers in the FFN
+            d_model: (:obj:`int`, default to 2560), dimension of the embeddings vector
+            encoder_layers: (:obj:`int`, default to 2), number of layers in the encoder
+            encoder_ffn_size: (:obj:`int`, default to 10240), size of hidden layers in the FFN in the encoder
+            decoder_layers: (:obj:`int`, default to 24), number of layers in the decoder 
+            decoder_ffn_size: (:obj:`int`, default to 10240), size of hidden layers in the FFN in the decoder
             dropout: (:obj:`float`, default to 0.1), embedding dropout
-            n_heads:(:obj:`int`, default to 16),  number of multi heads attention
-            n_positions:(:obj:`int`, default to 512), size of the position embeddings
+            activation_dropout: (:obj:`float`, default to 0.0), dropout after activation function
+            encoder_layerdrop: (:obj:`float`, default to 0.0, 
+            decoder_layerdrop: (:obj:`float`, default to 0.0), 
+            encoder_attention_heads:(:obj:`int`, default to 32),  number of multi heads attention in the encoder
+            decoder_attention_heads:(:obj:`int`, default to 32),  number of multi heads attention in the encoder
+            max_positions_embeddings:(:obj:`int`, default to 128), size of the position embeddings
             activation: (:obj:`string`, default to 'gelu'), activation function to use
             attention_dropout: (:obj:`float`, default to 0.0), multi head attention dropout
             relu_dropout: (:obj:`float`, default to 0.0), relu dropout
-            vocab_size: (:obj:`int`, default to 54944), the size of the vocabulary
-            learn_positional_embedding: (:obj:`boolean`, default to True),  if yes or no the positional embeddings will be learn
+            vocab_size: (:obj:`int`, default to 8008), the size of the vocabulary
+            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings will be learn
 
         Example::
 
-            from transformers import BlenderbotModel, BlenderbotConfig
+            from transformers import BlenderbotForConditionalGeneration, BlenderbotConfig
             # Initializing a Blenderbot configuration
             configuration = BlenderbotConfig()
             # Initializing a model from the configuration
-            model = BlenderbotModel(configuration)
+            model = BlenderbotForConditionalGeneration(configuration)
             # Accessing the model configuration
             configuration = model.config
         Attributes:
