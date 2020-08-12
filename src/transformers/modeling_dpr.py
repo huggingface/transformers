@@ -134,8 +134,8 @@ class DPRReaderOutput(ModelOutput):
     """
 
     start_logits: torch.FloatTensor
-    end_logits: torch.FloatTensor
-    relevance_logits: torch.FloatTensor
+    end_logits: torch.FloatTensor = None
+    relevance_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -161,7 +161,7 @@ class DPREncoder(PreTrainedModel):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_tuple: bool = False,
+        return_dict: bool = False,
     ) -> Union[BaseModelOutputWithPooling, Tuple[Tensor, ...]]:
         outputs = self.bert_model(
             input_ids=input_ids,
@@ -170,14 +170,14 @@ class DPREncoder(PreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output, pooled_output = outputs[:2]
         pooled_output = sequence_output[:, 0, :]
         if self.projection_dim > 0:
             pooled_output = self.encode_proj(pooled_output)
 
-        if return_tuple:
+        if not return_dict:
             return (sequence_output, pooled_output) + outputs[2:]
 
         return BaseModelOutputWithPooling(
@@ -217,7 +217,7 @@ class DPRSpanPredictor(PreTrainedModel):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_tuple: bool = False,
+        return_dict: bool = False,
     ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = input_ids.size() if input_ids is not None else inputs_embeds.size()[:2]
@@ -228,7 +228,7 @@ class DPRSpanPredictor(PreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         sequence_output = outputs[0]
 
@@ -244,7 +244,7 @@ class DPRSpanPredictor(PreTrainedModel):
         end_logits = end_logits.view(n_passages, sequence_length)
         relevance_logits = relevance_logits.view(n_passages)
 
-        if return_tuple:
+        if not return_dict:
             return (start_logits, end_logits, relevance_logits) + outputs[2:]
 
         return DPRReaderOutput(
@@ -361,6 +361,9 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states tensors of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 DPR_READER_INPUTS_DOCSTRING = r"""
@@ -388,6 +391,9 @@ DPR_READER_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states tensors of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -412,7 +418,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ) -> Union[DPRContextEncoderOutput, Tuple[Tensor, ...]]:
         r"""
     Return:
@@ -421,7 +427,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
 
         from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
         tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
+        model = DPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', return_dict=True)
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
         embeddings = model(input_ids).pooler_output
         """
@@ -430,7 +436,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -459,10 +465,10 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
-        if return_tuple:
+        if not return_dict:
             return outputs[1:]
         return DPRContextEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -490,7 +496,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ) -> Union[DPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
         r"""
     Return:
@@ -499,7 +505,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
 
         from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
         tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-        model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
+        model = DPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', return_dict=True)
         input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='pt')["input_ids"]
         embeddings = model(input_ids).pooler_output
         """
@@ -507,7 +513,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -536,10 +542,10 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
-        if return_tuple:
+        if not return_dict:
             return outputs[1:]
         return DPRQuestionEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -565,7 +571,7 @@ class DPRReader(DPRPretrainedReader):
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
-        return_tuple=None,
+        return_dict=None,
     ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
         r"""
     Return:
@@ -574,7 +580,7 @@ class DPRReader(DPRPretrainedReader):
 
         from transformers import DPRReader, DPRReaderTokenizer
         tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-        model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
+        model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base', return_dict=True)
         encoded_inputs = tokenizer(
                 questions=["What is love ?"],
                 titles=["Haddaway"],
@@ -591,7 +597,7 @@ class DPRReader(DPRPretrainedReader):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -613,5 +619,5 @@ class DPRReader(DPRPretrainedReader):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )

@@ -95,6 +95,8 @@ class TFTrainingArguments(TrainingArguments):
             at the next training step under the keyword argument ``mems``.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
     """
 
     tpu_name: str = field(
@@ -162,7 +164,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     def eval_batch_size(self) -> int:
@@ -175,7 +177,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     @tf_required

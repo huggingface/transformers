@@ -132,7 +132,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
   if torch_device == "cuda":
     model = model.half()
   tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
-  #@slow  
+  @slow  
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [268, 343, 2])  
@@ -330,7 +330,9 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
                                       -2.0674e-02, -3.2628e-02, -9.5583e-02,  6.5901e-02,  5.8617e-02,
                                       9.2186e-02, -4.5951e-02, -3.7279e-02, -1.5638e-02,  3.7328e-02]]])
       decoder_inputs = torch.LongTensor([1]).expand(1,1).to(torch_device)
-      logits = model(input_ids, decoder_input_ids=decoder_inputs)['logits']
+      logits = model(input_ids, decoder_input_ids=decoder_inputs)[0]
+      print(logits)
+      
     
       assert torch.allclose(expected_logits, logits, atol=1e-4)
       
@@ -344,11 +346,11 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
     
     model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-    generated_utterances = self.model.generate(**model_inputs, min_length=20, length_penalty=0.65, max_length=128, early_stopping=True)
+    generated_utterances = self.model.generate(**model_inputs, min_length=15, length_penalty=0.65, max_length=128, early_stopping=True)
     self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances)) #test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
     
   
-  @slow
+  #@slow
   def test_generation_from_short_input_same_as_parlai_90M(self):
     src_text = [
     "sam",
@@ -363,7 +365,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
     
   
 
-  @slow
+  #@slow
   def test_loss_same_as_parlai_90_short_input(self):
     input_ids = _long_tensor([[1384]])  # sam
     assert self.model.config.variant == "xlm"

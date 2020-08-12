@@ -121,12 +121,16 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
         try:
-            assert pointer.shape == array.shape
+            assert (
+                pointer.shape == array.shape
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -272,6 +276,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config_class = OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights.
@@ -314,10 +319,10 @@ class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    lm_loss: Optional[torch.FloatTensor]
-    mc_loss: Optional[torch.FloatTensor]
-    lm_logits: torch.FloatTensor
-    mc_logits: torch.FloatTensor
+    lm_loss: Optional[torch.FloatTensor] = None
+    mc_loss: Optional[torch.FloatTensor] = None
+    lm_logits: torch.FloatTensor = None
+    mc_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -373,8 +378,9 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -391,6 +397,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
 
+        self.register_buffer("position_ids", torch.arange(config.n_positions))
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -423,13 +430,13 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -443,9 +450,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
         if position_ids is None:
             # Code is different from when we had a single embedding matrice from position and token embeddings
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(input_shape[-1], dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+            position_ids = self.position_ids[None, : input_shape[-1]]
 
         # Attention mask.
         if attention_mask is not None:
@@ -496,7 +501,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutput(
@@ -538,7 +543,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -548,7 +553,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -559,7 +564,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
@@ -573,7 +578,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -622,7 +627,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -650,7 +655,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         import torch
 
         tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+        model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt', return_dict=True)
         tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
         model.resize_token_embeddings(len(tokenizer))
 
@@ -662,7 +667,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         lm_logits = outputs.lm_logits
         mc_logits = outputs.mc_logits
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if "lm_labels" in kwargs:
             warnings.warn(
                 "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
@@ -680,25 +685,24 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
         mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
 
-        lm_loss = None
+        lm_loss, mc_loss = None, None
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
-        mc_loss = None
+            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
         if labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            mc_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (lm_logits, mc_logits) + transformer_outputs[1:]
             if mc_loss is not None:
                 output = (mc_loss,) + output
