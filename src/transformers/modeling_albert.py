@@ -302,7 +302,7 @@ class AlbertLayer(nn.Module):
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
         ffn_output = apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.ff_chunk, attention_output[0],
+            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output[0],
         )
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_output[0])
 

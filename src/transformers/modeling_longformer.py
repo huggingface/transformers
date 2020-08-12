@@ -701,7 +701,7 @@ class LongformerLayer(nn.Module):
         outputs = self_attn_outputs[1:]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.ff_chunk, attn_output
+            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attn_output
         )
         outputs = (layer_output,) + outputs
         return outputs

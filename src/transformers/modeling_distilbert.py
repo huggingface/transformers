@@ -223,7 +223,7 @@ class FFN(nn.Module):
         self.activation = gelu if config.activation == "gelu" else nn.ReLU()
 
     def forward(self, input):
-        return apply_chunking_to_forward(self.chunk_size_feed_forward, self.seq_len_dim, self.ff_chunk, input)
+        return apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, input)
 
     def ff_chunk(self, input):
         x = self.lin1(input)

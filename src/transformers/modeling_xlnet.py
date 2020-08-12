@@ -534,9 +534,9 @@ class XLNetLayer(nn.Module):
 
         if output_g is not None:
             output_g = apply_chunking_to_forward(
-                self.chunk_size_feed_forward, self.seq_len_dim, self.ff_chunk, output_g
+                self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, output_g
             )
-        output_h = apply_chunking_to_forward(self.chunk_size_feed_forward, self.seq_len_dim, self.ff_chunk, output_h)
+        output_h = apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, output_h)
 
         outputs = (output_h, output_g) + outputs[2:]  # Add again attentions if there are there
         return outputs
