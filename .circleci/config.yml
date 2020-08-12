@@ -101,7 +101,7 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.3-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.3-torch-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing]
