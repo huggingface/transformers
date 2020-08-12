@@ -131,7 +131,8 @@ from .pipelines import (
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
+from .tokenization_bart import BartTokenizer, BartTokenizerFast
+from .tokenization_mbart import MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -298,6 +299,7 @@ if is_torch_available():
         BartForQuestionAnswering,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+    from .modeling_mbart import MBartForConditionalGeneration
     from .modeling_marian import MarianMTModel
     from .tokenization_marian import MarianTokenizer
     from .modeling_roberta import (
