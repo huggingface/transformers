@@ -145,7 +145,7 @@ class Seq2SeqDataset(Dataset):
 
 
 class TranslationDataset(Seq2SeqDataset):
-    """A dataset that calls prepare_translation_batch."""
+    """A dataset that calls prepare_seq2seq_batch."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -167,7 +167,7 @@ class TranslationDataset(Seq2SeqDataset):
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
-        batch_encoding = self.tokenizer.prepare_translation_batch(
+        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
             tgt_texts=[x["tgt_texts"] for x in batch],

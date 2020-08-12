@@ -302,6 +302,7 @@ if is_torch_available():
     from .tokenization_marian import MarianTokenizer
     from .modeling_roberta import (
         RobertaForMaskedLM,
+        RobertaForCausalLM,
         RobertaModel,
         RobertaForSequenceClassification,
         RobertaForMultipleChoice,
@@ -428,6 +429,7 @@ if is_torch_available():
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_linear_schedule_with_warmup,
+        get_polynomial_decay_schedule_with_warmup,
     )
 
     # Trainer
@@ -437,6 +439,7 @@ if is_torch_available():
         DataCollator,
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorWithPadding,
     )
     from .data.datasets import (
         GlueDataset,
