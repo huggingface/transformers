@@ -921,15 +921,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Calculate QA loss
 
         Args:
-            logits (:obj:``torch.Tensor`):
-                logits
+            logits (:obj:`torch.Tensor`): logits
+
         Returns:
-            :obj:`torch.Tensor`:
-                start logits
-            :obj:`torch.Tensor`:
-                end logits
-            :obj:`torch.Tensor`:
-                total loss
+            :obj:`torch.Tensor`: start logits
+            :obj:`torch.Tensor`: end logits
+            :obj:`torch.Tensor`: total loss
         """
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
