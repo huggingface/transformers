@@ -32,7 +32,21 @@ class BlenderbotConfig(PretrainedConfig):
             attention_dropout: (:obj:`float`, default to 0.0), multi head attention dropout
             relu_dropout: (:obj:`float`, default to 0.0), relu dropout
             vocab_size: (:obj:`int`, default to 8008), the size of the vocabulary
-            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings will be learn
+            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings 
+            will be learn
+            variant: (obj: str, default to "prelayernorm") defines when to apply a layernorm
+            init_std: (obj: float, default to 0.02)
+            is_encoder_decoder: (obj:`boolean`, default to True)
+            pad_token_id: (obj:`int`, default to 1),
+            bos_token_id: (obj:`int`, default to 0),
+            eos_token_id: (obj:`int`, default to 2),
+            normalize_before: (:obj:`boolean`, default to True),
+            add_final_layer_norm: (obj:`boolean`, default to False),
+            scale_embedding: (obj:`boolean`, default to False),
+            normalize_embedding: (obj:`boolean`, default to False),
+            static_position_embeddings: (:obj:`boolean`, default to False),
+            add_bias_logits: (:obj:`boolean`, default to False),
+            
 
         Example::
 
