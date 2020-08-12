@@ -15,28 +15,15 @@ from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Conf
 
 try:
     from .finetune import SummarizationModule
-    from .initialization_utils import init_student, copy_layers
-    from .utils import (
-        use_task_specific_params,
-        SummarizationDataset,
-        pickle_load,
-        freeze_params,
-        assert_all_frozen,
-        any_requires_grad,
-    )
     from .finetune import main as ft_main
+    from .initialization_utils import init_student, copy_layers
+    from .utils import use_task_specific_params, pickle_load, freeze_params, assert_all_frozen, any_requires_grad
+
 except ImportError:
     from finetune import SummarizationModule
     from finetune import main as ft_main
     from initialization_utils import init_student, copy_layers
-    from utils import (
-        use_task_specific_params,
-        SummarizationDataset,
-        pickle_load,
-        freeze_params,
-        assert_all_frozen,
-        any_requires_grad,
-    )
+    from utils import use_task_specific_params, pickle_load, freeze_params, assert_all_frozen, any_requires_grad
 
 
 class BartSummarizationDistiller(SummarizationModule):
@@ -114,11 +101,6 @@ class BartSummarizationDistiller(SummarizationModule):
             copy_layers(teacher.decoder.block, student.decoder.block, d_layers_to_copy)
         if self.different_encoder:
             copy_layers(teacher.encoder.block, student.encoder.block, e_layers_to_copy)
-
-    def get_dataset(self, type_path) -> SummarizationDataset:
-        n_obs = self.n_obs[type_path]
-        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs)
-        return dataset
 
     def calc_mse_loss(self, teacher_outputs: torch.Tensor, student_outputs: torch.Tensor, mask) -> torch.FloatTensor:
         if mask is not None:
@@ -431,6 +413,18 @@ def get_layers_to_copy(n_to_get, tot):
             12: all_layers,
         }
         return layers_to_copy[n_to_get]
+    elif tot == 16:
+        layers_to_copy = {  # maps  num layers in student -> which teacher layers to copy
+            1: [0],
+            2: [0, 8],
+            3: [0, 8, 15],
+            4: [0, 5, 10, 15],
+            6: [0, 3, 6, 9, 12, 15],
+            8: [0, 2, 4, 6, 8, 10, 12, 15],
+            9: [0, 1, 3, 5, 7, 9, 11, 13, 15],
+            16: all_layers,
+        }
+        return layers_to_copy[n_to_get]
     else:
         return all_layers[:n_to_get]  # TODO: better version on theseus-bart branch
 
@@ -446,6 +440,7 @@ def distill_main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
     parser = BartSummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 

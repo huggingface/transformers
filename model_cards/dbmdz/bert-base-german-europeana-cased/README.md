@@ -1,5 +1,5 @@
 ---
-language: german
+language: de
 license: mit
 tags:
   - "historic german"

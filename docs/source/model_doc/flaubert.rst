@@ -61,6 +61,20 @@ FlaubertForSequenceClassification
     :members:
 
 
+FlaubertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaubertForMultipleChoice
+    :members:
+
+
+FlaubertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaubertForTokenClassification
+    :members:
+
+
 FlaubertForQuestionAnsweringSimple
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

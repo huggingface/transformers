@@ -215,7 +215,7 @@ Follow these steps to start contributing:
      `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
    - If you are adding a new tokenizer, write tests, and make sure 
      `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
-   CircleCI does not run the slow tests. 
+   CircleCI does not run the slow tests, but github actions does every night!
 6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an 
    example.
 
@@ -238,8 +238,7 @@ and for the examples:
 $ pip install -r examples/requirements.txt  # only needed the first time
 $ python -m pytest -n auto --dist=loadfile -s -v ./examples/
 ```
-
-In fact, that's how `make test` and `make test-examples` are implemented!
+In fact, that's how `make test` and `make test-examples` are implemented (sans the `pip install` line)!
 
 You can specify a smaller set of tests in order to test only the feature
 you're working on.

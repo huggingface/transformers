@@ -23,7 +23,7 @@ import unittest
 from importlib import import_module
 
 from transformers import is_tf_available, is_torch_available
-from transformers.testing_utils import _tf_gpu_memory_limit, require_tf
+from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
 
 
 if is_tf_available():
@@ -80,8 +80,8 @@ class TFModelTesterMixin:
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
             inputs_dict = {
-                k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices, 1))
-                if isinstance(v, tf.Tensor) and v.ndim != 0
+                k: tf.tile(tf.expand_dims(v, 1), (1, self.model_tester.num_choices) + (1,) * (v.ndim - 1))
+                if isinstance(v, tf.Tensor) and v.ndim > 0
                 else v
                 for k, v in inputs_dict.items()
             }
@@ -129,6 +129,63 @@ class TFModelTesterMixin:
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
                 self.assert_outputs_same(after_outputs, outputs)
+
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+
+        for model_class in self.all_model_classes:
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(inputs_dict))
+            model._saved_model_inputs_spec = None
+            model._set_save_spec(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tf.saved_model.save(model, tmpdirname)
+                model = tf.keras.models.load_model(tmpdirname)
+                outputs = model(inputs_dict)
+                output = outputs[list(outputs.keys())[-1]] if isinstance(outputs, dict) else outputs[-1]
+                hidden_states = [t.numpy() for t in output]
+                self.assertEqual(len(outputs), num_out)
+                self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_attentions = True
+        encoder_seq_length = (
+            self.model_tester.encoder_seq_length
+            if hasattr(self.model_tester, "encoder_seq_length")
+            else self.model_tester.seq_length
+        )
+        encoder_key_length = (
+            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
+        )
+
+        for model_class in self.all_model_classes:
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(inputs_dict))
+            model._saved_model_inputs_spec = None
+            model._set_save_spec(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tf.saved_model.save(model, tmpdirname)
+                model = tf.keras.models.load_model(tmpdirname)
+                outputs = model(inputs_dict)
+                output = outputs[list(outputs.keys())[-1]] if isinstance(outputs, dict) else outputs[-1]
+                attentions = [t.numpy() for t in output]
+                self.assertEqual(len(outputs), num_out)
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -183,6 +240,8 @@ class TFModelTesterMixin:
         # Make sure we don't have nans
         if isinstance(after_outputs, tf.Tensor):
             out_1 = after_outputs.numpy()
+        elif isinstance(after_outputs, dict):
+            out_1 = after_outputs[list(after_outputs.keys())[0]]
         else:
             out_1 = after_outputs[0].numpy()
         out_2 = outputs[0].numpy()

@@ -17,7 +17,6 @@
 
 import logging
 import os
-import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -185,11 +184,6 @@ def main():
 
         for i in range(batch_size):
             for j in range(seq_len):
-                if label_ids[i, j] == -1:
-                    label_ids[i, j] = -100
-                    warnings.warn(
-                        "Using `-1` to mask the loss for the token is depreciated. Please use `-100` instead."
-                    )
                 if label_ids[i, j] != -100:
                     out_label_list[i].append(label_map[label_ids[i][j]])
                     preds_list[i].append(label_map[preds[i][j]])

@@ -30,6 +30,7 @@ def generate_summaries_or_translations(
     device: str = DEFAULT_DEVICE,
     fp16=False,
     task="summarization",
+    decoder_start_token_id=None,
     **gen_kwargs,
 ) -> None:
     fout = Path(out_file).open("w", encoding="utf-8")
@@ -37,6 +38,8 @@ def generate_summaries_or_translations(
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
     if fp16:
         model = model.half()
+    if decoder_start_token_id is None:
+        decoder_start_token_id = gen_kwargs.pop("decoder_start_token_id", None)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -46,11 +49,14 @@ def generate_summaries_or_translations(
     for batch in tqdm(list(chunks(examples, batch_size))):
         if "t5" in model_name:
             batch = [model.config.prefix + text for text in batch]
-        batch = tokenizer(batch, max_length=1024, return_tensors="pt", truncation=True, padding="max_length").to(
-            device
-        )
+        batch = tokenizer(batch, return_tensors="pt", truncation=True, padding="max_length").to(device)
         input_ids, attention_mask = trim_batch(**batch, pad_token_id=tokenizer.pad_token_id)
-        summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask, **gen_kwargs)
+        summaries = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_start_token_id=decoder_start_token_id,
+            **gen_kwargs,
+        )
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         for hypothesis in dec:
             fout.write(hypothesis + "\n")
@@ -69,6 +75,13 @@ def run_generate():
     parser.add_argument("--task", type=str, default="summarization", help="typically translation or summarization")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument(
+        "--decoder_start_token_id",
+        type=int,
+        default=None,
+        required=False,
+        help="decoder_start_token_id (otherwise will look at config)",
+    )
+    parser.add_argument(
         "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
     )
     parser.add_argument("--fp16", action="store_true")
@@ -76,7 +89,7 @@ def run_generate():
     examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path).readlines()]
     if args.n_obs > 0:
         examples = examples[: args.n_obs]
-
+    Path(args.save_path).parent.mkdir(exist_ok=True)
     generate_summaries_or_translations(
         examples,
         args.save_path,
@@ -85,6 +98,7 @@ def run_generate():
         device=args.device,
         fp16=args.fp16,
         task=args.task,
+        decoder_start_token_id=args.decoder_start_token_id,
     )
     if args.reference_path is None:
         return
@@ -93,6 +107,7 @@ def run_generate():
     output_lns = [x.rstrip() for x in open(args.save_path).readlines()]
     reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][: len(output_lns)]
     scores: dict = score_fn(output_lns, reference_lns)
+    print(scores)
     if args.score_path is not None:
         json.dump(scores, open(args.score_path, "w+"))
     return scores

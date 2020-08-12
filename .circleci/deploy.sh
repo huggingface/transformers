@@ -47,4 +47,4 @@ deploy_doc "e7cfc1a" v2.9.0
 deploy_doc "7cb203f" v2.9.1
 deploy_doc "10d7239" v2.10.0 
 deploy_doc "b42586e" v2.11.0
-deploy_doc "1158e56" #v3.0.2 Latest stable release
+deploy_doc "7fb8bdf" #v3.0.2 Latest stable release
