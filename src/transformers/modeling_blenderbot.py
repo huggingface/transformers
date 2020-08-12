@@ -7,11 +7,11 @@ import torch.nn.functional as F
 from .configuration_blenderbot import BlenderbotConfig
 from .file_utils import add_start_docstrings_to_callable
 from .modeling_bart import (
-    BartDecoder, 
-    BartEncoder, 
-    _prepare_bart_decoder_inputs, 
-    _reorder_buffer, 
-    SinusoidalPositionalEmbedding
+    BartDecoder,
+    BartEncoder,
+    _prepare_bart_decoder_inputs,
+    _reorder_buffer,
+    SinusoidalPositionalEmbedding,
 )
 from .modeling_utils import PreTrainedModel
 from .modeling_outputs import (
@@ -23,13 +23,14 @@ from .modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 
+
 class PretrainedBlenderbotModel(PreTrainedModel):
     config_class = BlenderbotConfig
     base_model_prefix = "."
 
     def _init_weights(self, module):
         std = self.config.init_std
-        if isinstance(module,(nn.Linear, nn.Embedding)):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=std)
         elif isinstance(module, SinusoidalPositionalEmbedding):
             pass
@@ -38,7 +39,6 @@ class PretrainedBlenderbotModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding) and module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
 
-    
 
 class BlenderbotOutput(nn.Module):
     def __init__(self, config: BlenderbotConfig, embeddings):
@@ -49,9 +49,8 @@ class BlenderbotOutput(nn.Module):
     def forward(self, hidden_states):
         output = F.linear(hidden_states, self.embeddings.weight)
         # we need to force their probability of generation to be 0.
-        output[:, :, self.bos_token_id] = -65504 if output.dtype is torch.float16 else - 1e20
+        output[:, :, self.bos_token_id] = -65504 if output.dtype is torch.float16 else -1e20
         return output
-    
 
 
 # TODO: delete this
@@ -106,9 +105,9 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
         self.bos_token_id = config.bos_token_id
-        self.output = BlenderbotOutput(config,  self.shared)
+        self.output = BlenderbotOutput(config, self.shared)
         self.init_weights()
-        
+
     # def output(self, tensor):
     #     """
     #     Compute output logits.
@@ -154,8 +153,8 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
                 return_dict=return_dict,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
-        #if not isinstance(encoder_outputs, BaseModelOutput):
-        
+        # if not isinstance(encoder_outputs, BaseModelOutput):
+
         if not return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -185,14 +184,14 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
         )
-            
+
         scores = self.output(decoder_outputs[0])
         loss = None
         if labels is not None:
             loss_fc = nn.CrossEntropyLoss()
             loss = loss_fc(scores[0].view(-1, self.config.vocab_size), labels.view(-1))
         if not return_dict:
-            output = (loss, scores) + decoder_outputs[1:] if loss is not None else  (scores, ) + decoder_outputs[1:]
+            output = (loss, scores) + decoder_outputs[1:] if loss is not None else (scores,) + decoder_outputs[1:]
             return output
 
         return Seq2SeqLMOutput(
@@ -218,6 +217,7 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
             "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
+
     def get_input_embeddings(self):
         return self.shared
 

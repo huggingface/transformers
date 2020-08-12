@@ -21,7 +21,7 @@ VOCAB_FILES_NAMES = {
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
-        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json", 
+        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
     },
     "merges_file": {
         "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
@@ -41,6 +41,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
     def __init__(
         self,
         vocab_file,
@@ -81,11 +82,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
             **kwargs,
         )
 
-    
-    
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: List[int] = None
-    ):
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
@@ -101,9 +98,6 @@ class BlenderbotTokenizer(RobertaTokenizer):
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         return token_ids_0 + [self.sep_token_id]
-    
-    
-        
 
 
 BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
@@ -189,13 +183,13 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
-        token = re.sub('([.,!?()])', r' \1', token)
-        token = re.sub('(\')', r' \1 ', token)
-        token = re.sub('\s{2,}', ' ', token)
+        token = re.sub("([.,!?()])", r" \1", token)
+        token = re.sub("(')", r" \1 ", token)
+        token = re.sub("\s{2,}", " ", token)
         if "\n" in token:
             token = token.replace("\n", " __newln__")
-        
-        tokens = token.split(' ')
+
+        tokens = token.split(" ")
         words = []
         for token in tokens:
             token = token.lower()
@@ -206,7 +200,6 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             if not pairs:
                 words.append(token)
                 continue
-            
 
             while True:
                 bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
@@ -215,7 +208,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
                 first, second = bigram
                 new_word = []
                 i = 0
-                
+
                 while i < len(word):
                     try:
                         j = word.index(first, i)
@@ -224,7 +217,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
                     except ValueError:
                         new_word.extend(word[i:])
                         break
-                    
+
                     if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
                         new_word.append(first + second)
                         i += 2
@@ -239,10 +232,10 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
                     pairs = get_pairs(word)
             word = "@@ ".join(word)
             word = word[:-4]
-            
+
             self.cache[token] = word
             words.append(word)
-        return ' '.join(words)
+        return " ".join(words)
 
     def _tokenize(self, text):
         """ Tokenize a string.

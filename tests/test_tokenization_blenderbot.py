@@ -18,7 +18,7 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["__start__", "adapt", "act", "ap@@", "te", "__end__", "__unk__"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
-      
+
         merges = ["#version: 0.2", "a p", "t e</w>", "ap t</w>", "a d", "ad apt</w>", "a c", "ac t</w>", ""]
         self.special_tokens_map = {"unk_token": "__unk__", "bos_token": "__start__", "eos_token": "__end__"}
 
@@ -41,7 +41,7 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_full_blenderbot_small_tokenizer(self):
         tokenizer = BlenderbotSmallTokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "adapt act apte"
-        bpe_tokens  = ["adapt", "act", "ap@@", "te"]
+        bpe_tokens = ["adapt", "act", "ap@@", "te"]
         tokens = tokenizer.tokenize(text)
         self.assertListEqual(tokens, bpe_tokens)
 

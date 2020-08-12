@@ -218,4 +218,5 @@ class MBartConfig(BartConfig):
 
     def __init__(self, variant="prelayernorm", **kwargs):
         super().__init__(variant=variant, **kwargs)
+
     """See real config values at https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json."""

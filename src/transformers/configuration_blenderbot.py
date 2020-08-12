@@ -5,6 +5,7 @@ from .configuration_utils import PretrainedConfig
 
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"blenderbot": "facebook/blenderbot-3B"}
 
+
 class BlenderbotConfig(PretrainedConfig):
     """
         This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotModel`.
@@ -116,7 +117,7 @@ class BlenderbotConfig(PretrainedConfig):
             **kwargs,
         )
         self.vocab_size = vocab_size
-        self.d_model = d_model 
+        self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
@@ -126,12 +127,12 @@ class BlenderbotConfig(PretrainedConfig):
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.max_position_embeddings = max_position_embeddings
-        self.init_std = init_std 
+        self.init_std = init_std
         self.activation_function = activation_function
         self.variant = variant
-        self.scale_embedding = scale_embedding  
-        self.normalize_embedding = normalize_embedding  
-        self.normalize_before = normalize_before  
+        self.scale_embedding = scale_embedding
+        self.normalize_embedding = normalize_embedding
+        self.normalize_before = normalize_before
         self.add_final_layer_norm = add_final_layer_norm
         self.add_bias_logits = add_bias_logits
         self.static_position_embeddings = static_position_embeddings
