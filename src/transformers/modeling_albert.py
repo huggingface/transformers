@@ -309,7 +309,7 @@ class AlbertLayer(nn.Module):
         return (hidden_states,) + attention_output[1:]  # add attentions if we output them
 
     def ff_chunk(self, attention_output):
-        ffn_output = self.ffn(attention_output[0])
+        ffn_output = self.ffn(attention_output)
         ffn_output = self.activation(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
         return ffn_output
