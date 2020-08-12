@@ -52,6 +52,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -85,6 +86,7 @@ CONFIG_MAPPING = OrderedDict(
         ("marian", MarianConfig,),
         ("mbart", MBartConfig,),
         ("bart", BartConfig,),
+        ("blenderbot", BlenderbotConfig),
         ("reformer", ReformerConfig,),
         ("longformer", LongformerConfig,),
         ("roberta", RobertaConfig,),

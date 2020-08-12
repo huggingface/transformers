@@ -1,5 +1,3 @@
-# this code is almost the same as tokenization_gpt2.
-# the original blenderbot is also using byte-level bpe tokenization based on subword-nmt
 import json
 import logging
 from typing import List
@@ -19,15 +17,14 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-# will update paths once uploded files on S3
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/blenderbot-3B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/vocab.json",
-        "facebook/blenderbot-9B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/vocab.json",  # uses the same vocab and merges files as the 3B model
+        "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
+        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",  # uses the same vocab and merges files as the 3B model
     },
     "merges_file": {
-        "facebook/blenderbot-3B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/merges.txt",
-        "facebook/blenderbot-9B": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-3B/merges.txt",
+        "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
+        "facebook/blenderbot-9B": "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt",
     },
 }
 
@@ -50,7 +47,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
-        sep_token="__end__",
+        sep_token="</s>",
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
@@ -91,7 +88,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
-        A Blenderbot sequence has the following format:
+        A RoBERTa sequence has the following format:
 
         - single sequence: `` X </s>``
 
@@ -109,8 +106,8 @@ class BlenderbotTokenizer(RobertaTokenizer):
 
 
 BLENDERBOT_90M_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-90M": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-90M/vocab.json"},
-    "merges_file": {"facebook/blenderbot-90M": "https://s3://models.huggingface.co/bert/sshleifer/blenderbot-90M/merges.txt"},
+    "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
+    "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
 }
 
 BLENDERBOT_90M_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {

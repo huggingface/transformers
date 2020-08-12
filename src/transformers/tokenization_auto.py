@@ -86,6 +86,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
+        (BlenderbotConfig, (BlenderbotTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),

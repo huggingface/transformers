@@ -1,8 +1,9 @@
 import unittest
 
-from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available, BlenderbotSmallTokenizer
+from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_bart import _long_tensor, assert_tensors_close
@@ -12,7 +13,6 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
  import torch
  from transformers import BlenderbotForConditionalGeneration
-
 
 
 @require_torch
@@ -124,31 +124,19 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
   self.assertEqual(model.decoder.embed_positions.weight.shape, expected_shape)
 
 
-@require_torch
-class AbstractBlenderBotIntegrationTests(unittest.TestCase):
- checkpoint_name = "sshleifer/blenderbot-3B"
- tokenizer_cls = BlenderbotTokenizer
 
- @cached_property
- def model(self):
-  model = BlenderbotForConditionalGeneration.from_pretrained(self.checkpoint_name).to(torch_device)
+@unittest.skipUnless(torch_device != "cpu", "3b test are very slow on CPU.")
+@require_torch
+class Blenderbot3BIntegrationTests(unittest.TestCase):
+  model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
   if torch_device == "cuda":
-   model = model.half()
-  return model
-
- @cached_property
- def tokenizer(self):
-  return self.tokenizer_cls.from_pretrained(self.checkpoint_name)
-
-
-#@unittest.skipUnless(torch_device != "cpu", "3b test are very slow on CPU.")
-@require_torch
-class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
-      
+    model = model.half()
+  tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+  #@slow  
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [268, 343, 2])  
-  
+  @slow
   def test_forward_3B_same_as_parlai(self):
       torch.manual_seed(0)
       config = BlenderbotConfig(
@@ -272,18 +260,19 @@ class Blenderbot3BIntegrationTests(AbstractBlenderBotIntegrationTests):
     self.assertListEqual(expected_ids, generated_ids)
     
 
-
 @require_torch
-class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
-      
-  checkpoint_name = "sshleifer/blenderbot-90M"
-  tokenizer_cls = BlenderbotSmallTokenizer
+class Blenderbot90MIntegrationTests(unittest.TestCase):
+  
+  model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
+  if torch_device == "cuda":
+    model = model.half()
+  model.eval()
+  tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
 
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
-    self.assertListEqual(tok("sam").input_ids, [1384])  
-  
- 
+    self.assertListEqual(tok("sam").input_ids, [1384])     
+
   def test_forward_90M_same_as_parlai(self):
       torch.manual_seed(0)
       config = BlenderbotConfig(
@@ -355,8 +344,7 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
 
     
     model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-    generated_utterances = self.model.generate(**model_inputs, min_length=15, length_penalty=0.65, max_length=128, early_stopping=True)
-   
+    generated_utterances = self.model.generate(**model_inputs, min_length=20, length_penalty=0.65, max_length=128, early_stopping=True)
     self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances)) #test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
     
   
@@ -368,7 +356,7 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
 
     model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
     generated_utterances = self.model.generate(**model_inputs)
-    tgt_text = ["__start__ have you ever heard of sam harris ? he ' s an american singer , songwriter , and actor ."]
+    tgt_text = ["__start__ have you ever heard of sam harris? he's an american singer, songwriter, and actor."]
     
     generated_txt = self.tokenizer.batch_decode(generated_utterances)
     self.assertListEqual(tgt_text, generated_txt)
@@ -405,8 +393,5 @@ class Blenderbot90MIntegrationTests(AbstractBlenderBotIntegrationTests):
     9,
     2147,
     5,
-    ]  # FIXME, there should be a 2 here
-
+    ]
     self.assertListEqual(expected_tokens, generated_utterances[0])
-  
-  

@@ -4,11 +4,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.modeling_bart import BartForConditionalGeneration, SelfAttention
-
 from .configuration_blenderbot import BlenderbotConfig
 from .file_utils import add_start_docstrings_to_callable
-from .modeling_bart import BartDecoder, BartEncoder, _prepare_bart_decoder_inputs, _reorder_buffer, SinusoidalPositionalEmbedding
+from .modeling_bart import (
+    BartDecoder, 
+    BartEncoder, 
+    _prepare_bart_decoder_inputs, 
+    _reorder_buffer, 
+    SinusoidalPositionalEmbedding
+)
 from .modeling_utils import PreTrainedModel
 from .modeling_outputs import (
     BaseModelOutput,
@@ -48,9 +52,10 @@ class BlenderbotOutput(nn.Module):
         output[:, :, self.bos_token_id] = -65504 if output.dtype is torch.float16 else - 1e20
         return output
     
-    
+
+
 # TODO: delete this
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["sshleifer/blenderbot-3B", "sshleifer/blenderbot-90M"]
+BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/blenderbot-3B", "facebook/blenderbot-90M"]
 BLENDERBOT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
@@ -82,6 +87,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
         labels: (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
 """
 
+
 class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
     config_class = BlenderbotConfig
     base_model_prefix = "."
@@ -92,10 +98,20 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model, config.pad_token_id)
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
-        self.output = BlenderbotOutput(config,  self.shared)
         self.bos_token_id = config.bos_token_id
+        self.output = BlenderbotOutput(config,  self.shared)
         self.init_weights()
         
+    # def output(self, tensor):
+    #     """
+    #     Compute output logits.
+    #     """
+    #     # project back to vocabulary
+    #     output = F.linear(tensor, self.shared.weight)
+    #     # compatibility with fairseq: fairseq sometimes reuses BOS tokens and
+    #     # we need to force their probability of generation to be 0.
+    #     output[:, :, self.bos_token_id] = -65504 if output.dtype is torch.float16 else - 1e20
+    #     return output
 
     @add_start_docstrings_to_callable(BLENDERBOT_INPUTS_DOCSTRING)
     def forward(

@@ -229,6 +229,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (MarianConfig, MarianMTModel),
         (BartConfig, BartForConditionalGeneration),
+        (BlenderbotConfig, BlenderbotForConditionalGeneration),
         (LongformerConfig, LongformerForMaskedLM),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForMaskedLM),
