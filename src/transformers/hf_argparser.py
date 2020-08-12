@@ -4,7 +4,7 @@ import sys
 from argparse import ArgumentParser
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, List, NewType, Tuple, Union
+from typing import Any, Iterable, List, NewType, Optional, Tuple, Union
 
 
 DataClass = NewType("DataClass", Any)
@@ -64,7 +64,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
-            elif field.type is bool:
+            elif field.type is bool or field.type is Optional[bool]:
                 kwargs["action"] = "store_false" if field.default is True else "store_true"
                 if field.default is True:
                     field_name = f"--no-{field.name}"
