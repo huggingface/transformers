@@ -20,12 +20,12 @@ class BlenderbotConfig(PretrainedConfig):
             d_model: (:obj:`int`, default to 2560), dimension of the embeddings vector
             encoder_layers: (:obj:`int`, default to 2), number of layers in the encoder
             encoder_ffn_size: (:obj:`int`, default to 10240), size of hidden layers in the FFN in the encoder
-            decoder_layers: (:obj:`int`, default to 24), number of layers in the decoder 
+            decoder_layers: (:obj:`int`, default to 24), number of layers in the decoder
             decoder_ffn_size: (:obj:`int`, default to 10240), size of hidden layers in the FFN in the decoder
             dropout: (:obj:`float`, default to 0.1), embedding dropout
             activation_dropout: (:obj:`float`, default to 0.0), dropout after activation function
-            encoder_layerdrop: (:obj:`float`, default to 0.0, 
-            decoder_layerdrop: (:obj:`float`, default to 0.0), 
+            encoder_layerdrop: (:obj:`float`, default to 0.0,
+            decoder_layerdrop: (:obj:`float`, default to 0.0),
             encoder_attention_heads:(:obj:`int`, default to 32),  number of multi heads attention in the encoder
             decoder_attention_heads:(:obj:`int`, default to 32),  number of multi heads attention in the encoder
             max_positions_embeddings:(:obj:`int`, default to 128), size of the position embeddings
@@ -33,7 +33,7 @@ class BlenderbotConfig(PretrainedConfig):
             attention_dropout: (:obj:`float`, default to 0.0), multi head attention dropout
             relu_dropout: (:obj:`float`, default to 0.0), relu dropout
             vocab_size: (:obj:`int`, default to 8008), the size of the vocabulary
-            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings 
+            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings
             will be learn
             variant: (obj: str, default to "prelayernorm") defines when to apply a layernorm
             init_std: (obj: float, default to 0.02)
@@ -47,7 +47,7 @@ class BlenderbotConfig(PretrainedConfig):
             normalize_embedding: (obj:`boolean`, default to False),
             static_position_embeddings: (:obj:`boolean`, default to False),
             add_bias_logits: (:obj:`boolean`, default to False),
-            
+
 
         Example::
 
