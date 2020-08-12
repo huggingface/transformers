@@ -14,7 +14,7 @@ widget:
 trained with this notebook
 https://colab.research.google.com/drive/1pfCV3bngAmISNZVfDvBMyEhQKuYw37Rl#scrollTo=AyImj9qZYLRi&uniqifier=3
 
-
+config from microsoft/DialoGPT-medium
 ### How to use
 
 Now we are ready to try out how the model works as a chatting partner!
