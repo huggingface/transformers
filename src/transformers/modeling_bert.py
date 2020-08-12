@@ -683,14 +683,6 @@ BERT_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
@@ -769,6 +761,16 @@ class BertModel(BertPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            if the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
+            is used in the cross-attention if the model is configured as a decoder.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -956,7 +958,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.info("If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -976,22 +978,27 @@ class BertLMHeadModel(BertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs
     ):
         r"""
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            if the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
+            is used in the cross-attention if the model is configured as a decoder.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the left-to-right language modeling loss (next word prediction).
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
 
     Returns:
 
@@ -1061,8 +1068,8 @@ class BertForMaskedLM(BertPreTrainedModel):
         super().__init__(config)
 
         if config.is_decoder:
-            logger.info(
-                "If you want to use `TFBertForMaskedLM` make sure `config.is_decoder=False` for "
+            logger.warning(
+                "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
@@ -1089,9 +1096,9 @@ class BertForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
