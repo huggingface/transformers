@@ -32,7 +32,7 @@ class PabeeTests(unittest.TestCase):
             --task_name mrpc
             --do_train
             --do_eval
-            --output_dir ./tests/fixtures/tests_samples/temp_dir
+            --output_dir ./tests/fixtures/tests_samples/pabee_temp_dir
             --per_gpu_train_batch_size=2
             --per_gpu_eval_batch_size=1
             --learning_rate=2e-5
