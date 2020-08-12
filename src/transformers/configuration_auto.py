@@ -33,6 +33,7 @@ from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from .configuration_marian import MarianConfig
 from .configuration_mobilebert import MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_pegasus import PegasusConfig
 from .configuration_reformer import ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -83,6 +84,7 @@ CONFIG_MAPPING = OrderedDict(
         ("albert", AlbertConfig,),
         ("camembert", CamembertConfig,),
         ("xlm-roberta", XLMRobertaConfig,),
+        ("pegasus", PegasusConfig),
         ("marian", MarianConfig,),
         ("mbart", MBartConfig,),
         ("bart", BartConfig,),

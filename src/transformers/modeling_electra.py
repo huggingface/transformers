@@ -114,7 +114,9 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             elif m_name == "kernel":
                 array = np.transpose(array)
             try:
-                assert pointer.shape == array.shape, original_name
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -186,9 +188,9 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 
 
 @dataclass
-class ElectraForPretrainingOutput(ModelOutput):
+class ElectraForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.ElectraForPretrainingModel`.
+    Output type of :class:`~transformers.ElectraForPreTrainingModel`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -208,8 +210,8 @@ class ElectraForPretrainingOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -272,8 +274,9 @@ ELECTRA_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -331,13 +334,13 @@ class ElectraModel(ElectraPreTrainedModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -371,7 +374,7 @@ class ElectraModel(ElectraPreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         return hidden_states
@@ -428,7 +431,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -437,7 +440,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         discriminator_hidden_states = self.electra(
             input_ids,
@@ -448,7 +451,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
             inputs_embeds,
             output_attentions,
             output_hidden_states,
-            return_tuple,
+            return_dict,
         )
 
         sequence_output = discriminator_hidden_states[0]
@@ -464,7 +467,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -493,7 +496,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ElectraForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -505,7 +508,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
@@ -527,7 +530,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         >>> logits = model(input_ids).logits
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         discriminator_hidden_states = self.electra(
             input_ids,
@@ -538,7 +541,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             inputs_embeds,
             output_attentions,
             output_hidden_states,
-            return_tuple,
+            return_dict,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
@@ -555,11 +558,11 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             else:
                 loss = loss_fct(logits.view(-1, discriminator_sequence_output.shape[1]), labels.float())
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ElectraForPretrainingOutput(
+        return ElectraForPreTrainingOutput(
             loss=loss,
             logits=logits,
             hidden_states=discriminator_hidden_states.hidden_states,
@@ -606,7 +609,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
         **kwargs
     ):
         r"""
@@ -625,7 +628,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         generator_hidden_states = self.electra(
             input_ids,
@@ -636,7 +639,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             inputs_embeds,
             output_attentions,
             output_hidden_states,
-            return_tuple,
+            return_dict,
         )
         generator_sequence_output = generator_hidden_states[0]
 
@@ -649,7 +652,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
             loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (prediction_scores,) + generator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -695,14 +698,14 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         discriminator_hidden_states = self.electra(
             input_ids,
@@ -713,7 +716,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
             inputs_embeds,
             output_attentions,
             output_hidden_states,
-            return_tuple,
+            return_dict,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
@@ -732,7 +735,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
             else:
                 loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -782,7 +785,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -794,7 +797,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         discriminator_hidden_states = self.electra(
             input_ids,
@@ -831,7 +834,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits,) + discriminator_hidden_states[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
@@ -847,14 +850,14 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
 @add_start_docstrings(
     """ELECTRA Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    ELECTRA_INPUTS_DOCSTRING,
+    ELECTRA_START_DOCSTRING,
 )
 class ElectraForMultipleChoice(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
-        self.summary = SequenceSummary(config)
+        self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -876,7 +879,8 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
-        return_tuple=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -884,7 +888,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -905,12 +909,13 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
-            return_tuple=return_tuple,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         sequence_output = discriminator_hidden_states[0]
 
-        pooled_output = self.summary(sequence_output)
+        pooled_output = self.sequence_summary(sequence_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
@@ -919,7 +924,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if return_tuple:
+        if not return_dict:
             output = (reshaped_logits,) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 

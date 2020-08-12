@@ -38,6 +38,7 @@ from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_pegasus import PegasusConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -89,6 +90,9 @@ from .file_utils import (
 )
 from .hf_argparser import HfArgumentParser
 
+# Integrations
+from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
+
 # Model Cards
 from .modelcard import ModelCard
 
@@ -105,6 +109,8 @@ from .modeling_tf_pytorch_utils import (
 
 # Pipelines
 from .pipelines import (
+    Conversation,
+    ConversationalPipeline,
     CsvPipelineDataFormat,
     FeatureExtractionPipeline,
     FillMaskPipeline,
@@ -119,6 +125,7 @@ from .pipelines import (
     TextGenerationPipeline,
     TokenClassificationPipeline,
     TranslationPipeline,
+    ZeroShotClassificationPipeline,
     pipeline,
 )
 
@@ -146,6 +153,7 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_pegasus import PegasusTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -280,9 +288,11 @@ if is_torch_available():
         XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForQuestionAnsweringSimple,
+        XLMForMultipleChoice,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_blenderbot import BlenderbotForConditionalGeneration, BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from .modeling_pegasus import PegasusForConditionalGeneration
     from .modeling_bart import (
         PretrainedBartModel,
         BartForSequenceClassification,
@@ -359,6 +369,8 @@ if is_torch_available():
         FlaubertForTokenClassification,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
+        FlaubertForTokenClassification,
+        FlaubertForMultipleChoice,
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -393,6 +405,7 @@ if is_torch_available():
         LongformerForMultipleChoice,
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
+        LongformerSelfAttention,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_dpr import (
@@ -417,6 +430,7 @@ if is_torch_available():
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_linear_schedule_with_warmup,
+        get_polynomial_decay_schedule_with_warmup,
     )
 
     # Trainer
@@ -533,8 +547,10 @@ if is_tf_available():
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFElectraForMaskedLM,
+        TFElectraForMultipleChoice,
         TFElectraForPreTraining,
         TFElectraForQuestionAnswering,
+        TFElectraForSequenceClassification,
         TFElectraForTokenClassification,
         TFElectraModel,
         TFElectraPreTrainedModel,
@@ -557,6 +573,14 @@ if is_tf_available():
         TFGPT2MainLayer,
         TFGPT2Model,
         TFGPT2PreTrainedModel,
+    )
+
+    from .modeling_tf_longformer import (
+        TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFLongformerModel,
+        TFLongformerForMaskedLM,
+        TFLongformerForQuestionAnswering,
+        TFLongformerSelfAttention,
     )
 
     from .modeling_tf_mobilebert import (

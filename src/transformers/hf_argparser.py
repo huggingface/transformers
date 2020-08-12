@@ -4,7 +4,7 @@ import sys
 from argparse import ArgumentParser
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, List, NewType, Tuple, Union
+from typing import Any, Iterable, List, NewType, Optional, Tuple, Union
 
 
 DataClass = NewType("DataClass", Any)
@@ -64,7 +64,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
-            elif field.type is bool:
+            elif field.type is bool or field.type is Optional[bool]:
                 kwargs["action"] = "store_false" if field.default is True else "store_true"
                 if field.default is True:
                     field_name = f"--no-{field.name}"
@@ -155,6 +155,19 @@ class HfArgumentParser(ArgumentParser):
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype)}
             inputs = {k: v for k, v in data.items() if k in keys}
+            obj = dtype(**inputs)
+            outputs.append(obj)
+        return (*outputs,)
+
+    def parse_dict(self, args: dict) -> Tuple[DataClass, ...]:
+        """
+        Alternative helper method that does not use `argparse` at all,
+        instead uses a dict and populating the dataclass types.
+        """
+        outputs = []
+        for dtype in self.dataclass_types:
+            keys = {f.name for f in dataclasses.fields(dtype)}
+            inputs = {k: v for k, v in args.items() if k in keys}
             obj = dtype(**inputs)
             outputs.append(obj)
         return (*outputs,)

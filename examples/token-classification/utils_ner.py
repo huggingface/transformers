@@ -146,7 +146,7 @@ if is_tf_available():
         """
 
         features: List[InputFeatures]
-        pad_token_label_id: int = -1
+        pad_token_label_id: int = -100
         # Use cross entropy ignore_index as padding label id so that only
         # real label ids contribute to the loss later.
 
@@ -221,6 +221,8 @@ if is_tf_available():
                 )
 
         def get_dataset(self):
+            self.dataset = self.dataset.apply(tf.data.experimental.assert_cardinality(len(self.features)))
+
             return self.dataset
 
         def __len__(self):

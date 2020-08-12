@@ -169,11 +169,15 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             array = np.transpose(array)
         if isinstance(pointer, list):
             # Here we will split the TF weights
-            assert len(pointer) == array.shape[0]
+            assert (
+                len(pointer) == array.shape[0]
+            ), f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
                 try:
-                    assert p_i.shape == arr_i.shape
+                    assert (
+                        p_i.shape == arr_i.shape
+                    ), f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
@@ -181,7 +185,9 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert pointer.shape == array.shape
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -627,8 +633,8 @@ class XLNetLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -661,8 +667,8 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -695,8 +701,8 @@ class XLNetForTokenClassificationOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -705,7 +711,7 @@ class XLNetForTokenClassificationOutput(ModelOutput):
 @dataclass
 class XLNetForMultipleChoiceOutput(ModelOutput):
     """
-    Base class for outputs of multiple choice models.
+    Output type of :class:`~transformers.XLNetForMultipleChoice`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -731,8 +737,8 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -741,7 +747,7 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     """
-    Base class for outputs of question answering models.
+    Output type of :class:`~transformers.XLNetForQuestionAnsweringSimple`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -767,9 +773,9 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
             heads.
     """
 
-    loss: Optional[torch.FloatTensor]
-    start_logits: torch.FloatTensor
-    end_logits: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    start_logits: torch.FloatTensor = None
+    end_logits: torch.FloatTensor = None
     mems: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -778,7 +784,7 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringOutput(ModelOutput):
     """
-    Base class for outputs of question answering models using a :obj:`SquadHead`.
+    Output type of :class:`~transformers.XLNetForQuestionAnswering`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
@@ -891,8 +897,9 @@ XLNET_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_tuple (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the output of the model will be a plain tuple instead of a ``dataclass``.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -1051,13 +1058,13 @@ class XLNetModel(XLNetPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
@@ -1220,7 +1227,6 @@ class XLNetModel(XLNetPreTrainedModel):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         output = output.permute(1, 0, 2).contiguous()
 
-        # TODO Teven: fix this test to only use use_cache.
         if not use_cache:
             new_mems = None
 
@@ -1239,7 +1245,7 @@ class XLNetModel(XLNetPreTrainedModel):
             else:
                 attentions = tuple(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
 
-        if return_tuple:
+        if not return_dict:
             return tuple(v for v in [output, new_mems, hidden_states, attentions] if v is not None)
 
         return XLNetModelOutput(
@@ -1325,7 +1331,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`, defaults to :obj:`None`):
@@ -1344,7 +1350,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         import torch
 
         tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = XLNetLMHeadModel.from_pretrained('xlnet-large-cased')
+        model = XLNetLMHeadModel.from_pretrained('xlnet-large-cased', return_dict=True)
 
         # We show how to setup inputs to predict a next token using a bi-directional context.
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)).unsqueeze(0)  # We will predict the masked token
@@ -1369,7 +1375,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         loss = outputs.loss
         next_token_logits = outputs.logits  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
@@ -1385,7 +1391,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         logits = self.lm_loss(transformer_outputs[0])
@@ -1396,7 +1402,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1447,7 +1453,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`)
@@ -1456,7 +1462,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
@@ -1472,7 +1478,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         output = transformer_outputs[0]
 
@@ -1489,7 +1495,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1539,7 +1545,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1547,7 +1553,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         outputs = self.transformer(
@@ -1563,7 +1569,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1584,7 +1590,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1634,7 +1640,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1642,7 +1648,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
             of the input tensors. (see `input_ids` above)
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1669,7 +1675,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         output = transformer_outputs[0]
@@ -1683,7 +1689,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels.view(-1))
 
-        if return_tuple:
+        if not return_dict:
             output = (reshaped_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1734,7 +1740,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1746,7 +1752,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         outputs = self.transformer(
@@ -1762,7 +1768,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
 
         sequence_output = outputs[0]
@@ -1789,7 +1795,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
 
-        if return_tuple:
+        if not return_dict:
             output = (start_logits, end_logits) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
@@ -1842,7 +1848,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_tuple=None,
+        return_dict=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1869,7 +1875,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         >>> import torch
 
         >>> tokenizer =  XLNetTokenizer.from_pretrained('xlnet-base-cased')
-        >>> model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased')
+        >>> model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased', return_dict=True)
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         >>> start_positions = torch.tensor([1])
@@ -1878,7 +1884,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         >>> loss = outputs.loss
         """
-        return_tuple = return_tuple if return_tuple is not None else self.config.use_return_tuple
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
 
         transformer_outputs = self.transformer(
@@ -1894,7 +1900,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_tuple=return_tuple,
+            return_dict=return_dict,
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
@@ -1924,7 +1930,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                 # note(zhiliny): by default multiply the loss by 0.5 so that the scale is comparable to start_loss and end_loss
                 total_loss += cls_loss * 0.5
 
-            if return_tuple:
+            if not return_dict:
                 return (total_loss,) + transformer_outputs[1:]
             else:
                 return XLNetForQuestionAnsweringOutput(
@@ -1966,7 +1972,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                 hidden_states, start_states=start_states, cls_index=cls_index
             )  # Shape (batch size,): one single `cls_logits` for each sample
 
-            if return_tuple:
+            if not return_dict:
                 outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits)
                 return outputs + transformer_outputs[1:]
             else:
