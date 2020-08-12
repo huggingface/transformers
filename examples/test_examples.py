@@ -90,10 +90,11 @@ class ExamplesTests(unittest.TestCase):
             --task mrpc
             --do_train
             --do_predict
-            --output_dir ./tests/fixtures/tests_samples/temp_dir
+            --output_dir ./tests/fixtures/tests_samples/pl_temp_dir
             --train_batch_size=32
             --learning_rate=1e-4
-            --num_train_epochs=1
+            --max_steps=10
+            --warmup_steps=2
             --seed=42
             --max_seq_length=128
             """.split()
@@ -103,16 +104,7 @@ class ExamplesTests(unittest.TestCase):
 
         with patch.object(sys, "argv", testargs):
             result = run_pl_glue.main()
-            # for now just testing that the script can run to a completion
-            self.assertGreater(result["acc"], 0.25)
-            #
-            # TODO: this fails on CI - doesn't get acc/f1>=0.75:
-            #
-            #     # remove all the various *loss* attributes
-            #     result = {k: v for k, v in result.items() if "loss" not in k}
-            #     for k, v in result.items():
-            #         self.assertGreaterEqual(v, 0.75, f"({k})")
-            #
+            self.assertGreater(result["acc"], 0.75)
 
     def test_run_language_modeling(self):
         stream_handler = logging.StreamHandler(sys.stdout)
