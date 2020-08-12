@@ -20,16 +20,10 @@ from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_torch_tpu_available
+from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import (
-    PREFIX_CHECKPOINT_DIR,
-    EvalPrediction,
-    PredictionOutput,
-    TrainOutput,
-    is_wandb_available,
-    set_seed,
-)
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, set_seed
 from .training_args import TrainingArguments
 
 
@@ -53,26 +47,17 @@ if is_torch_tpu_available():
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-
-    _has_tensorboard = True
-except ImportError:
+if is_tensorboard_available():
     try:
-        from tensorboardX import SummaryWriter
-
-        _has_tensorboard = True
+        from torch.utils.tensorboard import SummaryWriter
     except ImportError:
-        _has_tensorboard = False
-
-
-def is_tensorboard_available():
-    return _has_tensorboard
-
+        from tensorboardX import SummaryWriter
 
 if is_wandb_available():
     import wandb
 
+if is_comet_available():
+    import comet_ml
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +159,8 @@ class Trainer:
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+        kwargs:
+            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -184,9 +171,9 @@ class Trainer:
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-        prediction_loss_only=False,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        **kwargs,
     ):
         self.model = model.to(args.device)
         self.args = args
@@ -194,9 +181,16 @@ class Trainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
-        self.prediction_loss_only = prediction_loss_only
         self.optimizer, self.lr_scheduler = optimizers
         self.tb_writer = tb_writer
+        if "prediction_loss_only" in kwargs:
+            warnings.warn(
+                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a future version. Use `args.prediction_loss_only` instead.",
+                FutureWarning,
+            )
+            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
         if tb_writer is None and is_tensorboard_available() and self.is_world_process_zero():
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         if not is_tensorboard_available():
@@ -209,6 +203,13 @@ class Trainer:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
+        if is_comet_available():
+            self.setup_comet()
+        elif os.environ.get("COMET_MODE") != "DISABLED":
+            logger.info(
+                "To use comet_ml logging, run `pip/conda install comet_ml` "
+                "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
         set_seed(self.args.seed)
         # Create output directory if needed
@@ -392,6 +393,37 @@ class Trainer:
                 wandb.watch(
                     self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
                 )
+
+    def setup_comet(self):
+        """
+        Setup the optional Comet.ml integration.
+
+        Environment:
+            COMET_MODE:
+                (Optional): str - "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME:
+                (Optional): str - Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY:
+                (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+
+        For a number of configurable items in the environment,
+        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
+        """
+        if self.is_world_master():
+            comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
+            args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
+            experiment = None
+            if comet_mode == "ONLINE":
+                experiment = comet_ml.Experiment(**args)
+                logger.info("Automatic Comet.ml online logging enabled")
+            elif comet_mode == "OFFLINE":
+                args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
+                experiment = comet_ml.OfflineExperiment(**args)
+                logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
+            if experiment is not None:
+                experiment._set_model_graph(self.model, framework="transformers")
+                experiment._log_parameters(self.args, prefix="args/", framework="transformers")
+                experiment._log_parameters(self.model.config, prefix="config/", framework="transformers")
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -601,8 +633,14 @@ class Trainer:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:
-                # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
-                xm.master_print(met.metrics_report())
+                if is_torch_tpu_available():
+                    # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
+                    xm.master_print(met.metrics_report())
+                else:
+                    logger.warning(
+                        "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
+                        "configured. Check your training configuration if this is unexpected."
+                    )
 
         if self.tb_writer:
             self.tb_writer.close()
@@ -655,6 +693,11 @@ class Trainer:
         if is_wandb_available():
             if self.is_world_process_zero():
                 wandb.log(logs, step=self.global_step)
+        if is_comet_available():
+            if self.is_world_process_zero():
+                experiment = comet_ml.config.get_global_experiment()
+                if experiment is not None:
+                    experiment._log_metrics(logs, step=self.global_step, epoch=self.epoch, framework="transformers")
         output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
@@ -917,7 +960,9 @@ class Trainer:
             )
             return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
 
-        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
+        prediction_loss_only = (
+            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
+        )
 
         model = self.model
         # multi-gpu eval

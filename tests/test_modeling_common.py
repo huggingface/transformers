@@ -60,6 +60,7 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     test_missing_keys = True
+    test_chunking = False
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class):
@@ -518,6 +519,29 @@ class ModelTesterMixin:
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_feed_forward_chunking(self):
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_chunking:
+            return
+
+        for model_class in self.all_model_classes:
+            torch.manual_seed(0)
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            torch.manual_seed(0)
+            config.chunk_size_feed_forward = 1
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()

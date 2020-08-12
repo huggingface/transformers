@@ -128,7 +128,7 @@ Under the hood: pretrained models
 Let's now see what happens beneath the hood when using those pipelines. As we saw, the model and tokenizer are created
 using the :obj:`from_pretrained` method:
 
-::
+.. code-block::
 
     >>> ## PYTORCH CODE
     >>> from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -146,7 +146,7 @@ Using the tokenizer
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
-that process (you can learn more about them in the :doc:`tokenizer_summary <tokenizer_summary>`, which is why we need
+that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`, which is why we need
 to instantiate the tokenizer using the name of the model, to make sure we use the same rules as when the model was
 pretrained.
 
@@ -295,7 +295,7 @@ precision, etc.). See the :doc:`training tutorial <training>` for more details.
 
 Once your model is fine-tuned, you can save it with its tokenizer in the following way:
 
-::
+.. code-block::
 
     tokenizer.save_pretrained(save_directory)
     model.save_pretrained(save_directory)
@@ -305,14 +305,14 @@ directory name instead of the model name. One cool feature of 🤗 Transformers 
 PyTorch and TensorFlow: any model saved as before can be loaded back either in PyTorch or TensorFlow. If you are
 loading a saved PyTorch model in a TensorFlow model, use :func:`~transformers.TFAutoModel.from_pretrained` like this:
 
-::
+.. code-block::
 
     tokenizer = AutoTokenizer.from_pretrained(save_directory)
     model = TFAutoModel.from_pretrained(save_directory, from_pt=True)
 
 and if you are loading a saved TensorFlow model in a PyTorch model, you should use the following code:
 
-::
+.. code-block::
 
     tokenizer = AutoTokenizer.from_pretrained(save_directory)
     model = AutoModel.from_pretrained(save_directory, from_tf=True)
@@ -320,7 +320,7 @@ and if you are loading a saved TensorFlow model in a PyTorch model, you should u
 Lastly, you can also ask the model to return all hidden states and all attention weights if you need them:
 
 
-::
+.. code-block::
 
     >>> ## PYTORCH CODE
     >>> pt_outputs = pt_model(**pt_batch, output_hidden_states=True, output_attentions=True)

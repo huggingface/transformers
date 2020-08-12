@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Install newest ptl.
-pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 # for seqeval metrics import
 pip install -r ../requirements.txt
 

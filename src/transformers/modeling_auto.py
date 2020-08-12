@@ -34,6 +34,7 @@ from .configuration_auto import (
     LongformerConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
+    PegasusConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -125,6 +126,7 @@ from .modeling_mobilebert import (
     MobileBertModel,
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_pegasus import PegasusForConditionalGeneration
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
@@ -133,6 +135,7 @@ from .modeling_reformer import (
 )
 from .modeling_retribert import RetriBertModel
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -248,6 +251,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        (RobertaConfig, RobertaForCausalLM),
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
@@ -283,6 +287,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         (T5Config, T5ForConditionalGeneration),
+        (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
         (BartConfig, BartForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),

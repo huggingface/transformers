@@ -29,17 +29,15 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
         pad_mask = target.eq(ignore_index)
         nll_loss.masked_fill_(pad_mask, 0.0)
         smooth_loss.masked_fill_(pad_mask, 0.0)
-        bs = pad_mask.long().sum()
     else:
         nll_loss = nll_loss.squeeze(-1)
         smooth_loss = smooth_loss.squeeze(-1)
-        bs = lprobs.shape[0]
 
     nll_loss = nll_loss.sum()  # mean()? Scared to break other math.
     smooth_loss = smooth_loss.sum()
     eps_i = epsilon / lprobs.size(-1)
     loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
-    return loss / bs, nll_loss / bs
+    return loss, nll_loss
 
 
 def encode_line(tokenizer, line, max_length, pad_to_max_length=True, return_tensors="pt"):
@@ -146,7 +144,9 @@ class Seq2SeqDataset(Dataset):
         return SortishSampler(self.src_lens, batch_size)
 
 
-class MBartDataset(Seq2SeqDataset):
+class TranslationDataset(Seq2SeqDataset):
+    """A dataset that calls prepare_seq2seq_batch."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.max_source_length != self.max_target_length:
@@ -167,7 +167,7 @@ class MBartDataset(Seq2SeqDataset):
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
-        batch_encoding = self.tokenizer.prepare_translation_batch(
+        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
             tgt_texts=[x["tgt_texts"] for x in batch],
