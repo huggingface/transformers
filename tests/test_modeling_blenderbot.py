@@ -132,7 +132,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
   if torch_device == "cuda":
     model = model.half()
   tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
-  #@slow  
+  @slow  
   def test_tokenization_same_as_parlai(self):
     tok = self.tokenizer
     self.assertListEqual(tok("sam").input_ids, [268, 343, 2])  
