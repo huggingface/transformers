@@ -127,7 +127,6 @@ class ScheduleInitTest(unittest.TestCase):
             scheduler = scheduler_func(self.optimizer, **kwargs)
             self.assertEqual(len([scheduler.get_lr()[0]]), 1)
             lrs_1 = unwrap_schedule(scheduler, self.num_steps)
-            print(scheduler_func, lrs_1)
             self.assertListAlmostEqual(
                 lrs_1, expected_learning_rates, tol=1e-2, msg=f"failed for {scheduler_func} in normal scheduler",
             )
