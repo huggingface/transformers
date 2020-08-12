@@ -126,7 +126,9 @@ conversion utilities for the following models:
     Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
 23. `Pegasus <https://github.com/google-research/pegasus>`_ (from Google) released with the paper `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
     <https://arxiv.org/abs/1912.08777>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
-24. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+24. `MBart <>`_ (from Facebook) released with the paper  `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov
+    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.  
+25. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -208,6 +210,7 @@ conversion utilities for the following models:
     model_doc/mobilebert
     model_doc/dpr
     model_doc/pegasus
+    model_doc/mbart
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils
