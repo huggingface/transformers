@@ -1,5 +1,5 @@
 Encoder Decoder Models
------------
+------------------------
 
 This class can wrap an encoder model, such as ``BertModel`` and a decoder modeling with a language modeling head, such as ``BertForMaskedLM`` into a encoder-decoder model.
 
@@ -10,7 +10,7 @@ An application of this architecture could be *summarization* using two pretraine
 
 
 ``EncoderDecoderConfig``
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.EncoderDecoderConfig
     :members:

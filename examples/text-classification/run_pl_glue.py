@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 import time
+from argparse import Namespace
 
 import numpy as np
 import torch
@@ -24,6 +25,8 @@ class GLUETransformer(BaseTransformer):
     mode = "sequence-classification"
 
     def __init__(self, hparams):
+        if type(hparams) == dict:
+            hparams = Namespace(**hparams)
         hparams.glue_output_mode = glue_output_modes[hparams.task]
         num_labels = glue_tasks_num_labels[hparams.task]
 
@@ -41,7 +44,8 @@ class GLUETransformer(BaseTransformer):
         outputs = self(**inputs)
         loss = outputs[0]
 
-        tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
+        lr_scheduler = self.trainer.lr_schedulers[0]["scheduler"]
+        tensorboard_logs = {"loss": loss, "rate": lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
 
     def prepare_data(self):
@@ -54,7 +58,6 @@ class GLUETransformer(BaseTransformer):
             cached_features_file = self._feature_file(mode)
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 logger.info("Loading features from cached file %s", cached_features_file)
-                features = torch.load(cached_features_file)
             else:
                 logger.info("Creating features from dataset file at %s", args.data_dir)
                 examples = (
@@ -72,7 +75,7 @@ class GLUETransformer(BaseTransformer):
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-    def load_dataset(self, mode, batch_size):
+    def get_dataloader(self, mode: int, batch_size: int, shuffle: bool = False) -> DataLoader:
         "Load datasets. Called after prepare data."
 
         # We test on dev set to compare to benchmarks without having to submit to GLUE server
@@ -92,7 +95,7 @@ class GLUETransformer(BaseTransformer):
         return DataLoader(
             TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels),
             batch_size=batch_size,
-            shuffle=True,
+            shuffle=shuffle,
         )
 
     def validation_step(self, batch, batch_idx):
@@ -108,7 +111,7 @@ class GLUETransformer(BaseTransformer):
 
         return {"val_loss": tmp_eval_loss.detach().cpu(), "pred": preds, "target": out_label_ids}
 
-    def _eval_end(self, outputs):
+    def _eval_end(self, outputs) -> tuple:
         val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean().detach().cpu().item()
         preds = np.concatenate([x["pred"] for x in outputs], axis=0)
 
@@ -132,20 +135,14 @@ class GLUETransformer(BaseTransformer):
         logs = ret["log"]
         return {"val_loss": logs["val_loss"], "log": logs, "progress_bar": logs}
 
-    def test_epoch_end(self, outputs):
-        # updating to test_epoch_end instead of deprecated test_end
+    def test_epoch_end(self, outputs) -> dict:
         ret, predictions, targets = self._eval_end(outputs)
-
-        # Converting to the dic required by pl
-        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/\
-        # pytorch_lightning/trainer/logging.py#L139
         logs = ret["log"]
         # `val_loss` is the key returned by `self._eval_end()` but actually refers to `test_loss`
         return {"avg_test_loss": logs["val_loss"], "log": logs, "progress_bar": logs}
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
-        # Add NER specific options
         BaseTransformer.add_model_specific_args(parser, root_dir)
         parser.add_argument(
             "--max_seq_length",
@@ -158,7 +155,12 @@ class GLUETransformer(BaseTransformer):
         parser.add_argument(
             "--task", default="", type=str, required=True, help="The GLUE task to run",
         )
-
+        parser.add_argument(
+            "--gpus",
+            default=0,
+            type=int,
+            help="The number of GPUs allocated for this, it is by default 0 meaning none",
+        )
         parser.add_argument(
             "--data_dir",
             default=None,
@@ -174,7 +176,7 @@ class GLUETransformer(BaseTransformer):
         return parser
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = GLUETransformer.add_model_specific_args(parser, os.getcwd())
@@ -192,4 +194,8 @@ if __name__ == "__main__":
     if args.do_predict:
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         model = model.load_from_checkpoint(checkpoints[-1])
-        trainer.test(model)
+        return trainer.test(model)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,9 @@
 ELECTRA
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The ELECTRA model was proposed in the paper.
 `ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators <https://openreview.net/pdf?id=r1xMH1BtvB>`__.
 ELECTRA is a new pre-training approach which trains two transformer models: the generator and the discriminator. The
@@ -68,6 +71,16 @@ ElectraTokenizerFast
     :members:
 
 
+Electra specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_electra.ElectraForPreTrainingOutput
+    :members:
+
+.. autoclass:: transformers.modeling_tf_electra.TFElectraForPreTrainingOutput
+    :members:
+
+
 ElectraModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -89,10 +102,31 @@ ElectraForMaskedLM
     :members:
 
 
+ElectraForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForSequenceClassification
+    :members:
+
+
+ElectraForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForMultipleChoice
+    :members:
+
+
 ElectraForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForTokenClassification
+    :members:
+
+
+ElectraForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForQuestionAnswering
     :members:
 
 
@@ -117,8 +151,29 @@ TFElectraForMaskedLM
     :members:
 
 
+TFElectraForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForSequenceClassification
+    :members:
+
+
+TFElectraForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForMultipleChoice
+    :members:
+
+
 TFElectraForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForTokenClassification
+    :members:
+
+
+TFElectraForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForQuestionAnswering
     :members:

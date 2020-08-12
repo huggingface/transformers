@@ -61,7 +61,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class T5Tokenizer(PreTrainedTokenizer):
     """
-        Constructs an XLNet tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+        Constructs a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
 
         This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
         should refer to the superclass for more information regarding methods.
@@ -94,6 +94,7 @@ class T5Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,

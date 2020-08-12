@@ -19,8 +19,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.hf_api import HfApi
-
-from .utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -33,15 +32,22 @@ if is_torch_available():
         MarianTokenizer,
         MarianMTModel,
     )
+    from transformers.convert_marian_to_pytorch import (
+        convert_hf_name_to_opus_name,
+        convert_opus_name_to_hf_name,
+        ORG_NAME,
+    )
+    from transformers.pipelines import TranslationPipeline
 
 
 class ModelManagementTests(unittest.TestCase):
     @slow
-    def test_model_count(self):
+    def test_model_names(self):
         model_list = HfApi().model_list()
-        expected_num_models = 1011
-        actual_num_models = len([x for x in model_list if x.modelId.startswith("Helsinki-NLP")])
-        self.assertEqual(expected_num_models, actual_num_models)
+        model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
+        bad_model_ids = [mid for mid in model_ids if "+" in model_ids]
+        self.assertListEqual([], bad_model_ids)
+        self.assertGreater(len(model_ids), 500)
 
 
 @require_torch
@@ -91,12 +97,12 @@ class MarianIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
+        model_inputs = self.tokenizer.prepare_seq2seq_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
             torch_device
         )
-        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
+        self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
-            model_inputs["input_ids"], attention_mask=model_inputs["attention_mask"], num_beams=2
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
         )
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
@@ -106,10 +112,10 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
     @slow
     def test_forward(self):
         src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
-        expected = [38, 121, 14, 697, 38848, 0]
+        expected_ids = [38, 121, 14, 697, 38848, 0]
 
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt).to(torch_device)
-        self.assertListEqual(expected, model_inputs["input_ids"][0].tolist())
+        model_inputs: dict = self.tokenizer.prepare_seq2seq_batch(src, tgt_texts=tgt).to(torch_device)
+        self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
 
         desired_keys = {
             "input_ids",
@@ -123,22 +129,16 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         max_indices = logits.argmax(-1)
         self.tokenizer.batch_decode(max_indices)
 
-    def test_tokenizer_equivalence(self):
-        batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
-        input_ids = batch["input_ids"][0]
-        expected = [38, 121, 14, 697, 38848, 0]
-        self.assertListEqual(expected, input_ids.tolist())
-
     def test_unk_support(self):
         t = self.tokenizer
-        ids = t.prepare_translation_batch(["||"]).to(torch_device)["input_ids"][0].tolist()
+        ids = t.prepare_seq2seq_batch(["||"]).to(torch_device).input_ids[0].tolist()
         expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
         self.assertEqual(expected, ids)
 
     def test_pad_not_split(self):
-        input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])["input_ids"][0]
+        input_ids_w_pad = self.tokenizer.prepare_seq2seq_batch(["I am a small frog <pad>"]).input_ids[0].tolist()
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
-        self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
+        self.assertListEqual(expected_w_pad, input_ids_w_pad)
 
     @slow
     def test_batch_generation_en_de(self):
@@ -187,7 +187,7 @@ class TestMarian_RU_FR(MarianIntegrationTest):
     src = "ru"
     tgt = "fr"
     src_text = ["Он показал мне рукопись своей новой пьесы."]
-    expected_text = ["Il me montre un manuscrit de sa nouvelle pièce."]
+    expected_text = ["Il m'a montré le manuscrit de sa nouvelle pièce."]
 
     @slow
     def test_batch_generation_ru_fr(self):
@@ -197,36 +197,66 @@ class TestMarian_RU_FR(MarianIntegrationTest):
 class TestMarian_MT_EN(MarianIntegrationTest):
     src = "mt"
     tgt = "en"
-    src_text = ["Il - Babiloniżi b'mod żbaljat ikkonkludew li l - Alla l - veru kien dgħajjef."]
-    expected_text = ["The Babylonians wrongly concluded that the true God was weak."]
+    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
+    expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
 
-    @unittest.skip("")  # Known Issue: This model generates a string of .... at the end of the translation.
+    @slow
     def test_batch_generation_mt_en(self):
         self._assert_generated_batch_equal_expected()
 
 
-class TestMarian_DE_Multi(MarianIntegrationTest):
-    src = "de"
-    tgt = "ch_group"
-    src_text = ["Er aber sprach: Das ist die Gottlosigkeit."]
+class TestMarian_en_ROMANCE(MarianIntegrationTest):
+    """Multilingual on target side."""
+
+    src = "en"
+    tgt = "ROMANCE"
+    src_text = [
+        ">>fr<< Don't spend so much time watching TV.",
+        ">>pt<< Your message has been sent.",
+        ">>es<< He's two years older than me.",
+    ]
+    expected_text = [
+        "Ne passez pas autant de temps à regarder la télé.",
+        "A sua mensagem foi enviada.",
+        "Es dos años más viejo que yo.",
+    ]
 
     @slow
-    def test_translation_de_multi_does_not_error(self):
-        self.translate_src_text()
-
-    @unittest.skip("")  # "Language codes are not yet supported."
-    def test_batch_generation_de_multi_tgt(self):
+    def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
 
-    @unittest.skip("")  # "Language codes are not yet supported."
-    def test_lang_code(self):
-        t = "Er aber sprach"
-        zh_code = self.code
-        tok_fn = self.tokenizer.prepare_translation_batch
-        pass_code = tok_fn(src_texts=[t], tgt_lang_code=zh_code)["input_ids"][0]
-        preprocess_with_code = tok_fn(src_texts=[zh_code + "  " + t])["input_ids"][0]
-        self.assertListEqual(pass_code.tolist(), preprocess_with_code.tolist())
-        for code in self.tokenizer.supported_language_codes:
-            self.assertIn(code, self.tokenizer.encoder)
-        pass_only_code = tok_fn(src_texts=[""], tgt_lang_code=zh_code)["input_ids"][0].tolist()
-        self.assertListEqual(pass_only_code, [self.tokenizer.encoder[zh_code], self.tokenizer.eos_token_id])
+    def test_tokenizer_handles_empty(self):
+        normalized = self.tokenizer.normalize("")
+        self.assertIsInstance(normalized, str)
+        with self.assertRaises(ValueError):
+            self.tokenizer.prepare_seq2seq_batch([""])
+
+    def test_pipeline(self):
+        device = 0 if torch_device == "cuda" else -1
+        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=device)
+        output = pipeline(self.src_text)
+        self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
+
+
+@require_torch
+class TestConversionUtils(unittest.TestCase):
+    def test_renaming_multilingual(self):
+        old_names = [
+            "opus-mt-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
+            "opus-mt-cmn+cn-fi",  # no group
+            "opus-mt-en-de",  # standard name
+            "opus-mt-en-de",  # standard name
+        ]
+        expected = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
+        self.assertListEqual(expected, [convert_opus_name_to_hf_name(x) for x in old_names])
+
+    def test_undoing_renaming(self):
+        hf_names = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
+        converted_opus_names = [convert_hf_name_to_opus_name(x) for x in hf_names]
+        expected_opus_names = [
+            "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
+            "cmn+cn-fi",
+            "en-de",  # standard name
+            "en-de",
+        ]
+        self.assertListEqual(expected_opus_names, converted_opus_names)

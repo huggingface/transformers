@@ -6,7 +6,7 @@ from unittest.mock import patch
 import run_ner
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger()
 
@@ -30,4 +30,4 @@ class ExamplesTests(unittest.TestCase):
             """.split()
         with patch.object(sys, "argv", ["run.py"] + testargs):
             result = run_ner.main()
-            self.assertLess(result["loss"], 1.5)
+            self.assertLess(result["eval_loss"], 1.5)

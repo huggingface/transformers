@@ -60,7 +60,7 @@ def main():
     with open(args.file_path, "r", encoding="utf8") as fp:
         data = fp.readlines()
 
-    logger.info(f"Start encoding")
+    logger.info("Start encoding")
     logger.info(f"{len(data)} examples to process.")
 
     rslt = []

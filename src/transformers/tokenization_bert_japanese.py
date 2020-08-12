@@ -30,37 +30,37 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese/vocab.txt",
-        "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking/vocab.txt",
-        "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char/vocab.txt",
-        "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking/vocab.txt",
+        "cl-tohoku/bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese/vocab.txt",
+        "cl-tohoku/bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking/vocab.txt",
+        "cl-tohoku/bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char/vocab.txt",
+        "cl-tohoku/bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bert-base-japanese": 512,
-    "bert-base-japanese-whole-word-masking": 512,
-    "bert-base-japanese-char": 512,
-    "bert-base-japanese-char-whole-word-masking": 512,
+    "cl-tohoku/bert-base-japanese": 512,
+    "cl-tohoku/bert-base-japanese-whole-word-masking": 512,
+    "cl-tohoku/bert-base-japanese-char": 512,
+    "cl-tohoku/bert-base-japanese-char-whole-word-masking": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "bert-base-japanese": {
+    "cl-tohoku/bert-base-japanese": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "wordpiece",
     },
-    "bert-base-japanese-whole-word-masking": {
+    "cl-tohoku/bert-base-japanese-whole-word-masking": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "wordpiece",
     },
-    "bert-base-japanese-char": {
+    "cl-tohoku/bert-base-japanese-char": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "character",
     },
-    "bert-base-japanese-char-whole-word-masking": {
+    "cl-tohoku/bert-base-japanese-char-whole-word-masking": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "character",
@@ -185,9 +185,14 @@ class MecabTokenizer:
         self.never_split = never_split if never_split is not None else []
         self.normalize_text = normalize_text
 
-        import MeCab
+        import fugashi
+        import ipadic
 
-        self.mecab = MeCab.Tagger(mecab_option) if mecab_option is not None else MeCab.Tagger()
+        # Use ipadic by default (later options can override it)
+        mecab_option = mecab_option or ""
+        mecab_option = ipadic.MECAB_ARGS + " " + mecab_option
+
+        self.mecab = fugashi.GenericTagger(mecab_option)
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
@@ -197,21 +202,13 @@ class MecabTokenizer:
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
 
-        mecab_output = self.mecab.parse(text)
+        for word in self.mecab(text):
+            token = word.surface
 
-        cursor = 0
-        for line in mecab_output.split("\n"):
-            if line == "EOS":
-                break
-
-            token, _ = line.split("\t")
-            token_start = text.index(token, cursor)
-            token_end = token_start + len(token)
             if self.do_lower_case and token not in never_split:
                 token = token.lower()
 
             tokens.append(token)
-            cursor = token_end
 
         return tokens
 

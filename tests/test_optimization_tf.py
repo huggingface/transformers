@@ -1,8 +1,7 @@
 import unittest
 
 from transformers import is_tf_available
-
-from .utils import require_tf
+from transformers.testing_utils import require_tf
 
 
 if is_tf_available():
@@ -47,7 +46,7 @@ class OptimizationFTest(unittest.TestCase):
         with strategy.scope():
             accumulator = GradientAccumulator()
             variable = tf.Variable([4.0, 3.0])
-            optimizer = create_optimizer(5e-5, 10, 5)
+            optimizer, _ = create_optimizer(5e-5, 10, 5)
             gradient_placeholder = tf.Variable([0.0, 0.0], trainable=False)
 
         def accumulate_on_replica(gradient):

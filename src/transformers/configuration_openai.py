@@ -30,7 +30,7 @@ OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class OpenAIGPTConfig(PretrainedConfig):
     """
-        This is the configuration class to store the configuration of an :class:`~transformers.OpenAIGPTModel`.
+        This is the configuration class to store the configuration of a :class:`~transformers.OpenAIGPTModel`.
         It is used to instantiate an GPT model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
         the `GPT <https://huggingface.co/openai-gpt>`__ architecture from OpenAI.
@@ -98,23 +98,18 @@ class OpenAIGPTConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import OpenAIGPTConfig, OpenAIGPTModel
+            >>> from transformers import OpenAIGPTConfig, OpenAIGPTModel
 
-            # Initializing a GPT configuration
-            configuration = OpenAIGPTConfig()
+            >>> # Initializing a GPT configuration
+            >>> configuration = OpenAIGPTConfig()
 
-            # Initializing a model from the configuration
-            model = OpenAIGPTModel(configuration)
+            >>> # Initializing a model from the configuration
+            >>> model = OpenAIGPTModel(configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
-    pretrained_config_archive_map = OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "openai-gpt"
 
     def __init__(

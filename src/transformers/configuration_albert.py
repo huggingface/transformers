@@ -32,7 +32,7 @@ ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class AlbertConfig(PretrainedConfig):
     r"""
-        This is the configuration class to store the configuration of an :class:`~transformers.AlbertModel`.
+        This is the configuration class to store the configuration of a :class:`~transformers.AlbertModel`.
         It is used to instantiate an ALBERT model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
         the ALBERT `xxlarge <https://huggingface.co/albert-xxlarge-v2>`__ architecture.
@@ -81,29 +81,24 @@ class AlbertConfig(PretrainedConfig):
 
         Example::
 
-            from transformers import AlbertConfig, AlbertModel
-            # Initializing an ALBERT-xxlarge style configuration
-            albert_xxlarge_configuration = AlbertConfig()
+            >>> from transformers import AlbertConfig, AlbertModel
+            >>> # Initializing an ALBERT-xxlarge style configuration
+            >>> albert_xxlarge_configuration = AlbertConfig()
 
-            # Initializing an ALBERT-base style configuration
-            albert_base_configuration = AlbertConfig(
-                hidden_size=768,
-                num_attention_heads=12,
-                intermediate_size=3072,
-            )
+            >>> # Initializing an ALBERT-base style configuration
+            >>> albert_base_configuration = AlbertConfig(
+            ...      hidden_size=768,
+            ...      num_attention_heads=12,
+            ...      intermediate_size=3072,
+            ...  )
 
-            # Initializing a model from the ALBERT-base style configuration
-            model = AlbertModel(albert_xxlarge_configuration)
+            >>> # Initializing a model from the ALBERT-base style configuration
+            >>> model = AlbertModel(albert_xxlarge_configuration)
 
-            # Accessing the model configuration
-            configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
 
-    pretrained_config_archive_map = ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "albert"
 
     def __init__(

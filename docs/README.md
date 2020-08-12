@@ -7,6 +7,14 @@ you can install them with the following command, at the root of the code reposit
 pip install -e ".[docs]"
 ```
 
+---
+**NOTE**
+
+You only need to generate the documentation to inspect it locally (if you're planning changes and want to 
+check how they look like before committing for instance). You don't have to commit the built documentation.
+
+---
+
 ## Packages installed
 
 Here's an overview of all the packages installed. If you ran the previous command installing all packages from
@@ -34,20 +42,14 @@ pip install recommonmark
 
 ## Building the documentation
 
-Make sure that there is a symlink from the `example` file (in /examples) inside the source folder. Run the following
-command to generate it:
-
-```bash
-ln -s ../../examples/README.md examples.md
-```
-
 Once you have setup `sphinx`, you can build the documentation by running the following command in the `/docs` folder:
 
 ```bash
 make html
 ```
 
-A folder called ``_build/html`` should have been created. You can now open the file ``_build/html/index.html`` in your browser. 
+A folder called ``_build/html`` should have been created. You can now open the file ``_build/html/index.html`` in your
+browser. 
 
 ---
 **NOTE**
@@ -67,6 +69,18 @@ It should build the static app that will be available under `/docs/_build/html`
 
 Accepted files are reStructuredText (.rst) and Markdown (.md). Create a file with its extension and put it
 in the source directory. You can then link it to the toc-tree by putting the filename without the extension.
+
+## Preview the documentation in a pull request
+
+Once you have made your pull request, you can check what the documentation will look like after it's merged by
+following these steps:
+
+- Look at the checks at the bottom of the conversation page of your PR (you may need to click on "show all checks" to
+  expand them).
+- Click on "details" next to the `ci/circleci: build_doc` check.
+- In the new window, click on the "Artifacts" tab.
+- Locate the file "docs/_build/html/index.html" (or any specific page you want to check) and click on it to get a 
+  preview.
 
 ## Writing Documentation - Specification
 
@@ -112,8 +126,8 @@ XXXConfig
     :members:
 ```
 
-This will include every public method of the configuration. If for some reason you wish for a method not to be displayed
-in the documentation, you can do so by specifying which methods should be in the docs:
+This will include every public method of the configuration. If for some reason you wish for a method not to be
+displayed in the documentation, you can do so by specifying which methods should be in the docs:
 
 ```
 XXXTokenizer
@@ -127,8 +141,8 @@ XXXTokenizer
 
 ### Writing source documentation
 
-Values that should be put in `code` should either be surrounded by double backticks: \`\`like so\`\` or be written as an object
-using the :obj: syntax: :obj:\`like so\`.
+Values that should be put in `code` should either be surrounded by double backticks: \`\`like so\`\` or be written as
+an object using the :obj: syntax: :obj:\`like so\`.
 
 When mentionning a class, it is recommended to use the :class: syntax as the mentioned class will be automatically
 linked by Sphinx: :class:\`transformers.XXXClass\`
@@ -153,7 +167,7 @@ Here's an example showcasing everything so far:
 
             Indices can be obtained using :class:`transformers.AlbertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
 ```

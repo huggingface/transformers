@@ -1,5 +1,5 @@
 ---
-language: german
+language: de
 thumbnail: kfold.png
 ---
 

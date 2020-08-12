@@ -206,7 +206,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
+        special tokens using the tokenizer ``prepare_for_model`` methods.
 
         Args:
             token_ids_0 (:obj:`List[int]`):

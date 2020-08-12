@@ -45,7 +45,9 @@ class XnliProcessor(DataProcessor):
             text_a = line[0]
             text_b = line[1]
             label = "contradiction" if line[2] == "contradictory" else line[2]
-            assert isinstance(text_a, str) and isinstance(text_b, str) and isinstance(label, str)
+            assert isinstance(text_a, str), f"Training input {text_a} is not a string"
+            assert isinstance(text_b, str), f"Training input {text_b} is not a string"
+            assert isinstance(label, str), f"Training label {label} is not a string"
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -63,7 +65,9 @@ class XnliProcessor(DataProcessor):
             text_a = line[6]
             text_b = line[7]
             label = line[1]
-            assert isinstance(text_a, str) and isinstance(text_b, str) and isinstance(label, str)
+            assert isinstance(text_a, str), f"Training input {text_a} is not a string"
+            assert isinstance(text_b, str), f"Training input {text_b} is not a string"
+            assert isinstance(label, str), f"Training label {label} is not a string"
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 

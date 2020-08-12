@@ -36,5 +36,4 @@ class CamembertConfig(RobertaConfig):
     superclass for the appropriate documentation alongside usage examples.
     """
 
-    pretrained_config_archive_map = CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "camembert"

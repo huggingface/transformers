@@ -29,8 +29,14 @@ from .configuration_auto import (
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
+    LongformerConfig,
+    MarianConfig,
+    MBartConfig,
+    MobileBertConfig,
     OpenAIGPTConfig,
+    PegasusConfig,
     ReformerConfig,
+    RetriBertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -38,10 +44,9 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
 )
-from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
-from .tokenization_bart import BartTokenizer
+from .tokenization_bart import BartTokenizer, MBartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -50,9 +55,13 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_longformer import LongformerTokenizer
 from .tokenization_marian import MarianTokenizer
+from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_pegasus import PegasusTokenizer
 from .tokenization_reformer import ReformerTokenizer
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -66,13 +75,18 @@ logger = logging.getLogger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, None)),
+        (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
+        (PegasusConfig, (PegasusTokenizer, None)),
+        (MBartConfig, (MBartTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
+        (LongformerConfig, (LongformerTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
@@ -94,26 +108,25 @@ class AutoTokenizer:
         when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
         class method.
 
-        The `from_pretrained()` method take care of returning the correct tokenizer class instance
+        The `from_pretrained()` method takes care of returning the correct tokenizer class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
 
-        The tokenizer class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: T5Tokenizer (T5 model)
-            - contains `distilbert`: DistilBertTokenizer (DistilBert model)
-            - contains `albert`: AlbertTokenizer (ALBERT model)
-            - contains `camembert`: CamembertTokenizer (CamemBERT model)
-            - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
-            - contains `roberta`: RobertaTokenizer (RoBERTa model)
-            - contains `bert`: BertTokenizer (Bert model)
-            - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
-            - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
-            - contains `xlnet`: XLNetTokenizer (XLNet model)
-            - contains `xlm`: XLMTokenizer (XLM model)
-            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
-            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `t5`: T5Tokenizer (T5 model)
+            - `distilbert`: DistilBertTokenizer (DistilBert model)
+            - `albert`: AlbertTokenizer (ALBERT model)
+            - `camembert`: CamembertTokenizer (CamemBERT model)
+            - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
+            - `longformer`: LongformerTokenizer (AllenAI Longformer model)
+            - `roberta`: RobertaTokenizer (RoBERTa model)
+            - `bert`: BertTokenizer (Bert model)
+            - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+            - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
+            - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
+            - `xlnet`: XLNetTokenizer (XLNet model)
+            - `xlm`: XLMTokenizer (XLM model)
+            - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - `electra`: ElectraTokenizer (Google ELECTRA model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -129,23 +142,26 @@ class AutoTokenizer:
         r""" Instantiate one of the tokenizer classes of the library
         from a pre-trained model vocabulary.
 
-        The tokenizer class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: T5Tokenizer (T5 model)
-            - contains `distilbert`: DistilBertTokenizer (DistilBert model)
-            - contains `albert`: AlbertTokenizer (ALBERT model)
-            - contains `camembert`: CamembertTokenizer (CamemBERT model)
-            - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
-            - contains `roberta`: RobertaTokenizer (RoBERTa model)
-            - contains `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
-            - contains `bert`: BertTokenizer (Bert model)
-            - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
-            - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
-            - contains `xlnet`: XLNetTokenizer (XLNet model)
-            - contains `xlm`: XLMTokenizer (XLM model)
-            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
-            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
+        The tokenizer class to instantiate is selected
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+            - `t5`: T5Tokenizer (T5 model)
+            - `distilbert`: DistilBertTokenizer (DistilBert model)
+            - `albert`: AlbertTokenizer (ALBERT model)
+            - `camembert`: CamembertTokenizer (CamemBERT model)
+            - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
+            - `longformer`: LongformerTokenizer (AllenAI Longformer model)
+            - `roberta`: RobertaTokenizer (RoBERTa model)
+            - `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
+            - `bert`: BertTokenizer (Bert model)
+            - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+            - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
+            - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
+            - `xlnet`: XLNetTokenizer (XLNet model)
+            - `xlm`: XLMTokenizer (XLM model)
+            - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - `electra`: ElectraTokenizer (Google ELECTRA model)
 
         Params:
             pretrained_model_name_or_path: either:
@@ -191,7 +207,7 @@ class AutoTokenizer:
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        if "bert-base-japanese" in pretrained_model_name_or_path:
+        if "bert-base-japanese" in str(pretrained_model_name_or_path):
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         use_fast = kwargs.pop("use_fast", False)

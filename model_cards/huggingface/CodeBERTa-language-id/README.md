@@ -1,6 +1,12 @@
 ---
 language: code
 thumbnail: https://hf-dinosaur.huggingface.co/CodeBERTa/CodeBERTa.png
+tags:
+- test
+datasets:
+- aeslc
+metrics:
+- bertscore
 ---
 
 # CodeBERTa-language-id: The World’s fanciest programming language identification algo 🤯

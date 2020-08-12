@@ -17,7 +17,9 @@
 import inspect
 import logging
 import os
-from typing import Callable, Tuple
+import re
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -31,10 +33,14 @@ from .file_utils import (
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_NAME,
+    ModelOutput,
     cached_path,
     hf_bucket_url,
     is_remote_url,
+    is_torch_tpu_available,
+    replace_return_docstrings,
 )
+from .generation_utils import GenerationMixin
 
 
 logger = logging.getLogger(__name__)
@@ -55,14 +61,47 @@ except ImportError:
             return input
 
 
+def find_pruneable_heads_and_indices(
+    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
+) -> Tuple[Set[int], torch.LongTensor]:
+    """
+    Finds the heads and their indices taking :obj:`already_pruned_heads` into account.
+
+    Args:
+        heads (:obj:`List[int]`): List of the indices of heads to prune.
+        n_heads (:obj:`int`): The number of heads in the model.
+        head_size (:obj:`int`): The size of each head.
+        already_pruned_heads (:obj:`Set[int]`): A set of already pruned heads.
+
+    Returns:
+        :obj:`Tuple[Set[int], torch.LongTensor]`: A tuple with the remaining heads and their corresponding indices.
+    """
+    mask = torch.ones(n_heads, head_size)
+    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
+    for head in heads:
+        # Compute how many pruned heads are before the head and move the index accordingly
+        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
+        mask[head] = 0
+    mask = mask.view(-1).contiguous().eq(1)
+    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
+    return heads, index
+
+
 class ModuleUtilsMixin:
     """
-    A few utilities for torch.nn.Modules, to be used as a mixin.
+    A few utilities for :obj:`torch.nn.Modules`, to be used as a mixin.
     """
 
     def num_parameters(self, only_trainable: bool = False) -> int:
         """
-        Get number of (optionally, trainable) parameters in the module.
+        Get the number of (optionally, trainable) parameters in the model.
+
+        Args:
+            only_trainable (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return only the number of trainable parameters
+
+        Returns:
+            :obj:`int`: The number of parameters.
         """
         params = filter(lambda x: x.requires_grad, self.parameters()) if only_trainable else self.parameters()
         return sum(p.numel() for p in params)
@@ -94,8 +133,11 @@ class ModuleUtilsMixin:
         return None
 
     def add_memory_hooks(self):
-        """ Add a memory hook before and after each sub-module forward pass to record increase in memory consumption.
-            Increase in memory consumption is stored in a `mem_rss_diff` attribute for each module and can be reset to zero with `model.reset_memory_hooks_state()`
+        """
+        Add a memory hook before and after each sub-module forward pass to record increase in memory consumption.
+
+        Increase in memory consumption is stored in a :obj:`mem_rss_diff` attribute for each module and can be reset to
+        zero with :obj:`model.reset_memory_hooks_state()`.
         """
         for module in self.modules():
             module.register_forward_pre_hook(self._hook_rss_memory_pre_forward)
@@ -103,6 +145,10 @@ class ModuleUtilsMixin:
         self.reset_memory_hooks_state()
 
     def reset_memory_hooks_state(self):
+        """
+        Reset the :obj:`mem_rss_diff` attribute of each module (see
+        :func:`~transformers.modeling_utils.ModuleUtilsMixin.add_memory_hooks`).
+        """
         for module in self.modules():
             module.mem_rss_diff = 0
             module.mem_rss_post_forward = 0
@@ -110,14 +156,51 @@ class ModuleUtilsMixin:
 
     @property
     def device(self) -> device:
-        return next(self.parameters()).device
+        """
+        :obj:`torch.device`: The device on which the module is (assuming that all the module parameters are on the same
+        device).
+        """
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].device
 
     @property
     def dtype(self) -> dtype:
-        return next(self.parameters()).dtype
+        """
+        :obj:`torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
+        """
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].dtype
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
-        """type: torch.Tensor -> torch.Tensor"""
+        """
+        Invert an attention mask (e.g., switches 0. and 1.).
+
+        Args:
+            encoder_attention_mask (:obj:`torch.Tensor`): An attention mask.
+
+        Returns:
+            :obj:`torch.Tensor`: The inverted attention mask.
+        """
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.dim() == 2:
@@ -128,19 +211,34 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+
+        if self.dtype == torch.float16:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
+        elif self.dtype == torch.float32:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+        else:
+            raise ValueError(
+                "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
+                    self.dtype
+                )
+            )
+
         return encoder_extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: tuple, device: device):
-        """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
+    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple[int], device: device) -> Tensor:
+        """
+        Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
 
         Arguments:
-            attention_mask: torch.Tensor with 1 indicating tokens to ATTEND to
-            input_shape: tuple, shape of input_ids
-            device: torch.Device, usually self.device
+            attention_mask (:obj:`torch.Tensor`):
+                Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
+            input_shape (:obj:`Tuple[int]`):
+                The shape of the input to the model.
+            device: (:obj:`torch.device`):
+                The device of the input to the model.
 
         Returns:
-            torch.Tensor with dtype of attention_mask.dtype
+            :obj:`torch.Tensor` The extended attention mask, with a the same dtype as :obj:`attention_mask.dtype`.
         """
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -175,17 +273,23 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
+    def get_head_mask(
+        self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+    ) -> Tensor:
         """
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        attention_probs has shape bsz x n_heads x N x N
-        Arguments:
-            head_mask: torch.Tensor or None: has shape [num_heads] or [num_hidden_layers x num_heads]
-            num_hidden_layers: int
+        Prepare the head mask if needed.
+
+        Args:
+            head_mask (:obj:`torch.Tensor` with shape :obj:`[num_heads]` or :obj:`[num_hidden_layers x num_heads]`, `optional`):
+                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
+            num_hidden_layers (:obj:`int`):
+                The number of hidden layers in the model.
+            is_attention_chunked: (:obj:`bool`, `optional, defaults to :obj:`False`):
+                Whether or not the attentions scores are computed by chunks or not.
+
         Returns:
-             Tensor of shape shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-             or list with [None] for each layer
+            :obj:`torch.Tensor` with shape :obj:`[num_hidden_layers x batch x num_heads x seq_length x seq_length]`
+            or list with :obj:`[None]` for each layer.
         """
         if head_mask is not None:
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
@@ -208,37 +312,45 @@ class ModuleUtilsMixin:
         return head_mask
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin):
-    r""" Base class for all models.
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
+    r"""
+    Base class for all models.
 
-        :class:`~transformers.PreTrainedModel` takes care of storing the configuration of the models and handles methods for loading/downloading/saving models
-        as well as a few methods common to all models to (i) resize the input embeddings and (ii) prune heads in the self-attention heads.
+    :class:`~transformers.PreTrainedModel` takes care of storing the configuration of the models and handles methods
+    for loading, downloading and saving models as well as a few methods common to all models to:
 
-        Class attributes (overridden by derived classes):
-            - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-            - ``pretrained_model_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained weights as values.
-            - ``load_tf_weights``: a python ``method`` for loading a TensorFlow checkpoint in a PyTorch model, taking as arguments:
+        * resize the input embeddings,
+        * prune heads in the self-attention heads.
 
-                - ``model``: an instance of the relevant subclass of :class:`~transformers.PreTrainedModel`,
-                - ``config``: an instance of the relevant subclass of :class:`~transformers.PretrainedConfig`,
-                - ``path``: a path (string) to the TensorFlow checkpoint.
+    Class attributes (overridden by derived classes):
+        - **config_class** (:class:`~transformers.PretrainedConfig`) -- A subclass of
+          :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
+        - **load_tf_weights** (:obj:`Callable`) -- A python `method` for loading a TensorFlow checkpoint in a
+          PyTorch model, taking as arguments:
 
-            - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
+            - **model** (:class:`~transformers.PreTrainedModel`) -- An instance of the model on which to load the
+              TensorFlow checkpoint.
+            - **config** (:class:`~transformers.PreTrainedConfig`) -- An instance of the configuration associated
+              to the model.
+            - **path** (:obj:`str`) -- A path to the TensorFlow checkpoint.
+
+        - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
+          derived classes of the same architecture adding modules on top of the base model.
+        - **authorized_missing_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
+          when loading the model (and avoid unnecessary warnings).
     """
     config_class = None
-    pretrained_model_archive_map = {}
     base_model_prefix = ""
+    authorized_missing_keys = None
 
     @property
-    def dummy_inputs(self):
-        """ Dummy inputs to do a forward pass in the network.
-
-        Returns:
-            torch.Tensor with dummy inputs
+    def dummy_inputs(self) -> Dict[str, torch.Tensor]:
+        """
+        :obj:`Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
@@ -252,16 +364,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         self.config = config
 
     @property
-    def base_model(self):
+    def base_model(self) -> nn.Module:
+        """
+        :obj:`torch.nn.Module`: The main body of the model.
+        """
         return getattr(self, self.base_model_prefix, self)
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> nn.Module:
         """
         Returns the model's input embeddings.
 
         Returns:
-            :obj:`nn.Module`:
-                A torch module mapping vocabulary to hidden states.
+            :obj:`nn.Module`: A torch module mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
@@ -269,13 +383,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         else:
             raise NotImplementedError
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Module):
         """
         Set model's input embeddings
 
         Args:
-            value (:obj:`nn.Module`):
-                A module mapping vocabulary to hidden states.
+            value (:obj:`nn.Module`): A module mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
@@ -283,20 +396,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         else:
             raise NotImplementedError
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> nn.Module:
         """
         Returns the model's output embeddings.
 
         Returns:
-            :obj:`nn.Module`:
-                A torch module mapping hidden states to vocabulary.
+            :obj:`nn.Module`: A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
 
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.
-        If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning
+
+        If the :obj:`torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning
         the weights instead.
         """
         output_embeddings = self.get_output_embeddings()
@@ -321,18 +434,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens=None):
-        """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
-        Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+        """
+        Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
+
+        Takes care of tying weights embeddings afterwards if the model class has a :obj:`tie_weights()` method.
 
         Arguments:
+            new_num_tokens (:obj:`int`, `optional`):
+                The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
+                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model wihtout doing
+                anything.
 
-            new_num_tokens: (`optional`) int:
-                New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end.
-                If not provided or None: does nothing and just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
-
-        Return: ``torch.nn.Embeddings``
-            Pointer to the input tokens Embeddings Module of the model
+        Return:
+            :obj:`torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
         base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
         model_embeds = base_model._resize_token_embeddings(new_num_tokens)
@@ -354,19 +470,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
 
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Module from a provided token Embedding Module.
-            Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end
+    def _get_resized_embeddings(
+        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
+    ) -> torch.nn.Embedding:
+        """
+        Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
+        initialized vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
-            new_num_tokens: (`optional`) int
+            old_embeddings (:obj:`torch.nn.Embedding`):
+                Old embeddings to be resized.
+            new_num_tokens (:obj:`int`, `optional`):
                 New number of tokens in the embedding matrix.
-                Increasing the size will add newly initialized vectors at the end
-                Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
-        Return: ``torch.nn.Embeddings``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
+
+                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
+                vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
+                :obj:`torch.nn.Embedding`` module of the model wihtout doing anything.
+
+        Return:
+            :obj:`torch.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
+            :obj:`new_num_tokens` is :obj:`None`
         """
         if new_num_tokens is None:
             return old_embeddings
@@ -389,7 +512,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         return new_embeddings
 
     def init_weights(self):
-        """ Initialize and prunes weights if needed. """
+        """
+        Initializes and prunes weights if needed.
+        """
         # Initialize weights
         self.apply(self._init_weights)
 
@@ -400,13 +525,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # Tie weights if needed
         self.tie_weights()
 
-    def prune_heads(self, heads_to_prune):
-        """ Prunes heads of the base model.
+    def prune_heads(self, heads_to_prune: Dict[int, List[int]]):
+        """
+        Prunes heads of the base model.
 
-            Arguments:
-
-                heads_to_prune: dict with keys being selected layer indices (`int`) and associated values being the list of heads to prune in said layer (list of `int`).
-                E.g. {1: [0, 2], 2: [2, 3]} will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
+        Arguments:
+            heads_to_prune (:obj:`Dict[int, List[int]]`):
+                Dictionary with keys being selected layer indices (:obj:`int`) and associated values being the list
+                of heads to prune in said layer (list of :obj:`int`). For instance {1: [0, 2], 2: [2, 3]} will
+                prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
         """
         # save new sets of pruned heads as union of previously stored pruned heads and newly pruned heads
         for layer, heads in heads_to_prune.items():
@@ -416,15 +543,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         self.base_model._prune_heads(heads_to_prune)
 
     def save_pretrained(self, save_directory):
-        """ Save a model and its configuration file to a directory, so that it
-            can be re-loaded using the `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
-
-            Arguments:
-                save_directory: directory to which to save.
         """
-        assert os.path.isdir(
-            save_directory
-        ), "Saving path should be a directory where the model and configuration can be saved"
+        Save a model and its configuration file to a directory, so that it can be re-loaded using the
+        `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
+
+        Arguments:
+            save_directory (:obj:`str`):
+                Directory to which to save. Will be created if it doesn't exist.
+        """
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
 
         # Only save the model itself if we are using distributed training
         model_to_save = self.module if hasattr(self, "module") else self
@@ -451,74 +581,110 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""Instantiate a pretrained pytorch model from a pre-trained model configuration.
+        r"""
+        Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
-        The model is set in evaluation mode by default using ``model.eval()`` (Dropout modules are deactivated)
-        To train the model, you should first set it back in training mode with ``model.train()``
+        The model is set in evaluation mode by default using ``model.eval()`` (Dropout modules are deactivated).
+        To train the model, you should first set it back in training mode with ``model.train()``.
 
-        The warning ``Weights from XXX not initialized from pretrained model`` means that the weights of XXX do not come pre-trained with the rest of the model.
-        It is up to you to train those weights with a downstream fine-tuning task.
+        The warning `Weights from XXX not initialized from pretrained model` means that the weights of XXX do not come
+        pretrained with the rest of the model. It is up to you to train those weights with a downstream fine-tuning
+        task.
 
-        The warning ``Weights from XXX not used in YYY`` means that the layer XXX is not used by YYY, therefore those weights are discarded.
+        The warning `Weights from XXX not used in YYY` means that the layer XXX is not used by YYY, therefore those
+        weights are discarded.
 
         Parameters:
-            pretrained_model_name_or_path: either:
-              - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
-              - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
-              - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-              - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
-              - None if you are both providing the configuration and state dictionary (resp. with keyword arguments ``config`` and ``state_dict``)
+            pretrained_model_name_or_path (:obj:`str`, `optional`):
+                Can be either:
 
-            model_args: (`optional`) Sequence of positional arguments:
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
+                      ``bert-base-uncased``.
+                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
+                      ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
+                      this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
+                      as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
+                      a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+                    - :obj:`None` if you are both providing the configuration and state dictionary (resp. with keyword
+                      arguments ``config`` and ``state_dict``).
+            model_args (sequence of positional arguments, `optional`):
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+            config (:obj:`Union[PretrainedConfig, str]`, `optional`):
+                Can be either:
 
-            config: (`optional`) one of:
-                - an instance of a class derived from :class:`~transformers.PretrainedConfig`, or
-                - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained()`
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
-                    - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
-                    - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
-                    - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
+                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
-            state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
-                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
-                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                be automatically loaded when:
 
-            cache_dir: (`optional`) string:
-                Path to a directory in which a downloaded pre-trained model
-                configuration should be cached if the standard cache should not be used.
+                    - The model is a model provided by the library (loaded with the `shortcut name` string of a
+                      pretrained model).
+                    - The model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
+                      by suppling the save directory.
+                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      configuration JSON file named `config.json` is found in the directory.
+            state_dict (:obj:`Dict[str, torch.Tensor]`, `optional`):
+                A state dictionary to use instead of a state dictionary loaded from saved weights file.
 
-            force_download: (`optional`) boolean, default False:
-                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
+                This option can be used if you want to create a model from a pretrained configuration but load your own
+                weights. In this case though, you should check if using
+                :func:`~transformers.PreTrainedModel.save_pretrained` and
+                :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
+            cache_dir (:obj:`str`, `optional`):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Load the model weights from a TensorFlow checkpoint save file (see docstring of
+                ``pretrained_model_name_or_path`` argument).
+            force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
+                cached versions if they exist.
+            resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to delete incompletely received files. Will attempt to resume the download if such a
+                file exists.
+            proxies (:obj:`Dict[str, str], `optional`):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
+                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
+                request.
+            output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether ot not to also return a dictionnary containing missing keys, unexpected keys and error
+                messages.
+            local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to only look at local files (e.g., not try doanloading the model).
+            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
+                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            kwargs (remaining dictionary of keyword arguments, `optional`):
+                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
+                :obj:`output_attention=True`). Behaves differently depending on whether a ``config`` is provided or
+                automatically loaded:
 
-            resume_download: (`optional`) boolean, default False:
-                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
-
-            proxies: (`optional`) dict, default None:
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
-                The proxies are used on each request.
-
-            output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
-
-            kwargs: (`optional`) Remaining dictionary of keyword arguments:
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
-
-                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
-                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
+                    - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
+                      underlying model's ``__init__`` method (we assume all relevant updates to the configuration have
+                      already been done)
+                    - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class
+                      initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of
+                      ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
+                      with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
+                      attribute will be passed to the underlying model's ``__init__`` function.
 
         Examples::
 
-            # For example purposes. Not runnable.
-            model = BertModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
-            model = BertModel.from_pretrained('./test/saved_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = BertModel.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
+            from transformers import BertConfig, BertModel
+            # Download model and configuration from S3 and cache.
+            model = BertModel.from_pretrained('bert-base-uncased')
+            # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
+            model = BertModel.from_pretrained('./test/saved_model/')
+            # Update configuration during loading.
+            model = BertModel.from_pretrained('bert-base-uncased', output_attention=True)
             assert model.config.output_attention == True
-            # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
             config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
             model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)
-
         """
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
@@ -550,9 +716,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
-            if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            elif os.path.isdir(pretrained_model_name_or_path):
+            if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
                     # Load from a TF 1.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
@@ -585,8 +749,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     use_cdn=use_cdn,
                 )
 
-            # redirect to the cache, if necessary
             try:
+                # Load from URL or cache if already cached
                 resolved_archive_file = cached_path(
                     archive_file,
                     cache_dir=cache_dir,
@@ -595,20 +759,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
+                if resolved_archive_file is None:
+                    raise EnvironmentError
             except EnvironmentError:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    msg = "Couldn't reach server at '{}' to download pretrained weights.".format(archive_file)
-                else:
-                    msg = (
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url to model weight files named one of {} but "
-                        "couldn't find any such file at this path or url.".format(
-                            pretrained_model_name_or_path,
-                            ", ".join(cls.pretrained_model_archive_map.keys()),
-                            archive_file,
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME],
-                        )
-                    )
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                )
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
@@ -699,20 +857,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 head_model_state_dict_without_base_prefix = [
                     key.split(cls.base_model_prefix + ".")[-1] for key in model.state_dict().keys()
                 ]
-
                 missing_keys.extend(head_model_state_dict_without_base_prefix - base_model_state_dict)
 
-            if len(missing_keys) > 0:
-                logger.info(
-                    "Weights of {} not initialized from pretrained model: {}".format(
-                        model.__class__.__name__, missing_keys
-                    )
-                )
+            # Some models may have keys that are not in the state by design, removing them before needlessly warning
+            # the user.
+            if cls.authorized_missing_keys is not None:
+                for pat in cls.authorized_missing_keys:
+                    missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
             if len(unexpected_keys) > 0:
+                logger.warning(
+                    f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                    f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                    f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
+                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                    f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
+                    f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                )
+            else:
+                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+            if len(missing_keys) > 0:
+                logger.warning(
+                    f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                    f"and are newly initialized: {missing_keys}\n"
+                    f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                )
+            else:
                 logger.info(
-                    "Weights from pretrained model not used in {}: {}".format(
-                        model.__class__.__name__, unexpected_keys
-                    )
+                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                    f"If your task is similar to the task the model of the ckeckpoint was trained on, "
+                    f"you can already use {model.__class__.__name__} for predictions without further training."
                 )
             if len(error_msgs) > 0:
                 raise RuntimeError(
@@ -733,970 +907,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             }
             return model, loading_info
 
-        if hasattr(config, "xla_device") and config.xla_device:
+        if hasattr(config, "xla_device") and config.xla_device and is_torch_tpu_available():
             import torch_xla.core.xla_model as xm
 
             model = xm.send_cpu_data_to_device(model, xm.xla_device())
-            model = model.to(xm.xla_device())
+            model.to(xm.xla_device())
 
         return model
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        return {"input_ids": input_ids}
-
-    def prepare_scores_for_generation(self, scores, **kwargs):
-        return scores
-
-    def _use_cache(self, outputs, use_cache):
-        """During generation, decide whether to pass the `past` variable to the next forward pass."""
-        if len(outputs) <= 1 or use_cache is False:
-            return False
-        if hasattr(self.config, "mem_len") and self.config.mem_len == 0:
-            return False
-        return True
-
-    def enforce_repetition_penalty_(self, lprobs, batch_size, num_beams, prev_output_tokens, repetition_penalty):
-        """repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858). """
-        for i in range(batch_size * num_beams):
-            for previous_token in set(prev_output_tokens[i].tolist()):
-                # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
-                if lprobs[i, previous_token] < 0:
-                    lprobs[i, previous_token] *= repetition_penalty
-                else:
-                    lprobs[i, previous_token] /= repetition_penalty
-
-    @torch.no_grad()
-    def generate(
-        self,
-        input_ids=None,
-        max_length=None,
-        min_length=None,
-        do_sample=None,
-        early_stopping=None,
-        num_beams=None,
-        temperature=None,
-        top_k=None,
-        top_p=None,
-        repetition_penalty=None,
-        bad_words_ids=None,
-        bos_token_id=None,
-        pad_token_id=None,
-        eos_token_id=None,
-        length_penalty=None,
-        no_repeat_ngram_size=None,
-        num_return_sequences=None,
-        attention_mask=None,
-        decoder_start_token_id=None,
-        use_cache=None,
-        **model_specific_kwargs
-    ):
-        r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
-
-        Adapted in part from `Facebook's XLM beam search code`_.
-
-        .. _`Facebook's XLM beam search code`:
-           https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529
-
-
-        Parameters:
-
-            input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
-                The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `torch.LongTensor` of shape `(1,)`.
-
-            max_length: (`optional`) int
-                The max length of the sequence to be generated.  Between `min_length` and infinity. Default to 20.
-
-            min_length: (`optional`) int
-                The min length of the sequence to be generated.  Between 0 and infinity. Default to 0.
-
-            do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-
-            early_stopping: (`optional`) bool
-                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-
-            num_beams: (`optional`) int
-                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
-
-            temperature: (`optional`) float
-                The value used to module the next token probabilities. Must be strictly positive. Default to 1.0.
-
-            top_k: (`optional`) int
-                The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.
-
-            top_p: (`optional`) float
-                The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.
-
-            repetition_penalty: (`optional`) float
-                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
-
-            pad_token_id: (`optional`) int
-                Padding token. Default to specicic model pad_token_id or None if it does not exist.
-
-            bos_token_id: (`optional`) int
-                BOS token. Defaults to `bos_token_id` as defined in the models config.
-
-            eos_token_id: (`optional`) int
-                EOS token. Defaults to `eos_token_id` as defined in the models config.
-
-            length_penalty: (`optional`) float
-                Exponential penalty to the length. Default to 1.
-
-            no_repeat_ngram_size: (`optional`) int
-                If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
-            bad_words_ids: (`optional`) list of lists of int
-                `bad_words_ids` contains tokens that are not allowed to be generated. In order to get the tokens of the words that should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
-
-            num_return_sequences: (`optional`) int
-                The number of independently computed returned sequences for each element in the batch. Default to 1.
-
-            attention_mask (`optional`) obj: `torch.LongTensor` of same shape as `input_ids`
-                Mask to avoid performing attention on padding token indices.
-                Mask values selected in ``[0, 1]``:
-                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-                Defaults to `None`.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
-
-            decoder_start_token_id=None: (`optional`) int
-                If an encoder-decoder model starts decoding with a different token than BOS.
-                Defaults to `None` and is changed to `BOS` later.
-
-            use_cache: (`optional`) bool
-                If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
-
-            model_specific_kwargs: (`optional`) dict
-                Additional model specific kwargs will be forwarded to the `forward` function of the model.
-
-        Return:
-
-            output: `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
-                sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
-
-        Examples::
-
-            tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40)  # do greedy decoding
-            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
-
-            tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
-            input_context = 'The dog'
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
-            outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
-            for i in range(3): #  3 output sequences were generated
-                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
-
-            tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            input_context = 'The dog'
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
-            for i in range(3): #  3 output sequences were generated
-                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
-
-            tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
-            input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
-            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
-
-            tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
-            input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
-            bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
-            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
-        """
-
-        # We cannot generate if the model does not have a LM head
-        if self.get_output_embeddings() is None:
-            raise AttributeError(
-                "You tried to generate sequences with a model that does not have a LM Head."
-                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`, `XLNetLMHeadModel`, `GPT2LMHeadModel`, `CTRLLMHeadModel`, `T5WithLMHeadModel`, `TransfoXLLMHeadModel`, `XLMWithLMHeadModel`, `BartForConditionalGeneration` )"
-            )
-
-        max_length = max_length if max_length is not None else self.config.max_length
-        min_length = min_length if min_length is not None else self.config.min_length
-        do_sample = do_sample if do_sample is not None else self.config.do_sample
-        early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        num_beams = num_beams if num_beams is not None else self.config.num_beams
-        temperature = temperature if temperature is not None else self.config.temperature
-        top_k = top_k if top_k is not None else self.config.top_k
-        top_p = top_p if top_p is not None else self.config.top_p
-        repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
-        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
-        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-        length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
-        no_repeat_ngram_size = (
-            no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
-        )
-        bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
-        num_return_sequences = (
-            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
-        )
-        decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
-        )
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]  # overriden by the input batch_size
-        else:
-            batch_size = 1
-
-        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
-        assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
-        assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
-        assert isinstance(early_stopping, bool), "`early_stopping` should be a boolean."
-        assert isinstance(use_cache, bool), "`use_cache` should be a boolean."
-        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
-        assert temperature > 0, "`temperature` should be strictly positive."
-        assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
-        assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
-        assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
-        assert input_ids is not None or (
-            isinstance(bos_token_id, int) and bos_token_id >= 0
-        ), "If input_ids is not defined, `bos_token_id` should be a positive integer."
-        assert pad_token_id is None or (
-            isinstance(pad_token_id, int) and (pad_token_id >= 0)
-        ), "`pad_token_id` should be a positive integer."
-        assert (eos_token_id is None) or (
-            isinstance(eos_token_id, int) and (eos_token_id >= 0)
-        ), "`eos_token_id` should be a positive integer."
-        assert length_penalty > 0, "`length_penalty` should be strictly positive."
-        assert (
-            isinstance(no_repeat_ngram_size, int) and no_repeat_ngram_size >= 0
-        ), "`no_repeat_ngram_size` should be a positive integer."
-        assert (
-            isinstance(num_return_sequences, int) and num_return_sequences > 0
-        ), "`num_return_sequences` should be a strictly positive integer."
-        assert (
-            bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
-        ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
-
-        if input_ids is None:
-            assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
-                "you should either supply a context to complete as `input_ids` input "
-                "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
-            )
-            input_ids = torch.full(
-                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
-            )
-        else:
-            assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
-
-        # not allow to duplicate outputs when greedy decoding
-        if do_sample is False:
-            if num_beams == 1:
-                # no_beam_search greedy generation conditions
-                assert (
-                    num_return_sequences == 1
-                ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
-
-            else:
-                # beam_search greedy generation conditions
-                assert (
-                    num_beams >= num_return_sequences
-                ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
-
-        # create attention mask if necessary
-        # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
-        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids):
-            attention_mask = input_ids.ne(pad_token_id).long()
-        elif attention_mask is None:
-            attention_mask = input_ids.new_ones(input_ids.shape)
-
-        # set pad_token_id to eos_token_id if not set. Important that this is done after
-        # attention_mask is created
-        if pad_token_id is None and eos_token_id is not None:
-            logger.warning(
-                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_id)
-            )
-            pad_token_id = eos_token_id
-
-        # current position and vocab size
-        if hasattr(self.config, "vocab_size"):
-            vocab_size = self.config.vocab_size
-        elif (
-            self.config.is_encoder_decoder
-            and hasattr(self.config, "decoder")
-            and hasattr(self.config.decoder, "vocab_size")
-        ):
-            vocab_size = self.config.decoder.vocab_size
-
-        # set effective batch size and effective batch multiplier according to do_sample
-        if do_sample:
-            effective_batch_size = batch_size * num_return_sequences
-            effective_batch_mult = num_return_sequences
-        else:
-            effective_batch_size = batch_size
-            effective_batch_mult = 1
-
-        if self.config.is_encoder_decoder:
-            if decoder_start_token_id is None:
-                decoder_start_token_id = bos_token_id
-
-            assert (
-                decoder_start_token_id is not None
-            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
-            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
-
-            # get encoder and store encoder outputs
-            encoder = self.get_encoder()
-
-            encoder_outputs: tuple = encoder(input_ids, attention_mask=attention_mask)
-
-        # Expand input ids if num_beams > 1 or num_return_sequences > 1
-        if num_return_sequences > 1 or num_beams > 1:
-            input_ids_len = input_ids.shape[-1]
-            input_ids = input_ids.unsqueeze(1).expand(batch_size, effective_batch_mult * num_beams, input_ids_len)
-            attention_mask = attention_mask.unsqueeze(1).expand(
-                batch_size, effective_batch_mult * num_beams, input_ids_len
-            )
-
-            input_ids = input_ids.contiguous().view(
-                effective_batch_size * num_beams, input_ids_len
-            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
-            attention_mask = attention_mask.contiguous().view(
-                effective_batch_size * num_beams, input_ids_len
-            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
-
-        if self.config.is_encoder_decoder:
-            # create empty decoder_input_ids
-            input_ids = torch.full(
-                (effective_batch_size * num_beams, 1),
-                decoder_start_token_id,
-                dtype=torch.long,
-                device=next(self.parameters()).device,
-            )
-            cur_len = 1
-
-            assert (
-                batch_size == encoder_outputs[0].shape[0]
-            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
-
-            # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
-            expanded_batch_idxs = (
-                torch.arange(batch_size)
-                .view(-1, 1)
-                .repeat(1, num_beams * effective_batch_mult)
-                .view(-1)
-                .to(input_ids.device)
-            )
-            # expand encoder_outputs
-            encoder_outputs = (encoder_outputs[0].index_select(0, expanded_batch_idxs), *encoder_outputs[1:])
-
-        else:
-            encoder_outputs = None
-            cur_len = input_ids.shape[-1]
-
-        if num_beams > 1:
-            output = self._generate_beam_search(
-                input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                early_stopping=early_stopping,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
-                pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
-                eos_token_id=eos_token_id,
-                batch_size=effective_batch_size,
-                num_return_sequences=num_return_sequences,
-                length_penalty=length_penalty,
-                num_beams=num_beams,
-                vocab_size=vocab_size,
-                encoder_outputs=encoder_outputs,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                model_specific_kwargs=model_specific_kwargs,
-            )
-        else:
-            output = self._generate_no_beam_search(
-                input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
-                pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
-                eos_token_id=eos_token_id,
-                batch_size=effective_batch_size,
-                encoder_outputs=encoder_outputs,
-                attention_mask=attention_mask,
-                use_cache=use_cache,
-                model_specific_kwargs=model_specific_kwargs,
-            )
-
-        return output
-
-    def _generate_no_beam_search(
-        self,
-        input_ids,
-        cur_len,
-        max_length,
-        min_length,
-        do_sample,
-        temperature,
-        top_k,
-        top_p,
-        repetition_penalty,
-        no_repeat_ngram_size,
-        bad_words_ids,
-        bos_token_id,
-        pad_token_id,
-        eos_token_id,
-        decoder_start_token_id,
-        batch_size,
-        encoder_outputs,
-        attention_mask,
-        use_cache,
-        model_specific_kwargs,
-    ):
-        """ Generate sequences for each example without beam search (num_beams == 1).
-            All returned sequence are generated independantly.
-        """
-        # length of generated sentences / unfinished sentences
-        unfinished_sents = input_ids.new(batch_size).fill_(1)
-        sent_lengths = input_ids.new(batch_size).fill_(max_length)
-
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
-
-        while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
-            )
-
-            outputs = self(**model_inputs)
-            next_token_logits = outputs[0][:, -1, :]
-
-            # if model has past, then set the past variable to speed up decoding
-            if self._use_cache(outputs, use_cache):
-                past = outputs[1]
-
-            # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                self.enforce_repetition_penalty_(next_token_logits, batch_size, 1, input_ids, repetition_penalty)
-
-            if no_repeat_ngram_size > 0:
-                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
-                for batch_idx in range(batch_size):
-                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
-
-            if bad_words_ids is not None:
-                # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-                for batch_idx in range(batch_size):
-                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
-
-            # set eos token prob to zero if min_length is not reached
-            if eos_token_id is not None and cur_len < min_length:
-                next_token_logits[:, eos_token_id] = -float("inf")
-
-            if do_sample:
-                # Temperature (higher temperature => more likely to sample low probability tokens)
-                if temperature != 1.0:
-                    next_token_logits = next_token_logits / temperature
-                # Top-p/top-k filtering
-                next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
-                # Sample
-                probs = F.softmax(next_token_logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
-            else:
-                # Greedy decoding
-                next_token = torch.argmax(next_token_logits, dim=-1)
-
-            # update generations and finished sentences
-            if eos_token_id is not None:
-                # pad finished sentences if eos_token_id exist
-                tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
-            else:
-                tokens_to_add = next_token
-
-            input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
-
-            if eos_token_id is not None:
-                eos_in_sents = tokens_to_add == eos_token_id
-                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
-                is_sents_unfinished_and_token_to_add_is_eos = unfinished_sents.mul(eos_in_sents.long()).bool()
-                sent_lengths.masked_fill_(is_sents_unfinished_and_token_to_add_is_eos, cur_len + 1)
-                # unfinished_sents is set to zero if eos in sentence
-                unfinished_sents.mul_((~eos_in_sents).long())
-
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
-            if unfinished_sents.max() == 0:
-                break
-
-            # extend attention_mask for new generated input if only decoder
-            if self.config.is_encoder_decoder is False:
-                attention_mask = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-                )
-
-            cur_len = cur_len + 1
-
-        # if there are different sentences lengths in the batch, some batches have to be padded
-        if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined if batches have different lengths"
-            # finished sents are filled with pad_token
-            decoded = input_ids.new(batch_size, sent_lengths.max().item()).fill_(pad_token_id)
-        else:
-            decoded = input_ids
-
-        for hypo_idx, hypo in enumerate(input_ids):
-            decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
-
-        return decoded
-
-    def _generate_beam_search(
-        self,
-        input_ids,
-        cur_len,
-        max_length,
-        min_length,
-        do_sample,
-        early_stopping,
-        temperature,
-        top_k,
-        top_p,
-        repetition_penalty,
-        no_repeat_ngram_size,
-        bad_words_ids,
-        bos_token_id,
-        pad_token_id,
-        eos_token_id,
-        decoder_start_token_id,
-        batch_size,
-        num_return_sequences,
-        length_penalty,
-        num_beams,
-        vocab_size,
-        encoder_outputs,
-        attention_mask,
-        use_cache,
-        model_specific_kwargs,
-    ):
-        """ Generate sequences for each example with beam search.
-        """
-
-        # generated hypotheses
-        generated_hyps = [
-            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=early_stopping)
-            for _ in range(batch_size)
-        ]
-
-        # scores for each sentence in the beam
-        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-
-        # for greedy decoding it is made sure that only tokens of the first beam are considered to avoid sampling the exact same tokens three times
-        if do_sample is False:
-            beam_scores[:, 1:] = -1e9
-        beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
-
-        # cache compute states
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
-
-        # done sentences
-        done = [False for _ in range(batch_size)]
-
-        while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
-            )
-            outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
-            next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
-
-            # if model has past, then set the past variable to speed up decoding
-            if self._use_cache(outputs, use_cache):
-                past = outputs[1]
-
-            # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
-            if repetition_penalty != 1.0:
-                self.enforce_repetition_penalty_(
-                    next_token_logits, batch_size, num_beams, input_ids, repetition_penalty,
-                )
-
-            if temperature != 1.0:
-                next_token_logits = next_token_logits / temperature
-
-            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-            if self.config.is_encoder_decoder and do_sample is False:
-                # TODO (PVP) still a bit hacky here - there might be a better solutino
-                scores = self.prepare_scores_for_generation(scores, cur_len=cur_len, max_length=max_length)
-
-            # set eos token prob to zero if min_length is not reached
-            if eos_token_id is not None and cur_len < min_length:
-                scores[:, eos_token_id] = -float("inf")
-
-            if no_repeat_ngram_size > 0:
-                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
-                num_batch_hypotheses = batch_size * num_beams
-                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_batch_tokens = calc_banned_ngram_tokens(
-                    input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
-                )
-                for i, banned_tokens in enumerate(banned_batch_tokens):
-                    scores[i, banned_tokens] = -float("inf")
-
-            if bad_words_ids is not None:
-                # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-                for i, banned_tokens in enumerate(banned_tokens):
-                    scores[i, banned_tokens] = -float("inf")
-
-            assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
-                scores.shape, (batch_size * num_beams, vocab_size)
-            )
-
-            if do_sample:
-                _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
-                # Top-p/top-k filtering
-                _scores = top_k_top_p_filtering(
-                    _scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
-                )  # (batch_size * num_beams, vocab_size)
-                # re-organize to group the beam together to sample from all beam_idxs
-                _scores = _scores.contiguous().view(
-                    batch_size, num_beams * vocab_size
-                )  # (batch_size, num_beams * vocab_size)
-
-                # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
-                probs = F.softmax(_scores, dim=-1)
-                next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)  # (batch_size, num_beams * 2)
-                # Compute next scores
-                next_scores = torch.gather(_scores, -1, next_tokens)  # (batch_size, num_beams * 2)
-                # sort the sampled vector to make sure that the first num_beams samples are the best
-                next_scores, next_scores_indices = torch.sort(next_scores, descending=True, dim=1)
-                next_tokens = torch.gather(next_tokens, -1, next_scores_indices)  # (batch_size, num_beams * 2)
-
-            else:
-                next_scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
-
-                # re-organize to group the beam together (we are keeping top hypothesis accross beams)
-                next_scores = next_scores.view(
-                    batch_size, num_beams * vocab_size
-                )  # (batch_size, num_beams * vocab_size)
-
-                next_scores, next_tokens = torch.topk(next_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
-
-            assert next_scores.size() == next_tokens.size() == (batch_size, 2 * num_beams)
-
-            # next batch beam content
-            next_batch_beam = []
-
-            # for each sentence
-            for batch_idx in range(batch_size):
-
-                # if we are done with this sentence
-                if done[batch_idx]:
-                    assert (
-                        len(generated_hyps[batch_idx]) >= num_beams
-                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
-                    assert (
-                        eos_token_id is not None and pad_token_id is not None
-                    ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
-                    next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
-                    continue
-
-                # next sentence beam content
-                next_sent_beam = []
-
-                # next tokens for this sentence
-                for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
-                    zip(next_tokens[batch_idx], next_scores[batch_idx])
-                ):
-                    # get beam and token IDs
-                    beam_id = beam_token_id // vocab_size
-                    token_id = beam_token_id % vocab_size
-
-                    effective_beam_id = batch_idx * num_beams + beam_id
-                    # add to generated hypotheses if end of sentence or last iteration
-                    if (eos_token_id is not None) and (token_id.item() == eos_token_id):
-                        # if beam_token does not belong to top num_beams tokens, it should not be added
-                        is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
-                        if is_beam_token_worse_than_top_num_beams:
-                            continue
-                        generated_hyps[batch_idx].add(
-                            input_ids[effective_beam_id].clone(), beam_token_score.item(),
-                        )
-                    else:
-                        # add next predicted token if it is not eos_token
-                        next_sent_beam.append((beam_token_score, token_id, effective_beam_id))
-
-                    # the beam for next step is full
-                    if len(next_sent_beam) == num_beams:
-                        break
-
-                # Check if were done so that we can save a pad step if all(done)
-                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    next_scores[batch_idx].max().item(), cur_len=cur_len
-                )
-
-                # update next beam content
-                assert len(next_sent_beam) == num_beams, "Beam should always be full"
-                next_batch_beam.extend(next_sent_beam)
-                assert len(next_batch_beam) == num_beams * (batch_idx + 1)
-
-            # stop when we are done with each sentence
-            if all(done):
-                break
-
-            # sanity check / prepare next batch
-            assert len(next_batch_beam) == batch_size * num_beams
-            beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
-            beam_tokens = input_ids.new([x[1] for x in next_batch_beam])
-            beam_idx = input_ids.new([x[2] for x in next_batch_beam])
-
-            # re-order batch
-            input_ids = input_ids[beam_idx, :]
-            input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
-            # re-order internal states
-            if past is not None:
-                past = self._reorder_cache(past, beam_idx)
-
-            # extend attention_mask for new generated input if only decoder
-            if self.config.is_encoder_decoder is False:
-                attention_mask = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-                )
-
-            # update current length
-            cur_len = cur_len + 1
-
-        # finalize all open beam hypotheses and end to generated hypotheses
-        for batch_idx in range(batch_size):
-            if done[batch_idx]:
-                continue
-
-            # test that beam scores match previously calculated scores if not eos and batch_idx not done
-            if eos_token_id is not None and all(
-                (token_id % vocab_size).item() is not eos_token_id for token_id in next_tokens[batch_idx]
-            ):
-                assert torch.all(
-                    next_scores[batch_idx, :num_beams] == beam_scores.view(batch_size, num_beams)[batch_idx]
-                ), "If batch_idx is not done, final next scores: {} have to equal to accumulated beam_scores: {}".format(
-                    next_scores[:, :num_beams][batch_idx], beam_scores.view(batch_size, num_beams)[batch_idx],
-                )
-
-            # need to add best num_beams hypotheses to generated hyps
-            for beam_id in range(num_beams):
-                effective_beam_id = batch_idx * num_beams + beam_id
-                final_score = beam_scores[effective_beam_id].item()
-                final_tokens = input_ids[effective_beam_id]
-                generated_hyps[batch_idx].add(final_tokens, final_score)
-
-        # depending on whether greedy generation is wanted or not define different output_batch_size and output_num_return_sequences_per_batch
-        output_batch_size = batch_size if do_sample else batch_size * num_return_sequences
-        output_num_return_sequences_per_batch = 1 if do_sample else num_return_sequences
-
-        # select the best hypotheses
-        sent_lengths = input_ids.new(output_batch_size)
-        best = []
-
-        # retrieve best hypotheses
-        for i, hypotheses in enumerate(generated_hyps):
-            sorted_hyps = sorted(hypotheses.beams, key=lambda x: x[0])
-            for j in range(output_num_return_sequences_per_batch):
-                effective_batch_idx = output_num_return_sequences_per_batch * i + j
-                best_hyp = sorted_hyps.pop()[1]
-                sent_lengths[effective_batch_idx] = len(best_hyp)
-                best.append(best_hyp)
-
-        # shorter batches are filled with pad_token
-        if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
-            sent_max_len = min(sent_lengths.max().item() + 1, max_length)
-            decoded = input_ids.new(output_batch_size, sent_max_len).fill_(pad_token_id)
-
-            # fill with hypothesis and eos_token_id if necessary
-            for i, hypo in enumerate(best):
-                decoded[i, : sent_lengths[i]] = hypo
-                if sent_lengths[i] < max_length:
-                    decoded[i, sent_lengths[i]] = eos_token_id
-        else:
-            # none of the hypotheses have an eos_token
-            assert (len(hypo) == max_length for hypo in best)
-            decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
-
-        return decoded
-
-    @staticmethod
-    def _reorder_cache(past: Tuple, beam_idx: Tensor) -> Tuple[Tensor]:
-        return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
-
-
-def calc_banned_ngram_tokens(prev_input_ids: Tensor, num_hypos: int, no_repeat_ngram_size: int, cur_len: int) -> None:
-    """Copied from fairseq for no_repeat_ngram in beam_search"""
-    if cur_len + 1 < no_repeat_ngram_size:
-        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
-        return [[] for _ in range(num_hypos)]
-    generated_ngrams = [{} for _ in range(num_hypos)]
-    for idx in range(num_hypos):
-        gen_tokens = prev_input_ids[idx].tolist()
-        generated_ngram = generated_ngrams[idx]
-        for ngram in zip(*[gen_tokens[i:] for i in range(no_repeat_ngram_size)]):
-            prev_ngram_tuple = tuple(ngram[:-1])
-            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
-
-    def _get_generated_ngrams(hypo_idx):
-        # Before decoding the next token, prevent decoding of ngrams that have already appeared
-        start_idx = cur_len + 1 - no_repeat_ngram_size
-        ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].tolist())
-        return generated_ngrams[hypo_idx].get(ngram_idx, [])
-
-    banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
-    return banned_tokens
-
-
-def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
-    banned_tokens = []
-
-    def _tokens_match(prev_tokens, tokens):
-        if len(tokens) == 0:
-            # if bad word tokens is just one token always ban it
-            return True
-        if len(tokens) > len(prev_input_ids):
-            # if bad word tokens are longer then prev input_ids they can't be equal
-            return False
-
-        if prev_tokens[-len(tokens) :] == tokens:
-            # if tokens match
-            return True
-        else:
-            return False
-
-    for prev_input_ids_slice in prev_input_ids:
-        banned_tokens_slice = []
-
-        for banned_token_seq in bad_words_ids:
-            assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
-                bad_words_ids
-            )
-
-            if _tokens_match(prev_input_ids_slice.tolist(), banned_token_seq[:-1]) is False:
-                # if tokens do not match continue
-                continue
-
-            banned_tokens_slice.append(banned_token_seq[-1])
-
-        banned_tokens.append(banned_tokens_slice)
-
-    return banned_tokens
-
-
-def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
-    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
-        Args:
-            logits: logits distribution shape (batch size, vocabulary size)
-            if top_k > 0: keep only top k tokens with highest probability (top-k filtering).
-            if top_p < 1.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
-                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
-            Make sure we keep at least min_tokens_to_keep per batch example in the output
-        From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
-    """
-    if top_k > 0:
-        top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))  # Safety check
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
-        logits[indices_to_remove] = filter_value
-
-    if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-
-        # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
-        sorted_indices_to_remove = cumulative_probs > top_p
-        if min_tokens_to_keep > 1:
-            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
-        # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
-
-        # scatter sorted tensors to original indexing
-        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-        logits[indices_to_remove] = filter_value
-    return logits
-
-
-class BeamHypotheses(object):
-    def __init__(self, num_beams, max_length, length_penalty, early_stopping):
-        """
-        Initialize n-best list of hypotheses.
-        """
-        self.max_length = max_length - 1  # ignoring bos_token
-        self.length_penalty = length_penalty
-        self.early_stopping = early_stopping
-        self.num_beams = num_beams
-        self.beams = []
-        self.worst_score = 1e9
-
-    def __len__(self):
-        """
-        Number of hypotheses in the list.
-        """
-        return len(self.beams)
-
-    def add(self, hyp, sum_logprobs):
-        """
-        Add a new hypothesis to the list.
-        """
-        score = sum_logprobs / len(hyp) ** self.length_penalty
-        if len(self) < self.num_beams or score > self.worst_score:
-            self.beams.append((score, hyp))
-            if len(self) > self.num_beams:
-                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
-                del self.beams[sorted_scores[0][1]]
-                self.worst_score = sorted_scores[1][0]
-            else:
-                self.worst_score = min(score, self.worst_score)
-
-    def is_done(self, best_sum_logprobs, cur_len=None):
-        """
-        If there are enough hypotheses and that none of the hypotheses being generated
-        can become better than the worst one in the heap, then we are done with this sentence.
-        """
-
-        if len(self) < self.num_beams:
-            return False
-        elif self.early_stopping:
-            return True
-        else:
-            if cur_len is None:
-                cur_len = self.max_length
-            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
-            ret = self.worst_score >= cur_score
-            return ret
-
 
 class Conv1D(nn.Module):
+    """
+    1D-convolutional layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2).
+
+    Basically works like a linear layer but the weights are transposed.
+
+    Args:
+        nf (:obj:`int`): The number of output features.
+        nx (:obj:`int`): The number of input features.
+    """
+
     def __init__(self, nf, nx):
-        """ Conv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
-            Basically works like a Linear layer but the weights are transposed
-        """
         super().__init__()
         self.nf = nf
         w = torch.empty(nx, nf)
@@ -1712,17 +943,31 @@ class Conv1D(nn.Module):
 
 
 class PoolerStartLogits(nn.Module):
-    """ Compute SQuAD start_logits from sequence hidden states. """
+    """
+    Compute SQuAD start logits from sequence hidden states.
 
-    def __init__(self, config):
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config used by the model, will be used to grab the :obj:`hidden_size` of the model.
+    """
+
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
 
-    def forward(self, hidden_states, p_mask=None):
-        """ Args:
-            **p_mask**: (`optional`) ``torch.FloatTensor`` of shape `(batch_size, seq_len)`
-                invalid position mask such as query and special symbols (PAD, SEP, CLS)
+    def forward(
+        self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Args:
+            hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            p_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len)`, `optional`):
+                Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS).
                 1.0 means token should be masked.
+
+        Returns:
+            :obj:`torch.FloatTensor`: The start logits for SQuAD.
         """
         x = self.dense(hidden_states).squeeze(-1)
 
@@ -1736,28 +981,48 @@ class PoolerStartLogits(nn.Module):
 
 
 class PoolerEndLogits(nn.Module):
-    """ Compute SQuAD end_logits from sequence hidden states and start token hidden state.
+    """
+    Compute SQuAD end logits from sequence hidden states.
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config used by the model, will be used to grab the :obj:`hidden_size` of the model and the
+            :obj:`layer_norm_eps` to use.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PretrainedConfig):
         super().__init__()
         self.dense_0 = nn.Linear(config.hidden_size * 2, config.hidden_size)
         self.activation = nn.Tanh()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense_1 = nn.Linear(config.hidden_size, 1)
 
-    def forward(self, hidden_states, start_states=None, start_positions=None, p_mask=None):
-        """ Args:
-            One of ``start_states``, ``start_positions`` should be not None.
-            If both are set, ``start_positions`` overrides ``start_states``.
-
-            **start_states**: ``torch.LongTensor`` of shape identical to hidden_states
-                hidden states of the first tokens for the labeled span.
-            **start_positions**: ``torch.LongTensor`` of shape ``(batch_size,)``
-                position of the first token for the labeled span:
-            **p_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, seq_len)``
-                Mask of invalid position such as query and special symbols (PAD, SEP, CLS)
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        start_states: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        p_mask: Optional[torch.FloatTensor] = None,
+    ) -> torch.FloatTensor:
+        """
+        Args:
+            hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            start_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`, `optional`):
+                The hidden states of the first tokens for the labeled span.
+            start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                The position of the first token for the labeled span.
+            p_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len)`, `optional`):
+                Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS).
                 1.0 means token should be masked.
+
+        .. note::
+
+            One of ``start_states`` or ``start_positions`` should be not obj:`None`. If both are set,
+            ``start_positions`` overrides ``start_states``.
+
+        Returns:
+            :obj:`torch.FloatTensor`: The end logits for SQuAD.
         """
         assert (
             start_states is not None or start_positions is not None
@@ -1783,7 +1048,13 @@ class PoolerEndLogits(nn.Module):
 
 
 class PoolerAnswerClass(nn.Module):
-    """ Compute SQuAD 2.0 answer class from classification and start tokens hidden states. """
+    """
+    Compute SQuAD 2.0 answer class from classification and start tokens hidden states.
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config used by the model, will be used to grab the :obj:`hidden_size` of the model.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -1791,23 +1062,33 @@ class PoolerAnswerClass(nn.Module):
         self.activation = nn.Tanh()
         self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
 
-    def forward(self, hidden_states, start_states=None, start_positions=None, cls_index=None):
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        start_states: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        cls_index: Optional[torch.LongTensor] = None,
+    ) -> torch.FloatTensor:
         """
         Args:
-            One of ``start_states``, ``start_positions`` should be not None.
-            If both are set, ``start_positions`` overrides ``start_states``.
+            hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            start_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`, `optional`):
+                The hidden states of the first tokens for the labeled span.
+            start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                The position of the first token for the labeled span.
+            cls_index (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+                Position of the CLS token for each sentence in the batch. If :obj:`None`, takes the last token.
 
-            **start_states**: ``torch.LongTensor`` of shape identical to ``hidden_states``.
-                hidden states of the first tokens for the labeled span.
-            **start_positions**: ``torch.LongTensor`` of shape ``(batch_size,)``
-                position of the first token for the labeled span.
-            **cls_index**: torch.LongTensor of shape ``(batch_size,)``
-                position of the CLS token. If None, take the last token.
+        .. note::
 
-            note(Original repo):
-                no dependency on end_feature so that we can obtain one single `cls_logits`
-                for each sample
+            One of ``start_states`` or ``start_positions`` should be not obj:`None`. If both are set,
+            ``start_positions`` overrides ``start_states``.
+
+        Returns:
+            :obj:`torch.FloatTensor`: The SQuAD 2.0 answer class.
         """
+        # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
         assert (
             start_states is not None or start_positions is not None
@@ -1829,45 +1110,43 @@ class PoolerAnswerClass(nn.Module):
         return x
 
 
-class SQuADHead(nn.Module):
-    r""" A SQuAD head inspired by XLNet.
+@dataclass
+class SquadHeadOutput(ModelOutput):
+    """
+    Base class for outputs of question answering models using a :class:`~transformers.modeling_utils.SQuADHead`.
 
-    Parameters:
-        config (:class:`~transformers.XLNetConfig`): Model configuration class with all the parameters of the model.
-
-    Inputs:
-        **hidden_states**: ``torch.FloatTensor`` of shape ``(batch_size, seq_len, hidden_size)``
-            hidden states of sequence tokens
-        **start_positions**: ``torch.LongTensor`` of shape ``(batch_size,)``
-            position of the first token for the labeled span.
-        **end_positions**: ``torch.LongTensor`` of shape ``(batch_size,)``
-            position of the last token for the labeled span.
-        **cls_index**: torch.LongTensor of shape ``(batch_size,)``
-            position of the CLS token. If None, take the last token.
-        **is_impossible**: ``torch.LongTensor`` of shape ``(batch_size,)``
-            Whether the question has a possible answer in the paragraph or not.
-        **p_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, seq_len)``
-            Mask of invalid position such as query and special symbols (PAD, SEP, CLS)
-            1.0 means token should be masked.
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned if both ``start_positions`` and ``end_positions`` are provided) ``torch.FloatTensor`` of shape ``(1,)``:
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
             Classification loss as the sum of start token, end token (and is_impossible if provided) classification losses.
-        **start_top_log_probs**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-            ``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``
+        start_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-        **start_top_index**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-            ``torch.LongTensor`` of shape ``(batch_size, config.start_n_top)``
+        start_top_index (``torch.LongTensor`` of shape ``(batch_size, config.start_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Indices for the top config.start_n_top start token possibilities (beam-search).
-        **end_top_log_probs**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-            ``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
+        end_top_log_probs (``torch.FloatTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Log probabilities for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
-        **end_top_index**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-            ``torch.LongTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``
+        end_top_index (``torch.LongTensor`` of shape ``(batch_size, config.start_n_top * config.end_n_top)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Indices for the top ``config.start_n_top * config.end_n_top`` end token possibilities (beam-search).
-        **cls_logits**: (`optional`, returned if ``start_positions`` or ``end_positions`` is not provided)
-            ``torch.FloatTensor`` of shape ``(batch_size,)``
+        cls_logits (``torch.FloatTensor`` of shape ``(batch_size,)``, `optional`, returned if ``start_positions`` or ``end_positions`` is not provided):
             Log probabilities for the ``is_impossible`` label of the answers.
+
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    start_top_log_probs: Optional[torch.FloatTensor] = None
+    start_top_index: Optional[torch.LongTensor] = None
+    end_top_log_probs: Optional[torch.FloatTensor] = None
+    end_top_index: Optional[torch.LongTensor] = None
+    cls_logits: Optional[torch.FloatTensor] = None
+
+
+class SQuADHead(nn.Module):
+    r"""
+    A SQuAD head inspired by XLNet.
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config used by the model, will be used to grab the :obj:`hidden_size` of the model and the
+            :obj:`layer_norm_eps` to use.
     """
 
     def __init__(self, config):
@@ -1879,11 +1158,37 @@ class SQuADHead(nn.Module):
         self.end_logits = PoolerEndLogits(config)
         self.answer_class = PoolerAnswerClass(config)
 
+    @replace_return_docstrings(output_type=SquadHeadOutput, config_class=PretrainedConfig)
     def forward(
-        self, hidden_states, start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None,
-    ):
-        outputs = ()
+        self,
+        hidden_states: torch.FloatTensor,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        cls_index: Optional[torch.LongTensor] = None,
+        is_impossible: Optional[torch.LongTensor] = None,
+        p_mask: Optional[torch.FloatTensor] = None,
+        return_dict: bool = False,
+    ) -> Union[SquadHeadOutput, Tuple[torch.FloatTensor]]:
+        """
+    Args:
+        hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len, hidden_size)`):
+            Final hidden states of the model on the sequence tokens.
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Positions of the first token for the labeled span.
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Positions of the last token for the labeled span.
+        cls_index (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Position of the CLS token for each sentence in the batch. If :obj:`None`, takes the last token.
+        is_impossible (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Whether the question has a possible answer in the paragraph or not.
+        p_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_len)`, `optional`):
+            Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS).
+            1.0 means token should be masked.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to return a :class:`~transformers.file_utils.ModelOuput` instead of a plain tuple.
 
+    Returns:
+        """
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
 
         if start_positions is not None and end_positions is not None:
@@ -1909,7 +1214,7 @@ class SQuADHead(nn.Module):
                 # note(zhiliny): by default multiply the loss by 0.5 so that the scale is comparable to start_loss and end_loss
                 total_loss += cls_loss * 0.5
 
-            outputs = (total_loss,) + outputs
+            return SquadHeadOutput(loss=total_loss) if return_dict else (total_loss,)
 
         else:
             # during inference, compute the end logits based on beam search
@@ -1939,27 +1244,44 @@ class SQuADHead(nn.Module):
             start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)
             cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)
 
-            outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits,) + outputs
-
-        # return start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits
-        # or (if labels are provided) (total_loss,)
-        return outputs
+            if not return_dict:
+                return (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits)
+            else:
+                return SquadHeadOutput(
+                    start_top_log_probs=start_top_log_probs,
+                    start_top_index=start_top_index,
+                    end_top_log_probs=end_top_log_probs,
+                    end_top_index=end_top_index,
+                    cls_logits=cls_logits,
+                )
 
 
 class SequenceSummary(nn.Module):
-    r""" Compute a single vector summary of a sequence hidden states according to various possibilities:
-        Args of the config class:
-            summary_type:
-                - 'last' => [default] take the last token hidden state (like XLNet)
-                - 'first' => take the first token hidden state (like Bert)
-                - 'mean' => take the mean of all tokens hidden states
-                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
-                - 'attn' => Not implemented now, use multi-head attention
-            summary_use_proj: Add a projection after the vector extraction
-            summary_proj_to_labels: If True, the projection outputs to config.num_labels classes (otherwise to hidden_size). Default: False.
-            summary_activation: 'tanh' or another string => add an activation to the output, Other => no activation. Default
-            summary_first_dropout: Add a dropout before the projection and activation
-            summary_last_dropout: Add a dropout after the projection and activation
+    r"""
+    Compute a single vector summary of a sequence hidden states.
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config used by the model. Relevant arguments in the config class of the model are (refer to the
+            actual config class of your model for the default values it uses):
+
+            - **summary_type** (:obj:`str`) -- The method to use to make this summary. Accepted values are:
+
+                - :obj:`"last"` -- Take the last token hidden state (like XLNet)
+                - :obj:`"first"` -- Take the first token hidden state (like Bert)
+                - :obj:`"mean"` -- Take the mean of all tokens hidden states
+                - :obj:`"cls_index"` -- Supply a Tensor of classification token position (GPT/GPT-2)
+                - :obj:`"attn"` -- Not implemented now, use multi-head attention
+
+            - **summary_use_proj** (:obj:`bool`) -- Add a projection after the vector extraction.
+            - **summary_proj_to_labels** (:obj:`bool`) -- If :obj:`True`, the projection outputs to
+              :obj:`config.num_labels` classes (otherwise to :obj:`config.hidden_size`).
+            - **summary_activation**  (:obj:`Optional[str]`) -- Set to :obj:`"tanh"` to add a tanh activation to the
+              output, another string or :obj:`None` will add no activation.
+            - **summary_first_dropout** (:obj:`float`) -- Optional dropout probability before the projection and
+              activation.
+            - **summary_last_dropout** (:obj:`float`)-- Optional dropout probability after the projection and
+              activation.
     """
 
     def __init__(self, config: PretrainedConfig):
@@ -1991,12 +1313,21 @@ class SequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(self, hidden_states, cls_index=None):
-        """ hidden_states: float Tensor in shape [bsz, ..., seq_len, hidden_size], the hidden-states of the last layer.
-            cls_index: [optional] position of the classification token if summary_type == 'cls_index',
-                shape (bsz,) or more generally (bsz, ...) where ... are optional leading dimensions of hidden_states.
-                if summary_type == 'cls_index' and cls_index is None:
-                    we take the last token of the sequence as classification token
+    def forward(
+        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+    ) -> torch.FloatTensor:
+        """
+        Compute a single vector summary of a sequence hidden states.
+
+        Args:
+            hidden_states (:obj:`torch.FloatTensor` of shape :obj:`[batch_size, seq_len, hidden_size]`):
+                The hidden states of the last layer.
+            cls_index (:obj:`torch.LongTensor` of shape :obj:`[batch_size]` or :obj:`[batch_size, ...]` where ... are optional leading dimensions of :obj:`hidden_states`, `optional`):
+                Used if :obj:`summary_type == "cls_index"` and takes the last token of the sequence as classification
+                token.
+
+        Returns:
+            :obj:`torch.FloatTensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -2023,24 +1354,19 @@ class SequenceSummary(nn.Module):
         return output
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """ Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
-
-    :param torch.Tensor x:
-    :return torch.Tensor:
+def prune_linear_layer(layer: torch.nn.Linear, index: torch.LongTensor, dim: int = 0) -> torch.nn.Linear:
     """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
-    return incremental_indices.long() + padding_idx
+    Prune a linear layer to keep only entries in index.
 
+    Used to remove heads.
 
-def prune_linear_layer(layer, index, dim=0):
-    """ Prune a linear layer (a model parameters) to keep only entries in index.
-        Return the pruned layer as a new layer with requires_grad=True.
-        Used to remove heads.
+    Args:
+        layer (:obj:`torch.nn.Linear`): The layer to prune.
+        index (:obj:`torch.LongTensor`): The indices to keep in the layer.
+        dim (:obj:`int`, `optional`, defaults to 0): The dimension on which to keep the indices.
+
+    Returns:
+        :obj:`torch.nn.Linear`: The pruned layer as a new layer with :obj:`requires_grad=True`.
     """
     index = index.to(layer.weight.device)
     W = layer.weight.index_select(dim, index).clone().detach()
@@ -2062,11 +1388,20 @@ def prune_linear_layer(layer, index, dim=0):
     return new_layer
 
 
-def prune_conv1d_layer(layer, index, dim=1):
-    """ Prune a Conv1D layer (a model parameters) to keep only entries in index.
-        A Conv1D work as a Linear layer (see e.g. BERT) but the weights are transposed.
-        Return the pruned layer as a new layer with requires_grad=True.
-        Used to remove heads.
+def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> Conv1D:
+    """
+    Prune a Conv1D layer to keep only entries in index. A Conv1D work as a Linear layer (see e.g. BERT) but the weights
+    are transposed.
+
+    Used to remove heads.
+
+    Args:
+        layer (:class:`~transformers.modeling_utils.Conv1D`): The layer to prune.
+        index (:obj:`torch.LongTensor`): The indices to keep in the layer.
+        dim (:obj:`int`, `optional`, defaults to 1): The dimension on which to keep the indices.
+
+    Returns:
+        :class:`~transformers.modeling_utils.Conv1D`: The pruned layer as a new layer with :obj:`requires_grad=True`.
     """
     index = index.to(layer.weight.device)
     W = layer.weight.index_select(dim, index).clone().detach()
@@ -2086,10 +1421,22 @@ def prune_conv1d_layer(layer, index, dim=1):
     return new_layer
 
 
-def prune_layer(layer, index, dim=None):
-    """ Prune a Conv1D or nn.Linear layer (a model parameters) to keep only entries in index.
-        Return the pruned layer as a new layer with requires_grad=True.
-        Used to remove heads.
+def prune_layer(
+    layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
+) -> Union[torch.nn.Linear, Conv1D]:
+    """
+    Prune a Conv1D or linear layer to keep only entries in index.
+
+    Used to remove heads.
+
+    Args:
+        layer (:obj:`Union[torch.nn.Linear, Conv1D]`): The layer to prune.
+        index (:obj:`torch.LongTensor`): The indices to keep in the layer.
+        dim (:obj:`int`, `optional`): The dimension on which to keep the indices.
+
+    Returns:
+        :obj:`torch.nn.Linear` or :class:`~transformers.modeling_utils.Conv1D`:
+        The pruned layer as a new layer with :obj:`requires_grad=True`.
     """
     if isinstance(layer, nn.Linear):
         return prune_linear_layer(layer, index, dim=0 if dim is None else dim)
@@ -2103,18 +1450,23 @@ def apply_chunking_to_forward(
     chunk_size: int, chunk_dim: int, forward_fn: Callable[..., torch.Tensor], *input_tensors
 ) -> torch.Tensor:
     """
-    This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension `chunk_dim`.
-    It then applies a layer `forward_fn` to each chunk independently to save memory.
-    If the `forward_fn` is independent across the `chunk_dim` this function will yield the
-    same result as not applying it.
+    This function chunks the :obj:`input_tensors` into smaller input tensor parts of size :obj:`chunk_size` over the
+    dimension :obj:`chunk_dim`. It then applies a layer :obj:`forward_fn` to each chunk independently to save memory.
+
+    If the :obj:`forward_fn` is independent across the :obj:`chunk_dim` this function will yield the same result as
+    directly applying :obj:`forward_fn` to :obj:`input_tensors`.
 
     Args:
-        chunk_size: int - the chunk size of a chunked tensor. `num_chunks` = `len(input_tensors[0]) / chunk_size`
-        chunk_dim: int - the dimension over which the input_tensors should be chunked
-        forward_fn: fn - the forward fn of the model
-        input_tensors: tuple(torch.Tensor) - the input tensors of `forward_fn` which are chunked
+        chunk_size (:obj:`int`):
+            The chunk size of a chunked tensor: :obj:`num_chunks = len(input_tensors[0]) / chunk_size`.
+        chunk_dim (:obj:`int`):
+            The dimension over which the :obj:`input_tensors` should be chunked.
+        forward_fn (:obj:`Callable[..., torch.Tensor]`):
+            The forward function of the model.
+        input_tensors (:obj:`Tuple[torch.Tensor]`):
+            The input tensors of ``forward_fn`` which will be chunked.
     Returns:
-        a Tensor with the same shape the foward_fn would have given if applied
+        :obj:`torch.Tensor`: A tensor with the same shape as the :obj:`foward_fn` would have given if applied`.
 
 
     Examples::
@@ -2147,7 +1499,7 @@ def apply_chunking_to_forward(
         assert (
             input_tensors[0].shape[chunk_dim] % chunk_size == 0
         ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
-            input_tensors[0][chunk_dim], chunk_size
+            input_tensors[0].shape[chunk_dim], chunk_size
         )
 
         num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size

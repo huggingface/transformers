@@ -23,7 +23,9 @@ from functools import lru_cache
 import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import AddedToken, PreTrainedTokenizer
+from .tokenization_utils_base import BatchEncoding
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -100,17 +102,26 @@ def get_pairs(word):
 
 class GPT2Tokenizer(PreTrainedTokenizer):
     """
-    GPT-2 BPE tokenizer. Peculiarities:
+    GPT-2 BPE tokenizer, using byte-level Byte-Pair-Encoding.
 
-    - Byte-level Byte-Pair-Encoding
-    - Requires a space to start the input string => the encoding methods should be called with the
-      ``add_prefix_space`` flag set to ``True``.
-      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
-      the absence of a space at the beginning of a string:
+    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
+    be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ::
 
-        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+        >>> from transformers import GPT2Tokenizer
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> tokenizer("Hello world")['input_ids']
+        [15496, 995]
+        >>> tokenizer(" Hello world")['input_ids']
+        [18435, 995]
+
+    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
+
+    .. note::
+
+        When used with ``is_pretokenized=True``, this tokenizer will add a space before each word (even the first one).
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
@@ -135,6 +146,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
@@ -144,8 +156,12 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
+        add_prefix_space=False,
         **kwargs
     ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -159,6 +175,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {}
+        self.add_prefix_space = add_prefix_space
 
         # Should haved added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
@@ -271,29 +288,39 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    def prepare_for_tokenization(self, text, **kwargs):
-        if "add_prefix_space" in kwargs and kwargs["add_prefix_space"]:
-            return " " + text
-        return text
+    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if is_pretokenized or add_prefix_space:
+            text = " " + text
+        return (text, kwargs)
 
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
     """
-    Constructs a "Fast" GPT-2 BPE tokenizer (backed by HuggingFace's `tokenizers` library).
+    Constructs a "Fast" GPT-2 BPE tokenizer (backed by HuggingFace's `tokenizers` library), using byte-level
+    Byte-Pair-Encoding.
 
-    Peculiarities:
-
-    - Byte-level Byte-Pair-Encoding
-    - Requires a space to start the input string => the encoding methods should be called with the
-      ``add_prefix_space`` flag set to ``True``.
-      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
-      the absence of a space at the beginning of a string:
+    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
+    be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ::
 
-        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+        >>> from transformers import GPT2TokenizerFast
+        >>> tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+        >>> tokenizer("Hello world")['input_ids']
+        [15496, 995]
+        >>> tokenizer(" Hello world")['input_ids']
+        [18435, 995]
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
+    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
+
+    .. note::
+
+        When used with ``is_pretokenized=True``, this tokenizer needs to be instantiated with
+        ``add_prefix_space=True``.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
 
     Args:
@@ -322,6 +349,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
@@ -346,3 +374,24 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             **kwargs,
         )
+        self.add_prefix_space = add_prefix_space
+
+    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+
+        is_pretokenized = kwargs.get("is_pretokenized", False)
+        assert self.add_prefix_space or not is_pretokenized, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._batch_encode_plus(*args, **kwargs)
+
+    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+
+        is_pretokenized = kwargs.get("is_pretokenized", False)
+        assert self.add_prefix_space or not is_pretokenized, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._encode_plus(*args, **kwargs)

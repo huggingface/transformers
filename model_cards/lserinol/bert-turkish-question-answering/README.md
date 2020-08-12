@@ -1,5 +1,5 @@
 ---
-language: turkish
+language: tr
 ---
 
 # bert-turkish-question-answering
@@ -43,7 +43,7 @@ questions = [
 ]
 
 for question in questions:
-    inputs = tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="pt")
+    inputs = tokenizer(question, text, add_special_tokens=True, return_tensors="pt")
     input_ids = inputs["input_ids"].tolist()[0]
 
     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)

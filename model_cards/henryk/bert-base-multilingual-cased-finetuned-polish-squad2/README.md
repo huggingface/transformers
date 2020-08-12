@@ -1,5 +1,5 @@
 ---
-language: polish
+language: pl
 ---
 
 # Multilingual + Polish SQuAD2.0

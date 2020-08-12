@@ -327,9 +327,15 @@ def convert_examples_to_features(
                 segment_ids.append(pad_token_segment_id)
                 p_mask.append(1)
 
-            assert len(input_ids) == max_seq_length
-            assert len(input_mask) == max_seq_length
-            assert len(segment_ids) == max_seq_length
+            assert (
+                len(input_ids) == max_seq_length
+            ), f"Input ids and sequence have mismatched lengths {len(input_ids)} and {max_seq_length}"
+            assert (
+                len(input_mask) == max_seq_length
+            ), f"Input mask and sequence have mismatched lengths {len(input_mask)} and {max_seq_length}"
+            assert (
+                len(segment_ids) == max_seq_length
+            ), f"Segment ids and sequence have mismatched lengths {len(segment_ids)} and {max_seq_length}"
 
             span_is_impossible = example.is_impossible
             start_position = None
@@ -626,7 +632,7 @@ def write_predictions(
         if not nbest:
             nbest.append(_NbestPrediction(text="empty", start_logit=0.0, end_logit=0.0))
 
-        assert len(nbest) >= 1
+        assert len(nbest) >= 1, "No valid predictions"
 
         total_scores = []
         best_non_null_entry = None
@@ -647,7 +653,7 @@ def write_predictions(
             output["end_logit"] = entry.end_logit
             nbest_json.append(output)
 
-        assert len(nbest_json) >= 1
+        assert len(nbest_json) >= 1, "No valid predictions"
 
         if not version_2_with_negative:
             all_predictions[example.qas_id] = nbest_json[0]["text"]
@@ -843,8 +849,8 @@ def write_predictions_extended(
             output["end_log_prob"] = entry.end_log_prob
             nbest_json.append(output)
 
-        assert len(nbest_json) >= 1
-        assert best_non_null_entry is not None
+        assert len(nbest_json) >= 1, "No valid predictions"
+        assert best_non_null_entry is not None, "No valid predictions"
 
         score_diff = score_null
         scores_diff_json[example.qas_id] = score_diff
