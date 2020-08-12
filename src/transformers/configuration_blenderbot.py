@@ -3,7 +3,7 @@ import os
 from .configuration_utils import PretrainedConfig
 
 
-BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"blenderbot": "sshleifer/blenderbot-3B"}
+BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"blenderbot": "facebook/blenderbot-3B"}
 
 class BlenderbotConfig(PretrainedConfig):
     """
