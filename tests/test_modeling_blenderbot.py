@@ -143,10 +143,10 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 @unittest.skipUnless(torch_device != "cpu", "3b test are very slow on CPU.")
 @require_torch
 class Blenderbot3BIntegrationTests(unittest.TestCase):
-    # model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
-    # if torch_device == "cuda":
-    #     model = model.half()
-    # tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+    model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
+    if torch_device == "cuda":
+        model = model.half()
+    tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
 
     @slow
     def test_tokenization_same_as_parlai(self):
@@ -257,7 +257,6 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         generated_txt = self.tokenizer.batch_decode(generated_utterances)
         self.assertListEqual(tgt_text, generated_txt)
 
-    @torch.no_grad()
     @slow
     def test_generation_from_long_input_same_as_parlai_3B(self):
         src_text = [
