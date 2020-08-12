@@ -1,3 +1,4 @@
+import inspect
 import logging
 import math
 import os
@@ -19,11 +20,19 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
-from .file_utils import is_torch_tpu_available
+from .file_utils import is_nlp_available, is_torch_tpu_available
 from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, set_seed
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    ComputeNLPMetrics,
+    EvalPrediction,
+    FinalActivation,
+    PredictionOutput,
+    TrainOutput,
+    set_seed,
+)
 from .training_args import TrainingArguments
 
 
@@ -41,6 +50,8 @@ else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
 
+if is_nlp_available():
+    import nlp
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -142,7 +153,7 @@ class Trainer:
         args (:class:`~transformers.TrainingArguments`):
             The arguments to tweak training.
         data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
-            The function to use to from a batch from a list of elements of :obj:`train_dataset` or
+            The function to use to form a batch from a list of elements of :obj:`train_dataset` or
             :obj:`eval_dataset`.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training.
@@ -151,8 +162,6 @@ class Trainer:
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
-            When performing evaluation and predictions, only returns the loss.
         tb_writer (:obj:`SummaryWriter`, `optional`):
             Object to write to TensorBoard.
         optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
@@ -232,6 +241,85 @@ class Trainer:
         self.epoch = None
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
+
+    @classmethod
+    def from_nlp_dataset(
+        cls,
+        model: PreTrainedModel,
+        args: TrainingArguments,
+        dataset: "nlp.dataset_dict.DatasetDict",
+        data_collator: Optional[DataCollator] = None,
+        metrics: Optional[Union["nlp.Metric", List["nlp.Metric"]]] = None,
+        final_activation: Optional[Union[str, FinalActivation]] = False,
+        tb_writer: Optional["SummaryWriter"] = None,
+        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+    ):
+        r"""
+        Creates an instance of :class:`~transformers.Trainer` from a nlp :obj:`DatasetDict` and `Metric`.
+
+        Args:
+        model (:class:`~transformers.PreTrainedModel`):
+            The model to train, evaluate or use for predictions.
+        args (:class:`~transformers.TrainingArguments`):
+            The arguments to tweak training.
+        dataset (:obj:`nlp.dataset_dict.DatasetDict`):
+            The dataset loaded and preprocessed via the :obj:`nlp` library.
+        data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
+            The function to use to form a batch from a list of elements from the :obj:`dataset`.
+        metrics (:obj:`nlp.Metric` or :obj:`List[nlp.Metric]`, `optional`):
+            One or several metrics loaded via the :obj:`nlp` library.
+        final_activation (:obj:`str` or :class:`~transformers.trainer_utils.FinalActivation`, `optional`):
+            The final activation to apply to the model output before feeding them to the :obj:`metrics`.
+        tb_writer (:obj:`SummaryWriter`, `optional`):
+            Object to write to TensorBoard.
+        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
+            A tuple containing the optimizer and the scheduler to use. Will default to an instance of
+            :class:`~transformers.AdamW` on your model and a scheduler given by
+            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+        kwargs:
+            Deprecated keyword arguments.
+
+        Examples:
+
+            >>> from nlp import load_dataset, load_metric
+            >>> from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments
+            >>> dataset = load_dataset('glue', 'sst2')
+            >>> metric = load_metric('glue', 'sst2')
+
+            >>> model_name = "distilbert-base-uncased-finetuned-sst-2-english"
+            >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+            >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
+
+            >>> encoded_dataset = dataset.map(lambda examples: tokenizer(examples['sentence'], padding=True), batched=True)
+            >>> args = TrainingArguments(output_dir = "test")
+
+            >>> trainer = Trainer.from_nlp_dataset(model, args, encoded_dataset, metrics=metric, final_activation="argmax")
+            >>> trainer.evaluate()
+            {'eval_loss': 0.3902028881816018, 'eval_accuracy': 0.9105504587155964, 'step': 0}
+        """
+        assert is_nlp_available(), "This method requires the nlp library: `pip install nlp`."
+        if metrics is not None:
+            compute_metrics = ComputeNLPMetrics(metrics, activation=final_activation)
+
+        # Inspect model forward signature to keep only the arguments it accepts.
+        signature = inspect.signature(model.forward)
+        signature_columns = list(signature.parameters.keys())
+        # Labels may be named label or label_ids, the default data collator handles that.
+        signature_columns += ["label", "label_ids"]
+        dataset_columns = dataset[list(dataset.keys())[0]].column_names
+        columns = [k for k in signature_columns if k in dataset_columns]
+        dataset.set_format(columns=columns)
+
+        return cls(
+            model,
+            args,
+            data_collator=data_collator,
+            train_dataset=dataset.get("train"),
+            eval_dataset=dataset.get("validation"),
+            compute_metrics=compute_metrics,
+            tb_writer=tb_writer,
+            optimizers=optimizers,
+        )
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):

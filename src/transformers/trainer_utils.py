@@ -1,9 +1,11 @@
 import random
-from typing import Dict, NamedTuple, Optional
+from dataclasses import dataclass
+from typing import Dict, List, NamedTuple, Optional, Union
 
 import numpy as np
 
 from .file_utils import is_tf_available, is_torch_available
+from .tokenization_utils_base import ExplicitEnum
 
 
 def set_seed(seed: int):
@@ -53,3 +55,39 @@ class TrainOutput(NamedTuple):
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
+
+
+class FinalActivation(ExplicitEnum):
+    """
+    Possible values for the ``final_activation`` argument in :meth:`Trainer.from_nlp_dataset`.
+    Useful for tab-completion in an IDE.
+    """
+
+    NONE = "none"
+    ARGMAX = "argmax"
+    SIGMOID = "sigmoid"
+    SOFTMAX = "softmax"
+
+
+ACTIVATION_NAME_TO_FUNCTION = {
+    "none": lambda x: x,
+    "argmax": lambda x: x.argmax(axis=-1),
+    "sigmoid": lambda x: 1 / (1 + np.exp(-x)),
+    "softmax": lambda x: np.exp(x) / np.exp(x).sum(-1, keepdims=True),
+}
+
+
+@dataclass
+class ComputeNLPMetrics:
+    metrics: Union["nlp.Metric", List["nlp.Metric"]]  # noqa: F821
+    activation: Optional[Union[str, FinalActivation]] = None
+
+    def __call__(self, eval_pred):
+        preds, labels = eval_pred
+        metrics = self.metrics if isinstance(self.metrics, list) else [self.metrics]
+        result = {}
+        for metric in metrics:
+            if self.activation is not None:
+                preds = ACTIVATION_NAME_TO_FUNCTION[self.activation](preds)
+            result = {**result, **metric.compute(preds.tolist(), references=labels.tolist())}
+        return result
