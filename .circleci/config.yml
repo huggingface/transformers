@@ -73,10 +73,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.3-torch_and_tf-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing]
             - run: pip install codecov pytest-cov
@@ -99,10 +95,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.3-torch-{{ checksum "setup.py" }}
-                      - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing]
             - save_cache:
