@@ -1,12 +1,28 @@
+#!/usr/bin/env python3
+# coding=utf-8
+# Copyright (c) Facebook, Inc. and its affiliates.
+#
+# This source code is licensed under the MIT license found in the;
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# LICENSE file in the root directory of this source tree.
+
 import unittest
 
 from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available
-from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_bart import _long_tensor, assert_tensors_close
+from .test_modeling_bart import _long_tensor
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
@@ -127,10 +143,10 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 @unittest.skipUnless(torch_device != "cpu", "3b test are very slow on CPU.")
 @require_torch
 class Blenderbot3BIntegrationTests(unittest.TestCase):
-    model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
-    if torch_device == "cuda":
-        model = model.half()
-    tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+    # model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
+    # if torch_device == "cuda":
+    #     model = model.half()
+    # tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
 
     @slow
     def test_tokenization_same_as_parlai(self):
