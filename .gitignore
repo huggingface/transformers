@@ -139,6 +139,7 @@ runs
 /wandb
 /examples/runs
 /examples/**/*.args
+/examples/rag/sweep
 
 # data
 /data
@@ -153,3 +154,6 @@ debug.env
 
 #ctags
 tags
+
+#temp RAG dev gitignore
+rag_configs

@@ -28,6 +28,7 @@ from .configuration_auto import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    DPRConfig,
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
@@ -52,6 +53,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from .tokenization_dpr import DPRContextEncoderTokenizer, DPRContextEncoderTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
@@ -78,6 +80,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (T5Config, (T5Tokenizer, None)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
+        (DPRConfig, (DPRContextEncoderTokenizer, DPRContextEncoderTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
         (MBartConfig, (MBartTokenizer, None)),
