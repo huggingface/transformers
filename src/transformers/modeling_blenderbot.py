@@ -4,8 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .configuration_blenderbot import BlenderbotConfig
+
 from .file_utils import add_start_docstrings_to_callable
+from .modeling_utils import PreTrainedModel
+
+from .configuration_blenderbot import BlenderbotConfig
 from .modeling_bart import (
     BartDecoder,
     BartEncoder,
@@ -13,7 +16,6 @@ from .modeling_bart import (
     _reorder_buffer,
     SinusoidalPositionalEmbedding,
 )
-from .modeling_utils import PreTrainedModel
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,

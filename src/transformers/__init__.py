@@ -243,6 +243,11 @@ if is_torch_available():
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BertLayer,
     )
+    
+    from .modeling_blenderbot import (
+        BlenderbotForConditionalGeneration, 
+        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
+    )
     from .modeling_openai import (
         OpenAIGPTPreTrainedModel,
         OpenAIGPTModel,
@@ -291,7 +296,6 @@ if is_torch_available():
         XLMForMultipleChoice,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from .modeling_blenderbot import BlenderbotForConditionalGeneration, BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST
     from .modeling_pegasus import PegasusForConditionalGeneration
     from .modeling_bart import (
         PretrainedBartModel,

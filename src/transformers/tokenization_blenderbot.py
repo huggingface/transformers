@@ -5,8 +5,8 @@ import os
 
 import regex as re
 
-from .tokenization_roberta import RobertaTokenizer
 from .tokenization_utils import AddedToken, PreTrainedTokenizer
+from .tokenization_roberta import RobertaTokenizer
 
 
 logger = logging.getLogger(__name__)
