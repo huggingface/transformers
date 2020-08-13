@@ -29,6 +29,7 @@ if is_tf_available():
         LongformerConfig,
         TFLongformerModel,
         TFLongformerForMaskedLM,
+        TFLongformerForSequenceClassification,
         TFLongformerForQuestionAnswering,
         TFLongformerSelfAttention,
     )
@@ -529,3 +530,14 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(tf.reduce_mean(loss), expected_loss, rtol=1e-4)
         tf.debugging.assert_near(tf.reduce_sum(prediction_scores), expected_prediction_scores_sum, rtol=1e-4)
         tf.debugging.assert_near(tf.reduce_mean(prediction_scores), expected_prediction_scores_mean, rtol=1e-4)
+
+    @slow
+    def test_inference_classification_head(self):
+        model = TFLongformerForSequenceClassification.from_pretrained("allenai/longformer-base-4096")
+        input_ids = tf.constant([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = [1, 3]
+        self.assertEqual(list(output.numpy().shape), expected_shape)
+        expected_tensor = tf.constant([[-0.9469, 0.3913, 0.5118]])
+        self.assertTrue(numpy.allclose(output.numpy(), expected_tensor.numpy(), atol=1e-4))
+

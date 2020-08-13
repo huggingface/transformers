@@ -20,13 +20,23 @@ import tensorflow as tf
 
 from .configuration_longformer import LongformerConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertSelfOutput
-from .modeling_tf_outputs import TFBaseModelOutputWithPooling, TFMaskedLMOutput, TFQuestionAnsweringModelOutput
+from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertPreTrainedModel, TFBertSelfOutput 
+from .modeling_tf_outputs import (
+    TFBaseModelOutputWithPooling,
+    TFMaskedLMOutput,
+    TFMultipleChoiceModelOutput,
+    TFQuestionAnsweringModelOutput,
+    TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
+)
 from .modeling_tf_roberta import TFRobertaEmbeddings, TFRobertaLMHead
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
+    TFSequenceClassificationLoss,
+    TFTokenClassificationLoss,
     cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
@@ -1273,6 +1283,106 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
+class TFLongformerClassificationHead(tf.keras.layers.Layer):
+    """Head for sentence-level classification tasks"""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
+            name="dense",
+        )
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.out_proj = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(confi.initializer_range), name="out_proj"
+        )
+
+    def call(self, features, training=False):
+        x = features[:, 0, :]
+        x = self.dropout(x, training=training)
+        x = self.dense(x)
+        x = self.dropout(x, training=training)
+        x = self.out_proj(x)
+        return x
+
+@add_start_docstrings(
+    """Longformer Model transformer with a sequence classification/regression head on top (a linear layer
+    on top of the pooled output) e.g. for GLUE tasks. """,
+    LONGFORMER_START_DOCSTRING,
+)
+class TFLongformerForSequenceClassification(TFBertPreTrainedModel):
+    config_class = LongformerConfig
+    base_model_prefix = "longformer"
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *init, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.longformer = TFLongformerModel(config, name="longformer")
+        self.classifier = TFLongformerClassificationHead(config, name="classifier")
+
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="allenai/longformer-base-4096",
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        global_attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy)
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on CLS token...")
+            global_attention_mask = tf.zeros_like(input_ids)
+            # global attention on cls token
+            global_attention_mask[:, 0] = 1
+
+        outputs = self.longformer(
+            input_ids,
+            attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
+
+        loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
 
 @add_start_docstrings(
     """Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD / TriviaQA (a linear layers on top of
@@ -1390,3 +1500,14 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+'''
+@add_start_docstrings(
+    """Longformer Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    LONGFORMER_START_DOCSTRING,
+)
+class LongformerForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassificationLoss):
+'''
+
+

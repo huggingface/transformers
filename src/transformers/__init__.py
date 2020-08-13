@@ -578,6 +578,7 @@ if is_tf_available():
         TFLongformerModel,
         TFLongformerForMaskedLM,
         TFLongformerForQuestionAnswering,
+        TFLongformerForSequenceClassification,
         TFLongformerSelfAttention,
     )
 
