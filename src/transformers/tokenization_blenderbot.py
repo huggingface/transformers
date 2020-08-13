@@ -17,7 +17,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-# will update paths once uploded files on S3
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
@@ -127,25 +126,19 @@ def get_pairs(word):
 
 class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
-    Constructs a Blenderbot-90M tokenizer. Peculiarities:
+        Constructs a Blenderbot-90M tokenizer. Peculiarities:
+        - Byte-Pair-Encoding
 
-    - Byte-Pair-Encoding
+        This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+        should refer to the superclass for more information regarding methods.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
-
-    Args:
-        vocab_file (:obj:`str`):
-            Path to the vocabulary file.
-        merges_file (:obj:`str`):
-            Path to the merges file.
-         bos_token (:obj:`string`, `optional`, defaults to "__start__"):
-            The beginning of sentence token.
-         eos_token (:obj:`string`, `optional`, defaults to "__end__"):
-            The end of sentence token.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be
-            this token instead.
+        Args:
+            vocab_file (:obj:`str`): Path to the vocabulary file.
+            merges_file (:obj:`str`): Path to the merges file.
+            bos_token (:obj:`string`, `optional`, defaults to "__start__"): The beginning of sentence token.
+            eos_token (:obj:`string`, `optional`, defaults to "__end__"): The end of sentence token.
+            unk_token (:obj:`string`, `optional`, defaults to "<unk>"): The unknown token. A token that is not in the 
+                vocabulary cannot be converted to an ID and is set to be this token instead.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

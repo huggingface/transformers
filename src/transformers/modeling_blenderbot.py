@@ -47,7 +47,6 @@ class PretrainedBlenderbotModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding) and module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
 
-
 class BlenderbotOutput(nn.Module):
     def __init__(self, config: BlenderbotConfig, embeddings):
         super().__init__()

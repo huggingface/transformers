@@ -1,7 +1,8 @@
+#!/usr/bin/env python3
 # coding=utf-8
-# Copyright 2020 The Fairseq Authors and The HuggingFace Inc. team.
+# Copyright (c) Facebook, Inc. and its affiliates.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# This source code is licensed under the MIT license found in the;
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -12,11 +13,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+# LICENSE file in the root directory of this source tree.
 from .configuration_utils import PretrainedConfig
 
 
-BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"blenderbot": "facebook/blenderbot-3B"}
+
+BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/config.json",
+    "facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-/config.json",
+}
 
 
 class BlenderbotConfig(PretrainedConfig):
@@ -29,6 +34,7 @@ class BlenderbotConfig(PretrainedConfig):
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
         for more information.
+
         Args:
             d_model: (:obj:`int`, default to 2560), dimension of the embeddings vector
             encoder_layers: (:obj:`int`, default to 2), number of layers in the encoder
@@ -46,8 +52,7 @@ class BlenderbotConfig(PretrainedConfig):
             attention_dropout: (:obj:`float`, default to 0.0), multi head attention dropout
             relu_dropout: (:obj:`float`, default to 0.0), relu dropout
             vocab_size: (:obj:`int`, default to 8008), the size of the vocabulary
-            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings
-            will be learn
+            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings will be learn
             variant: (obj: str, default to "prelayernorm") defines when to apply a layernorm
             init_std: (obj: float, default to 0.02)
             is_encoder_decoder: (obj:`boolean`, default to True)
@@ -61,19 +66,8 @@ class BlenderbotConfig(PretrainedConfig):
             static_position_embeddings: (:obj:`boolean`, default to False),
             add_bias_logits: (:obj:`boolean`, default to False),
 
-
-        Example::
-
-            from transformers import BlenderbotForConditionalGeneration, BlenderbotConfig
-            # Initializing a Blenderbot configuration
-            configuration = BlenderbotConfig()
-            # Initializing a model from the configuration
-            model = BlenderbotForConditionalGeneration(configuration)
-            # Accessing the model configuration
-            configuration = model.config
         Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
+            pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained checkpoints.
     """
 
     model_type = "blenderbot"
