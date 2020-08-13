@@ -151,7 +151,7 @@ class Trainer:
         model (:class:`~transformers.PreTrainedModel`):
             The model to train, evaluate or use for predictions.
         args (:class:`~transformers.TrainingArguments`):
-            The arguments to tweak training.
+            The arguments to tweak for training.
         data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
             The function to use to form a batch from a list of elements of :obj:`train_dataset` or
             :obj:`eval_dataset`.
@@ -247,7 +247,9 @@ class Trainer:
         cls,
         model: PreTrainedModel,
         args: TrainingArguments,
-        dataset: "nlp.dataset_dict.DatasetDict",
+        dataset_dict: "nlp.dataset_dict.DatasetDict" = None,
+        train_dataset: "nlp.dataset_dict.Dataset" = None,
+        eval_dataset: "nlp.dataset_dict.Dataset" = None,
         data_collator: Optional[DataCollator] = None,
         metrics: Optional[Union["nlp.Metric", List["nlp.Metric"]]] = None,
         final_activation: Optional[Union[str, FinalActivation]] = False,
@@ -257,13 +259,28 @@ class Trainer:
         r"""
         Creates an instance of :class:`~transformers.Trainer` from a nlp :obj:`DatasetDict` and `Metric`.
 
+        This method will inspect the signature of :obj:`model.forward` and remove the columns in the dataset(s) passed
+        that aren't expected by the model.
+
+        .. warning::
+
+            This API is experimental and will probably change slightly in the near future. It also requires the a
+            source install of the `nlp library <https://github.com/huggingface/nlp>`__.
+
         Args:
             model (:class:`~transformers.PreTrainedModel`):
                 The model to train, evaluate or use for predictions.
             args (:class:`~transformers.TrainingArguments`):
-                The arguments to tweak training.
-            dataset (:obj:`nlp.dataset_dict.DatasetDict`):
-                The dataset loaded and preprocessed via the :obj:`nlp` library.
+                The arguments to tweak for training.
+            dataset_dict (:obj:`nlp.dataset_dict.DatasetDict`, `optional`):
+                The full (train + eval) dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
+                can pass one or both of :nlp:`train_dataset` and :nlp:`eval_dataset`.
+            train_dataset (:obj:`nlp.dataset_dict.Dataset`, `optional`):
+                The training dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
+                can pass the full dataset in :nlp:`dataset_dict`.
+            eval_dataset (:obj:`nlp.dataset_dict.Dataset`, `optional`):
+                The validation dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
+                can pass the full dataset in :nlp:`dataset_dict`.
             data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
                 The function to use to form a batch from a list of elements from the :obj:`dataset`.
             metrics (:obj:`nlp.Metric` or :obj:`List[nlp.Metric]`, `optional`):
@@ -296,24 +313,30 @@ class Trainer:
             {'eval_loss': 0.3902028881816018, 'eval_accuracy': 0.9105504587155964, 'step': 0}
         """
         assert is_nlp_available(), "This method requires the nlp library: `pip install nlp`."
+        assert dataset_dict is None or (train_dataset is None and eval_dataset is None), "This method accept either `dataset_dict` or `train_dataset`/ `eval_dataset`, but not both."
         if metrics is not None:
             compute_metrics = ComputeNLPMetrics(metrics, activation=final_activation)
+        if dataset_dict is not None:
+            train_dataset = dataset_dict.get("train")
+            eval_dataset = dataset_dict.get("validation")
 
-        # Inspect model forward signature to keep only the arguments it accepts.
-        signature = inspect.signature(model.forward)
-        signature_columns = list(signature.parameters.keys())
-        # Labels may be named label or label_ids, the default data collator handles that.
-        signature_columns += ["label", "label_ids"]
-        dataset_columns = dataset[list(dataset.keys())[0]].column_names
-        columns = [k for k in signature_columns if k in dataset_columns]
-        dataset.set_format(columns=columns)
+        if train_dataset is not None or eval_dataset is not None:
+            # Inspect model forward signature to keep only the arguments it accepts.
+            signature = inspect.signature(model.forward)
+            signature_columns = list(signature.parameters.keys())
+            # Labels may be named label or label_ids, the default data collator handles that.
+            signature_columns += ["label", "label_ids"]
+            dataset_columns = (train_dataset if train_dataset is not None else eval_dataset).column_names
+            columns = [k for k in signature_columns if k in dataset_columns]
+            train_dataset.set_format(columns=columns)
+            eval_dataset.set_format(columns=columns)
 
         return cls(
             model,
             args,
             data_collator=data_collator,
-            train_dataset=dataset.get("train"),
-            eval_dataset=dataset.get("validation"),
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
             compute_metrics=compute_metrics,
             tb_writer=tb_writer,
             optimizers=optimizers,

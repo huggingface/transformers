@@ -89,5 +89,6 @@ class ComputeNLPMetrics:
         for metric in metrics:
             if self.activation is not None:
                 preds = ACTIVATION_NAME_TO_FUNCTION[self.activation](preds)
+            # TODO: when https://github.com/huggingface/nlp/pull/466 is merged, remove the `tolist`.
             result = {**result, **metric.compute(preds.tolist(), references=labels.tolist())}
         return result
