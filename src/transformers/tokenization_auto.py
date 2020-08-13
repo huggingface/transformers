@@ -46,7 +46,7 @@ from .configuration_auto import (
 )
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
-from .tokenization_bart import BartTokenizer, MBartTokenizer
+from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -85,7 +85,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MBartConfig, (MBartTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
-        (BartConfig, (BartTokenizer, None)),
+        (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),
