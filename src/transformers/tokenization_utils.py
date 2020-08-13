@@ -20,7 +20,7 @@ import itertools
 import logging
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
@@ -118,7 +118,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # until the serialization of Fast tokenizers is updated
         self.added_tokens_encoder: Dict[str, int] = {}
         self.added_tokens_decoder: Dict[int, str] = {}
-        self.unique_no_split_tokens: List[str] = []
+        self.unique_no_split_tokens: Set[str] = set()
 
     @property
     def is_fast(self) -> bool:
@@ -207,10 +207,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         # Make sure we don't split on any special tokens (even they were already in the vocab before e.g. for Albert)
         if special_tokens:
-            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(new_tokens)))
+            self.unique_no_split_tokens = set(self.unique_no_split_tokens).union(set(new_tokens))
         else:
             # Or on the newly added tokens
-            self.unique_no_split_tokens = list(set(self.unique_no_split_tokens).union(set(tokens_to_add)))
+            self.unique_no_split_tokens = set(self.unique_no_split_tokens).union(set(tokens_to_add))
 
         return len(tokens_to_add)
 
@@ -347,7 +347,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             )
 
         no_split_token = self.unique_no_split_tokens
-        tokenized_text = split_on_tokens(no_split_token, text)
+        tokenized_text = split_on_tokens(list(no_split_token), text)
         return tokenized_text
 
     def _tokenize(self, text, **kwargs):
