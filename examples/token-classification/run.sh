@@ -18,6 +18,7 @@ export SAVE_STEPS=750
 export SEED=1
 
 python3 run_ner.py \
+--task_type NER \
 --data_dir . \
 --labels ./labels.txt \
 --model_name_or_path $BERT_MODEL \
