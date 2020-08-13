@@ -61,45 +61,56 @@ class BlenderbotOutput(nn.Module):
         return output
 
 
-# TODO: delete this
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/blenderbot-3B", "facebook/blenderbot-90M"]
+BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/blenderbot-3B",
+    "facebook/blenderbot-90M"
+]
+
 BLENDERBOT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
-    Args:
-        config (:class:`~transformers.BlenderbotConfig`): Model configuration class with all the parameters of the
-        model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
+    refer to the PyTorch documentation for all matters related to general usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.BlenderbotConfig`): Model configuration class with all the parameters of the model.
+        Initializing with a config file does not load the weights associated with the model, only the configuration.
+        Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+
 """
 
 BLENDERBOT_INPUTS_DOCSTRING = r"""
-
- Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
-            Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using :class:`transformers.BlenderbotTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
-            `What are input IDs? <../glossary.html#input-ids>`__
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Use BlenderbotTokenizer.encode to produce them.
+            Padding will be ignored by default should you provide it.
+            Indices can be obtained using :class:`transformers.BlenderbotTokenizer.encode(text)`.
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on padding token indices in input_ids.
+            Mask values selected in ``[0, 1]``: ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
             Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
-            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults
-            to :obj:`None`)
-       attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults
-       to :obj:`None`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`,
-        defaults to :obj:`None`):
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`,
-        defaults to :obj:`None`):
-        labels: (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults
-        to :obj:`None`):
+            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
+            Used in the cross-attention of the decoder.
+        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+            Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+            Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
+            See diagram 1 in the paper for more info on the default strategy
+        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains pre-computed key and value hidden-states of the attention blocks.
+            Can be used to speed up decoding.
+            If ``decoder_past_key_value_states`` are used, the user can optionally input only the last
+            ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
+            :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If `use_cache` is True, ``decoder_past_key_values`` are returned and can be used to speed up decoding (see
+            ``decoder_past_key_values``).
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
 
@@ -116,17 +127,6 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
         self.bos_token_id = config.bos_token_id
         self.output = BlenderbotOutput(config, self.shared)
         self.init_weights()
-
-    # def output(self, tensor):
-    #     """
-    #     Compute output logits.
-    #     """
-    #     # project back to vocabulary
-    #     output = F.linear(tensor, self.shared.weight)
-    #     # compatibility with fairseq: fairseq sometimes reuses BOS tokens and
-    #     # we need to force their probability of generation to be 0.
-    #     output[:, :, self.bos_token_id] = -65504 if output.dtype is torch.float16 else - 1e20
-    #     return output
 
     @add_start_docstrings_to_callable(BLENDERBOT_INPUTS_DOCSTRING)
     def forward(
@@ -246,7 +246,6 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        # exactly as in BartConditionalGenerator
         ((enc_out, enc_mask), decoder_cached_states) = past
         reordered_past = []
         for layer_past in decoder_cached_states:
