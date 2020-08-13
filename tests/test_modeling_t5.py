@@ -37,6 +37,8 @@ class T5ModelTester:
         self.batch_size = 13
         self.encoder_seq_length = 7
         self.decoder_seq_length = 9
+        # For common tests
+        self.seq_length = self.decoder_seq_length
         self.is_training = True
         self.use_attention_mask = True
         self.use_labels = True

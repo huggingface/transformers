@@ -21,7 +21,8 @@ import tensorflow as tf
 from .configuration_longformer import LongformerConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertSelfOutput
-from .modeling_tf_outputs import TFBaseModelOutputWithPooling, TFMaskedLMOutput, TFQuestionAnsweringModelOutput
+from .modeling_tf_outputs import TFBaseModelOutputWithPooling, TFMaskedLMOutput, TFQuestionAnsweringModelOutput, \
+    TFBaseModelOutput
 from .modeling_tf_roberta import TFRobertaEmbeddings, TFRobertaLMHead
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
@@ -834,10 +835,10 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, output_attentions, output_hidden_states, padding_len = inputs
+        hidden_states, attention_mask, output_attentions, output_hidden_states, return_dict, padding_len = inputs
 
-        all_hidden_states = ()
-        all_attentions = ()
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
         for i, layer_module in enumerate(self.layer):
             if cast_bool_to_primitive(output_hidden_states, self.output_hidden_states) is True:
                 hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
@@ -854,12 +855,11 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
             hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
-        outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states, self.output_hidden_states) is True:
-            outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions, self.output_attentions) is True:
-            outputs = outputs + (all_attentions,)
-        return outputs  # outputs, (hidden states), (attentions)
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
 
 
 @keras_serializable
@@ -992,7 +992,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         embedding_output = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
         encoder_outputs = self.encoder(
-            [embedding_output, extended_attention_mask, output_attentions, output_hidden_states, padding_len],
+            [embedding_output, extended_attention_mask, output_attentions, output_hidden_states, return_dict, padding_len],
             training=training,
         )
 

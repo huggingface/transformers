@@ -713,8 +713,10 @@ class ModelTesterMixin:
                     if isinstance(tuple_object, (List, Tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
                     else:
-                        self.assertTrue(torch.allclose(tuple_object, dict_object))
+                        self.assertTrue(torch.allclose(tuple_object, dict_object, atol=1e-6))
 
                 recursive_check(tuple_output, dict_output)
 
