@@ -29,10 +29,10 @@ takes the text of a review and requires the model to predict whether the sentime
 negative. Let's start by downloading the dataset from the
 `Large Movie Review Dataset <http://ai.stanford.edu/~amaas/data/sentiment/>`_ webpage.
 
-.. code-block:: python
+.. code-block:: bash
 
-    !wget http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz
-    !tar -xf aclImdb_v1.tar.gz
+    wget http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz
+    tar -xf aclImdb_v1.tar.gz
 
 This data is organized into ``pos`` and ``neg`` folders with one text file per example. Let's write a function that can
 read this in.
@@ -245,9 +245,9 @@ is given as a collection of pre-tokenized documents where each token is assigned
 
 Let's start by downloading the data.
 
-.. code-block:: python
+.. code-block:: bash
 
-    !wget http://noisy-text.github.io/2017/files/wnut17train.conll
+    wget http://noisy-text.github.io/2017/files/wnut17train.conll
 
 In this case, we'll just download the train set, which is a single text file. Each line of the file contains either
 (1) a word and tag separated by a tab, or (2) a blank line indicating the end of a document. Let's write a
@@ -435,11 +435,11 @@ This involves fine-tuning a model which predicts a start position and an end pos
 
 We will start by downloading the data:
 
-.. code-block:: python
+.. code-block:: bash
 
-    !mkdir squad
-    !wget https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json -O squad/train-v2.0.json
-    !wget https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json -O squad/dev-v2.0.json
+    mkdir squad
+    wget https://rajpurkar.github.io/SQuAD-explorer/dataset/train-v2.0.json -O squad/train-v2.0.json
+    wget https://rajpurkar.github.io/SQuAD-explorer/dataset/dev-v2.0.json -O squad/dev-v2.0.json
 
 Each split is in a structured json file with a number of questions and answers for each passage (or context). We'll
 take this apart into parallel lists of contexts, questions, and answers (note that the contexts here are repeated
