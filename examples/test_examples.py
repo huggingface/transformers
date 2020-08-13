@@ -17,6 +17,7 @@
 import argparse
 import logging
 import os
+import shutil
 import sys
 import unittest
 from unittest.mock import patch
@@ -51,6 +52,10 @@ def get_setup_file():
     return args.f
 
 
+def clean_test_dir(path="./tests/fixtures/tests_samples/temp_dir"):
+    shutil.rmtree(path, ignore_errors=True)
+
+
 class ExamplesTests(unittest.TestCase):
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -78,6 +83,7 @@ class ExamplesTests(unittest.TestCase):
             del result["eval_loss"]
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
+        clean_test_dir()
 
     def test_run_pl_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -113,6 +119,7 @@ class ExamplesTests(unittest.TestCase):
             #     for k, v in result.items():
             #         self.assertGreaterEqual(v, 0.75, f"({k})")
             #
+        clean_test_dir()
 
     def test_run_language_modeling(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -136,6 +143,7 @@ class ExamplesTests(unittest.TestCase):
         with patch.object(sys, "argv", testargs):
             result = run_language_modeling.main()
             self.assertLess(result["perplexity"], 35)
+        clean_test_dir()
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -162,6 +170,7 @@ class ExamplesTests(unittest.TestCase):
             result = run_squad.main()
             self.assertGreaterEqual(result["f1"], 25)
             self.assertGreaterEqual(result["exact"], 21)
+        clean_test_dir()
 
     def test_generation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
