@@ -11,7 +11,7 @@ Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer. According to the abstract,
 
 MBART is a sequence-to-sequence denoising auto-encoder pre-trained on large-scale monolingual corpora in many languages using the BART objective. mBART is one of the first methods for pre-training a complete sequence-to-sequence model by denoising full texts in multiple languages, while previous approaches have focused only on the encoder, decoder, or reconstructing parts of the text.
 
-The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`_
+The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`__
 
 
 MBartConfig

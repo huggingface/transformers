@@ -9,12 +9,12 @@ _TOKENIZER_FOR_DOC = "MBartTokenizer"
 MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mbart-large-cc25",
     "facebook/mbart-large-en-ro",
-    # See all BART models at https://huggingface.co/models?filter=mbart
+    # See all multilingual BART models at https://huggingface.co/models?filter=mbart
 ]
 
 MBART_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
 
