@@ -287,6 +287,8 @@ class EncoderDecoderModel(PreTrainedModel):
             **kwargs_decoder,
         )
 
+        # TODO(PVP): currently it is not possible to use `past`
+        # with the encoder/decoder framework -> should be implemented
         return decoder_outputs + encoder_outputs
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):
@@ -313,6 +315,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         if "past_key_values" in decoder_inputs:
             input_dict["decoder_past_key_values"] = decoder_inputs["past_key_values"]
+
+        return input_dict
 
     def _reorder_cache(self, past, beam_idx):
         # apply decoder cache reordering here
