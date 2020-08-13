@@ -128,6 +128,8 @@ conversion utilities for the following models:
     <https://arxiv.org/abs/1912.08777>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
 24. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
+25. `Blenderbot <https://github.com/facebookresearch/ParlAI>`_ (from Facebook AI Research) released with the paper `Recipes for building an open-domain chatbot
+    <https://arxiv.org/abs/2004.13637>`_ by Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary Williamson, Yinhan Liu, Jing Xu, Myle Ott, Kurt Shuster, Eric M. Smith, Y-Lan Boureau, Jason Weston
 
 .. toctree::
     :maxdepth: 2
@@ -208,6 +210,7 @@ conversion utilities for the following models:
     model_doc/mobilebert
     model_doc/dpr
     model_doc/pegasus
+    model_doc/blenderbot
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils
