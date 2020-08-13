@@ -97,19 +97,12 @@ class TFModelTesterMixin:
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values():
-                inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
-                )
-            elif model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
-                inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
-                )
-            elif model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.values():
-                inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
-                )
-            elif model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values():
+            elif model_class in [
+                *TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
+                *TF_MODEL_FOR_CAUSAL_LM_MAPPING.values(),
+                *TF_MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
+            ]:
                 inputs_dict["labels"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
                 )
@@ -568,6 +561,20 @@ class TFModelTesterMixin:
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+            )
 
     def _get_embeds(self, wte, input_ids):
         # ^^ In our TF models, the input_embeddings can take slightly different forms,
