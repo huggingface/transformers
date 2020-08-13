@@ -56,7 +56,9 @@ class BartTokenizer(RobertaTokenizer):
         truncation=True,
         **kwargs,
     ) -> BatchEncoding:
-        """Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
+        r"""
+        Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
+
         Args:
             rc_texts: (:obj:`list`):
                 list of documents to summarize or source language texts
