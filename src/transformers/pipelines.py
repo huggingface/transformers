@@ -2269,7 +2269,7 @@ class ConversationalPipeline(Pipeline):
                     "You might consider trimming the early phase of the conversation".format(input_length, max_length)
                 )
             generated_responses = self.model.generate(
-                inputs["input_ids"], **generate_kwargs,
+                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
             )
 
             cleaned_history = self._clean_padding_history(generated_responses)
