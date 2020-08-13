@@ -215,7 +215,7 @@ class Attention(nn.Module):
             assert hasattr(
                 self, "q_attn"
             ), "If class is used as cross attention, the weights `q_attn` have to be defined. Please make sure to instantiate class with `Attention(..., is_cross_attention=True)`."
-            query = self.q_attn(hidden_states).split(self.split_size, dim=2)
+            query = self.q_attn(hidden_states)
             key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
             attention_mask = encoder_attention_mask
         else:
@@ -270,7 +270,7 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         if config.add_cross_attention:
             self.crossattention = Attention(hidden_size, n_ctx, config, scale, is_cross_attention=True)
-            self.ln_3 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = MLP(inner_dim, config)
 
     def forward(
@@ -294,28 +294,29 @@ class Block(nn.Module):
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
+        hidden_states = attn_output + hidden_states
 
         if encoder_hidden_states is not None:
             assert hasattr(
                 self, "crossattention"
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
             cross_attn_outputs = self.crossattention(
-                attn_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                output_attentions,
+                self.ln_cross_attn(hidden_states),
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_attentions=output_attentions,
             )
             attn_output = cross_attn_outputs[0]
+            hidden_states = hidden_states + attn_output
             outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
 
-        hidden_states = hidden_states + attn_output
         feed_forward_hidden_states = self.mlp(self.ln_2(hidden_states))
         hidden_states = hidden_states + feed_forward_hidden_states
 
         outputs = [hidden_states] + outputs
-        return outputs  # hidden_states, present, (attentions)
+        return outputs  # hidden_states, present, (cross_attentions, attentions)
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
