@@ -313,7 +313,9 @@ class Trainer:
             {'eval_loss': 0.3902028881816018, 'eval_accuracy': 0.9105504587155964, 'step': 0}
         """
         assert is_nlp_available(), "This method requires the nlp library: `pip install nlp`."
-        assert dataset_dict is None or (train_dataset is None and eval_dataset is None), "This method accept either `dataset_dict` or `train_dataset`/ `eval_dataset`, but not both."
+        assert dataset_dict is None or (
+            train_dataset is None and eval_dataset is None
+        ), "This method accept either `dataset_dict` or `train_dataset`/ `eval_dataset`, but not both."
         if metrics is not None:
             compute_metrics = ComputeNLPMetrics(metrics, activation=final_activation)
         if dataset_dict is not None:
