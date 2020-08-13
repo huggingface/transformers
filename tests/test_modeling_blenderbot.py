@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration, BlenderbotTokenizer, is_torch_available
+from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
@@ -28,6 +28,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+    from transformers import BlenderbotForConditionalGeneration
 
 
 @require_torch
@@ -35,13 +36,13 @@ class BlenderbotModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
+        batch_size=13,
         seq_len=10,
-        vocab_size=100,
+        vocab_size=99,
         hidden_size=16,
-        is_training=False,
+        is_training=True,
         num_hidden_layers=2,
-        num_attention_heads=2,
+        num_attention_heads=4,
         hidden_dropout_prob=0.2,
         max_position_embeddings=50,
         eos_token_id=2,
@@ -56,7 +57,7 @@ class BlenderbotModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_len = seq_len
+        self.seq_length = seq_len
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -76,7 +77,7 @@ class BlenderbotModelTester:
         torch.manual_seed(0)
 
     def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_len], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = BlenderbotConfig(
             d_model=self.hidden_size,
@@ -99,7 +100,7 @@ class BlenderbotModelTester:
             min_length=3,
             max_length=10,
         )
-        attention_mask = ids_tensor([self.batch_size, self.seq_len], vocab_size=2)
+        attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
@@ -107,11 +108,12 @@ class BlenderbotModelTester:
 @require_torch
 class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available else ()
+    all_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
 
     is_encoder_decoder = True
     test_head_masking = False
     test_pruning = False
-    test_torchscript = True
+    test_torchscript = False
     test_resize_embeddings = True
     test_missing_keys = False
 

@@ -158,16 +158,13 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
-        # if not isinstance(encoder_outputs, BaseModelOutput):
 
-        if not return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-        assert isinstance(encoder_outputs, BaseModelOutput)
         if use_cache:
             decoder_padding_mask, casual_mask = None, None
         else:
@@ -190,7 +187,8 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
         )
-
+        if not return_dict:
+            decoder_outputs = decoder_outputs + encoder_outputs
         scores = self.output(decoder_outputs[0])
         loss = None
         if labels is not None:
