@@ -187,14 +187,13 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
         )
-        if not return_dict:
-            decoder_outputs = decoder_outputs + encoder_outputs
         scores = self.output(decoder_outputs[0])
         loss = None
         if labels is not None:
             loss_fc = nn.CrossEntropyLoss()
             loss = loss_fc(scores[0].view(-1, self.config.vocab_size), labels.view(-1))
         if not return_dict:
+            decoder_outputs = decoder_outputs + encoder_outputs
             output = (loss, scores) + decoder_outputs[1:] if loss is not None else (scores,) + decoder_outputs[1:]
             return output
 
