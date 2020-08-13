@@ -716,7 +716,10 @@ class ModelTesterMixin:
                     elif tuple_object is None:
                         return
                     else:
-                        self.assertTrue(torch.allclose(tuple_object, dict_object, atol=1e-6))
+                        self.assertTrue(
+                            torch.allclose(tuple_object, dict_object, atol=1e-5),
+                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}",
+                        )
 
                 recursive_check(tuple_output, dict_output)
 

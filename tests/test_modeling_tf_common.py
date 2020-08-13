@@ -543,7 +543,10 @@ class TFModelTesterMixin:
                 elif tuple_object is None:
                     return
                 else:
-                    self.assertTrue(all(tf.equal(tuple_object, dict_object)))
+                    self.assertTrue(
+                        all(tf.equal(tuple_object, dict_object)),
+                        msg=f"Tuple and dict output are not equal. Difference: {tf.math.reduce_max(tf.abs(tuple_object - dict_object))}",
+                    )
 
                 recursive_check(tuple_output, dict_output)
 
