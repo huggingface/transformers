@@ -47,6 +47,7 @@ class PretrainedBlenderbotModel(PreTrainedModel):
         elif isinstance(module, nn.Embedding) and module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
 
+
 class BlenderbotOutput(nn.Module):
     def __init__(self, config: BlenderbotConfig, embeddings):
         super().__init__()
@@ -60,10 +61,7 @@ class BlenderbotOutput(nn.Module):
         return output
 
 
-BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/blenderbot-3B",
-    "facebook/blenderbot-90M"
-]
+BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/blenderbot-3B", "facebook/blenderbot-90M"]
 
 BLENDERBOT_START_DOCSTRING = r"""
 

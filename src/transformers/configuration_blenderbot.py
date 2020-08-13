@@ -17,7 +17,6 @@
 from .configuration_utils import PretrainedConfig
 
 
-
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/config.json",
     "facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-/config.json",
