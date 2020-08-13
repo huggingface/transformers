@@ -107,8 +107,12 @@ class BlenderbotModelTester:
 
 @require_torch
 class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
-    all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available else ()
-    all_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
+    if is_torch_available:
+      all_generative_model_classes = (BlenderbotForConditionalGeneration,)
+      all_model_classes = (BlenderbotForConditionalGeneration,)
+    else:
+      all_generative_model_classes = ()
+      all_model_classes =()
 
     is_encoder_decoder = True
     test_head_masking = False
