@@ -274,13 +274,13 @@ class Trainer:
                 The arguments to tweak for training.
             dataset_dict (:obj:`nlp.dataset_dict.DatasetDict`, `optional`):
                 The full (train + eval) dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
-                can pass one or both of :nlp:`train_dataset` and :nlp:`eval_dataset`.
+                can pass one or both of :obj:`train_dataset` and :obj:`eval_dataset`.
             train_dataset (:obj:`nlp.dataset_dict.Dataset`, `optional`):
                 The training dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
-                can pass the full dataset in :nlp:`dataset_dict`.
+                can pass the full dataset in :obj:`dataset_dict`.
             eval_dataset (:obj:`nlp.dataset_dict.Dataset`, `optional`):
                 The validation dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
-                can pass the full dataset in :nlp:`dataset_dict`.
+                can pass the full dataset in :obj:`dataset_dict`.
             data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
                 The function to use to form a batch from a list of elements from the :obj:`dataset`.
             metrics (:obj:`nlp.Metric` or :obj:`List[nlp.Metric]`, `optional`):
@@ -330,6 +330,10 @@ class Trainer:
             signature_columns += ["label", "label_ids"]
             dataset_columns = (train_dataset if train_dataset is not None else eval_dataset).column_names
             columns = [k for k in signature_columns if k in dataset_columns]
+            ignored_columns = list(set(dataset_columns) - set(signature_columns))
+            logger.info(
+                f"The following columns don't have a corresponding argument in {model.__class__.__name__} and have been ignored: {', '.join(ignored_columns)}."
+            )
             train_dataset.set_format(columns=columns)
             eval_dataset.set_format(columns=columns)
 
