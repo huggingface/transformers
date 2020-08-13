@@ -91,7 +91,7 @@ class PretrainedConfig(object):
               keep for top-k-filtering that will be used by default in the :obj:`generate` method of the model.
             - **top_p** (:obj:`float`, `optional`, defaults to 1) --  Value that will be used by default in the
               :obj:`generate` method of the model for ``top_p``. If set to float < 1, only the most probable tokens
-              with probabilities that add up to ``top_p`` or highest are kept for generation.
+              with probabilities that add up to ``top_p`` or higher are kept for generation.
             - **repetition_penalty** (:obj:`float`, `optional`, defaults to 1) -- Parameter for repetition penalty
               that will be used by default in the :obj:`generate` method of the model. 1.0 means no penalty.
             - **length_penalty** (:obj:`float`, `optional`, defaults to 1) -- Exponential penalty to the length that
