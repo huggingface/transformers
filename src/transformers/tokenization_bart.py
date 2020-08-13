@@ -57,20 +57,21 @@ class BartTokenizer(RobertaTokenizer):
         **kwargs,
     ) -> BatchEncoding:
         r"""
+
         Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
 
         Args:
-            src_texts: (:obj:`list`):
-                list of documents to summarize or source language texts
-            tgt_texts: (:obj:`list`, `optional`):
-                list of tgt language texts or summaries.
+            src_texts: (:obj:`List[str]`):
+                List of documents to summarize or source language texts.
+            tgt_texts: (:obj:`List[str]`, `optional`):
+                List of summaries or target language texts.
             max_length (:obj:`int`, `optional`):
-                Controls the maximum length for encoder inputs (documents to summarize or source language texts)
+                Controls the maximum length for encoder inputs (documents to summarize or source language texts).
                 If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
                 length is required by one of the truncation/padding parameters. If the model has no specific maximum
                 input length (like XLNet) truncation/padding to a maximum length will be deactivated.
             max_target_length (:obj:`int`, `optional`):
-                Controls the maximum length of decoder inputs (target language texts or summaries)
+                Controls the maximum length of decoder inputs (target language texts or summaries).
                 If left unset or set to :obj:`None`, this will use the max_length value.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
@@ -101,6 +102,7 @@ class BartTokenizer(RobertaTokenizer):
                   sequence lengths greater than the model maximum admissible input size).
             **kwargs:
                 Additional keyword arguments passed along to :obj:`self.__call__`.
+
         Returns:
             :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
             - **input_ids** -- List of token ids to be fed to the encoder.
