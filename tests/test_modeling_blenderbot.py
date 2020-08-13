@@ -422,7 +422,6 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
         self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
         # test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
 
-
     def test_generation_from_short_input_same_as_parlai_90M(self):
         src_text = [
             "sam",
