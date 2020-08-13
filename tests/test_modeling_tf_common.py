@@ -98,13 +98,21 @@ class TFModelTesterMixin:
             elif model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values():
-                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32)
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                )
             elif model_class in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
-                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32)
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                )
             elif model_class in TF_MODEL_FOR_MASKED_LM_MAPPING.values():
-                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32)
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                )
             elif model_class in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values():
-                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32)
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                )
         return inputs_dict
 
     def test_initialization(self):
