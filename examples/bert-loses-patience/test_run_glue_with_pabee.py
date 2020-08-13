@@ -25,7 +25,6 @@ def clean_test_dir(path="./tests/fixtures/tests_samples/temp_dir"):
 
 
 class PabeeTests(unittest.TestCase):
-    @unittest.skip("Disable while Canwen investigates.")
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
