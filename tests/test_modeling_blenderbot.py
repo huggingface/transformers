@@ -24,11 +24,11 @@ from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 from .test_configuration_common import ConfigTester
 from .test_modeling_bart import _long_tensor
 from .test_modeling_common import ModelTesterMixin, ids_tensor
+from transformers import BlenderbotForConditionalGeneration
 
 
 if is_torch_available():
     import torch
-    from transformers import BlenderbotForConditionalGeneration
 
 
 @require_torch
