@@ -1,5 +1,6 @@
 import argparse
 import logging
+import shutil
 import sys
 import unittest
 from unittest.mock import patch
@@ -17,6 +18,10 @@ def get_setup_file():
     parser.add_argument("-f")
     args = parser.parse_args()
     return args.f
+
+
+def clean_test_dir(path="./tests/fixtures/tests_samples/temp_dir"):
+    shutil.rmtree(path, ignore_errors=True)
 
 
 class PabeeTests(unittest.TestCase):
@@ -47,3 +52,5 @@ class PabeeTests(unittest.TestCase):
             result = run_glue_with_pabee.main()
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
+
+        clean_test_dir()
