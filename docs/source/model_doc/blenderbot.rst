@@ -20,13 +20,6 @@ Implementation Notes
 Blenderbot uses a standard seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf> based architecture
 
 
-BlenderbotForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BlenderbotForConditionalGeneration
-    :members: generate, forward
-
-
 BlenderbotConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -46,3 +39,10 @@ BlenderbotSmallTokenizer
 
 .. autoclass:: transformers.BlenderbotSmallTokenizer
     :members: bpe, convert_tokens_to_string, save_vocabulary
+
+
+BlenderbotForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BlenderbotForConditionalGeneration
+    :members: generate, forward
