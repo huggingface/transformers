@@ -17,9 +17,8 @@
 
 import unittest
 
-from transformers import BlenderbotConfig, BlenderbotTokenizer, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_bart import _long_tensor
@@ -28,7 +27,8 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
-    from transformers import BlenderbotForConditionalGeneration
+    from transformers import BlenderbotConfig, BlenderbotTokenizer, BlenderbotForConditionalGeneration
+    from transformers.tokenization_blenderbot import BlenderbotSmallTokenizer
 
 
 @require_torch
