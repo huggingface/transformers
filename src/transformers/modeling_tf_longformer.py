@@ -231,9 +231,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # apply dropout
         attn_probs = self.dropout(attn_probs, training=training)
 
-        #        value_vectors = tf.transpose(
-        #            tf.reshape(value_vectors, (seq_len, batch_size, self.num_heads, self.head_dim)), (1, 0, 2, 3)
-        #        )
         value_vectors = tf.reshape(value_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
 
         # if global attention, compute sum of global and local attn
@@ -682,18 +679,14 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         is_index_masked,
         training,
     ):
-        # TODO (PVP): clean up all those tf.transpose statements
-        hidden_states = tf.transpose(hidden_states, (1, 0, 2))
-        attn_output = tf.transpose(attn_output, (1, 0, 2))
-
-        seq_len, batch_size = shape_list(hidden_states)[:2]
+        batch_size, seq_len = shape_list(hidden_states)[:2]
 
         # prepare global hidden states
-        global_attn_hidden_states = tf.gather_nd(hidden_states, tf.reverse(is_index_global_attn_nonzero, axis=[1]))
+        global_attn_hidden_states = tf.gather_nd(hidden_states, is_index_global_attn_nonzero)
         global_attn_hidden_states = tf.scatter_nd(
-            tf.reverse(is_local_index_global_attn_nonzero, axis=[1]),
+            is_local_index_global_attn_nonzero,
             global_attn_hidden_states,
-            shape=(max_num_global_attn_indices, batch_size, self.embed_dim),
+            shape=(batch_size, max_num_global_attn_indices, self.embed_dim),
         )
 
         # global key, query, value
@@ -704,27 +697,18 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # normalize
         global_query_vectors_only_global /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
 
-        # (batch_size * self.num_heads, max_num_global_attn_indices, head_dim)
-        global_query_vectors_only_global = tf.transpose(
-            tf.reshape(
-                global_query_vectors_only_global,
-                (max_num_global_attn_indices, batch_size * self.num_heads, self.head_dim),
-            ),
-            (1, 0, 2),
-        )
+        def reshape_and_transpose(vector):
+            return tf.reshape(
+                tf.transpose(tf.reshape(vector, (batch_size, -1, self.num_heads, self.head_dim)), (0, 2, 1, 3)),
+                (batch_size * self.num_heads, -1, self.head_dim),
+            )
 
-        # (..., batch_size * self.num_heads, seq_len, head_dim)
-        global_key_vectors = tf.transpose(
-            tf.reshape(global_key_vectors, (-1, batch_size * self.num_heads, self.head_dim)), (1, 0, 2)
-        )
-
-        # (..., batch_size * self.num_heads, seq_len, head_dim)
-        global_value_vectors = tf.transpose(
-            tf.reshape(global_value_vectors, (-1, batch_size * self.num_heads, self.head_dim)), (1, 0, 2)
-        )
+        global_query_vectors_only_global = reshape_and_transpose(global_query_vectors_only_global)
+        global_key_vectors = reshape_and_transpose(global_key_vectors)
+        global_value_vectors = reshape_and_transpose(global_value_vectors)
 
         # compute attn scores
-        global_attn_scores = tf.matmul(global_query_vectors_only_global, tf.transpose(global_key_vectors, (0, 2, 1)))
+        global_attn_scores = tf.matmul(global_query_vectors_only_global, global_key_vectors, transpose_b=True)
 
         tf.debugging.assert_equal(
             shape_list(global_attn_scores),
@@ -785,11 +769,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # overwrite values with global attention
-        attn_output = tf.tensor_scatter_nd_update(
-            attn_output, tf.reverse(is_index_global_attn_nonzero, axis=[1]), nonzero_global_attn_output
-        )
-        attn_output = tf.transpose(attn_output, (1, 0, 2))
 
+        attn_output = tf.tensor_scatter_nd_update(
+            attn_output, is_index_global_attn_nonzero, nonzero_global_attn_output
+        )
         return attn_output
 
 
