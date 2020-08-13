@@ -60,7 +60,7 @@ class BartTokenizer(RobertaTokenizer):
         Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
 
         Args:
-            rc_texts: (:obj:`list`):
+            src_texts: (:obj:`list`):
                 list of documents to summarize or source language texts
             tgt_texts: (:obj:`list`, `optional`):
                 list of tgt language texts or summaries.
