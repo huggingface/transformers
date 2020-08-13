@@ -210,7 +210,6 @@ class Attention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-
         if encoder_hidden_states is not None:
             assert hasattr(
                 self, "q_attn"
@@ -664,20 +663,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **kwargs):
-        input_shape = input_ids.shape
-
+    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
         return {
             "input_ids": input_ids,
-            "attention_mask": attention_mask,
             "past_key_values": past,
             "use_cache": kwargs["use_cache"] if "use_cache" in kwargs else None,
         }
