@@ -146,6 +146,9 @@ class LineByLineWithNSPTextDataset(Dataset):
         while line_index < len(document):
             # add a segment to current chunk
             segment = document[line_index]
+            if not segment:
+                i += 1
+                continue
             current_chunk.append(segment) 
             current_length += len(segment)
             # if current length goes to the target length or reaches the end of file, start building token a and b
