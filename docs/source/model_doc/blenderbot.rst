@@ -21,7 +21,7 @@ Blenderbot uses a standard seq2seq model transformer <https://arxiv.org/pdf/1706
 
 
 BlenderbotForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
 .. autoclass:: transformers.BlenderbotForConditionalGeneration
     :members: generate, forward
