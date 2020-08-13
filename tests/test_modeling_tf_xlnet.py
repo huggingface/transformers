@@ -158,12 +158,10 @@ class TFXLNetModelTester:
         no_mems_outputs = model(inputs)
         self.parent.assertEqual(len(no_mems_outputs), 1)
 
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(result["last_hidden_state"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_lm_head(
@@ -191,27 +189,15 @@ class TFXLNetModelTester:
         inputs_3 = {"input_ids": input_ids_q, "perm_mask": perm_mask, "target_mapping": target_mapping}
         logits, _ = model(inputs_3).to_tuple()
 
-        result = {
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "all_logits_1": all_logits_1.numpy(),
-            "mems_2": [mem.numpy() for mem in mems_2],
-            "all_logits_2": all_logits_2.numpy(),
-        }
-
+        self.parent.assertEqual(all_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["all_logits_1"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+            [mem.shape for mem in mems_1],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
+        self.parent.assertEqual(all_logits_2.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
-        )
-
-        self.parent.assertListEqual(
-            list(result["all_logits_2"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
-        self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_2"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in mems_2],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_qa(
@@ -233,11 +219,11 @@ class TFXLNetModelTester:
         inputs = {"input_ids": input_ids_1, "attention_mask": input_mask, "token_type_ids": segment_ids}
         result = model(inputs)
 
-        self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_sequence_classif(
@@ -258,10 +244,10 @@ class TFXLNetModelTester:
 
         result = model(input_ids_1)
 
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_for_token_classification(
@@ -286,12 +272,10 @@ class TFXLNetModelTester:
             # 'token_type_ids': token_type_ids
         }
         result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, config.num_labels))
         self.parent.assertListEqual(
-            list(result["logits"].shape), [self.batch_size, self.seq_length, config.num_labels]
-        )
-        self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_for_multiple_choice(
@@ -320,10 +304,10 @@ class TFXLNetModelTester:
         }
         result = model(inputs)
 
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
         self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size * self.num_choices, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size * self.num_choices, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def prepare_config_and_inputs_for_common(self):
