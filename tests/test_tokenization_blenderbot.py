@@ -30,7 +30,6 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = ["__start__", "adapt", "act", "ap@@", "te", "__end__", "__unk__"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 

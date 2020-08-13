@@ -26,7 +26,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 PATTERNS = [
-    # ['self_attention', 'self_attn'],
     ["attention", "attn"],
     ["encoder_attention", "encoder_attn"],
     ["q_lin", "q_proj"],

@@ -274,7 +274,7 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
 
     @slow
-    def test_loss_same_as_parlai_3B(self):
+    def test_generation_ids_same_as_parlai_3B(self):
         input_ids = _long_tensor([[268, 343, 2]])  # sam
 
         generated_ids = self.model.generate(input_ids).tolist()[0]
@@ -422,7 +422,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
         self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
         # test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
 
-    # @slow
+
     def test_generation_from_short_input_same_as_parlai_90M(self):
         src_text = [
             "sam",
@@ -435,8 +435,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
         generated_txt = self.tokenizer.batch_decode(generated_utterances)
         self.assertListEqual(tgt_text, generated_txt)
 
-    # @slow
-    def test_loss_same_as_parlai_90_short_input(self):
+    def test_generation_ids_same_as_parlai_90_short_input(self):
         input_ids = _long_tensor([[1384]])  # sam
         assert self.model.config.variant == "xlm"
 
