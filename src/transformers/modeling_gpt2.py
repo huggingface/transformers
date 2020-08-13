@@ -166,7 +166,7 @@ class Attention(nn.Module):
         nd, ns = w.size(-2), w.size(-1)
 
         if not self.is_cross_attention:
-            # if Attention class is not cross attention that don't apply causal mask
+            # if only "normal" attention layer implements causal mask
             mask = self.bias[:, :, ns - nd : ns, :ns]
             w = torch.where(mask.bool(), w, self.masked_bias.to(w.dtype))
 
@@ -294,9 +294,11 @@ class Block(nn.Module):
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
+        # residual connection
         hidden_states = attn_output + hidden_states
 
         if encoder_hidden_states is not None:
+            # add one self-attention block for cross-attention
             assert hasattr(
                 self, "crossattention"
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
@@ -309,10 +311,12 @@ class Block(nn.Module):
                 output_attentions=output_attentions,
             )
             attn_output = cross_attn_outputs[0]
+            # residual connection
             hidden_states = hidden_states + attn_output
             outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
 
         feed_forward_hidden_states = self.mlp(self.ln_2(hidden_states))
+        # residual connection
         hidden_states = hidden_states + feed_forward_hidden_states
 
         outputs = [hidden_states] + outputs
