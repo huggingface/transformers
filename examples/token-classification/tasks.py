@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import List, TextIO, Union
+
 from conllu import parse_incr
 
 from utils_ner import InputExample, Split, TokenClassificationTask

@@ -22,7 +22,7 @@ from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from seqeval.metrics import f1_score, precision_score, recall_score
+from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch import nn
 
 from transformers import (
@@ -223,6 +223,7 @@ def main():
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
         return {
+            "accuracy_score": accuracy_score(out_label_list, preds_list),
             "precision": precision_score(out_label_list, preds_list),
             "recall": recall_score(out_label_list, preds_list),
             "f1": f1_score(out_label_list, preds_list),

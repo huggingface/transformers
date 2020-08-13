@@ -2,12 +2,12 @@ import argparse
 import glob
 import logging
 import os
-from importlib import import_module
 from argparse import Namespace
+from importlib import import_module
 
 import numpy as np
 import torch
-from seqeval.metrics import f1_score, precision_score, recall_score
+from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -54,7 +54,7 @@ class NERTransformer(BaseTransformer):
 
         outputs = self(**inputs)
         loss = outputs[0]
-        #tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
+        # tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss}
 
     def prepare_data(self):
@@ -136,6 +136,7 @@ class NERTransformer(BaseTransformer):
 
         results = {
             "val_loss": val_loss_mean,
+            "accuracy_score": accuracy_score(out_label_list, preds_list),
             "precision": precision_score(out_label_list, preds_list),
             "recall": recall_score(out_label_list, preds_list),
             "f1": f1_score(out_label_list, preds_list),
