@@ -318,7 +318,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
     def test_tokenization_same_as_parlai(self):
         tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
         self.assertListEqual(tokenizer("sam").input_ids, [1384])
-
+    @slow
     def test_forward_90M_same_as_parlai(self):
         torch.manual_seed(0)
         config = BlenderbotConfig(
