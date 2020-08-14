@@ -692,15 +692,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # normalize
         global_query_vectors_only_global /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
 
-        def reshape_and_transpose(vector):
-            return tf.reshape(
-                tf.transpose(tf.reshape(vector, (batch_size, -1, self.num_heads, self.head_dim)), (0, 2, 1, 3)),
-                (batch_size * self.num_heads, -1, self.head_dim),
-            )
-
-        global_query_vectors_only_global = reshape_and_transpose(global_query_vectors_only_global)
-        global_key_vectors = reshape_and_transpose(global_key_vectors)
-        global_value_vectors = reshape_and_transpose(global_value_vectors)
+        global_query_vectors_only_global = self.reshape_and_transpose(global_query_vectors_only_global, batch_size)
+        global_key_vectors = self.reshape_and_transpose(global_key_vectors, batch_size)
+        global_value_vectors = self.reshape_and_transpose(global_value_vectors, batch_size)
 
         # compute attn scores
         global_attn_scores = tf.matmul(global_query_vectors_only_global, global_key_vectors, transpose_b=True)
@@ -769,6 +763,13 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             attn_output, is_index_global_attn_nonzero, nonzero_global_attn_output
         )
         return attn_output
+
+    def reshape_and_transpose(self, vector, batch_size):
+        return tf.reshape(
+            tf.transpose(tf.reshape(vector, (batch_size, -1, self.num_heads, self.head_dim)), (0, 2, 1, 3)),
+            (batch_size * self.num_heads, -1, self.head_dim),
+        )
+
 
 
 class TFLongformerAttention(tf.keras.layers.Layer):
