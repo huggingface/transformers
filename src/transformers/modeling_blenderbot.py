@@ -57,7 +57,7 @@ class BlenderbotOutput(nn.Module):
     def forward(self, hidden_states):
         output = F.linear(hidden_states, self.embeddings.weight)
         # we need to force their probability of generation to be 0.
-        output[:, :, self.bos_token_id] = -torch.finfo(output.dtype).max
+        output[:, :, self.bos_token_id] = -torch.finfo(torch.float16).max  if output.dtype is torch.float16 else -1e20
         return output
 
 
