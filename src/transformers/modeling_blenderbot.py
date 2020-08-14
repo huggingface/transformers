@@ -186,6 +186,7 @@ class BlenderbotForConditionalGeneration(PretrainedBlenderbotModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
+            return_dict=return_dict,
         )
         scores = self.output(decoder_outputs[0])
         loss = None
