@@ -180,9 +180,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             query_vectors, key_vectors, self.one_sided_attn_window_size
         )
 
-        # values to pad for attention probs
-        #        float_mask = tf.cast((attention_mask != 0)[:, :, None, None], dtype=tf.float32) * -10000.0
-
         # diagonal mask with zeros everywhere and -inf inplace of padding
         diagonal_mask = self._sliding_chunks_query_key_matmul(
             tf.ones(shape_list(attention_mask), dtype=tf.float32), attention_mask, self.one_sided_attn_window_size
@@ -281,7 +278,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # without global attention, return local attention probabilities
         # batch_size x num_heads x sequence_length x window_size
         # which is the attention weights of every token attending to its neighbours
-        # TODO(PVP) - clean up the tf.transpose statements
         attn_probs = tf.cond(
             is_global_attn,
             lambda: self._get_global_attn_probs(attn_probs, max_num_global_attn_indices),
