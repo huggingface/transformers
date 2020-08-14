@@ -155,6 +155,7 @@ class BenchmarkTest(unittest.TestCase):
     def test_inference_encoder_decoder_with_configs(self):
         MODEL_ID = "sshleifer/tinier_bart"
         config = AutoConfig.from_pretrained(MODEL_ID)
+        config.use_cache = False
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,
