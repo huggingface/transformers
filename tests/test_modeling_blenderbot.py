@@ -315,7 +315,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
         model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
         if torch_device == "cuda":
             model = model.half()
-        tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-90M")
+        tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
 
     def test_tokenization_same_as_parlai(self):
         tok = self.tokenizer
