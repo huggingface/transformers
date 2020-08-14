@@ -61,7 +61,7 @@ class ExamplesTests(unittest.TestCase):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
-        testargs = f"""
+        testargs = """
             run_glue.py
             --model_name_or_path distilbert-base-uncased
             --data_dir ./tests/fixtures/tests_samples/MRPC/
