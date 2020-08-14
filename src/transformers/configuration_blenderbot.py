@@ -96,6 +96,7 @@ class BlenderbotConfig(PretrainedConfig):
         normalize_embedding=False,
         static_position_embeddings=False,
         add_bias_logits=False,
+        normalize_before = True
         variant="prelayernorm",
         **kwargs
     ):
@@ -134,6 +135,7 @@ class BlenderbotConfig(PretrainedConfig):
         self.variant = variant
         self.scale_embedding = scale_embedding
         self.normalize_embedding = normalize_embedding
+        self.normalize_before = normalize_before
         self.add_final_layer_norm = add_final_layer_norm
         self.add_bias_logits = add_bias_logits
         self.static_position_embeddings = static_position_embeddings

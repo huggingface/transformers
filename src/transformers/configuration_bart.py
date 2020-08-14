@@ -213,6 +213,7 @@ class BartConfig(PretrainedConfig):
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
 
+
 class MBartConfig(BartConfig):
     model_type = "mbart"
 
