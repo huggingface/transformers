@@ -14,10 +14,11 @@ We include several examples, each of which demonstrates a different type of comm
   - :ref:`qa_squad`
   - :ref:`resources`
 
-Note: Many of the datasets used in this tutorial are available and can be more easily accessed using the
-`🤗 NLP library <https://github.com/huggingface/nlp>`_. 🤗 Transformers also includes a number of data
-:doc:`processors <main_classes/processors>` for working with specific datasets like squad and glue. Neither is used
-here since this tutorial is meant to illustrate how to work with your own data.
+.. note::
+
+    Many of the datasets used in this tutorial are available and can be more easily accessed using the
+    `🤗 NLP library <https://github.com/huggingface/nlp>`_. We do not use this library to access the datasets here
+    since this tutorial meant to illustrate how to work with your own data.
 
 .. _seq_imdb:
 
@@ -284,9 +285,9 @@ Just to see what this data looks like, let's take a look at a segment of the fir
 
 .. code-block:: python
 
-    print(texts[0][10:17], tags[0][10:17], sep='\n')
-    # ['for', 'two', 'weeks', '.', 'Empire', 'State', 'Building']
-    # ['O', 'O', 'O', 'O', 'B-location', 'I-location', 'I-location']
+    >>> print(texts[0][10:17], tags[0][10:17], sep='\n')
+    ['for', 'two', 'weeks', '.', 'Empire', 'State', 'Building']
+    ['O', 'O', 'O', 'O', 'B-location', 'I-location', 'I-location']
 
 ``location`` is an entity type, ``B-`` indicates the beginning of an entity, and ``I-`` indicates consecutive positions of
 the same entity ("Empire State Building" is considered one entity). ``O`` indicates the token does not correspond to
@@ -307,8 +308,6 @@ which we'll use in a moment:
     unique_tags = set(tag for doc in tags for tag in doc)
     tag2id = {tag: id for id, tag in enumerate(unique_tags)}
     id2tag = {id: tag for tag, id in tag2id.items()}
-    print(unique_tags)
-    # {'I-person', 'I-product', 'O', 'B-location', 'I-location', 'B-creative-work', 'B-corporation', 'B-product', 'I-corporation', 'I-creative-work', 'B-group', 'B-person', 'I-group'}
 
 To encode the tokens, we'll use a pre-trained DistilBert tokenizer. We can tell the tokenizer that we're dealing
 with ready-split tokens rather than full sentence strings by passing ``is_pretokenized=True``. We'll also pass
@@ -345,7 +344,9 @@ position in the tuple is anything other than ``0``, we will set its correspondin
 it, we can also set labels to ``-100`` if the second position of the offset mapping is ``0``, since this means it must
 be a special token like ``[PAD]`` or ``[CLS]``.
 
-`Note: due to a recently fixed bug, -1 must be used instead of -100 when using TensorFlow in 🤗 Transformers <= 3.02.`
+.. note:: 
+
+    Due to a recently fixed bug, -1 must be used instead of -100 when using TensorFlow in 🤗 Transformers <= 3.02.
 
 .. code-block:: python
 
@@ -478,10 +479,10 @@ since there are multiple questions per context):
 
 The contexts and questions are just strings. The answers are dicts containing the subsequence of the passage with
 the correct answer as well as an integer indicating the character at which the answer begins. In order to train a
-model on this data we need (1) the tokenized context/question pairs, and (2) integers indicating at which `token`
+model on this data we need (1) the tokenized context/question pairs, and (2) integers indicating at which *token*
 positions the answer begins and ends.
 
-First, let's get the `character` position at which the answer ends in the passage (we are given the starting
+First, let's get the *character* position at which the answer ends in the passage (we are given the starting
 position). Sometimes SQuAD answers are off by one or two characters, so we will also adjust for that.
 
 .. code-block:: python
