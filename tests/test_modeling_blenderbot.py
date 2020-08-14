@@ -452,7 +452,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
             model = model.half()
 
         input_ids = _long_tensor([[1384]])  # sam
-        assert self.model.config.variant == "xlm"
+        assert model.config.variant == "xlm"
 
         generated_utterances = model.generate(
             input_ids, min_length=20, length_penalty=1.0, max_length=128, early_stopping=True
