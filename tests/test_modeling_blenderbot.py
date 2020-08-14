@@ -113,7 +113,6 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     else:
         all_generative_model_classes = ()
         all_model_classes = ()
-
     is_encoder_decoder = True
     test_head_masking = False
     test_pruning = False
