@@ -104,7 +104,7 @@ class TFGenerationMixin:
                 If set to float < 1, only the most probable tokens with probabilities that add up to ``top_p`` or
                 higher are kept for generation.
             repetition_penalty (:obj:`float`, `optional`, defaults to 1.0):
-                The parameter for repetition penalty. 1.0 means no penalty. See `this paper 
+                The parameter for repetition penalty. 1.0 means no penalty. See `this paper
                 <https://arxiv.org/pdf/1909.05858.pdf>`__ for more details.
             pad_token_id (:obj:`int`, `optional`):
                 The id of the `padding` token.
