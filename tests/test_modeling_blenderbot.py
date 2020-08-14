@@ -144,182 +144,180 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(model.decoder.embed_positions.weight.shape, expected_shape)
 
 
-# @unittest.skipUnless(torch_device != "cpu", "3b test are very slow on CPU.")
-# @require_torch
-# class Blenderbot3BIntegrationTests(unittest.TestCase):
-#     if is_torch_available():
-#         model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
-#         if torch_device == "cuda":
-#             model = model.half()
-#         tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+@unittest.skipUnless(torch_device != "cpu", "3b test are very slow on CPU.")
+@require_torch
+class Blenderbot3BIntegrationTests(unittest.TestCase):
+    @slow
+    def test_tokenization_same_as_parlai(self):
+        tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+        self.assertListEqual(tokenizer("sam").input_ids, [268, 343, 2])
 
-#     @slow
-#     def test_tokenization_same_as_parlai(self):
-#         tok = self.tokenizer
-#         self.assertListEqual(tok("sam").input_ids, [268, 343, 2])
+    @slow
+    def test_forward_3B_same_as_parlai(self):
+        torch.manual_seed(0)
+        config = BlenderbotConfig(
+            d_model=16,
+            vocab_size=50,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_ffn_dim=4,
+            decoder_ffn_dim=4,
+            variant="prelayernorm",
+            scale_embedding=True,
+            normalize_embedding=True,
+            max_position_embeddings=50,
+            activation_function="gelu",
+            normalize_before=False,
+            static_position_embeddings=True,
+            dropout=0.1,
+        )
+        input_ids = torch.tensor(
+            [[49, 12, 38, 24, 13, 25, 10, 28, 37, 7, 44, 7, 2, 3]], dtype=torch.long, device=torch_device,
+        )
+        model = BlenderbotForConditionalGeneration(config)
+        model.eval()
 
-#     @slow
-#     def test_forward_3B_same_as_parlai(self):
-#         torch.manual_seed(0)
-#         config = BlenderbotConfig(
-#             d_model=16,
-#             vocab_size=50,
-#             encoder_attention_heads=2,
-#             decoder_attention_heads=2,
-#             encoder_layers=2,
-#             decoder_layers=2,
-#             encoder_ffn_dim=4,
-#             decoder_ffn_dim=4,
-#             variant="prelayernorm",
-#             scale_embedding=True,
-#             normalize_embedding=True,
-#             max_position_embeddings=50,
-#             activation_function="gelu",
-#             normalize_before=False,
-#             static_position_embeddings=True,
-#             dropout=0.1,
-#         )
-#         input_ids = torch.tensor(
-#             [[49, 12, 38, 24, 13, 25, 10, 28, 37, 7, 44, 7, 2, 3]], dtype=torch.long, device=torch_device,
-#         )
-#         model = BlenderbotForConditionalGeneration(config)
-#         model.eval()
+        # output from parlai model after copying the same blenderbot weight in parlai and setting a manual_seed
+        expected_logits = torch.tensor(
+            [
+                [
+                    [
+                        -1.0000e20,
+                        0.0000e00,
+                        2.6462e-02,
+                        9.7588e-02,
+                        -5.6271e-02,
+                        -1.1409e-01,
+                        -3.3294e-02,
+                        -1.0423e-01,
+                        -4.8363e-02,
+                        -1.2610e-01,
+                        -3.4125e-02,
+                        -2.9841e-02,
+                        8.6975e-02,
+                        2.5547e-02,
+                        2.0425e-03,
+                        -5.9153e-02,
+                        1.4392e-02,
+                        -1.4324e-02,
+                        1.2774e-01,
+                        -5.3284e-02,
+                        -1.5876e-02,
+                        9.1752e-02,
+                        -3.0166e-02,
+                        -3.1726e-02,
+                        9.9600e-02,
+                        1.0991e-01,
+                        8.0946e-03,
+                        3.5396e-03,
+                        -2.5164e-02,
+                        -4.0277e-02,
+                        -3.6360e-02,
+                        7.5158e-02,
+                        4.3379e-02,
+                        1.3465e-01,
+                        -1.3209e-01,
+                        -1.1706e-01,
+                        5.6180e-02,
+                        -3.6239e-02,
+                        6.6490e-02,
+                        4.9879e-02,
+                        1.0979e-02,
+                        -2.7895e-02,
+                        -8.4691e-02,
+                        4.5857e-02,
+                        2.0233e-02,
+                        9.2533e-02,
+                        -6.4260e-02,
+                        -5.0988e-02,
+                        -4.0852e-02,
+                        1.9867e-02,
+                    ]
+                ]
+            ]
+        )
 
-#         # output from parlai model after copying the same blenderbot weight in parlai and setting a manual_seed
-#         expected_logits = torch.tensor(
-#             [
-#                 [
-#                     [
-#                         -1.0000e20,
-#                         0.0000e00,
-#                         2.6462e-02,
-#                         9.7588e-02,
-#                         -5.6271e-02,
-#                         -1.1409e-01,
-#                         -3.3294e-02,
-#                         -1.0423e-01,
-#                         -4.8363e-02,
-#                         -1.2610e-01,
-#                         -3.4125e-02,
-#                         -2.9841e-02,
-#                         8.6975e-02,
-#                         2.5547e-02,
-#                         2.0425e-03,
-#                         -5.9153e-02,
-#                         1.4392e-02,
-#                         -1.4324e-02,
-#                         1.2774e-01,
-#                         -5.3284e-02,
-#                         -1.5876e-02,
-#                         9.1752e-02,
-#                         -3.0166e-02,
-#                         -3.1726e-02,
-#                         9.9600e-02,
-#                         1.0991e-01,
-#                         8.0946e-03,
-#                         3.5396e-03,
-#                         -2.5164e-02,
-#                         -4.0277e-02,
-#                         -3.6360e-02,
-#                         7.5158e-02,
-#                         4.3379e-02,
-#                         1.3465e-01,
-#                         -1.3209e-01,
-#                         -1.1706e-01,
-#                         5.6180e-02,
-#                         -3.6239e-02,
-#                         6.6490e-02,
-#                         4.9879e-02,
-#                         1.0979e-02,
-#                         -2.7895e-02,
-#                         -8.4691e-02,
-#                         4.5857e-02,
-#                         2.0233e-02,
-#                         9.2533e-02,
-#                         -6.4260e-02,
-#                         -5.0988e-02,
-#                         -4.0852e-02,
-#                         1.9867e-02,
-#                     ]
-#                 ]
-#             ]
-#         )
+        decoder_inputs = torch.LongTensor([1]).expand(1, 1).to(torch_device)
+        logits = model(input_ids, decoder_input_ids=decoder_inputs)["logits"]
+        assert torch.allclose(expected_logits, logits, atol=1e-4)
 
-#         decoder_inputs = torch.LongTensor([1]).expand(1, 1).to(torch_device)
-#         logits = model(input_ids, decoder_input_ids=decoder_inputs)["logits"]
-#         assert torch.allclose(expected_logits, logits, atol=1e-4)
+    @slow
+    def test_generation_from_short_input_same_as_parlai_3B(self):
+        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+        src_text = [
+            "sam",
+        ]
 
-#     @slow
-#     def test_generation_from_short_input_same_as_parlai_3B(self):
-#         src_text = [
-#             "sam",
-#         ]
+        model_inputs = tokenizer(src_text, return_tensors="pt").to(torch_device)
+        generated_utterances = model.generate(**model_inputs)
+        tgt_text = ["Sam is a great name. It means 'sun' in Gaelic."]
 
-#         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-#         generated_utterances = self.model.generate(**model_inputs)
-#         tgt_text = ["Sam is a great name. It means 'sun' in Gaelic."]
+        generated_txt = tokenizer.batch_decode(generated_utterances)
+        self.assertListEqual(tgt_text, generated_txt)
 
-#         generated_txt = self.tokenizer.batch_decode(generated_utterances)
-#         self.assertListEqual(tgt_text, generated_txt)
+    @slow
+    def test_generation_from_long_input_same_as_parlai_3B(self):
+        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+        src_text = [
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
+              i'm going to throw up.\nand why is that?"
+        ]
+        tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder."]
 
-#     @slow
-#     def test_generation_from_long_input_same_as_parlai_3B(self):
-#         src_text = [
-#             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
-#     i'm going to throw up.\nand why is that?"
-#         ]
-#         tgt_text = ["I'm not sure, but I do know that social anxiety disorder is a mental disorder."]
+        model_inputs = tokenizer(src_text, return_tensors="pt").to(torch_device)
+        generated_utterances = model.generate(
+            **model_inputs, min_length=15, length_penalty=0.65, max_length=128, early_stopping=True
+        )
 
-#         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-#         generated_utterances = self.model.generate(
-#             **model_inputs, min_length=15, length_penalty=0.65, max_length=128, early_stopping=True
-#         )
+        self.assertListEqual(tgt_text, tokenizer.batch_decode(generated_utterances))
 
-#         self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
+    @slow
+    def test_generation_ids_same_as_parlai_3B(self):
+        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B").to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        input_ids = _long_tensor([[268, 343, 2]])  # sam
 
-#     @slow
-#     def test_generation_ids_same_as_parlai_3B(self):
-#         input_ids = _long_tensor([[268, 343, 2]])  # sam
-
-#         generated_ids = self.model.generate(input_ids).tolist()[0]
-#         expected_ids = [
-#             1,
-#             5502,
-#             315,
-#             265,
-#             848,
-#             1356,
-#             21,
-#             452,
-#             1361,
-#             472,
-#             90,
-#             415,
-#             803,
-#             556,
-#             9,
-#             302,
-#             485,
-#             72,
-#             491,
-#             317,
-#             21,
-#         ]
-#         self.assertListEqual(expected_ids, generated_ids)
+        generated_ids = model.generate(input_ids).tolist()[0]
+        expected_ids = [
+            1,
+            5502,
+            315,
+            265,
+            848,
+            1356,
+            21,
+            452,
+            1361,
+            472,
+            90,
+            415,
+            803,
+            556,
+            9,
+            302,
+            485,
+            72,
+            491,
+            317,
+            21,
+        ]
+        self.assertListEqual(expected_ids, generated_ids)
 
 
 @require_torch
 class Blenderbot90MIntegrationTests(unittest.TestCase):
-
-    if is_torch_available():
-        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
-        if torch_device == "cuda":
-            model = model.half()
-        tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
-
     def test_tokenization_same_as_parlai(self):
-        tok = self.tokenizer
-        self.assertListEqual(tok("sam").input_ids, [1384])
+        tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
+        self.assertListEqual(tokenizer("sam").input_ids, [1384])
 
     def test_forward_90M_same_as_parlai(self):
         torch.manual_seed(0)
@@ -413,36 +411,50 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generation_from_long_input_same_as_parlai_90M(self):
+        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
+
         src_text = [
             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
        i'm going to throw up.\nand why is that?"
         ]
         tgt_text = ["__start__ i ' m not sure . i just feel like i ' m going to throw up . __end__"]
 
-        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-        generated_utterances = self.model.generate(
+        model_inputs = tokenizer(src_text, return_tensors="pt").to(torch_device)
+        generated_utterances = model.generate(
             **model_inputs, min_length=15, length_penalty=0.65, max_length=128, early_stopping=True
         )
-        self.assertListEqual(tgt_text, self.tokenizer.batch_decode(generated_utterances))
+        self.assertListEqual(tgt_text, tokenizer.batch_decode(generated_utterances))
         # test not passing yet generated_utterance = __start__ i don ' t know . i just feel like i ' m going to throw up .
 
     def test_generation_from_short_input_same_as_parlai_90M(self):
+        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
+
         src_text = [
             "sam",
         ]
 
-        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
-        generated_utterances = self.model.generate(**model_inputs)
+        model_inputs = tokenizer(src_text, return_tensors="pt").to(torch_device)
+        generated_utterances = model.generate(**model_inputs)
         tgt_text = ["__start__ have you ever heard of sam harris? he's an american singer, songwriter, and actor."]
 
-        generated_txt = self.tokenizer.batch_decode(generated_utterances)
+        generated_txt = tokenizer.batch_decode(generated_utterances)
         self.assertListEqual(tgt_text, generated_txt)
 
     def test_generation_ids_same_as_parlai_90_short_input(self):
+        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+
         input_ids = _long_tensor([[1384]])  # sam
         assert self.model.config.variant == "xlm"
 
-        generated_utterances = self.model.generate(
+        generated_utterances = model.generate(
             input_ids, min_length=20, length_penalty=1.0, max_length=128, early_stopping=True
         ).tolist()
         expected_tokens = [
