@@ -113,15 +113,18 @@ easily batched such that each key in the batch encoding corresponds to a named p
     ## TENSORFLOW CODE
     import tensorflow as tf
 
-    train_dataset = tf.data.Dataset.from_tensor_slices(
-        (dict(train_encodings), train_labels)
-    )
-    val_dataset = tf.data.Dataset.from_tensor_slices(
-        (dict(val_encodings), val_labels)
-    )
-    test_dataset = tf.data.Dataset.from_tensor_slices(
-        (dict(test_encodings), test_labels)
-    )
+    train_dataset = tf.data.Dataset.from_tensor_slices((
+        dict(train_encodings),
+        train_labels
+    ))
+    val_dataset = tf.data.Dataset.from_tensor_slices((
+        dict(val_encodings),
+        val_labels
+    ))
+    test_dataset = tf.data.Dataset.from_tensor_slices((
+        dict(test_encodings),
+        test_labels
+    ))
 
 Now that our datasets our ready, we can fine-tune a model either with the 🤗
 :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer` or with native PyTorch/TensorFlow. See
@@ -318,7 +321,7 @@ a moment.
 .. code-block:: python
 
     from transformers import DistilBertTokenizerFast
-    tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-uncased')
+    tokenizer = DistilBertTokenizerFast.from_pretrained('distilbert-base-cased')
     train_encodings = tokenizer(train_texts, is_pretokenized=True, return_offsets_mapping=True, padding=True, truncation=True)
     val_encodings = tokenizer(val_texts, is_pretokenized=True, return_offsets_mapping=True, padding=True, truncation=True)
 
@@ -328,7 +331,7 @@ model below.
 Now we arrive at a common obstacle with using pre-trained models for token-level classification: many of the tokens
 in the W-NUT corpus are not in DistilBert's vocabulary. Bert and many models like it use a method called WordPiece
 Tokenization, meaning that single words are split into multiple tokens such that each token is likely to be in
-the vocabulary. For example, DistilBert's tokenizer would split the Twitter handle ``@HuggingFace`` into the tokens
+the vocabulary. For example, DistilBert's tokenizer would split the Twitter handle ``@huggingface`` into the tokens
 ``['@', 'hugging', '##face']``. This is a problem for us because we have exactly one tag per token. If the tokenizer
 splits a token into multiple sub-tokens, then we will end up with a mismatch between our tokens and our labels.
 
@@ -399,12 +402,14 @@ The hard part is now done. Just as in the sequence classification example above,
     train_encodings.pop("offset_mapping") # we don't want to pass this to the model
     val_encodings.pop("offset_mapping")
 
-    train_dataset = tf.data.Dataset.from_tensor_slices(
-        (dict(train_encodings), train_labels)
-    )
-    val_dataset = tf.data.Dataset.from_tensor_slices(
-        (dict(val_encodings), val_labels)
-    )
+    train_dataset = tf.data.Dataset.from_tensor_slices((
+        dict(train_encodings),
+        train_labels
+    ))
+    val_dataset = tf.data.Dataset.from_tensor_slices((
+        dict(val_encodings),
+        val_labels
+    ))
 
 Now load in a token classification model and specify the number of labels:
 
@@ -474,9 +479,6 @@ since there are multiple questions per context):
     train_contexts, train_questions, train_answers = read_squad('squad/train-v2.0.json')
     val_contexts, val_questions, val_answers = read_squad('squad/dev-v2.0.json')
 
-    print(train_answers[0])
-    # {'answer_start': 269, 'text': 'in the late 1990s'}
-
 The contexts and questions are just strings. The answers are dicts containing the subsequence of the passage with
 the correct answer as well as an integer indicating the character at which the answer begins. In order to train a
 model on this data we need (1) the tokenized context/question pairs, and (2) integers indicating at which *token*
@@ -538,9 +540,6 @@ Tokenizers, we can use the built in :func:`~transformers.BatchEncoding.char_to_t
 
     add_token_positions(train_encodings, train_answers)
     add_token_positions(val_encodings, val_answers)
-    
-    print(train_encodings.keys())
-    # dict_keys(['input_ids', 'attention_mask', 'start_positions', 'end_positions'])
 
 Our data is ready. Let's just put it in a PyTorch/TensorFlow dataset so that we can easily use it for
 training. In PyTorch, we define a custom ``Dataset`` class. In TensorFlow, we pass a tuple of
@@ -561,8 +560,8 @@ training. In PyTorch, we define a custom ``Dataset`` class. In TensorFlow, we pa
         def __len__(self):
             return len(self.encodings.input_ids)
         
-    train_dataset = SquadDataset(train_encodings, train_answers)
-    val_dataset = SquadDataset(val_encodings, val_answers)
+    train_dataset = SquadDataset(train_encodings)
+    val_dataset = SquadDataset(val_encodings)
     ## TENSORFLOW CODE
     import tensorflow as tf
 
@@ -587,12 +586,55 @@ Now we can use a DistilBert model with a QA head for training:
     model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
 
 
-The data and model are both ready to go. You can train the model either with
-:class:`~transformers.Trainer`/:class:`~transformers.TFTrainer` or with native PyTorch/TensorFlow, exactly as in the
-sequence classification example above.
+The data and model are both ready to go. You can train the model with
+:class:`~transformers.Trainer`/:class:`~transformers.TFTrainer` exactly as in the sequence classification example
+above. If using native PyTorch, replace ``labels`` with ``start_positions`` and ``end_positions`` in the training
+example. If using Keras's ``fit``, we need to make a minor modification to handle this example since it involves
+multiple model outputs.
 
   - :ref:`ft_trainer`
-  - :ref:`ft_native`
+
+.. code-block:: python
+
+    ## PYTORCH CODE
+    from torch.utils.data import DataLoader
+    from transformers import AdamW
+
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+    model.to(device)
+    model.train()
+
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+
+    optim = AdamW(model.parameters(), lr=5e-5)
+
+    for epoch in range(3):
+        for batch in train_loader:
+            optim.zero_grad()
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            start_positions = batch['start_positions'].to(device)
+            end_positions = batch['end_positions'].to(device)
+            outputs = model(input_ids, attention_mask=attention_mask, start_positions=start_positions, end_positions=end_positions)
+            loss = outputs[0]
+            loss.backward()
+            optim.step()
+
+    model.eval()
+    ## TENSORFLOW CODE
+    # Keras will expect a tuple when dealing with labels
+    train_dataset = train_dataset.map(lambda x, y: (x, (y['start_positions'], y['end_positions'])))
+
+    # Keras will assign a separate loss for each output and add them together. So we'll just use the standard CE loss
+    # instead of using the built-in model.compute_loss, which expects a dict of outputs and averages the two terms.
+    # Note that this means the loss will be 2x of when using TFTrainer since we're adding instead of averaging them.
+    loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    model.distilbert.return_dict = False # if using 🤗 Transformers >3.02, make sure outputs are tuples
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=5e-5)
+    model.compile(optimizer=optimizer, loss=loss) # can also use any keras loss fn
+    model.fit(train_dataset.shuffle(1000).batch(16), epochs=3, batch_size=16)
 
 .. _resources:
 
