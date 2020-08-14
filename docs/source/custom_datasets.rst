@@ -4,7 +4,7 @@ Fine-tuning with custom datasets
 This tutorial will take you through several examples of using 🤗 Transformers models with your own datasets. The
 guide shows one of many valid workflows for using these models and is meant to be illustrative rather than
 definitive. We show examples of reading in several data formats, preprocessing the data for several types of tasks,
-and then preparing the data into PyTorch/TensorFlow ``dataset`` objects which can easily be used either with
+and then preparing the data into PyTorch/TensorFlow ``Dataset`` objects which can easily be used either with
 :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer` or with native PyTorch/TensorFlow.
 
 We include several examples, each of which demonstrates a different type of common downstream task:
@@ -14,7 +14,7 @@ We include several examples, each of which demonstrates a different type of comm
   - :ref:`qa_squad`
   - :ref:`resources`
 
-Note: Many of the datasets used in this tutorial are available and can be more easily accessed using
+Note: Many of the datasets used in this tutorial are available and can be more easily accessed using the
 `🤗 NLP library <https://github.com/huggingface/nlp>`_. 🤗 Transformers also includes a number of data
 :doc:`processors <main_classes/processors>` for working with specific datasets like squad and glue. Neither is used
 here since this tutorial is meant to illustrate how to work with your own data.
@@ -83,7 +83,7 @@ input length. This will allow us to feed batches of sequences into the model at 
     test_encodings = tokenizer(test_texts, truncation=True, padding=True)
 
 Now, let's turn our labels and encodings into a Dataset object. In PyTorch, this is done by subclassing a
-``Dataset`` object and implementing ``__len__`` and ``__getitem__``. In TensorFlow, we pass our input encodings and
+``torch.utils.data.Dataset`` object and implementing ``__len__`` and ``__getitem__``. In TensorFlow, we pass our input encodings and
 labels to the ``from_tensor_slices`` constructor method. We put the data in this format so that the data can be
 easily batched such that each key in the batch encoding corresponds to a named parameter of the
 :meth:`~transformers.DistilBertForSequenceClassification.forward` method of the model we will train.
@@ -142,7 +142,7 @@ and instantiate a :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer
 
     training_args = TrainingArguments(
         output_dir='./results',          # output directory
-        num_train_epochs=3,              # total # of training epochs
+        num_train_epochs=3,              # total number of training epochs
         per_device_train_batch_size=16,  # batch size per device during training
         per_device_eval_batch_size=64,   # batch size for evaluation
         warmup_steps=500,                # number of warmup steps for learning rate scheduler
@@ -166,7 +166,7 @@ and instantiate a :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer
 
     training_args = TFTrainingArguments(
         output_dir='./results',          # output directory
-        num_train_epochs=3,              # total # of training epochs
+        num_train_epochs=3,              # total number of training epochs
         per_device_train_batch_size=16,  # batch size per device during training
         per_device_eval_batch_size=64,   # batch size for evaluation
         warmup_steps=500,                # number of warmup steps for learning rate scheduler
