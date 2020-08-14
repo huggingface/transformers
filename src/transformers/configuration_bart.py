@@ -32,6 +32,7 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
     "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
 }
+
 BART_CONFIG_ARGS_DOC = r"""
     Args:
         vocab_size (:obj:`int`, optional, defaults to 50265):
@@ -209,8 +210,3 @@ class BartConfig(PretrainedConfig):
         if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
-
-
-class MBartConfig(BartConfig):
-    model_type = "mbart"
-    """See real config values at https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json."""

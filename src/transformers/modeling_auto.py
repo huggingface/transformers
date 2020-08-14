@@ -32,6 +32,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    MBartConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -116,6 +117,7 @@ from .modeling_longformer import (
     LongformerModel,
 )
 from .modeling_marian import MarianMTModel
+from .modeling_mbart import MBartForConditionalGeneration
 from .modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -289,6 +291,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
+        (MBartConfig, MBartForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
     ]
