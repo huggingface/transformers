@@ -311,11 +311,11 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
 @require_torch
 class Blenderbot90MIntegrationTests(unittest.TestCase):
 
-    model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
-    if torch_device == "cuda":
-        model = model.half()
-    model.eval()
-    tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
+    if is_torch_available():
+        model = BlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-90M").to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-90M")
 
     def test_tokenization_same_as_parlai(self):
         tok = self.tokenizer
