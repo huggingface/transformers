@@ -32,6 +32,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    LxmertConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
     ReformerConfig,
@@ -114,6 +115,7 @@ from .modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
+from .modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from .modeling_marian import MarianMTModel
 from .modeling_mobilebert import (
     MobileBertForMaskedLM,
@@ -193,6 +195,7 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
+        (LxmertConfig, LxmertModel),
     ]
 )
 
@@ -217,6 +220,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
+        (LxmertConfig, LxmertForPreTraining),
     ]
 )
 
@@ -323,6 +327,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
+        (LxmertConfig, LxmertForQuestionAnswering),
     ]
 )
 

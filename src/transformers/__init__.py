@@ -420,7 +420,7 @@ if is_torch_available():
     )
 
     from .modeling_lxmert import (
-        LxmertForPretraining,
+        LxmertForPreTraining,
         LxmertModel,
         LxmertPreTrainedModel,
         LxmertEncoder,
@@ -680,7 +680,7 @@ if is_tf_available():
         TFLxmertMainLayer,
         TFLxmertEncoder,
         TFLxmertPreTrainedModel,
-        TFLxmertForPretraining,
+        TFLxmertForPreTraining,
     )
 
     # Optimization

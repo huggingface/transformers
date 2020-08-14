@@ -373,7 +373,7 @@ class TFLxmertCrossattLayer(tf.keras.layers.Layer):
 class TFLxmertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.attention = TFLxmertAttention(config, name="attention")
+        self.attention = TFLxmertSelfattLayer(config, name="attention")
         self.intermediate = TFLxmertIntermediate(config, name="intermediate")
         self.transformer_output = TFLxmertOutput(config, name="output")
 
@@ -822,7 +822,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
 @add_start_docstrings(
     """Lxmert Model with a `language modeling` head on top. """, LXMERT_START_DOCSTRING, LXMERT_INPUTS_DOCSTRING
 )
-class TFLxmertForPretraining(TFLxmertPreTrainedModel):
+class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
     r"""
     **input_ids**: ``tf.Tensor`` of shape ``(batch_size, sequence_length)``:
         Indices of input sequence tokens in the vocabulary.

@@ -205,6 +205,7 @@ conversion utilities for the following models:
     model_doc/retribert
     model_doc/mobilebert
     model_doc/dpr
+    model_doc/lxmert
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils

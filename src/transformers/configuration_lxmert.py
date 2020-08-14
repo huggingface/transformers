@@ -176,3 +176,4 @@ class LxmertConfig(PretrainedConfig):
         self.visual_feat_loss = visual_feat_loss
         self.output_hidden_states = output_hidden_states
         self.output_attentions = self.output_attentions
+        self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
