@@ -69,6 +69,8 @@ BART_CONFIG_ARGS_DOC = r"""
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         add_bias_logits (:obj:`int`, optional, defaults to False):
             True for marian only.
+        normalize_before (:obj:`bool`, optional, defaults to False):
+            Call layernorm before attention ops. True for pegasus, mbart. False for bart. FIXME: marian?
         normalize_embedding (:obj:`bool`, optional, defaults to True):
             Call layernorm after embeddings. Only True for Bart.
         static_position_embeddings (:obj:`bool`, optional, defaults to False):
@@ -129,6 +131,7 @@ class BartConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        normalize_before=False,
         add_final_layer_norm=False,
         scale_embedding=False,
         normalize_embedding=True,
@@ -176,6 +179,7 @@ class BartConfig(PretrainedConfig):
         # Params introduced for Mbart
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
+        self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
 
         # Params introduced for Marian
