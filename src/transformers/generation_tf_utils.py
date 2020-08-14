@@ -78,6 +78,9 @@ class TFGenerationMixin:
         attribute of the same name inside the :class:`~transformers.PretrainedConfig` of the model. The default values
         indicated are the default values of those config.
 
+        Most of these parameters are explained in more detail in `this blog post
+        <https://huggingface.co/blog/how-to-generate>`__.
+
         Parameters:
 
             input_ids (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -101,15 +104,19 @@ class TFGenerationMixin:
                 If set to float < 1, only the most probable tokens with probabilities that add up to ``top_p`` or
                 higher are kept for generation.
             repetition_penalty (:obj:`float`, `optional`, defaults to 1.0):
-                The parameter for repetition penalty. 1.0 means no penalty.
+                The parameter for repetition penalty. 1.0 means no penalty. See `this paper 
+                <https://arxiv.org/pdf/1909.05858.pdf>`__ for more details.
             pad_token_id (:obj:`int`, `optional`):
                 The id of the `padding` token.
             bos_token_id (:obj:`int`, `optional`):
-                The id of the `beginning-of-stream` token.
+                The id of the `beginning-of-sequence` token.
             eos_token_id (:obj:`int`, `optional`):
-                The id of the `end-of-stream` token.
+                The id of the `end-of-sequence` token.
             length_penalty (:obj:`float`, `optional`, defaults to 1.0):
                 Exponential penalty to the length. 1.0 means no penalty.
+
+                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
+                order to encourage the model to produce longer sequences.
             no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(:obj:`List[int]`, `optional`):
