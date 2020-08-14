@@ -12,7 +12,9 @@ are common among all the models to:
 - prune the attention heads of the model.
 
 The other methods that are common to each model are defined in :class:`~transformers.modeling_utils.ModuleUtilsMixin`
-(for the PyTorch models) and :class:`~transformers.modeling_tf_utils.TFModuleUtilsMixin` (for the TensorFlow models).
+(for the PyTorch models) and :class:`~transformers.modeling_tf_utils.TFModuleUtilsMixin` (for the TensorFlow models) or
+for text generation, :class:`~transformers.generation_utils.GenerationMixin` (for the PyTorch models) and
+:class:`~transformers.generation_tf_utils.TFGenerationMixin` (for the TensorFlow models)
 
 
 ``PreTrainedModel``
@@ -46,4 +48,8 @@ The other methods that are common to each model are defined in :class:`~transfor
 Generative models
 ~~~~~~~~~~~~~~~~~
 
-Coming soon
+.. autoclass:: transformers.generation_utils.GenerationMixin
+    :members:
+
+.. autoclass:: transformers.generation_tf_utils.TFGenerationMixin
+    :members:
