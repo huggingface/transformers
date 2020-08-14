@@ -226,7 +226,6 @@ class EncoderLayer(nn.Module):
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
         )
         self.variant = config.variant
-        self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]

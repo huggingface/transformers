@@ -51,19 +51,16 @@ class BlenderbotConfig(PretrainedConfig):
             attention_dropout: (:obj:`float`, default to 0.0), multi head attention dropout
             relu_dropout: (:obj:`float`, default to 0.0), relu dropout
             vocab_size: (:obj:`int`, default to 8008), the size of the vocabulary
-            static_position_embeddings: (:obj:`boolean`, default to False),  if yes or no the positional embeddings will be learn
             variant: (obj: str, default to "prelayernorm") defines when to apply a layernorm
-            init_std: (obj: float, default to 0.02)
+            init_std: (obj: float, default to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             is_encoder_decoder: (obj:`boolean`, default to True)
-            pad_token_id: (obj:`int`, default to 1),
-            bos_token_id: (obj:`int`, default to 0),
-            eos_token_id: (obj:`int`, default to 2),
-            normalize_before: (:obj:`boolean`, default to True),
-            add_final_layer_norm: (obj:`boolean`, default to False),
-            scale_embedding: (obj:`boolean`, default to False),
-            normalize_embedding: (obj:`boolean`, default to False),
-            static_position_embeddings: (:obj:`boolean`, default to False),
-            add_bias_logits: (:obj:`boolean`, default to False),
+            pad_token_id: (obj:`int`, default to 1): token id used to pad sequences.
+            bos_token_id: (obj:`int`, default to 0): begginning of sequence token id.
+            eos_token_id: (obj:`int`, default to 2): end of sequence token id.
+            add_final_layer_norm: (obj:`boolean`, default to False): if set to true a final Layernorm is added
+            scale_embedding: (obj:`boolean`, default to False):  Scale embeddings by diving by sqrt(d_model)
+            normalize_embedding: (obj:`boolean`, default to False): apply Layernorm to the embedding layer output
+            static_position_embeddings: (:obj:`boolean`, default to False): if set to True  positional embeddings are learnt otherwise use sinusoidal
 
         Attributes:
             pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained checkpoints.
@@ -94,7 +91,6 @@ class BlenderbotConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        normalize_before=True,
         add_final_layer_norm=False,
         scale_embedding=False,
         normalize_embedding=False,
