@@ -671,7 +671,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         return {
             "input_ids": input_ids,
             "past_key_values": past,
-            "use_cache": kwargs["use_cache"] if "use_cache" in kwargs else None,
+            "use_cache": kwargs.get("use_cache"),
         }
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
