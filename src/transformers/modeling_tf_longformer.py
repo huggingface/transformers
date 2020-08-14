@@ -285,7 +285,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         attn_probs = tf.cond(
             is_global_attn,
             lambda: self._get_global_attn_probs(attn_probs, max_num_global_attn_indices),
-            lambda: tf.transpose(attn_probs, (0, 2, 1, 3)),
+            lambda: attn_probs,
         )
 
         outputs = (attn_output, attn_probs)
@@ -301,7 +301,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             ],
             axis=-1,
         )
-        attn_probs = tf.transpose(attn_probs, (0, 2, 1, 3))
         return attn_probs
 
     def _sliding_chunks_query_key_matmul(self, query, key, window_overlap):
@@ -877,7 +876,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
             hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attentions = all_attentions + (tf.transpose(layer_outputs[1], (0, 2, 1, 3)),)
 
         # Add last layer
         if output_hidden_states:
