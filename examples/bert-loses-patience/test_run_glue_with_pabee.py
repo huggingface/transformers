@@ -54,4 +54,4 @@ class PabeeTests(unittest.TestCase):
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
 
-        clean_test_dir()
+        clean_test_dir(output_dir)
