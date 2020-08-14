@@ -506,14 +506,11 @@ class LxmertXLayer(nn.Module):
 
     def forward(self, lang_feats, lang_attention_mask, visual_feats, visual_attention_mask, output_attentions=False):
 
-        lang_att_output = (lang_feats,)
-        visual_att_output = (visual_feats,)
-
         lang_att_output, visual_att_output = self.cross_att(
-            lang_att_output[0],
-            lang_attention_mask,
-            visual_att_output[0],
-            visual_attention_mask,
+            lang_input=lang_feats,
+            lang_attention_mask=lang_attention_mask,
+            visual_input=visual_feats,
+            visual_attention_mask=visual_attention_mask,
             output_x_attentions=output_attentions,
         )
         attention_probs = lang_att_output[1:]
@@ -559,7 +556,7 @@ class LxmertEncoder(nn.Module):
         super().__init__()
 
         # Obj-level image embedding layer
-        self.visual_fc = LxmertVisualFeatEncoder(config)
+        self.visn_fc = LxmertVisualFeatEncoder(config)
         self.config = config
 
         # Number of layers
@@ -589,11 +586,11 @@ class LxmertEncoder(nn.Module):
         language_attentions = () if output_attentions or self.config.output_attentions else None
         cross_encoder_attentions = () if output_attentions or self.config.output_attentions else None
 
-        visual_feats = self.visual_fc(visual_feats, visual_pos)
+        visual_feats = self.visn_fc(visual_feats, visual_pos)
 
         # Run language layers
         for layer_module in self.layer:
-            l_outputs = layer_module(lang_feats, visual_attention_mask, output_attentions=output_attentions)
+            l_outputs = layer_module(lang_feats, lang_attention_mask, output_attentions=output_attentions)
             lang_feats = l_outputs[0]
             language_hidden_states = language_hidden_states + (lang_feats,)
             if language_attentions is not None:
@@ -618,11 +615,11 @@ class LxmertEncoder(nn.Module):
             )
             lang_feats, visual_feats = x_outputs[:2]
             vision_hidden_states = vision_hidden_states + (visual_feats,)
-            l_hidden_states = language_hidden_states + (lang_feats,)
+            language_hidden_states = language_hidden_states + (lang_feats,)
             if cross_encoder_attentions is not None:
                 cross_encoder_attentions = cross_encoder_attentions + (x_outputs[2],)
         visual_encoder_outputs = (vision_hidden_states, vision_attentions if output_attentions else None)
-        lang_encoder_outputs = (l_hidden_states, language_attentions if output_attentions else None)
+        lang_encoder_outputs = (language_hidden_states, language_attentions if output_attentions else None)
         return (visual_encoder_outputs, lang_encoder_outputs, cross_encoder_attentions if output_attentions else None)
 
 
