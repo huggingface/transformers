@@ -119,7 +119,7 @@ class TFGenerationMixin:
                 The number of independently computed returned sequences for each element in the batch.
             attention_mask (:obj:`tf.Tensor` of :obj:`dtype=tf.int32` and shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on padding token indices. Mask values are in ``[0, 1]``, 1 for
-                tokens that are mot masked, and 0 for masked tokens.
+                tokens that are not masked, and 0 for masked tokens.
 
                 If not provided, will default to a tensor the same shape as :obj:`input_ids` that masks the pad token.
 
