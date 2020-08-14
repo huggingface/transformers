@@ -310,7 +310,7 @@ class EncoderDecoderModel(PreTrainedModel):
         }
 
         # Ideally all models should have a `use_cache`
-        # leave following to ifs until all have it emplemented
+        # leave following to ifs until all have it implemented
         if "use_cache" in decoder_inputs:
             input_dict["decoder_use_cache"] = decoder_inputs["use_cache"]
 
