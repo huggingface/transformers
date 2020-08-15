@@ -25,6 +25,7 @@ from transformers.optimization import (
     get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
     get_linear_schedule_with_warmup,
+    get_polynomial_decay_schedule_with_warmup,
 )
 
 
@@ -48,7 +49,7 @@ arg_to_scheduler = {
     "linear": get_linear_schedule_with_warmup,
     "cosine": get_cosine_schedule_with_warmup,
     "cosine_w_restarts": get_cosine_with_hard_restarts_schedule_with_warmup,
-    # polynomial': '',                       # TODO
+    "polynomial": get_polynomial_decay_schedule_with_warmup,
     # '': get_constant_schedule,             # not supported for now
     # '': get_constant_schedule_with_warmup, # not supported for now
 }
@@ -245,7 +246,8 @@ class BaseTransformer(pl.LightningModule):
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
-        lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
+        lr_scheduler = trainer.lr_schedulers[0]["scheduler"]
+        lrs = {f"lr_group_{i}": lr for i, lr in enumerate(lr_scheduler.get_lr())}
         pl_module.logger.log_metrics(lrs)
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):

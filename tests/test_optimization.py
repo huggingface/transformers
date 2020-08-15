@@ -32,6 +32,7 @@ if is_torch_available():
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_linear_schedule_with_warmup,
+        get_polynomial_decay_schedule_with_warmup,
     )
 
 
@@ -113,6 +114,10 @@ class ScheduleInitTest(unittest.TestCase):
             get_cosine_with_hard_restarts_schedule_with_warmup: (
                 {**common_kwargs, "num_cycles": 2},
                 [5.0, 10.0, 8.53, 5.0, 1.46, 10.0, 8.53, 5.0, 1.46, 0.0],
+            ),
+            get_polynomial_decay_schedule_with_warmup: (
+                {**common_kwargs, "power": 2.0, "lr_end": 1e-7},
+                [5.0, 10.0, 7.656, 5.625, 3.906, 2.5, 1.406, 0.625, 0.156, 1e-07],
             ),
         }
 
