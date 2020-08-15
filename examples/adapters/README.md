@@ -19,7 +19,7 @@ Learn more in the paper ["Parameter-Efficient Transfer Learning for NLP"](https:
 ## Training
 An example of training adapters in BERT's encoders for MRPC classification task:
 ```bash
-python run_tf_adapter_bert.py \
+python run_tf_glue_adapter_bert.py \
   --casing bert-base-uncased \
   --bottleneck_size 64\
   --non_linearity gelu_new\
