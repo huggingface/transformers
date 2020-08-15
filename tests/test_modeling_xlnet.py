@@ -137,6 +137,7 @@ class XLNetModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -177,15 +178,10 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        _, _ = model(input_ids_1, input_mask=input_mask)
-        _, _ = model(input_ids_1, attention_mask=input_mask)
-        _, _ = model(input_ids_1, token_type_ids=segment_ids)
-        outputs, mems_1 = model(input_ids_1)
-
-        result = {
-            "mems_1": mems_1,
-            "outputs": outputs,
-        }
+        result = model(input_ids_1, input_mask=input_mask)
+        result = model(input_ids_1, attention_mask=input_mask)
+        result = model(input_ids_1, token_type_ids=segment_ids)
+        result = model(input_ids_1)
 
         config.mem_len = 0
         model = XLNetModel(config)
@@ -194,12 +190,10 @@ class XLNetModelTester:
         base_model_output = model(input_ids_1)
         self.parent.assertEqual(len(base_model_output), 2)
 
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(result["outputs"].size()), [self.batch_size, self.seq_length, self.hidden_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_model_use_cache(
@@ -233,7 +227,7 @@ class XLNetModelTester:
         self.parent.assertTrue(len(outputs_cache) == len(outputs_conf))
         self.parent.assertTrue(len(outputs_cache) == len(outputs_no_cache) + 1)
 
-        output, mems = outputs_cache
+        output, mems = outputs_cache.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -253,8 +247,8 @@ class XLNetModelTester:
         single_mask = torch.ones(input_ids_1.shape[0], 1, 1, dtype=torch.float, device=torch_device)
 
         # second forward pass
-        output_from_no_past, _ = model(next_input_ids, perm_mask=causal_mask)
-        output_from_past, _ = model(next_tokens, mems=mems, perm_mask=single_mask)
+        output_from_no_past = model(next_input_ids, perm_mask=causal_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, mems=mems, perm_mask=single_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -283,7 +277,7 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        _, _, attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)
+        attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)["attentions"]
 
         self.parent.assertEqual(len(attentions), config.n_layer)
         self.parent.assertIsInstance(attentions[0], tuple)
@@ -309,37 +303,24 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
+        result1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
 
-        loss_2, all_logits_2, mems_2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1)
+        result2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=result1.mems)
 
-        logits, _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
+        _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
 
-        result = {
-            "loss_1": loss_1,
-            "mems_1": mems_1,
-            "all_logits_1": all_logits_1,
-            "loss_2": loss_2,
-            "mems_2": mems_2,
-            "all_logits_2": all_logits_2,
-        }
-
-        self.parent.assertListEqual(list(result["loss_1"].size()), [])
+        self.parent.assertEqual(result1.loss.shape, ())
+        self.parent.assertEqual(result1.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["all_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result1.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
-        self.parent.assertListEqual(list(result["loss_2"].size()), [])
+        self.parent.assertEqual(result2.loss.shape, ())
+        self.parent.assertEqual(result2.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["all_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_2"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result2.mems],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_qa(
@@ -361,10 +342,9 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        outputs = model(input_ids_1)
-        (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems,) = outputs
+        result = model(input_ids_1)
 
-        outputs = model(
+        result_with_labels = model(
             input_ids_1,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -373,7 +353,7 @@ class XLNetModelTester:
             p_mask=input_mask,
         )
 
-        outputs = model(
+        result_with_labels = model(
             input_ids_1,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -381,40 +361,25 @@ class XLNetModelTester:
             is_impossible=is_impossible_labels,
         )
 
-        total_loss, mems = outputs
+        total_loss, mems = result_with_labels.to_tuple()
 
-        outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels,)
+        result_with_labels = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels,)
 
-        total_loss, mems = outputs
+        total_loss, mems = result_with_labels.to_tuple()
 
-        result = {
-            "loss": total_loss,
-            "start_top_log_probs": start_top_log_probs,
-            "start_top_index": start_top_index,
-            "end_top_log_probs": end_top_log_probs,
-            "end_top_index": end_top_index,
-            "cls_logits": cls_logits,
-            "mems": mems,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(
-            list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top],
+        self.parent.assertEqual(result_with_labels.loss.shape, ())
+        self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(
+            result.end_top_log_probs.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
-        self.parent.assertListEqual(
-            list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top],
+        self.parent.assertEqual(
+            result.end_top_index.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
+        self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
         self.parent.assertListEqual(
-            list(result["end_top_log_probs"].size()),
-            [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(
-            list(result["end_top_index"].size()), [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_token_classif(
@@ -436,22 +401,14 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        logits, mems_1 = model(input_ids_1)
-        loss, logits, mems_1 = model(input_ids_1, labels=token_labels)
+        result = model(input_ids_1)
+        result = model(input_ids_1, labels=token_labels)
 
-        result = {
-            "loss": loss,
-            "mems_1": mems_1,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_sequence_classif(
@@ -473,22 +430,14 @@ class XLNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        logits, mems_1 = model(input_ids_1)
-        loss, logits, mems_1 = model(input_ids_1, labels=sequence_labels)
+        result = model(input_ids_1)
+        result = model(input_ids_1, labels=sequence_labels)
 
-        result = {
-            "loss": loss,
-            "mems_1": mems_1,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def prepare_config_and_inputs_for_common(self):

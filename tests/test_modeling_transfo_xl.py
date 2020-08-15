@@ -75,6 +75,7 @@ class TransfoXLModelTester:
             div_val=self.div_val,
             n_layer=self.num_hidden_layers,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
@@ -88,30 +89,26 @@ class TransfoXLModelTester:
         model.to(torch_device)
         model.eval()
 
-        hidden_states_1, mems_1 = model(input_ids_1)
-        hidden_states_2, mems_2 = model(input_ids_2, mems_1)
+        outputs1 = model(input_ids_1)
+        outputs2 = model(input_ids_2, outputs1["mems"])
         outputs = {
-            "hidden_states_1": hidden_states_1,
-            "mems_1": mems_1,
-            "hidden_states_2": hidden_states_2,
-            "mems_2": mems_2,
+            "hidden_states_1": outputs1["last_hidden_state"],
+            "mems_1": outputs1["mems"],
+            "hidden_states_2": outputs2["last_hidden_state"],
+            "mems_2": outputs2["mems"],
         }
         return outputs
 
     def check_transfo_xl_model_output(self, result):
+        self.parent.assertEqual(result["hidden_states_1"].shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result["hidden_states_2"].shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(result["hidden_states_1"].size()), [self.batch_size, self.seq_length, self.hidden_size],
+            [mem.shape for mem in result["mems_1"]],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
         self.parent.assertListEqual(
-            list(result["hidden_states_2"].size()), [self.batch_size, self.seq_length, self.hidden_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_2"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result["mems_2"]],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
@@ -119,38 +116,34 @@ class TransfoXLModelTester:
         model.to(torch_device)
         model.eval()
 
-        lm_logits_1, mems_1 = model(input_ids_1)
-        loss_1, _, mems_1 = model(input_ids_1, labels=lm_labels)
-        lm_logits_2, mems_2 = model(input_ids_2, mems=mems_1)
-        loss_2, _, mems_2 = model(input_ids_2, labels=lm_labels, mems=mems_1)
+        lm_logits_1 = model(input_ids_1)["prediction_scores"]
+        outputs1 = model(input_ids_1, labels=lm_labels)
+        lm_logits_2 = model(input_ids_2, mems=outputs1["mems"])["prediction_scores"]
+        outputs2 = model(input_ids_2, labels=lm_labels, mems=outputs1["mems"])
 
         outputs = {
-            "loss_1": loss_1,
-            "mems_1": mems_1,
+            "loss_1": outputs1["losses"],
+            "mems_1": outputs1["mems"],
             "lm_logits_1": lm_logits_1,
-            "loss_2": loss_2,
-            "mems_2": mems_2,
+            "loss_2": outputs2["losses"],
+            "mems_2": outputs2["mems"],
             "lm_logits_2": lm_logits_2,
         }
         return outputs
 
     def check_transfo_xl_lm_head_output(self, result):
-        self.parent.assertListEqual(list(result["loss_1"].size()), [self.batch_size, self.seq_length - 1])
+        self.parent.assertEqual(result["loss_1"].shape, (self.batch_size, self.seq_length - 1))
+        self.parent.assertEqual(result["lm_logits_1"].shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["lm_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_1"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result["mems_1"]],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
-        self.parent.assertListEqual(list(result["loss_2"].size()), [self.batch_size, self.seq_length - 1])
+        self.parent.assertEqual(result["loss_2"].shape, (self.batch_size, self.seq_length - 1))
+        self.parent.assertEqual(result["lm_logits_2"].shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["lm_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
-        self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems_2"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result["mems_2"]],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def prepare_config_and_inputs_for_common(self):

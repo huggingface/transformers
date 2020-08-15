@@ -17,19 +17,27 @@
 
 
 import logging
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
 
 from .configuration_gpt2 import GPT2Config
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+    replace_return_docstrings,
+)
+from .modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
 from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFConv1D,
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
-    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -39,6 +47,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -75,6 +84,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
+        self.output_attentions = config.output_attentions
 
         self.c_attn = TFConv1D(n_state * 3, nx, initializer_range=config.initializer_range, name="c_attn")
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
@@ -95,8 +105,7 @@ class TFAttention(tf.keras.layers.Layer):
         m = i >= j - ns + nd
         return tf.cast(m, dtype)
 
-    def _attn(self, inputs, training=False):
-        q, k, v, attention_mask, head_mask, output_attentions = inputs
+    def _attn(self, q, k, v, attention_mask, head_mask, output_attentions, training=False):
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
@@ -121,7 +130,7 @@ class TFAttention(tf.keras.layers.Layer):
             w = w * head_mask
 
         outputs = [tf.matmul(w, v)]
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             outputs.append(w)
         return outputs
 
@@ -137,9 +146,7 @@ class TFAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
-    def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
-
+    def call(self, x, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
         query = self.split_heads(query)
@@ -151,12 +158,12 @@ class TFAttention(tf.keras.layers.Layer):
             value = tf.concat([past_value, value], axis=-2)
 
         # to cope with keras serialization
-        if cast_bool_to_primitive(use_cache, True) is True:
+        if use_cache:
             present = tf.stack([key, value], axis=0)
         else:
             present = (None,)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask, output_attentions], training=training)
+        attn_outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions, training=training)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -187,17 +194,16 @@ class TFBlock(tf.keras.layers.Layer):
     def __init__(self, n_ctx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
         nx = config.n_embd
+        inner_dim = config.n_inner if config.n_inner is not None else 4 * nx
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.attn = TFAttention(nx, n_ctx, config, scale, name="attn")
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
-        self.mlp = TFMLP(4 * nx, config, name="mlp")
+        self.mlp = TFMLP(inner_dim, config, name="mlp")
 
-    def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
-
+    def call(self, x, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
         a = self.ln_1(x)
         output_attn = self.attn(
-            [a, layer_past, attention_mask, head_mask, use_cache, output_attentions], training=training
+            a, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=training
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
         x = x + a
@@ -219,6 +225,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.use_cache = config.use_cache
+        self.return_dict = config.use_return_dict
 
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
@@ -262,6 +269,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -275,7 +283,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
             output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
             output_hidden_states = inputs[9] if len(inputs) > 9 else output_hidden_states
-            assert len(inputs) <= 10, "Too many inputs."
+            return_dict = inputs[10] if len(inputs) > 10 else return_dict
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -287,13 +296,15 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 10, "Too many inputs."
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         use_cache = use_cache if use_cache is not None else self.use_cache
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -358,43 +369,51 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
         output_shape = input_shape + [shape_list(hidden_states)[-1]]
 
-        presents = ()
-        all_attentions = []
-        all_hidden_states = ()
+        presents = () if use_cache else None
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past)):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
             outputs = block(
-                [hidden_states, layer_past, attention_mask, head_mask[i], use_cache, output_attentions],
+                hidden_states,
+                layer_past,
+                attention_mask,
+                head_mask[i],
+                use_cache,
+                output_attentions,
                 training=training,
             )
 
             hidden_states, present = outputs[:2]
-            presents = presents + (present,)
+            if use_cache:
+                presents = presents + (present,)
 
-            if cast_bool_to_primitive(output_attentions) is True:
-                all_attentions.append(outputs[2])
+            if output_attentions:
+                all_attentions = all_attentions + (outputs[2],)
 
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states,)
-
-        if use_cache is True:
-            outputs = outputs + (presents,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
-            outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
-            outputs = outputs + (all_attentions,)
-        return outputs  # last hidden state, presents, (all hidden_states), (attentions)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
+
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=presents,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+        )
 
 
 class TFGPT2PreTrainedModel(TFPreTrainedModel):
@@ -404,6 +423,42 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
 
     config_class = GPT2Config
     base_model_prefix = "transformer"
+
+
+@dataclass
+class TFGPT2DoubleHeadsModelOutput(ModelOutput):
+    """
+    Base class for outputs of models predicting if two sentences are consecutive or not.
+
+    Args:
+        lm_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        mc_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`):
+            Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
+        past_key_values (:obj:`List[tf.Tensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tf.Tensor` of length :obj:`config.n_layers`,  with each tensor of shape
+            :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
+            ``past_key_values`` input) to speed up sequential decoding.
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    lm_logits: tf.Tensor = None
+    mc_logits: tf.Tensor = None
+    past_key_values: Optional[List[tf.Tensor]] = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 GPT2_START_DOCSTRING = r"""
@@ -480,6 +535,11 @@ GPT2_INPUTS_DOCSTRING = r"""
             (if set to :obj:`False`) for evaluation.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -493,29 +553,13 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="gpt2",
+        output_type=TFBaseModelOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(self, inputs, **kwargs):
-        r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
-        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the last layer of the model.
-        past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
 
@@ -541,7 +585,12 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="gpt2")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="gpt2",
+        output_type=TFCausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs,
@@ -554,6 +603,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -561,31 +611,12 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the cross entropy classification loss.
             Indices should be in ``[0, ..., config.vocab_size - 1]``.
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
-        prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
-            labels = inputs[10] if len(inputs) > 10 else labels
-            if len(inputs) > 10:
-                inputs = inputs[:10]
+            labels = inputs[11] if len(inputs) > 11 else labels
+            if len(inputs) > 11:
+                inputs = inputs[:11]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
@@ -600,6 +631,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
@@ -607,15 +639,24 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
 
         logits = self.transformer.wte(hidden_states, mode="linear")
 
-        outputs = (logits,) + transformer_outputs[1:]
+        loss = None
         if labels is not None:
             # shift labels to the left and cut last logit token
             logits = logits[:, :-1]
             labels = labels[:, 1:]
             loss = self.compute_loss(labels, logits)
-            outputs = (loss,) + outputs
 
-        return outputs  # lm_logits, presents, (all hidden_states), (attentions)
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -639,6 +680,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         return self.transformer.wte
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         inputs,
@@ -652,6 +694,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
         r"""
@@ -660,26 +703,6 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             Selected in the range ``[0, input_ids.size(-1) - 1[``.
 
     Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
-        lm_prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        mc_prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`):
-            Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
-        past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as `input_ids` as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
 
     Examples::
 
@@ -715,8 +738,10 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             mc_token_ids = inputs[7] if len(inputs) > 7 else mc_token_ids
             use_cache = inputs[8] if len(inputs) > 8 else use_cache
-            output_attentions = inputs[9] if len(inputs) > 8 else output_attentions
-            assert len(inputs) <= 10, "Too many inputs."
+            output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
+            output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
+            return_dict = inputs[11] if len(inputs) > 11 else return_dict
+            assert len(inputs) <= 12, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -728,9 +753,12 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             mc_token_ids = inputs.get("mc_token_ids", mc_token_ids)
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 10, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 12, "Too many inputs."
         else:
             input_ids = inputs
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
 
         if input_ids is not None:
             input_shapes = shape_list(input_ids)
@@ -738,13 +766,11 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             input_shapes = shape_list(inputs_embeds)[:-1]
 
         seq_length = input_shapes[-1]
-
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-
-        flat_inputs = [
+        transformer_outputs = self.transformer(
             flat_input_ids,
             past,
             flat_attention_mask,
@@ -755,18 +781,22 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             use_cache,
             output_attentions,
             output_hidden_states,
-        ]
-
-        transformer_outputs = self.transformer(flat_inputs, training=training)
+            return_dict=return_dict,
+            training=training,
+        )
         hidden_states = transformer_outputs[0]
-
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
-
         lm_logits = self.transformer.wte(hidden_states, mode="linear")
-        mc_logits = self.multiple_choice_head([hidden_states, mc_token_ids], training=training)
-
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
         mc_logits = tf.squeeze(mc_logits, axis=-1)
 
-        outputs = (lm_logits, mc_logits) + transformer_outputs[1:]
+        if not return_dict:
+            return (lm_logits, mc_logits) + transformer_outputs[1:]
 
-        return outputs  # lm logits, mc logits, presents, (all hidden_states), (attentions)
+        return TFGPT2DoubleHeadsModelOutput(
+            lm_logits=lm_logits,
+            mc_logits=mc_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )

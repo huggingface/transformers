@@ -49,12 +49,15 @@ class PretrainedConfig(object):
                 Whether or not the model should returns all attentions.
             use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should return the last key/values attentions (not used by all models).
-            return_tuple (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the model should return tuples instead of :obj:`ModelOutput` objects.
+            return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the model should return a :class:`~transformers.file_utils.ModelOutput` instead of a
+                plain tuple.
             is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether the model is used as an encoder/decoder or not.
             is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether the model is used as decoder or not (in which case it's used as an encoder).
+            add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether cross-attention layers should be added to the model. Note, this option is only relevant for models that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
             prune_heads (:obj:`Dict[int, List[int]]`, `optional`, defaults to :obj:`{}`):
                 Pruned heads of the model. The keys are the selected layer indices and the associated values, the list
                 of heads to prune in said layer.
@@ -63,6 +66,11 @@ class PretrainedConfig(object):
                 2.
             xla_device (:obj:`bool`, `optional`):
                 A flag to indicate if TPU are available or not.
+            chunk_size_feed_forward (:obj:`int`, `optional`, defaults to :obj:`0`):
+                The chunk size of all feed forward layers in the residual attention blocks.
+                A chunk size of :obj:`0` means that the feed forward layer is not chunked.
+                A chunk size of n means that the feed forward layer processes :obj:`n` < sequence_length embeddings at a time.
+                For more information on feed forward chunking, see `How does Feed Forward Chunking work? <../glossary.html#feed-forward-chunking>`__ .
 
         Parameters for sequence generation
             - **max_length** (:obj:`int`, `optional`, defaults to 20) -- Maximum length that will be used by
@@ -83,7 +91,7 @@ class PretrainedConfig(object):
               keep for top-k-filtering that will be used by default in the :obj:`generate` method of the model.
             - **top_p** (:obj:`float`, `optional`, defaults to 1) --  Value that will be used by default in the
               :obj:`generate` method of the model for ``top_p``. If set to float < 1, only the most probable tokens
-              with probabilities that add up to ``top_p`` or highest are kept for generation.
+              with probabilities that add up to ``top_p`` or higher are kept for generation.
             - **repetition_penalty** (:obj:`float`, `optional`, defaults to 1) -- Parameter for repetition penalty
               that will be used by default in the :obj:`generate` method of the model. 1.0 means no penalty.
             - **length_penalty** (:obj:`float`, `optional`, defaults to 1) -- Exponential penalty to the length that
@@ -100,7 +108,7 @@ class PretrainedConfig(object):
               method of the model.
 
         Parameters for fine-tuning tasks
-            - **architectures** (:obj:List[`str`], `optional`) -- Model architectures that can be used with the
+            - **architectures** (:obj:`List[str]`, `optional`) -- Model architectures that can be used with the
               model pretrained weights.
             - **finetuning_task** (:obj:`str`, `optional`) -- Name of the task used to fine-tune the model. This can be
               used when converting from an original (TensorFlow or PyTorch) checkpoint.
@@ -133,7 +141,7 @@ class PretrainedConfig(object):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.return_tuple = kwargs.pop("return_tuple", False)
+        self.return_dict = kwargs.pop("return_dict", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
@@ -144,6 +152,7 @@ class PretrainedConfig(object):
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
+        self.add_cross_attention = kwargs.pop("add_cross_attention", False)
 
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
@@ -159,6 +168,7 @@ class PretrainedConfig(object):
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
+        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -194,12 +204,18 @@ class PretrainedConfig(object):
                 raise err
 
     @property
-    def use_return_tuple(self):
-        # If torchscript is set, force return_tuple to avoid jit errors
-        return self.return_tuple or self.torchscript
+    def use_return_dict(self) -> bool:
+        """
+        :obj:`bool`: Whether or not return :class:`~transformers.file_utils.ModelOutput` instead of tuples.
+        """
+        # If torchscript is set, force `return_dict=False` to avoid jit errors
+        return self.return_dict and not self.torchscript
 
     @property
     def num_labels(self) -> int:
+        """
+        :obj:`int`: The number of labels for classification models.
+        """
         return len(self.id2label)
 
     @num_labels.setter

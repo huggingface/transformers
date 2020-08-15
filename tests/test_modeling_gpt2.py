@@ -20,7 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -62,27 +62,27 @@ class GPT2ModelTester:
         scope=None,
     ):
         self.parent = parent
-        self.batch_size = 14
-        self.seq_length = 7
-        self.is_training = True
-        self.use_token_type_ids = True
-        self.use_input_mask = True
-        self.use_labels = True
-        self.use_mc_token_ids = True
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.intermediate_size = 37
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0, 1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 16
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 3
-        self.num_choices = 4
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_token_type_ids = use_token_type_ids
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.use_mc_token_ids = use_mc_token_ids
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
         self.scope = None
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
@@ -122,9 +122,10 @@ class GPT2ModelTester:
             n_positions=self.max_position_embeddings,
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
-            # initializer_range=self.initializer_range
+            # initializer_range=self.initializer_range,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
+            return_dict=True,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -141,26 +142,46 @@ class GPT2ModelTester:
             choice_labels,
         )
 
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            mc_token_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
 
     def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
         model.to(torch_device)
         model.eval()
 
-        model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
-        model(input_ids, token_type_ids=token_type_ids)
-        sequence_output, presents = model(input_ids)
+        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids)
 
-        result = {
-            "sequence_output": sequence_output,
-            "presents": presents,
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size],
-        )
-        self.parent.assertEqual(len(result["presents"]), config.n_layer)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
     def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
@@ -175,7 +196,7 @@ class GPT2ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past = outputs
+        output, past = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -185,8 +206,8 @@ class GPT2ModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
 
-        output_from_no_past, _ = model(next_input_ids, token_type_ids=next_token_type_ids)
-        output_from_past, _ = model(next_tokens, token_type_ids=next_token_types, past=past)
+        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -209,7 +230,7 @@ class GPT2ModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask)
+        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -226,8 +247,8 @@ class GPT2ModelTester:
         )
 
         # get two different outputs
-        output_from_no_past, _ = model(next_input_ids, attention_mask=attn_mask)
-        output_from_past, _ = model(next_tokens, past=past, attention_mask=attn_mask)
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -242,14 +263,9 @@ class GPT2ModelTester:
         model.to(torch_device)
         model.eval()
 
-        loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
-
-        result = {"loss": loss, "lm_logits": lm_logits}
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(
-            list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
-        )
+        result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_double_lm_head_model(
         self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
@@ -270,15 +286,12 @@ class GPT2ModelTester:
             "labels": multiple_choice_inputs_ids,
         }
 
-        loss, lm_logits, mc_logits, _ = model(**inputs)
-
-        result = {"loss": loss, "lm_logits": lm_logits, "mc_logits": mc_logits}
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(
-            list(result["lm_logits"].size()), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size],
+        result = model(**inputs)
+        self.parent.assertEqual(result.lm_loss.shape, ())
+        self.parent.assertEqual(
+            result.lm_logits.shape, (self.batch_size, self.num_choices, self.seq_length, self.vocab_size)
         )
-        self.parent.assertListEqual(list(result["mc_logits"].size()), [self.batch_size, self.num_choices])
+        self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -311,6 +324,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (GPT2LMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = GPT2ModelTester(self)

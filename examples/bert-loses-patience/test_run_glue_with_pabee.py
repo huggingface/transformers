@@ -1,5 +1,6 @@
 import argparse
 import logging
+import shutil
 import sys
 import unittest
 from unittest.mock import patch
@@ -19,6 +20,10 @@ def get_setup_file():
     return args.f
 
 
+def clean_test_dir(path):
+    shutil.rmtree(path, ignore_errors=True)
+
+
 class PabeeTests(unittest.TestCase):
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -32,7 +37,6 @@ class PabeeTests(unittest.TestCase):
             --task_name mrpc
             --do_train
             --do_eval
-            --output_dir ./tests/fixtures/tests_samples/temp_dir
             --per_gpu_train_batch_size=2
             --per_gpu_eval_batch_size=1
             --learning_rate=2e-5
@@ -41,8 +45,13 @@ class PabeeTests(unittest.TestCase):
             --overwrite_output_dir
             --seed=42
             --max_seq_length=128
-            """.split()
+            """
+        output_dir = "./tests/fixtures/tests_samples/temp_dir_{}".format(hash(testargs))
+        testargs += "--output_dir " + output_dir
+        testargs = testargs.split()
         with patch.object(sys, "argv", testargs):
             result = run_glue_with_pabee.main()
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
+
+        clean_test_dir(output_dir)

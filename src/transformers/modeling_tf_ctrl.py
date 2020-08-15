@@ -23,11 +23,11 @@ import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
 from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    cast_bool_to_primitive,
     keras_serializable,
     shape_list,
 )
@@ -36,7 +36,8 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-_TOKENIZER_FOR_DOC = "CtrlTokenizer"
+_CONFIG_FOR_DOC = "CTRLConfig"
+_TOKENIZER_FOR_DOC = "CTRLTokenizer"
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ctrl"
@@ -87,10 +88,11 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
 
 
 class TFMultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self, d_model_size, num_heads, **kwargs):
+    def __init__(self, d_model_size, num_heads, output_attentions=False, **kwargs):
         super().__init__(**kwargs)
         self.num_heads = num_heads
         self.d_model_size = d_model_size
+        self.output_attentions = output_attentions
 
         self.depth = int(d_model_size / self.num_heads)
 
@@ -104,8 +106,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, inputs, training=False):
-        v, k, q, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
+    def call(self, v, k, q, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
         batch_size = shape_list(q)[0]
 
         q = self.Wq(q)
@@ -121,10 +122,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             k = tf.concat((past_key, k), axis=-2)
             v = tf.concat((past_value, v), axis=-2)
 
-        # to cope with keras serialization
-        use_cache = cast_bool_to_primitive(use_cache, True)
-
-        if use_cache is True:
+        if use_cache:
             present = tf.stack((k, v), axis=0)
         else:
             present = (None,)
@@ -134,26 +132,40 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         attn = output[1]
         original_size_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model_size))
         output = self.dense(original_size_attention)
-
         outputs = (output, present)
-        if cast_bool_to_primitive(output_attentions) is True:
+
+        if output_attentions:
             outputs = outputs + (attn,)
+
         return outputs
 
 
-def point_wise_feed_forward_network(d_model_size, dff, name=""):
-    return tf.keras.Sequential(
-        [tf.keras.layers.Dense(dff, activation="relu", name="0"), tf.keras.layers.Dense(d_model_size, name="2")],
-        name="ffn",
-    )
+class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
+    def __init__(self, d_model_size, dff, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense_0 = tf.keras.layers.Dense(dff, activation="relu", name="0")
+        self.dense_2 = tf.keras.layers.Dense(d_model_size, name="2")
+
+    def call(self, inputs, trainable=False):
+        dense_0_output = self.dense_0(inputs)
+        dense_2_output = self.dense_2(dense_0_output)
+
+        return dense_2_output
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, d_model_size, num_heads, dff, rate=0.1, layer_norm_epsilon=1e-6, **kwargs):
+    def __init__(
+        self, d_model_size, num_heads, dff, rate=0.1, layer_norm_epsilon=1e-6, output_attentions=False, **kwargs
+    ):
         super().__init__(**kwargs)
 
-        self.multi_head_attention = TFMultiHeadAttention(d_model_size, num_heads, name="multi_head_attention")
-        self.ffn = point_wise_feed_forward_network(d_model_size, dff, name="ffn")
+        self.output_attentions = output_attentions
+
+        self.multi_head_attention = TFMultiHeadAttention(
+            d_model_size, num_heads, output_attentions=self.output_attentions, name="multi_head_attention"
+        )
+        self.ffn = TFPointWiseFeedForwardLayer(d_model_size, dff, name="ffn")
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layernorm1")
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layernorm2")
@@ -161,11 +173,18 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
-    def call(self, inputs, training=False):
-        x, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
+    def call(self, x, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
-            [normed, normed, normed, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions],
+            normed,
+            normed,
+            normed,
+            mask,
+            layer_past,
+            attention_mask,
+            head_mask,
+            use_cache,
+            output_attentions,
             training=training,
         )
         attn_output = attn_outputs[0]
@@ -190,6 +209,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.use_cache = config.use_cache
+        self.return_dict = config.use_return_dict
 
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
@@ -208,6 +228,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
                 config.dff,
                 config.resid_pdrop,
                 config.layer_norm_epsilon,
+                self.output_attentions,
                 name="h_._{}".format(i),
             )
             for i in range(config.n_layer)
@@ -242,6 +263,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
 
@@ -256,7 +278,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
             output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
             output_hidden_states = inputs[9] if len(inputs) > 9 else output_hidden_states
-            assert len(inputs) <= 10, "Too many inputs."
+            return_dict = inputs[10] if len(inputs) > 10 else return_dict
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -268,13 +291,15 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 10, "Too many inputs."
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         use_cache = use_cache if use_cache is not None else self.use_cache
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         # If using past key value states, only the last tokens
         # should be given as an input
@@ -356,40 +381,49 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
 
         output_shape = input_shape + [shape_list(hidden_states)[-1]]
-        presents = ()
-        all_hidden_states = ()
-        all_attentions = []
+        presents = () if use_cache else None
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
-            if cast_bool_to_primitive(output_hidden_states) is True:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h(
-                [hidden_states, mask, layer_past, attention_mask, head_mask[i], use_cache, output_attentions],
+                hidden_states,
+                mask,
+                layer_past,
+                attention_mask,
+                head_mask[i],
+                use_cache,
+                output_attentions,
                 training=training,
             )
             hidden_states, present = outputs[:2]
 
-            if use_cache is True:
+            if use_cache:
                 presents = presents + (present,)
 
-            if cast_bool_to_primitive(output_attentions) is True:
-                all_attentions.append(outputs[2])
+            if output_attentions:
+                all_attentions = all_attentions + (outputs[2],)
 
         hidden_states = self.layernorm(hidden_states)
         hidden_states = tf.reshape(hidden_states, output_shape)
-        if cast_bool_to_primitive(output_hidden_states) is True:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states,)
-        if use_cache is True:
-            outputs = outputs + (presents,)
-        if cast_bool_to_primitive(output_hidden_states) is True:
-            outputs = outputs + (all_hidden_states,)
-        if cast_bool_to_primitive(output_attentions) is True:
+        if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
-            outputs = outputs + (all_attentions,)
-        return outputs
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
+
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=presents,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+        )
 
 
 class TFCTRLPreTrainedModel(TFPreTrainedModel):
@@ -479,6 +513,11 @@ CTRL_INPUTS_DOCSTRING = r"""
             (if set to :obj:`False`) for evaluation.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -492,29 +531,13 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="ctrl",
+        output_type=TFBaseModelOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(self, inputs, **kwargs):
-        r"""
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.CTRLConfig`) and inputs:
-        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the last layer of the model.
-        past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
         outputs = self.transformer(inputs, **kwargs)
         return outputs
 
@@ -561,7 +584,12 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="ctrl")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="ctrl",
+        output_type=TFCausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def call(
         self,
         inputs,
@@ -574,6 +602,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         labels=None,
         training=False,
     ):
@@ -581,31 +610,12 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the cross entropy classification loss.
             Indices should be in ``[0, ..., config.vocab_size - 1]``.
-
-    Return:
-        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.CTRLConfig`) and inputs:
-        prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers` with each tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
         """
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
-            labels = inputs[10] if len(inputs) > 10 else labels
-            if len(inputs) > 10:
-                inputs = inputs[:10]
+            labels = inputs[11] if len(inputs) > 11 else labels
+            if len(inputs) > 11:
+                inputs = inputs[:11]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
@@ -620,6 +630,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
         )
 
@@ -627,12 +638,21 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         logits = self.lm_head(hidden_states)
 
-        outputs = (logits,) + transformer_outputs[1:]
+        loss = None
         if labels is not None:
             # shift labels to the left and cut last logit token
             logits = logits[:, :-1]
             labels = labels[:, 1:]
             loss = self.compute_loss(labels, logits)
-            outputs = (loss,) + outputs
 
-        return outputs  # lm_logits, presents, (all hidden_states), (attentions)
+        if not return_dict:
+            output = (logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )

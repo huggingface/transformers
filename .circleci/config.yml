@@ -1,4 +1,66 @@
-version: 2
+version: 2.1
+orbs:
+    gcp-gke: circleci/gcp-gke@1.0.4
+    go: circleci/go@1.3.0
+
+# TPU REFERENCES
+references:
+    checkout_ml_testing: &checkout_ml_testing
+        run:
+            name: Checkout ml-testing-accelerators
+            command: |
+                git clone https://github.com/GoogleCloudPlatform/ml-testing-accelerators.git
+                cd ml-testing-accelerators
+                git fetch origin 5e88ac24f631c27045e62f0e8d5dfcf34e425e25:stable
+                git checkout stable
+    build_push_docker: &build_push_docker
+        run:
+            name: Configure Docker
+            command: |
+                gcloud --quiet auth configure-docker
+                cd docker/transformers-pytorch-tpu
+                if [ -z "$CIRCLE_PR_NUMBER" ]; then docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" . ; else docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" --build-arg "GITHUB_REF=pull/$CIRCLE_PR_NUMBER/head" . ; fi
+                docker push "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID"
+    deploy_cluster: &deploy_cluster
+        run:
+            name: Deploy the job on the kubernetes cluster
+            command: |
+                go get github.com/google/go-jsonnet/cmd/jsonnet && \
+                export PATH=$PATH:$HOME/go/bin && \
+                kubectl create -f docker/transformers-pytorch-tpu/dataset.yaml || true && \
+                job_name=$(jsonnet -J ml-testing-accelerators/ docker/transformers-pytorch-tpu/bert-base-cased.jsonnet --ext-str image=$GCR_IMAGE_PATH --ext-str image-tag=$CIRCLE_WORKFLOW_JOB_ID | kubectl create -f -) && \
+                job_name=${job_name#job.batch/} && \
+                job_name=${job_name% created} && \
+                echo "Waiting on kubernetes job: $job_name" && \
+                i=0 && \
+                # 30 checks spaced 30s apart = 900s total.
+                max_checks=30 && \
+                status_code=2 && \
+                # Check on the job periodically. Set the status code depending on what
+                # happened to the job in Kubernetes. If we try max_checks times and
+                # still the job hasn't finished, give up and return the starting
+                # non-zero status code.
+                while [ $i -lt $max_checks ]; do ((i++)); if kubectl get jobs $job_name -o jsonpath='Failed:{.status.failed}' | grep "Failed:1"; then status_code=1 && break; elif kubectl get jobs $job_name -o jsonpath='Succeeded:{.status.succeeded}' | grep "Succeeded:1" ; then status_code=0 && break; else echo "Job not finished yet"; fi; sleep 30; done && \
+                echo "Done waiting. Job status code: $status_code" && \
+                pod_name=$(kubectl get po -l controller-uid=`kubectl get job $job_name -o "jsonpath={.metadata.labels.controller-uid}"` | awk 'match($0,!/NAME/) {print $1}') && \
+                echo "GKE pod name: $pod_name" && \
+                kubectl logs -f $pod_name --container=train
+                echo "Done with log retrieval attempt." && \
+                gcloud container images delete "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" --force-delete-tags && \
+                exit $status_code
+    delete_gke_jobs: &delete_gke_jobs
+        run:
+            name: Delete GKE Jobs
+            command: |
+                # Match jobs whose age matches patterns like '1h' or '1d', i.e. any job
+                # that has been around longer than 1hr. First print all columns for
+                # matches, then execute the delete.
+                kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $0}'
+                kubectl delete job $(kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $1}')
+
+
+
+
 jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
@@ -10,8 +72,17 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install .[sklearn,tf-cpu,torch,testing]
-            - run: sudo pip install codecov pytest-cov
+            - restore_cache:
+                  keys:
+                      - v0.3-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,torch,testing]
+            - run: pip install codecov pytest-cov
+            - save_cache:
+                key: v0.3-{{ checksum "setup.py" }}
+                paths:
+                    - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ --cov  | tee output.txt
             - run: codecov
             - store_artifacts:
@@ -27,12 +98,20 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install .[sklearn,torch,testing]
+            - restore_cache:
+                  keys:
+                      - v0.3-torch-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing]
+            - save_cache:
+                  key: v0.3-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt
-
     run_tests_tf:
         working_directory: ~/transformers
         docker:
@@ -43,7 +122,16 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install .[sklearn,tf-cpu,testing]
+            - restore_cache:
+                  keys:
+                      - v0.3-tf-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,testing]
+            - save_cache:
+                  key: v0.3-tf-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python -m pytest -n 8 --dist=loadfile -s ./tests/ | tee output.txt
             - store_artifacts:
                path: ~/transformers/output.txt
@@ -56,7 +144,16 @@ jobs:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
-            - run: sudo pip install .[mecab,testing]
+            - restore_cache:
+                  keys:
+                      - v0.3-custom_tokenizers-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[ja,testing]
+            - save_cache:
+                  key: v0.3-custom_tokenizers-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
             - store_artifacts:
                 path: ~/transformers/output.txt
@@ -71,9 +168,18 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install .[sklearn,torch,testing]
-            - run: sudo pip install -r examples/requirements.txt
-            - run: python -m pytest -n 8 --dist=loadfile -s ./examples/ | tee output.txt
+            - restore_cache:
+                  keys:
+                      - v0.3-torch_examples-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing]
+            - run: pip install -r examples/requirements.txt
+            - save_cache:
+                  key: v0.3-torch_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./examples/ | tee output.txt
             - store_artifacts:
                   path: ~/transformers/output.txt
                   destination: test_output.txt
@@ -83,7 +189,16 @@ jobs:
             - image: circleci/python:3.6
         steps:
             - checkout
-            - run: sudo pip install .[tf,torch,docs]
+            - restore_cache:
+                  keys:
+                      - v0.3-build_doc-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[tf,torch,docs]
+            - save_cache:
+                  key: v0.3-build_doc-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
                 path: ./docs/_build
@@ -96,7 +211,15 @@ jobs:
                 fingerprints:
                     - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
             - checkout
-            - run: sudo pip install .[tf,torch,docs]
+            - restore_cache:
+                  keys:
+                      - v0.3-deploy_doc-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install .[tf,torch,docs]
+            - save_cache:
+                  key: v0.3-deploy_doc-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: ./.circleci/deploy.sh
     check_code_quality:
         working_directory: ~/transformers
@@ -106,12 +229,22 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - restore_cache:
+                  keys:
+                      - v0.3-code_quality-{{ checksum "setup.py" }}
+                      - v0.3-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
             # we need a version of isort with https://github.com/timothycrosley/isort/pull/1000
-            - run: sudo pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
-            - run: sudo pip install .[tf,torch,quality]
+            - run: pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+            - run: pip install .[tf,torch,quality]
+            - save_cache:
+                  key: v0.3-code_quality-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: black --check --line-length 119 --target-version py35 examples templates tests src utils
             - run: isort --check-only --recursive examples templates tests src utils
             - run: flake8 examples templates tests src utils
+            - run: python utils/check_repo.py
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
@@ -120,8 +253,37 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install requests
+            - run: pip install requests
             - run: python ./utils/link_tester.py
+
+# TPU JOBS
+    run_examples_tpu:
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - go/install
+            - *checkout_ml_testing
+            - gcp-gke/install
+            - gcp-gke/update-kubeconfig-with-credentials:
+                  cluster: $GKE_CLUSTER
+                  perform-login: true
+            - setup_remote_docker
+            - *build_push_docker
+            - *deploy_cluster
+    cleanup-gke-jobs:
+        docker:
+            - image: circleci/python:3.6
+        steps:
+            - gcp-gke/install
+            - gcp-gke/update-kubeconfig-with-credentials:
+                  cluster: $GKE_CLUSTER
+                  perform-login: true
+            - *delete_gke_jobs
 workflow_filters: &workflow_filters
     filters:
         branches:
@@ -140,3 +302,15 @@ workflows:
             - run_tests_tf
             - build_doc
             - deploy_doc: *workflow_filters
+    tpu_testing_jobs:
+        triggers:
+            - schedule:
+                # Set to run at the first minute of every hour.
+                cron: "0 8 * * *"
+                filters:
+                    branches:
+                        only:
+                            - master
+        jobs:
+            - cleanup-gke-jobs
+            - run_examples_tpu

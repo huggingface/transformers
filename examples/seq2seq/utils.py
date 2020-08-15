@@ -29,17 +29,15 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=-100):
         pad_mask = target.eq(ignore_index)
         nll_loss.masked_fill_(pad_mask, 0.0)
         smooth_loss.masked_fill_(pad_mask, 0.0)
-        bs = pad_mask.long().sum()
     else:
         nll_loss = nll_loss.squeeze(-1)
         smooth_loss = smooth_loss.squeeze(-1)
-        bs = lprobs.shape[0]
 
     nll_loss = nll_loss.sum()  # mean()? Scared to break other math.
     smooth_loss = smooth_loss.sum()
     eps_i = epsilon / lprobs.size(-1)
     loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
-    return loss / bs, nll_loss / bs
+    return loss, nll_loss
 
 
 def encode_line(tokenizer, line, max_length, pad_to_max_length=True, return_tensors="pt"):
@@ -128,12 +126,6 @@ class Seq2SeqDataset(Dataset):
     def get_char_lens(data_file):
         return [len(x) for x in Path(data_file).open().readlines()]
 
-    @staticmethod
-    def trim_seq2seq_batch(batch, pad_token_id) -> tuple:
-        y = trim_batch(batch["decoder_input_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
-        return source_ids, source_mask, y
-
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
@@ -152,12 +144,15 @@ class Seq2SeqDataset(Dataset):
         return SortishSampler(self.src_lens, batch_size)
 
 
-class MBartDataset(Seq2SeqDataset):
+class TranslationDataset(Seq2SeqDataset):
+    """A dataset that calls prepare_seq2seq_batch."""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.max_source_length != self.max_target_length:
             warnings.warn(
-                f"Mbart will ignore max_target_length = {self.max_target_length} and use {self.max_source_length} for both sides."
+                f"Mbart is using sequence lengths {self.max_source_length}, {self.max_target_length}. "
+                f"Imbalanced sequence lengths may be undesired for translation tasks"
             )
 
     def __getitem__(self, index) -> Dict[str, str]:
@@ -172,12 +167,13 @@ class MBartDataset(Seq2SeqDataset):
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
-        batch_encoding = self.tokenizer.prepare_translation_batch(
+        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
             tgt_texts=[x["tgt_texts"] for x in batch],
             tgt_lang=self.tgt_lang,
             max_length=self.max_source_length,
+            max_target_length=self.max_target_length,
         )
         return batch_encoding.data
 
@@ -275,7 +271,7 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer
         aggregator.add_scores(scores)
 
     result = aggregator.aggregate()
-    return {k: v.mid.fmeasure for k, v in result.items()}
+    return {k: v.mid.fmeasure * 100 for k, v in result.items()}
 
 
 def freeze_params(model: nn.Module):
