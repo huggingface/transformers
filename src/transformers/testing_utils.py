@@ -302,7 +302,7 @@ class TestCasePlus(unittest.TestCase):
     def setUp(self):
         self.teardown_tmp_dirs = []
 
-    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=False, after=True):
+    def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=False):
         """
         Args:
             tmp_dir (:obj:`string`, `optional`, defaults to :obj:`None`):
