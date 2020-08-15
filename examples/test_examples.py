@@ -30,12 +30,7 @@ from transformers.testing_utils import torch_device
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
-    for dirname in [
-        "text-generation",
-        "text-classification",
-        "language-modeling",
-        "question-answering",
-    ]
+    for dirname in ["text-generation", "text-classification", "language-modeling", "question-answering",]
 ]
 sys.path.extend(SRC_DIRS)
 
@@ -63,6 +58,7 @@ def get_setup_file():
 def is_cuda_and_apex_avaliable():
     is_using_cuda = torch.cuda.is_available() and torch_device == "cuda"
     return is_using_cuda and is_apex_available()
+
 
 def clean_test_dir(path):
     shutil.rmtree(path, ignore_errors=True)
