@@ -25,6 +25,7 @@ from unittest.mock import patch
 import torch
 
 from transformers.trainer import is_apex_available
+from transformers.testing_utils import torch_device
 
 
 SRC_DIRS = [
@@ -55,7 +56,8 @@ def get_setup_file():
 
 
 def is_cuda_and_apex_avaliable():
-    return torch.cuda.is_available() and is_apex_available()
+    is_using_cuda = torch.cuda.is_available() and torch_device == "cuda"
+    return is_using_cuda and is_apex_available()
 
 def clean_test_dir(path):
     shutil.rmtree(path, ignore_errors=True)
@@ -154,6 +156,10 @@ class ExamplesTests(unittest.TestCase):
         output_dir = "./tests/fixtures/tests_samples/temp_dir_{}".format(hash(testargs))
         testargs += "--output_dir " + output_dir
         testargs = testargs.split()
+
+        if torch_device != "cuda":
+            testargs.append("--no_cuda")
+
         with patch.object(sys, "argv", testargs):
             result = run_language_modeling.main()
             self.assertLess(result["perplexity"], 35)
