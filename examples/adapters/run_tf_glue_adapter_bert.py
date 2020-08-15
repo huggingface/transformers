@@ -4,7 +4,7 @@ import tensorflow as tf
 import tensorflow_datasets
 import numpy as np
 from scipy.stats import spearmanr
-from sklearn.metrics import matthews_corrcoef, f1_score
+from sklearn.metrics import matthews_corrcoef, f1_score, accuracy_score
 from transformers import (
     BertConfig,
     BertTokenizer,
@@ -76,16 +76,16 @@ def main():
 
   data, info = tensorflow_datasets.load(TFDS_TASK, with_info=True)
   train_examples = info.splits["train"].num_examples
-  valid_examples = info.splits["validation"+postfix].num_examples
+  eval_examples = info.splits["validation"+postfix].num_examples
 
   train_dataset = glue_convert_examples_to_features(data["train"], tokenizer, max_length=args.max_seq_length, task=args.task)
-  valid_dataset = glue_convert_examples_to_features(data["validation"+postfix], tokenizer, max_length=args.max_seq_length, task=args.task)
+  eval_dataset = glue_convert_examples_to_features(data["validation"+postfix], tokenizer, max_length=args.max_seq_length, task=args.task)
     
   train_dataset = train_dataset.repeat().shuffle(buffer_size=100).batch(args.batch_size)
-  valid_dataset = valid_dataset.batch(args.batch_size)
+  eval_dataset = eval_dataset.batch(args.batch_size)
 
   train_steps = int(np.ceil(train_examples / args.batch_size))
-  valid_steps = int(np.ceil(valid_examples / args.batch_size))
+  eval_steps = int(np.ceil(eval_examples / args.batch_size))
 
 
   # Add Adapters
@@ -113,22 +113,18 @@ def main():
     model.bert.bert.encoder.layer[i].bert_output.LayerNorm.trainable = False
 
 
-  # Metrics, Loss & Optimizer
+  # Loss & Optimizer
   if num_labels == 1:
       loss = tf.keras.losses.MeanSquaredError()
-      metric = spearman
-      monitor = "val_spearman"
+      monitor = 'val_spearmanr'
   else:
       loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
       if args.task == 'cola':
-        metric = matthews_cc
-        monitor = "val_matthews_cc"
+        monitor = 'val_matthews_corrcoef'
       elif args.task in ['mrpc', 'qqp']:
-        metric = f1
-        monitor = "val_f1"
+        monitor = 'val_f1'
       else:
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-        monitor = "val_accuracy"
+        monitor = 'val_accuracy'
                 
 
   opt, scheduler = create_optimizer(init_lr=args.learning_rate,
@@ -136,53 +132,66 @@ def main():
                         num_warmup_steps=int(train_steps * args.epochs * args.warmup_ratio),
                         adam_epsilon=1e-6,
                         weight_decay_rate = 0)
-  model.compile(optimizer=opt, loss=loss, metrics=metric)
+  model.compile(optimizer=opt, loss=loss)
 
   # Callback to save the best model
-  checkpoint = ModelCheckpoint(monitor, os.path.join(args.saved_models_dir, args.task))
+  checkpoint = ModelCheckpoint(eval_dataset, args.batch_size, eval_steps, monitor, os.path.join(args.saved_models_dir, args.task))
 
   # Fine-tuning
   history = model.fit(
       train_dataset,
       epochs=args.epochs,
       steps_per_epoch=train_steps,
-      validation_data=valid_dataset,
-      validation_steps=valid_steps,
       callbacks=[checkpoint]
   )
 
 
-def spearman(labels, preds):
-    return (tf.py_function(spearmanr, [tf.cast(labels, tf.float32), 
-                           tf.cast(preds, tf.float32)], Tout = tf.float32))
-def f1(labels, preds):
-    preds = tf.math.argmax(preds, axis=1)
-    return (tf.py_function(f1_score, [tf.cast(labels, tf.float32), 
-                           tf.cast(preds, tf.float32)], Tout = tf.float32))
-def matthews_cc(labels, preds):
-    preds = tf.math.argmax(preds, axis=1)
-    return (tf.py_function(matthews_corrcoef, [tf.cast(labels, tf.float32), 
-                           tf.cast(preds, tf.float32)], Tout = tf.float32))
-    
-
 class ModelCheckpoint(tf.keras.callbacks.Callback):
-  def __init__(self, monitor, save_path):
+  def __init__(self, eval_dataset, eval_batch_size, eval_steps, monitor, save_path):
     super(ModelCheckpoint, self).__init__()
+    self.eval_dataset = eval_dataset
+    self.eval_batch_size = eval_batch_size
+    self.eval_steps = eval_steps
     self.monitor = monitor
     self.save_path = save_path
-    self.best_score = -np.Inf
-    self.best_loss = np.Inf
+    self.best_val_score = -np.Inf
+
+    self.val_labels: np.ndarray = None
+    for batch in self.eval_dataset:
+      if self.val_labels is None:
+        self.val_labels = batch[1].numpy()
+      else:
+        self.val_labels = np.append(self.val_labels, batch[1].numpy(), axis=0)
+
+  def evaluate(self):
+    val_preds = self.model.predict(self.eval_dataset, batch_size=self.eval_batch_size, steps=self.eval_steps)
+
+    if self.monitor == 'val_spearmanr':
+      val_preds = tf.clip_by_value(val_preds, clip_value_min=0.0, clip_value_max=5.0)
+      return spearmanr(self.val_labels, val_preds)[0]
+
+    elif self.monitor == 'val_matthews_corrcoef':
+      val_preds = tf.math.argmax(val_preds, axis=1)
+      return matthews_corrcoef(self.val_labels, val_preds)
+
+    elif self.monitor == 'val_f1':
+      val_preds = tf.math.argmax(val_preds, axis=1)
+      return f1_score(self.val_labels, val_preds)
+
+    else:
+      val_preds = tf.math.argmax(val_preds, axis=1)
+      return accuracy_score(self.val_labels, val_preds)
 
   def on_epoch_end(self, epoch, logs):
-    score = logs.get(self.monitor)
-    loss = logs.get("val_loss")
-    if score > self.best_score or (score == self.best_score and loss < self.best_loss):
+    val_score = self.evaluate()
+    print(" - {0}: {1:.4f}".format(self.monitor, val_score))
+
+    if val_score >= self.best_val_score:
       path = os.path.join(self.save_path, str(epoch+1))
       os.makedirs(path)
       self.model.save_weights(path+'/best_weights.h5')
-      self.best_score = score
-      self.best_loss = loss
-      print("\nModel saved as the best model")
+      self.best_val_score = val_score
+      print("Model saved in epoch {} as the best model".format(epoch+1))
 
 if __name__ == "__main__":
     main()
