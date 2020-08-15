@@ -316,22 +316,24 @@ class TestCasePlus(unittest.TestCase):
             tmp_dir(:obj:`string`):
                 either the same value as passed via `tmp_dir` or the path to the auto-created tmp dir
         """
-        if tmp_dir is not None:  # using provided path
+        if tmp_dir is not None:
+            # using provided path
+            path = Path(tmp_dir).resolve()
+
             # to avoid nuking parts of the filesystem, only relative paths are allowed
             if not tmp_dir.startswith("./"):
                 raise ValueError(
                     f"`tmp_dir` can only be a relative path, i.e. `./some/path`, but received `{tmp_dir}`"
                 )
-            path = Path(tmp_dir).resolve()
 
+            # ensure the dir is empty to start with
             if before is True and path.exists():
-                # ensure the dir is empty to start with
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
             path.mkdir(parents=True, exist_ok=True)
 
         else:
-            # using unique tmp dir (always empty)
+            # using unique tmp dir (always empty, regardless of `before`)
             tmp_dir = tempfile.mkdtemp()
 
         if after is True:
