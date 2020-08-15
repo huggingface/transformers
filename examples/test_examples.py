@@ -30,7 +30,12 @@ from transformers.testing_utils import torch_device
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
-    for dirname in ["text-generation", "text-classification", "language-modeling", "question-answering"]
+    for dirname in [
+        "text-generation",
+        "text-classification",
+        "language-modeling",
+        "question-answering",
+    ]
 ]
 sys.path.extend(SRC_DIRS)
 
@@ -203,7 +208,10 @@ class ExamplesTests(unittest.TestCase):
         if is_cuda_and_apex_avaliable():
             testargs.append("--fp16")
 
-        model_type, model_name = ("--model_type=gpt2", "--model_name_or_path=sshleifer/tiny-gpt2")
+        model_type, model_name = (
+            "--model_type=gpt2",
+            "--model_name_or_path=sshleifer/tiny-gpt2",
+        )
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
             result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)
