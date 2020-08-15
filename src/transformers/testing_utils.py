@@ -269,21 +269,21 @@ class TestCasePlus(unittest.TestCase):
     In all the following scenarios the temp dir will be auto-removed at the end
     of test, unless `after=False`.
 
-    # 1. give me a unique temp dir, `tmp_dir` will contain the path to the created temp dir
+    # 1. create a unique temp dir, `tmp_dir` will contain the path to the created temp dir
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
 
-    # 2. create the temp dir of my choice and delete it at the end - useful for debug when you want to
+    # 2. create a temp dir of my choice and delete it at the end - useful for debug when you want to
     # monitor a specific directory
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
 
-    # 3. create the temp dir of my choice and do not delete it at the end - useful for when you want
+    # 3. create a temp dir of my choice and do not delete it at the end - useful for when you want
     # to look at the temp results
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
 
-    # 4. create the temp dir of my choice and ensure to delete it right away - useful for when you
+    # 4. create a temp dir of my choice and ensure to delete it right away - useful for when you
     # disabled deletion in the previous test run and want to make sure the that tmp dir is empty
     # before the new test is run
     def test_whatever(self):
@@ -301,7 +301,6 @@ class TestCasePlus(unittest.TestCase):
 
     def setUp(self):
         self.teardown_tmp_dirs = []
-        self.teardown_tmp_objs = []
 
     def get_auto_remove_tmp_dir(self, tmp_dir=None, before=False, after=True):
         """
@@ -331,20 +330,18 @@ class TestCasePlus(unittest.TestCase):
 
             path.mkdir(parents=True, exist_ok=True)
 
-            if after is True:
-                # register for deletion
-                self.teardown_tmp_dirs.append(tmp_dir)
-
-            return tmp_dir
         else:
-            # using unique tmp dir
-            obj = tempfile.TemporaryDirectory()
-            self.teardown_tmp_objs.append(obj)
-            return obj.name
+            # using unique tmp dir (always empty)
+            tmp_dir = tempfile.mkdtemp()
+
+        if after is True:
+            # register for deletion
+            self.teardown_tmp_dirs.append(tmp_dir)
+
+        return tmp_dir
 
     def tearDown(self):
         # remove registered temp dirs and delete objects
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
-        self.teardown_tmp_objs = []
