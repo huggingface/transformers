@@ -343,7 +343,7 @@ class TestCasePlus(unittest.TestCase):
         return tmp_dir
 
     def tearDown(self):
-        # remove registered temp dirs and delete objects
+        # remove registered temp dirs
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
