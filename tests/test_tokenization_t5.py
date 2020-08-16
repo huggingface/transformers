@@ -17,6 +17,7 @@
 import os
 import unittest
 
+from transformers.file_utils import cached_property
 from transformers.tokenization_t5 import T5Tokenizer
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
@@ -102,3 +103,13 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
+
+    @cached_property
+    def t5_base_tokenizer(self):
+        return T5Tokenizer.from_pretrained("t5-base")
+
+    def test_eos_treatment(self):
+        tokenizer = self.t5_base_tokenizer
+        batch_with_eos_added = tokenizer(["hi</s>", "I went to the gym</s>", "</s>"])
+        batch_without_eos_added = tokenizer(["hi", "I went to the gym", ""])
+        self.assertListEqual(batch_with_eos_added["input_ids"], batch_without_eos_added["input_ids"])
