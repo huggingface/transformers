@@ -572,7 +572,7 @@ class Trainer:
 
                     if is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
-                    if self.args.fp16 and _use_native_amp:
+                    elif self.args.fp16 and _use_native_amp:
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                     else:
