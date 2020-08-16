@@ -522,8 +522,8 @@ Self-supervised training uses corrupted tokens, by randomly removing 15% of the 
 replacing them with individual sentinel tokens (if several consecutive tokens are marked for removal, the whole group is replaced with a single sentinel token). The input of the encoder is the corrupted sentence, the input of the decoder is the
 original sentence and the target is then the dropped out tokens delimited by their sentinel tokens.
 
-For instance, if we have the sentence “My dog is very cute .”, and we decide to remove the token "dog", "is" and "cute", the encoder
-input becomes “My <x> very <y> .” and the target becomes “<x> dog is <y> cute .<z>”
+For instance, if we have the sentence “My dog is very cute .”, and we decide to remove the tokens: "dog", "is" and "cute", the encoder
+input becomes “My <x> very <y> .” and the target input becomes “<x> dog is <y> cute .<z>”
 
 The library provides a version of this model for conditional generation.
 
