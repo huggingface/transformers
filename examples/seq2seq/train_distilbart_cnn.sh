@@ -20,5 +20,5 @@ python finetune.py \
     --tokenizer_name facebook/bart-large \
     --warmup_steps 500 \
     --output_dir distilbart-cnn-12-6 \
-    $@
+    "$@"
 
