@@ -1,4 +1,4 @@
-.PHONY: quality style test test-examples
+.PHONY: quality style test test-examples docs
 
 # Check that source code meets quality standards
 
@@ -23,3 +23,8 @@ test:
 
 test-examples:
 	python -m pytest -n auto --dist=loadfile -s -v ./examples/
+
+# Check that docs can build
+
+docs:
+	cd docs && make html SPHINXOPTS="-W"
