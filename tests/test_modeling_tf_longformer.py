@@ -29,8 +29,10 @@ if is_tf_available():
         LongformerConfig,
         TFLongformerModel,
         TFLongformerForMaskedLM,
-        TFLongformerForSequenceClassification,
+        TFLongformerForMultipleChoice,
         TFLongformerForQuestionAnswering,
+        TFLongformerForSequenceClassification,
+        TFLongformerForTokenClassification,
         TFLongformerSelfAttention,
     )
 
@@ -194,6 +196,37 @@ class TFLongformerModelTester:
             shape_list(result["prediction_scores"]), [self.batch_size, self.seq_length, self.vocab_size]
         )
 
+    def create_and_check_longformer_for_sequence_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFLongformerForSequenceClassification(config=config)
+        inputs = dict(input_ids=input_ids, attention_mask=input_mask, labels=sequence_labels)
+        loss, output = model(inputs)
+        self.parent.assertListEqual(shape_list(output), [self.batch_size, self.num_labels])
+
+    def create_and_check_longformer_for_token_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFLongformerForTokenClassification(config=config)
+        inputs = dict(input_ids=input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        (output,) = model(inputs)
+        self.parent.assertListEqual(list(output.shape), [self.batch_size, self.seq_length, self.num_labels])
+
+    def create_and_check_longformer_for_multiple_choice(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_choices = self.num_choices
+        model = TFLongformerForMultipleChoice(config=config)
+        inputs = dict(
+            input_ids=tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1)),
+            attention_mask=tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1)),
+            token_type_ids=tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1)),
+        )
+        (output,) = model(inputs)
+        self.parent.assertListEqual(list(output.shape), [self.batch_size, self.num_choices])
+
     def create_and_check_longformer_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -292,6 +325,18 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_longformer_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_longformer_for_masked_lm(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_multiple_choice(*config_and_inputs)
 
     def test_longformer_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_question_answering()
@@ -540,4 +585,3 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(list(output.numpy().shape), expected_shape)
         expected_tensor = tf.constant([[-0.9469, 0.3913, 0.5118]])
         self.assertTrue(numpy.allclose(output.numpy(), expected_tensor.numpy(), atol=1e-4))
-

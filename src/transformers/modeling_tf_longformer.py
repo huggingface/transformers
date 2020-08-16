@@ -20,7 +20,7 @@ import tensorflow as tf
 
 from .configuration_longformer import LongformerConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertPreTrainedModel, TFBertSelfOutput 
+from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertSelfOutput
 from .modeling_tf_outputs import (
     TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
@@ -1283,6 +1283,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
+
 class TFLongformerClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks"""
 
@@ -1296,7 +1297,7 @@ class TFLongformerClassificationHead(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.out_proj = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(confi.initializer_range), name="out_proj"
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
 
     def call(self, features, training=False):
@@ -1307,25 +1308,20 @@ class TFLongformerClassificationHead(tf.keras.layers.Layer):
         x = self.out_proj(x)
         return x
 
+
 @add_start_docstrings(
     """Longformer Model transformer with a sequence classification/regression head on top (a linear layer
     on top of the pooled output) e.g. for GLUE tasks. """,
     LONGFORMER_START_DOCSTRING,
 )
-class TFLongformerForSequenceClassification(TFBertPreTrainedModel):
-    config_class = LongformerConfig
-    base_model_prefix = "longformer"
-
+class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *init, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-
-        self.longformer = TFLongformerModel(config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
         self.classifier = TFLongformerClassificationHead(config, name="classifier")
 
-        self.init_weights()
-
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-base-4096",
@@ -1334,34 +1330,43 @@ class TFLongformerForSequenceClassification(TFBertPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
+        inputs=None,
         attention_mask=None,
         global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        labels=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy)
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if return_dict is None:
+            return_dict = self.longformer.return_dict
+
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
 
         if global_attention_mask is None:
             logger.info("Initializing global attention on CLS token...")
-            global_attention_mask = tf.zeros_like(input_ids)
+            global_attention_mask = tf.zeros_like(inputs)
             # global attention on cls token
             global_attention_mask[:, 0] = 1
 
         outputs = self.longformer(
-            input_ids,
+            inputs,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
@@ -1370,9 +1375,11 @@ class TFLongformerForSequenceClassification(TFBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
+
         sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
+        logits = self.classifier(sequence_output, training=training)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
 
@@ -1381,8 +1388,200 @@ class TFLongformerForSequenceClassification(TFBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
+
+
+@add_start_docstrings(
+    """Longformer Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    LONGFORMER_START_DOCSTRING,
+)
+class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
+
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="allenai/longformer-base-4096",
+        output_type=TFTokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        global_attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+        training=False,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+        """
+        if not return_dict:
+            return_dict = self.longformer.return_dict
+
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on CLS token...")
+            global_attention_mask = tf.zeros_like(inputs)
+            # global attention on cls token
+            global_attention_mask[:, 0] = 1
+
+        outputs = self.longformer(
+            inputs,
+            attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output, training=training)
+        logits = self.classifier(sequence_output)
+
+        loss = None if labels is None else self.compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFTokenClassifierOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
+
+
+@add_start_docstrings(
+    """Longformer Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    LONGFORMER_START_DOCSTRING,
+)
+class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoiceLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
+            1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return dict(input_ids=tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS))
+
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="allenai/longformer-base-4096",
+        output_type=TFMultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        global_attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+        training=False,
+    ):
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            global_attention_mask = inputs[2] if len(inputs) > 2 else global_attention_mask
+            token_type_ids = inputs[3] if len(inputs) > 3 else token_type_ids
+            position_ids = inputs[4] if len(inputs) > 4 else position_ids
+            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            labels = inputs[9] if len(inputs) > 9 else labels
+            assert len(inputs) <= 10, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_attentions)
+            return_dict = inputs.get("return_dict", return_dict)
+            labels = inputs.get("labels", labels)
+            assert len(inputs) <= 10, "Too many inputs."
+        else:
+            input_ids = inputs
+        if return_dict is None:
+            return_dict = self.longformer.return_dict
+
+        if input_ids is not None:
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
+        else:
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
+
+        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        flat_global_attention_mask = (
+            tf.reshape(global_attention_mask, (-1, seq_length)) if global_attention_mask is not None else None
+        )
+        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        outputs = self.longformer(
+            flat_input_ids,
+            flat_attention_mask,
+            flat_global_attention_mask,
+            flat_token_type_ids,
+            flat_position_ids,
+            inputs_embeds,
+            output_attentions,
+            output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        pooled_output = self.dropout(outputs[1], training=training)
+        logits = self.classifier(pooled_output)
+        reshaped_logits = tf.reshape(logits, (-1, num_choices))
+
+        loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFMultipleChoiceModelOutput(
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+        )
+
 
 @add_start_docstrings(
     """Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD / TriviaQA (a linear layers on top of
@@ -1500,14 +1699,3 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-'''
-@add_start_docstrings(
-    """Longformer Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    LONGFORMER_START_DOCSTRING,
-)
-class LongformerForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassificationLoss):
-'''
-
-
