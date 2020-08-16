@@ -612,7 +612,7 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
     ...            "close to the Manhattan Bridge which is visible from the window."
 
 
-This outputs a list of all words, that have been identified as one of the entities from the 9 classes defined above. Here are the
+This outputs a list of all words that have been identified as one of the entities from the 9 classes defined above. Here are the
 expected results:
 
 .. code-block::
