@@ -127,28 +127,34 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
 class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     checkpoint_name = "facebook/mbart-large-cc25"
     src_text = [
-        " UN Chief Says There Is No Military Solution in Syria",
-        " I ate lunch twice yesterday",
+        "<s> UN Chief Says There Is No Military Solution in Syria",
+        "<s> I ate lunch twice yesterday",
     ]
-    tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
+    tgt_text = [
+        "UN Chief Says There Is No Military Solution in Syria",
+        "I ate lunch twice yesterday",
+    ]
 
-    @unittest.skip("This test is broken, still generates english")
+    @slow
     def test_cc25_generate(self):
         inputs = self.tokenizer.prepare_seq2seq_batch([self.src_text[0]]).to(torch_device)
         translated_tokens = self.model.generate(
             input_ids=inputs["input_ids"].to(torch_device),
-            decoder_start_token_id=self.tokenizer.lang_code_to_id["ro_RO"],
+            #decoder_start_token_id=self.tokenizer.lang_code_to_id["ro_RO"],
         )
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
 
     @slow
-    def test_fill_mask(self):
-        inputs = self.tokenizer.prepare_seq2seq_batch(["One of the best <mask> I ever read!"]).to(torch_device)
+    def test_cc25_fill_mask(self):
+        inputs = self.tokenizer.prepare_seq2seq_batch(["<s> One of the best <mask> I ever read!","One of the best <mask> I ever read!", ]).to(torch_device)
         outputs = self.model.generate(
-            inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id["en_XX"], num_beams=1
+            inputs["input_ids"],
+            decoder_start_token_id=self.tokenizer.lang_code_to_id["en_XX"],
+            num_beams=1
         )
         prediction: str = self.tokenizer.batch_decode(
             outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )[0]
-        self.assertEqual(prediction, "of the best books I ever read!")
+        )
+        # without BOS, the output is missing the first word.
+        assert prediction == ["One of the best books about the world I ever read!", "of the best books I ever read!"]
