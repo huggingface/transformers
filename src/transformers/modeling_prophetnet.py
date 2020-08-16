@@ -30,6 +30,8 @@ import numpy as np
 import math
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, add_code_sample_docstrings
 import warnings
+from .modeling_bart import SelfAttention, LayerNorm, invert_mask
+
 
 logger = logging.getLogger(__name__)
 
@@ -103,10 +105,6 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
             Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
-            Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
-            If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
-            See diagram 1 in the paper for more info on the default strategy
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
@@ -143,7 +141,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.onnx_trace = False
 
-    def forward(self, input, use_cache=False, positions=None):
+    def forward(self, input_ids, use_cache=False, positions=None):
         """Input is expected to be of size [bsz x seqlen]."""
         assert (
             (positions is None) or (self.padding_idx is None)
@@ -153,9 +151,9 @@ class LearnedPositionalEmbedding(nn.Embedding):
             if use_cache:
                 # positions is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-                positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
+                positions = input_ids.data.new(1, 1).fill_(int(self.padding_idx + input_ids.size(1)))
             else:
-                mask = input.data.ne(self.padding_idx).int()
+                mask = input_ids.data.ne(self.padding_idx).int()
                 positions = ( torch.cumsum(mask, dim=1).type_as(mask) * mask ).long() + self.padding_idx
             real_positions = positions
         else:
@@ -172,193 +170,14 @@ class LearnedPositionalEmbedding(nn.Embedding):
     def _forward(self, positions):
         return super().forward(positions)
 
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, export=False):
-    if not export and torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
-
-def invert_mask(attention_mask):
-    assert attention_mask.dim() == 2
-    return attention_mask.eq(0)
-
-
-class SelfAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        encoder_decoder_attention=False,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
-
-        self.encoder_decoder_attention = encoder_decoder_attention
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
-
-    def _shape(self, tensor, dim_0, bsz):
-        return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
-
-    def forward(
-        self,
-        query,
-        key: Optional[Tensor],
-        key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
-        attn_mask: Optional[Tensor] = None,
-        output_attentions=False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Time(SeqLen) x Batch x Channel"""
-        static_kv: bool = self.encoder_decoder_attention
-        tgt_len, bsz, embed_dim = query.size()
-        assert embed_dim == self.embed_dim
-        assert list(query.size()) == [tgt_len, bsz, embed_dim]
-        # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # reuse k,v and encoder_padding_mask
-            saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state:
-                # previous time steps are cached - no need to recompute key and value if they are static
-                if static_kv:
-                    key = None
-        else:
-            saved_state = None
-            layer_state = {}
-
-        q = self.q_proj(query) * self.scaling
-        if static_kv:
-            if key is None:
-                k = v = None
-            else:
-                k = self.k_proj(key)
-                v = self.v_proj(key)
-        else:
-            k = self.k_proj(query)
-            v = self.v_proj(query)
-
-        q = self._shape(q, tgt_len, bsz)
-        if k is not None:
-            k = self._shape(k, -1, bsz)
-        if v is not None:
-            v = self._shape(v, -1, bsz)
-
-        if saved_state is not None:
-            k, v, key_padding_mask = self._use_saved_state(k, v, saved_state, key_padding_mask, static_kv, bsz)
-
-        # Update cache
-        layer_state[self.cache_key] = {
-            "prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_key_padding_mask": key_padding_mask if not static_kv else None,
-        }
-
-        assert k is not None
-        src_len = k.size(1)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
-        assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
-
-        if attn_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
-        if key_padding_mask is not None and key_padding_mask.dim() == 0:
-            key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len,)
-
-        if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
-            attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-        attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training,)
-
-        assert v is not None
-        attn_output = torch.bmm(attn_probs, v)
-        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
-        attn_output = self.out_proj(attn_output)
-        if output_attentions:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights = None
-        return attn_output, attn_weights
-
-    def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
-        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        if "prev_key" in saved_state:
-            _prev_key = saved_state["prev_key"]
-            assert _prev_key is not None
-            prev_key = _prev_key.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                k = prev_key
-            else:
-                assert k is not None
-                k = torch.cat([prev_key, k], dim=1)
-        if "prev_value" in saved_state:
-            _prev_value = saved_state["prev_value"]
-            assert _prev_value is not None
-            prev_value = _prev_value.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                v = prev_value
-            else:
-                assert v is not None
-                v = torch.cat([prev_value, v], dim=1)
-        assert k is not None and v is not None
-        prev_key_padding_mask: Optional[Tensor] = saved_state.get("prev_key_padding_mask", None)
-        key_padding_mask = self._cat_prev_key_padding_mask(
-            key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv
-        )
-        return k, v, key_padding_mask
-
-    @staticmethod
-    def _cat_prev_key_padding_mask(
-        key_padding_mask: Optional[Tensor],
-        prev_key_padding_mask: Optional[Tensor],
-        batch_size: int,
-        src_len: int,
-        static_kv: bool,
-    ) -> Optional[Tensor]:
-        # saved key padding masks have shape (bsz, seq_len)
-        if prev_key_padding_mask is not None:
-            if static_kv:
-                new_key_padding_mask = prev_key_padding_mask
-            else:
-                new_key_padding_mask = torch.cat([prev_key_padding_mask, key_padding_mask], dim=1)
-
-        elif key_padding_mask is not None:
-            filler = torch.zeros(
-                batch_size,
-                src_len - key_padding_mask.size(1),
-                dtype=key_padding_mask.dtype,
-                device=key_padding_mask.device,
-            )
-            new_key_padding_mask = torch.cat([filler, key_padding_mask], dim=1)
-        else:
-            new_key_padding_mask = prev_key_padding_mask
-        return new_key_padding_mask
-
 
 class EncoderLayer(nn.Module):
+    """
+    Same to Transformer Encoder Layer
+    """
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
         self.self_attn = SelfAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
         )
@@ -370,28 +189,29 @@ class EncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
-    def forward(self, x, encoder_padding_mask, output_attentions=False):
-        residual = x
-        x, attn_weights = self.self_attn(
-            query=x, key=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
+    def forward(self, hidden_states, encoder_padding_mask, output_attentions=False):
+        residual = hidden_states
+        hidden_states, attn_weights = self.self_attn(
+            query=hidden_states, key=hidden_states, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.self_attn_layer_norm(x)
-        residual = x
-        x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
-        x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.final_layer_norm(x)
-        return x, attn_weights
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        residual = hidden_states
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        return hidden_states, attn_weights
 
 
 
 class ProphetNetEncoder(nn.Module):
     """
-    ProphetNet Encoder is same to traditional Transformer Encoder.
+    Same to Transformer Encoder.
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
     is a :class:`EncoderLayer`.
 
@@ -412,32 +232,10 @@ class ProphetNetEncoder(nn.Module):
         self.embed_scale = None
         self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings+1+self.padding_idx, embed_dim, self.padding_idx)
 
-        self.layers = nn.ModuleList([])
-        self.layers.extend([
-            EncoderLayer(config)
-            for i in range(config.encoder_layers)
-        ])
+        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
     def forward(self, input_ids, attention_mask=None, output_attentions=False):
-        """
-
-        Args:
-            input_ids (LongTensor): tokens in the source language of shape
-                `(batch, src_len)`
-            attention_mask (torch.LongTensor): indicating which indices are padding tokens.
-        Returns:
-            Tuple comprised of:
-                - **x** (Tensor): the last encoder layer's output of
-                  shape `(src_len, batch, embed_dim)`
-                - **encoder_states** (List[Tensor]): all intermediate
-                  hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (List[Tensor]): Attention weights for each layer.
-                During training might not be of length n_layers because of layer dropout.
-
-        """
-
         # remove bos to be consistent with fairseq version
         input_ids = input_ids[:, 1:]
         if attention_mask is not None:
@@ -454,16 +252,16 @@ class ProphetNetEncoder(nn.Module):
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
-        encoder_states, all_attentions = [], []
+        encoder_states, all_attentions = (), ()
         for encoder_layer in self.layers:
             if self.output_hidden_states:
-                encoder_states.append(x)
+                encoder_states = encoder_states + (x,)
             x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
             if output_attentions:
-                all_attentions.append(attn)
+                all_attentions = all_attentions + (x,)
 
         if self.output_hidden_states:
-            encoder_states.append(x)
+            encoder_states = encoder_states + (x,)
 
         # T x B x C -> B x T x C
         encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
@@ -471,20 +269,6 @@ class ProphetNetEncoder(nn.Module):
         results = (x, encoder_states, all_attentions)
         return results
 
-    def ngram_attention_bias(length, num_skip):
-        bias_result = []
-        for n_skip in range(num_skip):
-            bias_n_skip = []
-            for i in range(length):
-                bias_this = [float('-inf')] * (2 * length)
-                bias_this[length + i] = 0
-                first_k = i - n_skip
-                first_k = first_k if first_k > 0 else 0
-                for j in range(first_k + 1):
-                    bias_this[j] = 0
-                bias_n_skip.append(bias_this)
-            bias_result.append(bias_n_skip)
-        return torch.from_numpy(np.array(bias_result, dtype=np.float32))
 
 def softmax(x, dim, onnx_trace=False):
     if onnx_trace:
@@ -567,26 +351,6 @@ class NgramMultiheadAttention(nn.Module):
         if self.bias_v is not None:
             nn.init.xavier_normal_(self.bias_v)
 
-    def _relative_positions_bucket(self, relative_positions, bidirectional=False):
-        num_buckets = self.num_buckets
-        max_distance = self.relative_max_distance
-        n = -relative_positions
-        result = 0
-        if bidirectional:
-            num_buckets = num_buckets // 2
-            result = result + torch.lt(n, torch.zeros_like(n)).int() * num_buckets
-            n = torch.abs(n)
-        else:
-            n = torch.max(n, torch.zeros_like(n))
-        max_exact = num_buckets // 2
-        is_small = torch.lt(n, max_exact)
-        val_if_large = max_exact + torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (
-                num_buckets - max_exact)
-        val_if_large = torch.min(val_if_large, torch.ones_like(val_if_large) * (num_buckets - 1))
-        val_if_large = val_if_large.int()
-        result = result + torch.where(is_small, n.int(), val_if_large)
-        return result
-
     def main_stream_relative_logits(self, query, attn_weights, real_positions, i_bucket_main_stream):
         # input query [T,B,C]
         # input attn_weights [T*head,T,S]
@@ -606,7 +370,7 @@ class NgramMultiheadAttention(nn.Module):
             # [B,T,S]
             relative_positions = relative_positions - real_positions
             # [B,T,T]
-            i_buckets = self._relative_positions_bucket(relative_positions, False)
+            i_buckets = _relative_positions_bucket(self.num_buckets, self.relative_max_distance, relative_positions, False)
 
         # [B,T,C]
         query = query.transpose(0, 1)
@@ -654,7 +418,7 @@ class NgramMultiheadAttention(nn.Module):
             relative_positions = relative_positions
             # [B,T,2*T] or [B,T,S]
             relative_positions = relative_positions - real_positions
-            i_buckets = self._relative_positions_bucket(relative_positions, False)
+            i_buckets = _relative_positions_bucket(self.num_buckets, self.relative_max_distance, relative_positions, False)
 
         # [ngram, B, T, C]
         query = query.transpose(1, 2)
@@ -679,7 +443,7 @@ class NgramMultiheadAttention(nn.Module):
 
         return result
 
-    def forward(self, query, key, value, key_padding_mask=None, layer_state=None,
+    def forward(self, hidden_states, key_padding_mask=None, layer_state=None,
                 need_weights=True, static_kv=False,
                 self_attn_mask=None,
                 ngram_mask_matrix=None,
@@ -689,23 +453,17 @@ class NgramMultiheadAttention(nn.Module):
                 output_attentions = False
                 ):
 
-        tgt_len, bsz, embed_dim = query.size()
+        tgt_len, bsz, embed_dim = hidden_states.size()
         assert embed_dim == self.embed_dim
-        assert list(query.size()) == [tgt_len, bsz, embed_dim]
+        assert list(hidden_states.size()) == [tgt_len, bsz, embed_dim]
 
         if layer_state is not None:  # reuse k,v and encoder_padding_mask
             saved_state = layer_state.get(self.cache_key, {})
-            if 'prev_key' in saved_state:
-                # previous time steps are cached - no need to recompute
-                # key and value if they are static
-                if static_kv:
-                    assert self.encoder_decoder_attention and not self.self_attention
-                    key = value = None
         else:
             saved_state = None
             layer_state = {}
 
-        q, k, v = self.in_proj_qkv(query)
+        q, k, v = self.in_proj_qkv(hidden_states)
         q *= self.scaling
 
         if self.bias_k is not None:
@@ -718,7 +476,7 @@ class NgramMultiheadAttention(nn.Module):
         if v is not None:
             v = v.contiguous().view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
 
-        h_list = query.chunk(1 + self.ngram, dim=0)
+        h_list = hidden_states.chunk(1 + self.ngram, dim=0)
 
         q_list = q.chunk(1 + self.ngram, dim=1)
         k_list = k.chunk(1 + self.ngram, dim=1)
@@ -762,12 +520,12 @@ class NgramMultiheadAttention(nn.Module):
             self_attn_mask = self_attn_mask.unsqueeze(0)
             attn_weights_main = attn_weights_main + self_attn_mask
 
-        attn_weights_main = softmax(
+        attn_probs_main = softmax(
             attn_weights_main, dim=-1, onnx_trace=self.onnx_trace,
         ).type_as(attn_weights_main)
-        attn_weights_main = F.dropout(attn_weights_main, p=self.dropout, training=self.training)
+        attn_probs_main = F.dropout(attn_probs_main, p=self.dropout, training=self.training)
 
-        attn_main = torch.bmm(attn_weights_main, v_main)
+        attn_main = torch.bmm(attn_probs_main, v_main)
         attn_main = attn_main.transpose(0, 1).contiguous().view(1, real_tgt_len, bsz, embed_dim)
         attn_main = self.out_proj(attn_main)
 
@@ -810,12 +568,8 @@ class NgramMultiheadAttention(nn.Module):
         attn_ngram = attn_ngram.transpose(1, 2).contiguous().view(self.ngram, real_tgt_len, bsz, embed_dim)
         attn_ngram = self.out_proj(attn_ngram)
 
-        attn_result = []
-        attn_result.append(attn_main)
-        attn_result.append(attn_ngram)
-
         # [1+ngram*T, B, C]
-        attn = torch.cat(attn_result, 0).view(-1, bsz, embed_dim)
+        attn = torch.cat([attn_main, attn_ngram], 0).view(-1, bsz, embed_dim)
 
         if output_attentions:
             attn_weights = attn_weights_ngram#.view(bsz, self.num_heads, tgt_len, src_len)
@@ -864,25 +618,10 @@ class NgramMultiheadAttention(nn.Module):
             bias = bias[start:end]
         return F.linear(input, weight, bias)
 
-    def reorder_incremental_state(self, incremental_state, new_order):
-        """Reorder buffered internal state (for incremental generation)."""
-        input_buffer = self._get_input_buffer(incremental_state)
-        if input_buffer is not None:
-            for k in input_buffer.keys():
-                input_buffer[k] = input_buffer[k].index_select(0, new_order)
-            self._set_input_buffer(incremental_state, input_buffer)
-
-    def _get_input_buffer(self, incremental_state):
-        return {}
-
-    def _set_input_buffer(self, incremental_state, buffer):
-        pass
-
-
 class ProphetNetDecoderLayer(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
         self.dropout = config.dropout
         self.activation_dropout = config.activation_dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -912,7 +651,7 @@ class ProphetNetDecoderLayer(nn.Module):
 
     def forward(
         self,
-        x,
+        hidden_states,
         encoder_hidden_states,
         encoder_attn_mask=None,
         layer_state=None,
@@ -924,15 +663,13 @@ class ProphetNetDecoderLayer(nn.Module):
         real_positions=None
     ):
         # one main stream and ngram predicting streams
-        residual = x
+        residual = hidden_states
 
         if layer_state is None:
             layer_state = {}
 
-        x, self_attn_weights = self.ngram_self_attn(
-            query=x,
-            key=x,
-            value=x,
+        hidden_states, self_attn_weights = self.ngram_self_attn(
+            hidden_states=hidden_states,
             layer_state=layer_state,
             need_weights=False,
             self_attn_mask=self_attn_mask,
@@ -942,31 +679,31 @@ class ProphetNetDecoderLayer(nn.Module):
             real_positions=real_positions,
             output_attentions=output_attentions
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.self_attn_layer_norm(x)
-        residual = x
-        x, _ = self.encoder_attn(
-            query=x,
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        residual = hidden_states
+        hidden_states, _ = self.encoder_attn(
+            query=hidden_states,
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.encoder_attn_layer_norm(x)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
-        residual = x
-        x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
-        x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.final_layer_norm(x)
+        residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
 
         return (
-            x,
+            hidden_states,
             self_attn_weights,
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
@@ -985,6 +722,50 @@ def ngram_attention_bias(length, num_skip):
                 bias_n_skip.append(bias_this)
             bias_result.append(bias_n_skip)
         return torch.from_numpy(np.array(bias_result, dtype=np.float32))
+
+def _relative_positions_bucket(num_buckets, max_distance, relative_positions, is_bidirectional=False):
+    n = -relative_positions
+    result = 0
+    if is_bidirectional:
+        num_buckets = num_buckets // 2
+        result = result + torch.lt(n, torch.zeros_like(n)).int() * num_buckets
+        n = torch.abs(n)
+    else:
+        n = torch.max(n, torch.zeros_like(n))
+    max_exact = num_buckets // 2
+    is_small = torch.lt(n, max_exact)
+    val_if_large = max_exact + torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (
+            num_buckets - max_exact)
+    val_if_large = torch.min(val_if_large, torch.ones_like(val_if_large) * (num_buckets - 1))
+    val_if_large = val_if_large.int()
+    result = result + torch.where(is_small, n.int(), val_if_large)
+    return result
+
+
+def cal_relative_positions_buckets(num_buckets, max_distance, real_positions):
+    # main stream
+    main_stream_relative_positions = real_positions.unsqueeze(1)
+    # [B,T,T/S]
+    main_stream_relative_positions = main_stream_relative_positions.repeat(1, real_positions.size(-1), 1)
+    # [B,T,1]
+    real_positions_main = real_positions.unsqueeze(-1)
+    main_stream_relative_positions = main_stream_relative_positions - real_positions_main
+
+    # predicting stream
+    # input shift
+    real_positions_shift_predicting_stream = real_positions - 1
+    # [B,1, 2*T]
+    predicting_stream_relative_positions = torch.cat((real_positions_shift_predicting_stream, real_positions),
+                                                     dim=-1).unsqueeze(1)
+    # [B,T, 2*T]
+    predicting_stream_relative_positions = predicting_stream_relative_positions.repeat(1, real_positions.size(-1),
+                                                                                       1)
+    # [B,T, 1]
+    real_positions_predicting_stream = real_positions.unsqueeze(-1)
+    predicting_stream_relative_positions = predicting_stream_relative_positions - real_positions_predicting_stream
+    i_buckets_main_stream = _relative_positions_bucket(num_buckets, max_distance, main_stream_relative_positions, is_bidirectional=False)
+    i_bucket_relative_stream = _relative_positions_bucket(num_buckets, max_distance, predicting_stream_relative_positions, is_bidirectional=False)
+    return i_buckets_main_stream, i_bucket_relative_stream
 
 class ProphetNetDecoder(nn.Module):
     """
@@ -1011,64 +792,16 @@ class ProphetNetDecoder(nn.Module):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = None
         self.embed_tokens = embed_tokens
-        embed_dim = config.d_model
+        embed_dim = config.hidden_size
         self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings + 2 + self.padding_idx,
                                                           embed_dim, self.padding_idx)
         self.ngram_input_embed = nn.Embedding(self.ngram, embed_dim, None)
-        self.layers = nn.ModuleList([])
-        self.layers.extend([
-            ProphetNetDecoderLayer(config)
-            for _ in range(config.decoder_layers)
-        ])
+
+        self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.emb_layer_norm = LayerNorm(embed_dim)
 
-    def _relative_positions_bucket(self, relative_positions, bidirectional=False):
-        num_buckets = self.num_buckets
-        max_distance = self.relative_max_distance
-        n = -relative_positions
-        result = 0
-        if bidirectional:
-            num_buckets = num_buckets // 2
-            result = result + torch.lt(n, torch.zeros_like(n)).int() * num_buckets
-            n = torch.abs(n)
-        else:
-            n = torch.max(n, torch.zeros_like(n))
-        max_exact = num_buckets // 2
-        is_small = torch.lt(n, max_exact)
-        val_if_large = max_exact + torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (
-                num_buckets - max_exact)
-        val_if_large = torch.min(val_if_large, torch.ones_like(val_if_large) * (num_buckets - 1))
-        val_if_large = val_if_large.int()
-        result = result + torch.where(is_small, n.int(), val_if_large)
-        return result
 
-    def cal_pretrain_relative_positions(self, real_positions):
-        # main stream
-        main_stream_relative_positions = real_positions.unsqueeze(1)
-        # [B,T,T/S]
-        main_stream_relative_positions = main_stream_relative_positions.repeat(1, real_positions.size(-1), 1)
-        # [B,T,1]
-        real_positions_main = real_positions.unsqueeze(-1)
-        main_stream_relative_positions = main_stream_relative_positions - real_positions_main
-
-        # predicting stream
-        # input shift
-        real_positions_shift_predicting_stream = real_positions - 1
-        # [B,1, 2*T]
-        predicting_stream_relative_positions = torch.cat((real_positions_shift_predicting_stream, real_positions),
-                                                         dim=-1).unsqueeze(1)
-        # [B,T, 2*T]
-        predicting_stream_relative_positions = predicting_stream_relative_positions.repeat(1, real_positions.size(-1),
-                                                                                           1)
-        # [B,T, 1]
-        real_positions_predicting_stream = real_positions.unsqueeze(-1)
-        predicting_stream_relative_positions = predicting_stream_relative_positions - real_positions_predicting_stream
-        i_buckets_main_stream = self._relative_positions_bucket(main_stream_relative_positions, bidirectional=False)
-        i_bucket_relative_stream = self._relative_positions_bucket(predicting_stream_relative_positions,
-                                                                   bidirectional=False)
-        return i_buckets_main_stream, i_bucket_relative_stream
-
-    def cal_finetune_relative_positions(self, real_positions):
+    def cal_and_buffer_finetune_relative_positions(self, real_positions):
         n_tokens = real_positions.size(-1)
         batch_size = real_positions.size(0)
         if not hasattr(self,
@@ -1076,8 +809,7 @@ class ProphetNetDecoder(nn.Module):
                 self._finetune_i_bucket_main_stream is None \
                 or self._finetune_i_bucket_main_stream.device != real_positions.device:
             fake_positions = torch.arange(1, self.max_target_positions + 1).repeat(1, 1)
-            finetune_i_bucket_main_stream, finetune_i_bucket_predicting_stream = \
-                self.cal_pretrain_relative_positions(fake_positions)
+            finetune_i_bucket_main_stream, finetune_i_bucket_predicting_stream = cal_relative_positions_buckets(self.num_buckets, self.relative_max_distance, fake_positions)
             self._finetune_i_bucket_main_stream = finetune_i_bucket_main_stream.to(real_positions.device)
             self._finetune_i_bucket_predicting_stream = finetune_i_bucket_predicting_stream.to(real_positions.device)
         finetune_i_bucket_main_stream = self._finetune_i_bucket_main_stream[:, :n_tokens, :n_tokens].repeat(batch_size,
@@ -1150,19 +882,18 @@ class ProphetNetDecoder(nn.Module):
             main_stream_pos_embed = main_stream_pos_embed[:, -1:]  # happens after we embed them
             i_buckets_main_stream, i_bucket_relative_stream = None, None
         else:
-            i_buckets_main_stream, i_bucket_relative_stream = \
-                self.cal_finetune_relative_positions(real_positions)
+            i_buckets_main_stream, i_bucket_relative_stream = self.cal_and_buffer_finetune_relative_positions(real_positions)
         predicting_stream_pos_embed = self.embed_positions._forward(real_positions + 1)
-        x = self.embed_tokens(input_ids)
+        hidden_states = self.embed_tokens(input_ids)
         if self.embed_scale is not None:
-            x *= self.embed_scal
-        x += main_stream_pos_embed
+            hidden_states *= self.embed_scal
+        hidden_states += main_stream_pos_embed
         # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        hidden_states = hidden_states.transpose(0, 1)
 
         ngram_input_embed = self.ngram_input_embed.weight
         if use_cache:
-            B = x.size(1)
+            B = hidden_states.size(1)
             ngram_masks = [
                 (ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, B, 1)
                 for ngram in range(self.ngram)]
@@ -1171,13 +902,13 @@ class ProphetNetDecoder(nn.Module):
         else:
             ngram_masks = [(ngram_input_embed[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1) for
                            ngram in range(self.ngram)]
-            self_attn_mask = self.buffered_future_mask(x)
-            ngram_mask_matrix = self.buffered_future_mask_ngram(x)
+            self_attn_mask = self.buffered_future_mask(hidden_states)
+            ngram_mask_matrix = self.buffered_future_mask_ngram(hidden_states)
         # TODO in train [(1+ngram)*T, B, C], in inference [T+ngram, B, C]
-        x = torch.cat([x] + ngram_masks, 0)
+        hidden_states = torch.cat([hidden_states] + ngram_masks, 0)
         if self.emb_layer_norm:
-            x = self.emb_layer_norm(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+            hidden_states = self.emb_layer_norm(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # decoder layers
@@ -1186,10 +917,10 @@ class ProphetNetDecoder(nn.Module):
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
             if self.output_hidden_states:
-                all_hidden_states += (x,)
+                all_hidden_states += (hidden_states,)
             layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
-            x, layer_self_attn, layer_past = decoder_layer(
-                x,
+            hidden_states, layer_self_attn, layer_past = decoder_layer(
+                hidden_states,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
                 layer_state=layer_state,
@@ -1204,35 +935,13 @@ class ProphetNetDecoder(nn.Module):
                 next_decoder_cache.append(layer_past.copy())
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
-        # TODO [(1+ngram)*T, B, C] -> [B, (1+ngram)*T, C]
-        x_list = x.transpose(0, 1).chunk(1 + self.ngram, 1)
+        hidden_states_list = hidden_states.transpose(0, 1).chunk(1 + self.ngram, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
         if use_cache:
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
-        return x_list, next_cache, all_hidden_states, list(all_self_attns)
-
-
-
-
-
-
-
-def shift_tokens_right(input_ids, pad_token_id):
-    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
-    prev_output_tokens = input_ids.clone()
-    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = input_ids[:, :-1]
-    return prev_output_tokens
-
-def make_padding_mask(input_ids, padding_idx=1):
-    """True for pad tokens"""
-    padding_mask = input_ids.eq(padding_idx)
-    if not padding_mask.any():
-        padding_mask = None
-    return padding_mask
+        return hidden_states_list, next_cache, all_hidden_states, list(all_self_attns)
 
 def fill_with_neg_inf(t):
     """FP16-compatible function that fills a input_ids with -inf."""
@@ -1251,10 +960,8 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        padding_idx, vocab_size, dim_size = config.pad_token_id, config.vocab_size, config.d_model
+        padding_idx, vocab_size, dim_size = config.pad_token_id, config.vocab_size, config.hidden_size
         self.embed_tokens = nn.Embedding(vocab_size, dim_size, padding_idx=padding_idx)
-        nn.init.normal_(self.embed_tokens.weight, mean=0, std=dim_size ** -0.5)
-        nn.init.constant_(self.embed_tokens.weight[padding_idx], 0)
         self.encoder = ProphetNetEncoder(config, self.embed_tokens)
         self.decoder = ProphetNetDecoder(config, self.embed_tokens)
 
@@ -1330,8 +1037,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         super().__init__(config)
         base_model = ProphetNetModel(config)
         self.model = base_model
-        #self.padding_idx = config.pad_token_id
-        self.padding_idx = -100
+        self.padding_idx = config.pad_token_id
         self.disable_ngram_loss = config.disable_ngram_loss
 
     def output_layer(self, features, **kwargs):
@@ -1350,12 +1056,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         output_attentions=None,
         **unused,
     ):
-        if "lm_labels" in unused:
-            warnings.warn(
-                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                DeprecationWarning,
-            )
-            labels = unused.pop("lm_labels")
 
         outputs = self.model(
             input_ids,
@@ -1386,8 +1086,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             loss = F.nll_loss(
                 lprobs,
                 expend_targets.view(-1),
-                reduction='sum',
-                ignore_index=self.padding_idx,
+                reduction='sum'
             )
             if self.config.eps > 0.:
                 smooth_loss = -lprobs.sum(dim=-1, keepdim=True)

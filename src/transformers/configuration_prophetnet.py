@@ -30,7 +30,7 @@ PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ProphetNetConfig(PretrainedConfig):
     r"""
-            Configuration class for Bart. Parameters are renamed from the fairseq implementation
+            Configuration class for ProphetNet. Parameters are renamed from the fairseq implementation
         """
     model_type = "prophetnet"
 
@@ -39,18 +39,18 @@ class ProphetNetConfig(PretrainedConfig):
             activation_dropout=0.1,
             activation_function="gelu",
             vocab_size=30522,
-            d_model=24,
-            encoder_ffn_dim=96,
-            encoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_ffn_dim=96,
-            decoder_layers=2,
-            decoder_attention_heads=2,
-            encoder_layerdrop=0.0,
-            decoder_layerdrop=0.0,
-            attention_dropout=0.0,
+            hidden_size=1024,
+            encoder_ffn_dim=4096,
+            encoder_layers=12,
+            encoder_attention_heads=16,
+            decoder_ffn_dim=4096,
+            decoder_layers=12,
+            decoder_attention_heads=16,
+            encoder_layerdrop=0.1,
+            decoder_layerdrop=0.1,
+            attention_dropout=0.1,
             dropout=0.1,
-            max_position_embeddings=1024,
+            max_position_embeddings=512,
             init_std=0.02,
             num_labels=3,
             is_encoder_decoder=True,
@@ -64,8 +64,6 @@ class ProphetNetConfig(PretrainedConfig):
             eps=0.0,
             **common_kwargs
     ):
-        if "hidden_size" in common_kwargs:
-            raise ValueError("hidden size is called d_model")
         super().__init__(
             num_labels=num_labels,
             pad_token_id=pad_token_id,
@@ -75,7 +73,7 @@ class ProphetNetConfig(PretrainedConfig):
             **common_kwargs,
         )
         self.vocab_size = vocab_size
-        self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
+        self.hidden_size = hidden_size
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
@@ -100,10 +98,6 @@ class ProphetNetConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.dropout = dropout
 
-
-    @property
-    def hidden_size(self):
-        return self.d_model
 
     @property
     def num_attention_heads(self) -> int:
