@@ -5,8 +5,16 @@ from typing import Callable, Dict, List, NamedTuple, Optional, Union
 import numpy as np
 
 from .file_utils import is_tf_available, is_torch_available
-from .modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 from .tokenization_utils_base import ExplicitEnum
+
+
+SEQUENCE_CLASSIFICATION_MODELS = []
+if is_torch_available():
+    from .modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    SEQUENCE_CLASSIFICATION_MODELS = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values()
+elif is_tf_available():
+    from .modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    SEQUENCE_CLASSIFICATION_MODELS = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values()
 
 
 def set_seed(seed: int):
@@ -80,7 +88,7 @@ ACTIVATION_NAME_TO_FUNCTION = {
 
 def auto_activation(model) -> FinalActivation:
     model_class = model.__class__
-    if model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
+    if model_class in SEQUENCE_CLASSIFICATION_MODELS:
         return FinalActivation.ARGMAX
     return FinalActivation.NONE
 
