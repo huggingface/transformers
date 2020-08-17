@@ -17,9 +17,10 @@
 
 import logging
 import os
-from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
+
+from dataclasses import asdict
 
 from ...file_utils import is_tf_available
 from ...tokenization_utils import PreTrainedTokenizer
@@ -79,7 +80,7 @@ if is_tf_available():
         processor = glue_processors[task]()
         examples = [processor.tfds_map(processor.get_example_from_tensor_dict(example)) for example in examples]
         features = glue_convert_examples_to_features(examples, tokenizer, max_length=max_length, task=task)
-        label_type = tf.float32 if task == 'sts-b' else tf.int64
+        label_type = tf.float32 if task == "sts-b" else tf.int64
 
         def gen():
             for ex in features:
