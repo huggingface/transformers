@@ -5,9 +5,11 @@ tags:
 - roberta-urdu-small
 - urdu
 - transformers
-license: [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/urduhack/urduhack/blob/master/LICENSE)
+license: mit
 ---
 ## roberta-urdu-small
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/urduhack/urduhack/blob/master/LICENSE)
 ### Overview
 **Language model:** roberta-urdu-small
 **Model size:** 125M
