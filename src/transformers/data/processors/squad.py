@@ -137,9 +137,11 @@ def squad_convert_example_to_features(
     # Handle case where tokenized query is empty, since the fast tokenizer doesn't do so
     if len(tokenized_query) == 0:
         raise ValueError(
-            f"Input {tokenized_query} is not valid. Should be a string or a list/tuple of strings when `is_pretokenized=True`.")
+            f"Input {tokenized_query} is not valid. Should be a string or a list/tuple of strings when `is_pretokenized=True`."
+        )
     truncated_query_len = len(
-        tokenizer.truncate_sequences(ids=tokenized_query, truncation_strategy=truncation, stride=doc_stride))
+        tokenizer.truncate_sequences(ids=tokenized_query, truncation_strategy=truncation, stride=doc_stride)
+    )
 
     # Tokenizers who insert 2 SEP tokens in-between <context> & <question> need to have special handling
     # in the way they compute mask of added tokens.
@@ -171,11 +173,11 @@ def squad_convert_example_to_features(
             return_overflowing_tokens=True,
             stride=max_seq_length - doc_stride - truncated_query_len - sequence_pair_added_tokens,
             return_token_type_ids=True,
-            is_pretokenized=True
+            is_pretokenized=True,
         )
 
         # Handle case where fast tokenizer returns list[list[int]]
-        if isinstance(encoded_dict['input_ids'][0], list):
+        if isinstance(encoded_dict["input_ids"][0], list):
             encoded_dict = {k: v[0] for k, v in encoded_dict.items()}
 
         paragraph_len = min(
@@ -188,10 +190,9 @@ def squad_convert_example_to_features(
                 non_padded_ids = encoded_dict["input_ids"][: encoded_dict["input_ids"].index(tokenizer.pad_token_id)]
             else:
                 last_padding_id_position = (
-                        len(encoded_dict["input_ids"]) - 1 - encoded_dict["input_ids"][::-1].index(
-                    tokenizer.pad_token_id)
+                    len(encoded_dict["input_ids"]) - 1 - encoded_dict["input_ids"][::-1].index(tokenizer.pad_token_id)
                 )
-                non_padded_ids = encoded_dict["input_ids"][last_padding_id_position + 1:]
+                non_padded_ids = encoded_dict["input_ids"][last_padding_id_position + 1 :]
 
         else:
             non_padded_ids = encoded_dict["input_ids"]
@@ -214,7 +215,7 @@ def squad_convert_example_to_features(
         spans.append(encoded_dict)
 
         if "overflowing_tokens" not in encoded_dict or (
-                "overflowing_tokens" in encoded_dict and len(encoded_dict["overflowing_tokens"]) == 0
+            "overflowing_tokens" in encoded_dict and len(encoded_dict["overflowing_tokens"]) == 0
         ):
             break
         span_doc_tokens = encoded_dict["overflowing_tokens"]
@@ -237,9 +238,9 @@ def squad_convert_example_to_features(
         # Original TF implem also keep the classification token (set to 0)
         p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
-            p_mask[truncated_query_len + sequence_added_tokens:] = 0
+            p_mask[truncated_query_len + sequence_added_tokens :] = 0
         else:
-            p_mask[-len(span["tokens"]): -(truncated_query_len + sequence_added_tokens)] = 0
+            p_mask[-len(span["tokens"]) : -(truncated_query_len + sequence_added_tokens)] = 0
 
         pad_token_indices = np.where(span["input_ids"] == tokenizer.pad_token_id)
         special_token_indices = np.asarray(
