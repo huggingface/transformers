@@ -158,6 +158,7 @@ conversion utilities for the following models:
 
     pretrained_models
     examples
+    custom_datasets
     notebooks
     converting_tensorflow_models
     migration
