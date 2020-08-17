@@ -157,8 +157,8 @@ Extractive Question Answering
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
 a model on a SQuAD task, you may leverage the
-`run_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_squad.py` and
-`run_tf_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py` scripts.
+`run_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_squad.py>`_ and
+`run_tf_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py>`_ scripts.
 
 
 Here is an example of using pipelines to do question answering: extracting an answer from a text given a question.
@@ -582,9 +582,9 @@ Named Entity Recognition (NER) is the task of classifying tokens according to a 
 token as a person, an organisation or a location.
 An example of a named entity recognition dataset is the CoNLL-2003 dataset, which is entirely based on that task.
 If you would like to fine-tune a model on an NER task, you may leverage the
-`run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py` (PyTorch),
-`run_pl_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_pl_ner.py` (leveraging pytorch-lightning) or the
-`run_tf_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_tf_ner.py` (TensorFlow) scripts.
+`run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py>`_ (PyTorch),
+`run_pl_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_pl_ner.py>`_ (leveraging pytorch-lightning) or the
+`run_tf_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_tf_ner.py>`_ (TensorFlow) scripts.
 
 Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as belonging to one
 of 9 classes:
@@ -728,7 +728,8 @@ Summarization
 Summarization is the task of summarizing a document or an article into a shorter text.
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was created for the task of summarization.
-If you would like to fine-tune a model on a summarization task, you may leverage the ``examples/summarization/bart/run_train.sh`` (XXX: wrong script) (pytorch-lightning) script.
+If you would like to fine-tune a model on a summarization task, various approaches are described in this
+`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`_.
 
 Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN / Daily Mail data set.
 
@@ -803,6 +804,8 @@ Translation is the task of translating a text from one language to another.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input data
 and the corresponding sentences in German as the target data.
+If you would like to fine-tune a model on a translation task, various approaches are described in this
+`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`_.
 
 Here is an example of using the pipelines to do translation.
 It leverages a T5 model that was only pre-trained on a multi-task mixture dataset (including WMT), yet, yielding impressive
