@@ -114,7 +114,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            ["アップル", "ストア", "で", "i", "Phone", "8", "が", "発売", "さ", "れ", "た", "。"],
+            ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れ", "た", "。"],
         )
 
     def test_mecab_tokenizer_lower(self):
