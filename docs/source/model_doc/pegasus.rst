@@ -8,13 +8,14 @@ file a `Github Issue <https://github.com/huggingface/transformers/issues/new?ass
 Overview
 ~~~~~~~~~~~~~~~~~~~~~
 
-The Pegasus model was `proposed <https://arxiv.org/abs/1910.13461>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
+The Pegasus model was proposed in `PEGASUS: Pre-training with Extracted Gap-sentences for
+Abstractive Summarization <https://arxiv.org/pdf/1912.08777.pdf>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
 According to the abstract,
 
 - Pegasus' pretraining task is intentionally similar to summarization: important sentences are removed/masked from an input document and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
 - Pegasus achieves SOTA summarization performance on all 12 downstream tasks, as measured by ROUGE and human eval.
 
-The Authors' code can be found `here <https://github.com/google-research/pegasus>`_
+The Authors' code can be found `here <https://github.com/google-research/pegasus>`_.
 
 
 Checkpoints
