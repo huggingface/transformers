@@ -28,9 +28,7 @@ the sequences for seq-2-seq fine-tuning.
 ::
     example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    batch = tokenizer.prepare_seq2seq_batch(
-        example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
-    )
+    batch = tokenizer.prepare_seq2seq_batch(example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian)
     input_ids = batch["input_ids"]
     target_ids = batch["decoder_input_ids"]
     decoder_input_ids = target_ids[:, :-1].contiguous()
