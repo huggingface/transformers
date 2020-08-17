@@ -80,7 +80,7 @@ class OnnxExportTestCase(unittest.TestCase):
 
     def _test_export(self, model, framework, opset, tokenizer=None):
         tempdir = TemporaryDirectory(suffix=model)
-        path = tempdir + "/model.onnx"
+        path = Path(tempdir) + "/model.onnx"
         # Remove folder if exists
         if exists(dirname(path)):
             rmtree(dirname(path))
