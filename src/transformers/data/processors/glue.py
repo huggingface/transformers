@@ -17,10 +17,9 @@
 
 import logging
 import os
+from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
-
-from dataclasses import asdict
 
 from ...file_utils import is_tf_available
 from ...tokenization_utils import PreTrainedTokenizer
