@@ -807,10 +807,10 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
         self.assertSequenceEqual(tokens_p["input_ids"], [0, 250, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 
         # token_type_ids should put 0 everywhere
-        self.assertEquals(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
+        self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
         # attention_mask should put 1 everywhere, so sum over length should be 1
-        self.assertEquals(
+        self.assertEqual(
             sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
             sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
         )
