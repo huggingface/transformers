@@ -30,9 +30,19 @@ MBART_START_DOCSTRING = r"""
     "The BART Model with a language modeling head. Can be used for machine translation.", MBART_START_DOCSTRING
 )
 class MBartForConditionalGeneration(BartForConditionalGeneration):
-    """
+    r"""
     This class overrides :class:`~transformers.BartForConditionalGeneration`. Please check the
     superclass for the appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import MBartForConditionalGeneration, MBartTokenizer
+        >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
+        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
+        >>> article = "UN Chief Says There Is No Military Solution in Syria"
+        >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
+        >>> translated_tokens = model.generate(**batch)
+        >>> translation = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+        >>> assert translation == "Şeful ONU declară că nu există o soluţie militară în Siria"
     """
 
     config_class = MBartConfig
