@@ -1,6 +1,6 @@
 import random
 from dataclasses import dataclass
-from typing import Dict, List, NamedTuple, Optional, Union
+from typing import Callable, Dict, List, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -80,7 +80,7 @@ ACTIVATION_NAME_TO_FUNCTION = {
 @dataclass
 class ComputeNLPMetrics:
     metrics: Union["nlp.Metric", List["nlp.Metric"]]  # noqa: F821
-    activation: Optional[Union[str, FinalActivation]] = None
+    activation: Optional[Union[str, FinalActivation, Callable]] = None
 
     def __call__(self, eval_pred):
         preds, labels = eval_pred
@@ -88,7 +88,10 @@ class ComputeNLPMetrics:
         result = {}
         for metric in metrics:
             if self.activation is not None:
-                preds = ACTIVATION_NAME_TO_FUNCTION[self.activation](preds)
+                activation_function = (
+                    self.activation if callable(self.activation) else ACTIVATION_NAME_TO_FUNCTION[self.activation]
+                )
+                preds = activation_function(preds)
             # TODO: when https://github.com/huggingface/nlp/pull/466 is merged, remove the `tolist`.
             result = {**result, **metric.compute(preds.tolist(), references=labels.tolist())}
         return result

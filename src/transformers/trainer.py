@@ -252,7 +252,7 @@ class Trainer:
         eval_dataset: "nlp.dataset_dict.Dataset" = None,
         data_collator: Optional[DataCollator] = None,
         metrics: Optional[Union["nlp.Metric", List["nlp.Metric"]]] = None,
-        final_activation: Optional[Union[str, FinalActivation]] = False,
+        final_activation: Optional[Union[str, FinalActivation, Callable]] = False,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
     ):
@@ -285,7 +285,7 @@ class Trainer:
                 The function to use to form a batch from a list of elements from the :obj:`dataset`.
             metrics (:obj:`nlp.Metric` or :obj:`List[nlp.Metric]`, `optional`):
                 One or several metrics loaded via the :obj:`nlp` library.
-            final_activation (:obj:`str` or :class:`~transformers.trainer_utils.FinalActivation`, `optional`):
+            final_activation (:obj:`str` or :class:`~transformers.trainer_utils.FinalActivation` or :obj:`Callable`, `optional`):
                 The final activation to apply to the model output before feeding them to the :obj:`metrics`.
             tb_writer (:obj:`SummaryWriter`, `optional`):
                 Object to write to TensorBoard.
