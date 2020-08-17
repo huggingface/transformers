@@ -58,6 +58,7 @@ class OnnxExportTestCase(unittest.TestCase):
 
     @require_tf
     @slow
+    @unittest.skip('morgan on vacation')
     def test_quantize_tf(self):
         for model in OnnxExportTestCase.MODEL_TO_TEST:
             path = self._test_export(model, "tf", 12)
@@ -69,6 +70,7 @@ class OnnxExportTestCase(unittest.TestCase):
 
     @require_torch
     @slow
+    @unittest.skip('morgan on vacation')
     def test_quantize_pytorch(self):
         for model in OnnxExportTestCase.MODEL_TO_TEST:
             path = self._test_export(model, "pt", 12)
