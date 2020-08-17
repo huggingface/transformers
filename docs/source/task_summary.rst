@@ -16,10 +16,10 @@ following:
 
 - Not all models were fine-tuned on all tasks. If you want to fine-tune a model on a specific task, you can leverage
   one of the `run_$TASK.py` scripts in the
-  `examples <https://github.com/huggingface/transformers/tree/master/examples>`_ directory.
+  `examples <https://github.com/huggingface/transformers/tree/master/examples>`__ directory.
 - Fine-tuned models were fine-tuned on a specific dataset. This dataset may or may not overlap with your use-case
   and domain. As mentioned previously, you may leverage the
-  `examples <https://github.com/huggingface/transformers/tree/master/examples>`_ scripts to fine-tune your model, or you
+  `examples <https://github.com/huggingface/transformers/tree/master/examples>`__ scripts to fine-tune your model, or you
   may create your own training script.
 
 In order to do an inference on a task, several mechanisms are made available by the library:
@@ -43,9 +43,9 @@ Sequence Classification
 Sequence classification is the task of classifying sequences according to a given number of classes. An example
 of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
 a model on a GLUE sequence classification task, you may leverage the
-`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_glue.py>`_ and
-`run_pl_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_pl_glue.py>`_ or
-`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_tf_glue.py>`_ scripts.
+`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_glue.py>`__ and
+`run_pl_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_pl_glue.py>`__ or
+`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_tf_glue.py>`__ scripts.
 
 Here is an example of using pipelines to do sentiment analysis: identifying if a sequence is positive or negative.
 It leverages a fine-tuned model on sst2, which is a GLUE task.
@@ -157,8 +157,8 @@ Extractive Question Answering
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
 a model on a SQuAD task, you may leverage the
-`run_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_squad.py>`_ and
-`run_tf_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py>`_ scripts.
+`run_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_squad.py>`__ and
+`run_tf_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py>`__ scripts.
 
 
 Here is an example of using pipelines to do question answering: extracting an answer from a text given a question.
@@ -495,7 +495,7 @@ In the next section, we show how this functionality is leveraged in :func:`~tran
 Text Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. The following example shows how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines, as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`_ for example).
+In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. The following example shows how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines, as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`__ for example).
 
 .. code-block::
 
@@ -572,7 +572,7 @@ Here is an example of text generation using ``XLNet`` and its tokenzier.
 Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-XL* often need to be padded to work well.
 GPT-2 is usually a good choice for *open-ended text generation* because it was trained on millions of webpages with a causal language modeling objective.
 
-For more information on how to apply different decoding strategies for text generation, please also refer to our text generation blog post `here <https://huggingface.co/blog/how-to-generate>`_.
+For more information on how to apply different decoding strategies for text generation, please also refer to our text generation blog post `here <https://huggingface.co/blog/how-to-generate>`__.
 
 
 Named Entity Recognition
@@ -582,9 +582,9 @@ Named Entity Recognition (NER) is the task of classifying tokens according to a 
 token as a person, an organisation or a location.
 An example of a named entity recognition dataset is the CoNLL-2003 dataset, which is entirely based on that task.
 If you would like to fine-tune a model on an NER task, you may leverage the
-`run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py>`_ (PyTorch),
-`run_pl_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_pl_ner.py>`_ (leveraging pytorch-lightning) or the
-`run_tf_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_tf_ner.py>`_ (TensorFlow) scripts.
+`run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py>`__ (PyTorch),
+`run_pl_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_pl_ner.py>`__ (leveraging pytorch-lightning) or the
+`run_tf_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_tf_ner.py>`__ (TensorFlow) scripts.
 
 Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as belonging to one
 of 9 classes:
@@ -729,7 +729,7 @@ Summarization is the task of summarizing a document or an article into a shorter
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was created for the task of summarization.
 If you would like to fine-tune a model on a summarization task, various approaches are described in this
-`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`_.
+`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
 
 Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN / Daily Mail data set.
 
@@ -805,7 +805,7 @@ Translation is the task of translating a text from one language to another.
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input data
 and the corresponding sentences in German as the target data.
 If you would like to fine-tune a model on a translation task, various approaches are described in this
-`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`_.
+`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
 
 Here is an example of using the pipelines to do translation.
 It leverages a T5 model that was only pre-trained on a multi-task mixture dataset (including WMT), yet, yielding impressive
