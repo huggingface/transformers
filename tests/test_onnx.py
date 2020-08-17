@@ -1,7 +1,5 @@
 import unittest
-from os.path import dirname, exists
 from pathlib import Path
-from shutil import rmtree
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
