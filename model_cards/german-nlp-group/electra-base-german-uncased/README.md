@@ -4,13 +4,9 @@ license: mit
 thumbnail: "https://raw.githubusercontent.com/German-NLP-Group/german-transformer-training/master/model_cards/german-electra-logo.png"
 tags:
 - electra
-- german
-- deutsch
 - commoncrawl
-- base
 - uncased
 - umlaute
-- BERT
 ---
 
 # German Electra Uncased
