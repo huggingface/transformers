@@ -127,9 +127,19 @@ def squad_convert_example_to_features(
 
     spans = []
 
-    truncated_query = tokenizer.encode(
-        example.question_text, add_special_tokens=False, truncation=True, max_length=max_query_length
-    )
+    if tokenizer.padding_side == "right":
+        truncation = TruncationStrategy.ONLY_SECOND.value
+    else:
+        truncation = TruncationStrategy.ONLY_FIRST.value
+
+    # Tokenize and truncate query
+    tokenized_query = tokenizer.tokenize(example.question_text)
+    # Handle case where tokenized query is empty, since the fast tokenizer doesn't do so
+    if len(tokenized_query) == 0:
+        raise ValueError(
+            f"Input {tokenized_query} is not valid. Should be a string or a list/tuple of strings when `is_pretokenized=True`.")
+    truncated_query_len = len(
+        tokenizer.truncate_sequences(ids=tokenized_query, truncation_strategy=truncation, stride=doc_stride))
 
     # Tokenizers who insert 2 SEP tokens in-between <context> & <question> need to have special handling
     # in the way they compute mask of added tokens.
@@ -146,13 +156,11 @@ def squad_convert_example_to_features(
 
         # Define the side we want to truncate / pad and the text/pair sorting
         if tokenizer.padding_side == "right":
-            texts = truncated_query
+            texts = tokenized_query
             pairs = span_doc_tokens
-            truncation = TruncationStrategy.ONLY_SECOND.value
         else:
             texts = span_doc_tokens
-            pairs = truncated_query
-            truncation = TruncationStrategy.ONLY_FIRST.value
+            pairs = tokenized_query
 
         encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
             texts,
@@ -161,13 +169,18 @@ def squad_convert_example_to_features(
             padding=padding_strategy,
             max_length=max_seq_length,
             return_overflowing_tokens=True,
-            stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
+            stride=max_seq_length - doc_stride - truncated_query_len - sequence_pair_added_tokens,
             return_token_type_ids=True,
+            is_pretokenized=True
         )
+
+        # Handle case where fast tokenizer returns list[list[int]]
+        if isinstance(encoded_dict['input_ids'][0], list):
+            encoded_dict = {k: v[0] for k, v in encoded_dict.items()}
 
         paragraph_len = min(
             len(all_doc_tokens) - len(spans) * doc_stride,
-            max_seq_length - len(truncated_query) - sequence_pair_added_tokens,
+            max_seq_length - truncated_query_len - sequence_pair_added_tokens,
         )
 
         if tokenizer.pad_token_id in encoded_dict["input_ids"]:
@@ -175,9 +188,10 @@ def squad_convert_example_to_features(
                 non_padded_ids = encoded_dict["input_ids"][: encoded_dict["input_ids"].index(tokenizer.pad_token_id)]
             else:
                 last_padding_id_position = (
-                    len(encoded_dict["input_ids"]) - 1 - encoded_dict["input_ids"][::-1].index(tokenizer.pad_token_id)
+                        len(encoded_dict["input_ids"]) - 1 - encoded_dict["input_ids"][::-1].index(
+                    tokenizer.pad_token_id)
                 )
-                non_padded_ids = encoded_dict["input_ids"][last_padding_id_position + 1 :]
+                non_padded_ids = encoded_dict["input_ids"][last_padding_id_position + 1:]
 
         else:
             non_padded_ids = encoded_dict["input_ids"]
@@ -186,13 +200,13 @@ def squad_convert_example_to_features(
 
         token_to_orig_map = {}
         for i in range(paragraph_len):
-            index = len(truncated_query) + sequence_added_tokens + i if tokenizer.padding_side == "right" else i
+            index = truncated_query_len + sequence_added_tokens + i if tokenizer.padding_side == "right" else i
             token_to_orig_map[index] = tok_to_orig_index[len(spans) * doc_stride + i]
 
         encoded_dict["paragraph_len"] = paragraph_len
         encoded_dict["tokens"] = tokens
         encoded_dict["token_to_orig_map"] = token_to_orig_map
-        encoded_dict["truncated_query_with_special_tokens_length"] = len(truncated_query) + sequence_added_tokens
+        encoded_dict["truncated_query_with_special_tokens_length"] = truncated_query_len + sequence_added_tokens
         encoded_dict["token_is_max_context"] = {}
         encoded_dict["start"] = len(spans) * doc_stride
         encoded_dict["length"] = paragraph_len
@@ -200,7 +214,7 @@ def squad_convert_example_to_features(
         spans.append(encoded_dict)
 
         if "overflowing_tokens" not in encoded_dict or (
-            "overflowing_tokens" in encoded_dict and len(encoded_dict["overflowing_tokens"]) == 0
+                "overflowing_tokens" in encoded_dict and len(encoded_dict["overflowing_tokens"]) == 0
         ):
             break
         span_doc_tokens = encoded_dict["overflowing_tokens"]
@@ -223,9 +237,9 @@ def squad_convert_example_to_features(
         # Original TF implem also keep the classification token (set to 0)
         p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
-            p_mask[len(truncated_query) + sequence_added_tokens :] = 0
+            p_mask[truncated_query_len + sequence_added_tokens:] = 0
         else:
-            p_mask[-len(span["tokens"]) : -(len(truncated_query) + sequence_added_tokens)] = 0
+            p_mask[-len(span["tokens"]): -(truncated_query_len + sequence_added_tokens)] = 0
 
         pad_token_indices = np.where(span["input_ids"] == tokenizer.pad_token_id)
         special_token_indices = np.asarray(
@@ -259,7 +273,7 @@ def squad_convert_example_to_features(
                 if tokenizer.padding_side == "left":
                     doc_offset = 0
                 else:
-                    doc_offset = len(truncated_query) + sequence_added_tokens
+                    doc_offset = truncated_query_len + sequence_added_tokens
 
                 start_position = tok_start_position - doc_start + doc_offset
                 end_position = tok_end_position - doc_start + doc_offset
