@@ -26,7 +26,8 @@ the sequences for seq-2-seq fine-tuning.
 - Supervised training
 
 ::
-    example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+
+    example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
     expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
     batch = tokenizer.prepare_seq2seq_batch(example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian)
     input_ids = batch["input_ids"]
@@ -41,6 +42,7 @@ the sequences for seq-2-seq fine-tuning.
     The following example shows how to translate English to Romanian using the ```facebook/mbart-large-en-ro``` model.
 
 ::
+
     from transformers import MBartForConditionalGeneration, MBartTokenizer
     model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
