@@ -145,7 +145,7 @@ class Seq2SeqDataset(Dataset):
 
 
 class TranslationDataset(Seq2SeqDataset):
-    """A dataset that calls prepare_translation_batch."""
+    """A dataset that calls prepare_seq2seq_batch."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -167,7 +167,7 @@ class TranslationDataset(Seq2SeqDataset):
         }
 
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
-        batch_encoding = self.tokenizer.prepare_translation_batch(
+        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.src_lang,
             tgt_texts=[x["tgt_texts"] for x in batch],
@@ -271,7 +271,7 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str], use_stemmer
         aggregator.add_scores(scores)
 
     result = aggregator.aggregate()
-    return {k: v.mid.fmeasure for k, v in result.items()}
+    return {k: v.mid.fmeasure * 100 for k, v in result.items()}
 
 
 def freeze_params(model: nn.Module):

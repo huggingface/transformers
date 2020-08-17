@@ -20,7 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -62,27 +62,27 @@ class GPT2ModelTester:
         scope=None,
     ):
         self.parent = parent
-        self.batch_size = 14
-        self.seq_length = 7
-        self.is_training = True
-        self.use_token_type_ids = True
-        self.use_input_mask = True
-        self.use_labels = True
-        self.use_mc_token_ids = True
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.intermediate_size = 37
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0, 1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 16
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 3
-        self.num_choices = 4
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_token_type_ids = use_token_type_ids
+        self.use_input_mask = use_input_mask
+        self.use_labels = use_labels
+        self.use_mc_token_ids = use_mc_token_ids
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
         self.scope = None
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
@@ -142,6 +142,35 @@ class GPT2ModelTester:
             choice_labels,
         )
 
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            mc_token_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+            token_type_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
+
     def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPT2Model(config=config)
         model.to(torch_device)
@@ -152,7 +181,7 @@ class GPT2ModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result["past_key_values"]), config.n_layer)
+        self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
     def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPT2Model(config=config)

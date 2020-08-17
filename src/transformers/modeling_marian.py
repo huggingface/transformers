@@ -19,9 +19,7 @@ from .configuration_marian import MarianConfig
 from .modeling_bart import BartForConditionalGeneration
 
 
-MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # See all Marian models at https://huggingface.co/models?search=Helsinki-NLP
-]
+# See all Marian models at https://huggingface.co/models?search=Helsinki-NLP
 
 
 class MarianMTModel(BartForConditionalGeneration):
@@ -42,7 +40,7 @@ class MarianMTModel(BartForConditionalGeneration):
 
         >>> model = MarianMTModel.from_pretrained(mname)
         >>> tok = MarianTokenizer.from_pretrained(mname)
-        >>> batch = tok.prepare_translation_batch(src_texts=[sample_text])  # don't need tgt_text for inference
+        >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text])  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
         >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
 

@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 
 import lightning_base
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from transformers.testing_utils import require_multigpu
+from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu
 
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import SummarizationModule, main
@@ -166,6 +166,31 @@ class TestSummarizationDistiller(unittest.TestCase):
             # TODO: understand why this breaks
             self.assertEqual(nll_loss, model_computed_loss)
 
+    def test_distill_mbart(self):
+        updates = dict(
+            student_encoder_layers=2,
+            student_decoder_layers=1,
+            num_train_epochs=4,
+            val_check_interval=0.25,
+            alpha_hid=2.0,
+            task="translation",
+            model_name_or_path="IGNORE_THIS_IT_DOESNT_GET_USED",
+            tokenizer_name=MBART_TINY,
+            teacher=MBART_TINY,
+            src_lang="en_XX",
+            tgt_lang="ro_RO",
+        )
+        model = self._test_distiller_cli(updates, check_contents=False)
+
+        ckpts = list(Path(model.output_dir).glob("*.ckpt"))
+        self.assertEqual(1, len(ckpts))
+        transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
+        all_files = list(Path(model.output_dir).glob("best_tfmr/*"))
+        assert len(all_files) > 2
+        self.assertEqual(len(transformer_ckpts), 2)
+
+        evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
+
     @unittest.skip("T5 distillation is broken at the moment")
     def test_distill_t5(self):
         updates = dict(
@@ -180,7 +205,7 @@ class TestSummarizationDistiller(unittest.TestCase):
 
     def _test_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
-            label_smoothing_eps=0.0,
+            label_smoothing=0.0,
             early_stopping_patience=-1,
             train_batch_size=1,
             eval_batch_size=2,
@@ -329,7 +354,7 @@ def test_finetune_extra_model_args():
     assert str(excinfo.value) == f"model config doesn't have a `{unsupported_param}` attribute"
 
 
-def test_finetune_lr_shedulers(capsys):
+def test_finetune_lr_schedulers():
     args_d: dict = CHEAP_ARGS.copy()
 
     task = "summarization"
@@ -361,23 +386,23 @@ def test_finetune_lr_shedulers(capsys):
 
     # --help test
     with pytest.raises(SystemExit) as excinfo:
-        args = parser.parse_args(args)
+        with CaptureStdout() as cs:
+            args = parser.parse_args(args)
         assert False, "--help is expected to sys.exit"
     assert excinfo.type == SystemExit
-    captured = capsys.readouterr()
     expected = lightning_base.arg_to_scheduler_metavar
-    assert expected in captured.out, "--help is expected to list the supported schedulers"
+    assert expected in cs.out, "--help is expected to list the supported schedulers"
 
     # --lr_scheduler=non_existing_scheduler test
     unsupported_param = "non_existing_scheduler"
     args = {f"--lr_scheduler={unsupported_param}"}
     with pytest.raises(SystemExit) as excinfo:
-        args = parser.parse_args(args)
+        with CaptureStderr() as cs:
+            args = parser.parse_args(args)
         assert False, "invalid argument is expected to sys.exit"
     assert excinfo.type == SystemExit
-    captured = capsys.readouterr()
     expected = f"invalid choice: '{unsupported_param}'"
-    assert expected in captured.err, f"should have bailed on invalid choice of scheduler {unsupported_param}"
+    assert expected in cs.err, f"should have bailed on invalid choice of scheduler {unsupported_param}"
 
     # --lr_scheduler=existing_scheduler test
     supported_param = "cosine"

@@ -44,8 +44,8 @@ class GLUETransformer(BaseTransformer):
         outputs = self(**inputs)
         loss = outputs[0]
 
-        # tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
-        tensorboard_logs = {"loss": loss}
+        lr_scheduler = self.trainer.lr_schedulers[0]["scheduler"]
+        tensorboard_logs = {"loss": loss, "rate": lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
 
     def prepare_data(self):
@@ -169,7 +169,7 @@ class GLUETransformer(BaseTransformer):
         return parser
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = GLUETransformer.add_model_specific_args(parser, os.getcwd())
@@ -187,4 +187,8 @@ if __name__ == "__main__":
     if args.do_predict:
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         model = model.load_from_checkpoint(checkpoints[-1])
-        trainer.test(model)
+        return trainer.test(model)
+
+
+if __name__ == "__main__":
+    main()

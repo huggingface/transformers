@@ -63,6 +63,13 @@ RobertaModel
     :members:
 
 
+RobertaForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaForCausalLM
+    :members:
+
+
 RobertaForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
