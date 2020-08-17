@@ -1,3 +1,9 @@
+---
+language: fr
+widget:
+- text: "Face à un choc inédit, les mesures mises en place par le gouvernement ont permis une protection forte et efficace des ménages"
+---
+
 ## About
 
 The  *french-camembert-postag-model* is a part of speech tagging model for French that was trained on the *free-french-treebank* dataset available on 
