@@ -416,6 +416,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if output_embeddings is not None:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
+        if self.config.is_encoder_decoder and self.config.tie_encoder_decoder:
+            self._tie_or_clone_encoder_decoder_weights(self.encoder, self.decoder)
+
+    def _tie_or_clone_encoder_decoder_weights(self, encoder, decoder):
+        
+
+
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
         """ Tie or clone module weights depending of whether we are using TorchScript or not
         """
