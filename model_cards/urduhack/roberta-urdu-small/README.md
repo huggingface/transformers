@@ -9,7 +9,7 @@ license: [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](ht
 ---
 ## roberta-urdu-small
 ### Overview
-**Language model:** roberta-small-small
+**Language model:** roberta-urdu-small
 **Model size:** 125M
 **Language:** Urdu
 **Training data:** News data from urdu news resources in Pakistan
