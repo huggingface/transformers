@@ -418,9 +418,9 @@ TOLERANCE = 1e-4
 
 @require_torch
 class BartModelIntegrationTests(unittest.TestCase):
-    # @cached_property
-    # def default_tokenizer(self):
-    #     return BartTokenizer.from_pretrained("facebook/bart-large")
+    @cached_property
+    def default_tokenizer(self):
+        return BartTokenizer.from_pretrained("facebook/bart-large")
 
     @cached_property
     def default_tokenizer_fast(self):
