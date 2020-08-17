@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Fine-tuning the library models for named entity recognition."""
 
-
 import logging
 import os
 from dataclasses import dataclass, field
@@ -32,10 +31,15 @@ from transformers import (
     TFTrainer,
     TFTrainingArguments,
 )
-from utils_ner import Split, TFNerDataset, get_labels
-
+from utils_ner import Split, TFNerDataset
 
 logger = logging.getLogger(__name__)
+
+
+def get_labels(path_labels):
+    with open(path_labels) as f:
+        labels = f.read().split("\n")
+    return labels
 
 
 @dataclass
@@ -77,7 +81,7 @@ class DataTrainingArguments:
         default=128,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+                    "than this will be truncated, sequences shorter will be padded."
         },
     )
     overwrite_cache: bool = field(
@@ -93,10 +97,10 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
+            os.path.exists(training_args.output_dir)
+            and os.listdir(training_args.output_dir)
+            and training_args.do_train
+            and not training_args.overwrite_output_dir
     ):
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
@@ -275,6 +279,11 @@ def main():
                         logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
 
     return results
+
+
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
 
 
 if __name__ == "__main__":
