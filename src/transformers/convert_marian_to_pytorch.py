@@ -4,7 +4,7 @@ import os
 import shutil
 import warnings
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
 from zipfile import ZipFile
 
 import numpy as np
@@ -13,6 +13,80 @@ from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 from transformers.hf_api import HfApi
+
+def remove_suffix(text: str, suffix: str):
+    if text.endswith(suffix):
+        return text[:-len(suffix)]
+    return text  # or whatever
+
+def _process_benchmark_table_row(x):
+    fields = lmap(str.strip, x.replace('\t', '').split('|')[1:-1])
+    assert len(fields) == 3
+    return (fields[0], float(fields[1]), float(fields[2]))
+
+
+def process_last_benchmark_table(readme_path) -> List[Tuple[str, float, float]]:
+    md_content = Path(readme_path).open().read()
+    entries = md_content.split('## Benchmarks')[-1].strip().split('\n')[2:]
+    data = lmap(_process_benchmark_table_row, entries)
+    return data
+
+
+def check_if_models_are_dominated(old_repo_path='OPUS-MT-train/models', new_repo_path='Tatoeba-Challenge/models/'):
+    """Make a blacklist for models where we have already ported the same language pair, and the ported model has higher BLEU score."""
+    import pandas as pd
+    released_cols = ['url_base',
+                     'pair',  # (ISO639-3/ISO639-5 codes),
+                     'short_pair',  # (reduced codes),
+                     'chrF2_score',
+                     'bleu',
+                     'brevity_penalty',
+                     'ref_len',
+                     'src_name', 'tgt_name']
+
+    released = pd.read_csv(f'{new_repo_path}/released-models.txt', sep='\t', header=None).iloc[:-1]
+    released.columns = released_cols
+    old_reg = make_registry(repo_path=old_repo_path)
+    old_reg = pd.DataFrame(old_reg, columns=['id', 'prepro', 'url_model', 'url_test_set'])
+    assert old_reg.id.value_counts().max() == 1
+    old_reg = old_reg.set_index('id')
+
+    released['fname'] = released['url_base'].apply(
+        lambda x: remove_suffix(remove_prefix(x, 'https://object.pouta.csc.fi/Tatoeba-Challenge/opus'), '.zip'))
+
+    released['2m'] = released.fname.str.startswith('2m')
+    released['date'] = pd.to_datetime(released['fname'].apply(lambda x: remove_prefix(remove_prefix(x, '2m-'), '-')))
+
+    newest_released = released.dsort('date').drop_duplicates(['short_pair'], keep='first')
+
+
+    short_to_new_bleu = newest_released.set_index('short_pair').bleu
+
+    assert released.groupby('short_pair').pair.nunique().max() == 1
+
+    short_to_long = released.groupby('short_pair').pair.first().to_dict()
+
+    overlap_short = old_reg.index.intersection(released.short_pair.unique())
+    overlap_long = [short_to_long[o] for o in overlap_short]
+    new_reported_bleu = [short_to_new_bleu[o] for o in overlap_short]
+
+    def get_old_bleu(o) -> float:
+        pat = old_repo_path +'/{}/README.md'
+        bm_data = process_last_benchmark_table(pat.format(o))
+        tab = pd.DataFrame(bm_data, columns=['testset', 'bleu', 'chr-f'])
+        tato_bleu = tab.loc[lambda x: x.testset.str.startswith('Tato')].bleu
+        if tato_bleu.shape[0] > 0:
+            return tato_bleu.iloc[0]
+        else:
+            return np.nan
+
+    old_bleu = [get_old_bleu(o) for o in overlap_short]
+    cmp_df = pd.DataFrame(
+        dict(short=overlap_short, long=overlap_long, old_bleu=old_bleu, new_bleu=new_reported_bleu)).fillna(-1)
+
+    dominated = cmp_df[cmp_df.old_bleu > cmp_df.new_bleu]
+    blacklist = dominated.long.unique().tolist()  # 3 letter codes
+    return dominated, blacklist
 
 
 def remove_prefix(text: str, prefix: str):
