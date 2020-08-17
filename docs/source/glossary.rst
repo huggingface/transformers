@@ -57,7 +57,7 @@ The tokenizer takes care of splitting the sequence into tokens available in the 
     >>> tokenized_sequence = tokenizer.tokenize(sequence)
 
 The tokens are either words or subwords. Here for instance, "VRAM" wasn't in the model vocabulary, so it's been split
-in "V", "RA" and "M". To indicate those tokens are not separate words but parts of the same word, a  double-hash prefix is
+in "V", "RA" and "M". To indicate those tokens are not separate words but parts of the same word, a double-hash prefix is
 added for "RA" and "M":
 
 ::
