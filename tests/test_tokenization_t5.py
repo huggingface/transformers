@@ -122,7 +122,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual((2, 9), batch.input_ids.shape)
         self.assertEqual((2, 9), batch.attention_mask.shape)
-        result = batch.input_ids.tolist()[0]
+        result = list(batch.input_ids.numpy()[0])
         self.assertListEqual(expected_src_tokens, result)
         # Test that special tokens are reset
         self.assertEqual(tokenizer.prefix_tokens, [])
@@ -175,8 +175,8 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK)
 
-        src_ids = batch.input_ids.tolist()[0]
-        tgt_ids = batch.decoder_input_ids.tolist()[0]
+        src_ids = list(batch.input_ids.numpy()[0])
+        tgt_ids = list(batch.decoder_input_ids.numpy()[0])
 
         self.assertEqual(expected_src_tokens, src_ids)
         self.assertEqual(expected_tgt_tokens, tgt_ids)
