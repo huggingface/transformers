@@ -95,7 +95,7 @@ BART_CONFIG_ARGS_DOC = r"""
             for SequenceClassification
         is_encoder_decoder (:obj:`int`, optional, defaults to True):
             True
-        force_bos_token_to_be_generated (:obj:`bool`, optional, defaults to False):
+        force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
             force BOS token to be generated at step 1 (after decoder_start_token_id), only true for bart-large-cnn.
 
 """
