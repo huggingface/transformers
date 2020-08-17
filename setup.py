@@ -65,7 +65,7 @@ if stale_egg_info.exists():
 
 extras = {}
 
-extras["ja"] = ["fugashi>=1.0", "ipadic>=1.0,<2.0"]
+extras["ja"] = ["fugashi>=1.0", "ipadic>=1.0.0,<2.0", "unidic_lite>=1.0.7", "unidic>=1.0.2"]
 extras["sklearn"] = ["scikit-learn"]
 
 # keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
