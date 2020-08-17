@@ -62,11 +62,3 @@ output = model(encoded_input)
 This model was pre-trained with 522MB of indonesian Wikipedia.
 The texts are tokenized using a byte-level version of Byte Pair Encoding (BPE) (for unicode characters) and 
 a vocabulary size of 52,000. The inputs are sequences of 128 consecutive tokens.
-
-## BibTeX entry and citation info
-
-```bibtex
-@inproceedings{...,
-  year={2020}
-}
-```

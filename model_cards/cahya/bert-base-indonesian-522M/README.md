@@ -71,11 +71,3 @@ The texts are lowercased and tokenized using WordPiece and a vocabulary size of 
 then of the form:
 
 ```[CLS] Sentence A [SEP] Sentence B [SEP]```
-
-## BibTeX entry and citation info
-
-```bibtex
-@inproceedings{...,
-  year={2020}
-}
-```
