@@ -31,6 +31,7 @@ from .trainer_utils import (
     FinalActivation,
     PredictionOutput,
     TrainOutput,
+    auto_activation,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -252,7 +253,7 @@ class Trainer:
         eval_dataset: "nlp.dataset_dict.Dataset" = None,
         data_collator: Optional[DataCollator] = None,
         metrics: Optional[Union["nlp.Metric", List["nlp.Metric"]]] = None,
-        final_activation: Optional[Union[str, FinalActivation, Callable]] = False,
+        final_activation: Optional[Union[str, FinalActivation, Callable]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
     ):
@@ -287,6 +288,9 @@ class Trainer:
                 One or several metrics loaded via the :obj:`nlp` library.
             final_activation (:obj:`str` or :class:`~transformers.trainer_utils.FinalActivation` or :obj:`Callable`, `optional`):
                 The final activation to apply to the model output before feeding them to the :obj:`metrics`.
+
+                If not provided, will default to the most common activation function that goes with your model (see
+                :func:`~transformers.trainer_utils.auto_activation`).
             tb_writer (:obj:`SummaryWriter`, `optional`):
                 Object to write to TensorBoard.
             optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
@@ -308,7 +312,7 @@ class Trainer:
             >>> encoded_dataset = dataset.map(lambda examples: tokenizer(examples['sentence'], padding=True), batched=True)
             >>> args = TrainingArguments(output_dir = "test")
 
-            >>> trainer = Trainer.from_nlp_dataset(model, args, encoded_dataset, metrics=metric, final_activation="argmax")
+            >>> trainer = Trainer.from_nlp_dataset(model, args, encoded_dataset, metrics=metric)
             >>> trainer.evaluate()
             {'eval_loss': 0.3902028881816018, 'eval_accuracy': 0.9105504587155964, 'step': 0}
         """
@@ -317,6 +321,8 @@ class Trainer:
             train_dataset is None and eval_dataset is None
         ), "This method accept either `dataset_dict` or `train_dataset`/ `eval_dataset`, but not both."
         if metrics is not None:
+            if final_activation is None:
+                final_activation = auto_activation(model)
             compute_metrics = ComputeNLPMetrics(metrics, activation=final_activation)
         if dataset_dict is not None:
             train_dataset = dataset_dict.get("train")

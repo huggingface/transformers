@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, NamedTuple, Optional, Union
 import numpy as np
 
 from .file_utils import is_tf_available, is_torch_available
+from .modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 from .tokenization_utils_base import ExplicitEnum
 
 
@@ -70,17 +71,28 @@ class FinalActivation(ExplicitEnum):
 
 
 ACTIVATION_NAME_TO_FUNCTION = {
-    "none": lambda x: x,
-    "argmax": lambda x: x.argmax(axis=-1),
-    "sigmoid": lambda x: 1 / (1 + np.exp(-x)),
-    "softmax": lambda x: np.exp(x) / np.exp(x).sum(-1, keepdims=True),
+    FinalActivation.NONE: lambda x: x,
+    FinalActivation.ARGMAX: lambda x: x.argmax(axis=-1),
+    FinalActivation.SIGMOID: lambda x: 1 / (1 + np.exp(-x)),
+    FinalActivation.SOFTMAX: lambda x: np.exp(x) / np.exp(x).sum(-1, keepdims=True),
 }
+
+
+def auto_activation(model) -> FinalActivation:
+    model_class = model.__class__
+    if model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
+        return FinalActivation.ARGMAX
+    return FinalActivation.NONE
 
 
 @dataclass
 class ComputeNLPMetrics:
     metrics: Union["nlp.Metric", List["nlp.Metric"]]  # noqa: F821
     activation: Optional[Union[str, FinalActivation, Callable]] = None
+
+    def __post_init__(self):
+        if isinstance(self.activation, str):
+            self.activation = FinalActivation(self.activation)
 
     def __call__(self, eval_pred):
         preds, labels = eval_pred
