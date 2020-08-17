@@ -159,6 +159,8 @@ class Trainer:
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+        kwargs:
+            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -169,9 +171,9 @@ class Trainer:
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-        prediction_loss_only=False,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        **kwargs,
     ):
         self.model = model.to(args.device)
         self.args = args
@@ -179,9 +181,16 @@ class Trainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
-        self.prediction_loss_only = prediction_loss_only
         self.optimizer, self.lr_scheduler = optimizers
         self.tb_writer = tb_writer
+        if "prediction_loss_only" in kwargs:
+            warnings.warn(
+                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a future version. Use `args.prediction_loss_only` instead.",
+                FutureWarning,
+            )
+            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
         if tb_writer is None and is_tensorboard_available() and self.is_world_process_zero():
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         if not is_tensorboard_available():
@@ -563,7 +572,7 @@ class Trainer:
 
                     if is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
-                    if self.args.fp16 and _use_native_amp:
+                    elif self.args.fp16 and _use_native_amp:
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                     else:
@@ -624,8 +633,14 @@ class Trainer:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:
-                # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
-                xm.master_print(met.metrics_report())
+                if is_torch_tpu_available():
+                    # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
+                    xm.master_print(met.metrics_report())
+                else:
+                    logger.warning(
+                        "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
+                        "configured. Check your training configuration if this is unexpected."
+                    )
 
         if self.tb_writer:
             self.tb_writer.close()
@@ -945,7 +960,9 @@ class Trainer:
             )
             return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
 
-        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
+        prediction_loss_only = (
+            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
+        )
 
         model = self.model
         # multi-gpu eval

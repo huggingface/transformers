@@ -15,7 +15,7 @@
 # limitations under the License.
 
 import logging
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -27,13 +27,22 @@ logger = logging.getLogger(__name__)
 
 class GenerationMixin:
     """
-    A class contraining all of the functions supporting generation, to be used as a mixin in PreTrainedModel.
+    A class contraining all of the functions supporting generation, to be used as a mixin in
+    :class:`~transfomers.PreTrainedModel`.
     """
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        """
+        Implement in subclasses of :class:`~transfomers.PreTrainedModel` for custom behavior to prepare inputs in the
+        generate method.
+        """
         return {"input_ids": input_ids}
 
     def adjust_logits_during_generation(self, logits, **kwargs):
+        """
+        Implement in subclasses of :class:`~transfomers.PreTrainedModel` for custom behavior to adjust the logits in
+        the generate method.
+        """
         return logits
 
     def _use_cache(self, outputs, use_cache):
@@ -45,7 +54,9 @@ class GenerationMixin:
         return True
 
     def enforce_repetition_penalty_(self, lprobs, batch_size, num_beams, prev_output_tokens, repetition_penalty):
-        """repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858). """
+        """
+        Enforce the repetition penalty (from the `CTRL paper <https://arxiv.org/abs/1909.05858>`__).
+        """
         for i in range(batch_size * num_beams):
             for previous_token in set(prev_output_tokens[i].tolist()):
                 # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
@@ -89,11 +100,12 @@ class GenerationMixin:
                 scores[i, banned_tokens] = -float("inf")
 
         if bad_words_ids is not None:
+            # Exclude EOS token (already processed)
+            bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
             # calculate a list of banned tokens according to bad words
-            banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
-
-            for i, banned_tokens in enumerate(banned_tokens):
-                scores[i, banned_tokens] = -float("inf")
+            banned_tokens = calc_banned_bad_words_ids(input_ids.tolist(), bad_words_ids)
+            # Modify the scores in place by setting the banned tokens logits to `-inf`
+            set_scores_to_inf_for_banned_tokens(scores, banned_tokens)
 
         return scores
 
@@ -122,89 +134,83 @@ class GenerationMixin:
         use_cache: Optional[bool] = None,
         **model_specific_kwargs
     ) -> torch.LongTensor:
-        r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
+        r"""
+        Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
+        beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
-        Adapted in part from `Facebook's XLM beam search code`_.
+        Adapted in part from `Facebook's XLM beam search code
+        <https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529>`__.
 
-        .. _`Facebook's XLM beam search code`:
-           https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529
+        Apart from :obj:`input_ids` and :obj:`attention_mask`, all the arguments below will default to the value of the
+        attribute of the same name inside the :class:`~transformers.PretrainedConfig` of the model. The default values
+        indicated are the default values of those config.
 
+        Most of these parameters are explained in more detail in `this blog post
+        <https://huggingface.co/blog/how-to-generate>`__.
 
         Parameters:
 
-            input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
-                The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `torch.LongTensor` of shape `(1,)`.
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`None` the method initializes
+                it as an empty :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            max_length (:obj:`int`, `optional`, defaults to 20):
+                The maximum length of the sequence to be generated.
+            min_length (:obj:`int`, `optional`, defaults to 10):
+                The minimum length of the sequence to be generated.
+            do_sample (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use sampling ; use greedy decoding otherwise.
+            early_stopping (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to stop the beam search when at least ``num_beams`` sentences are finished per batch or not.
+            num_beams (:obj:`int`, `optional`, defaults to 1):
+                Number of beams for beam search. 1 means no beam search.
+            temperature (:obj:`float`, `optional`, defaults tp 1.0):
+                The value used to module the next token probabilities.
+            top_k (:obj:`int`, `optional`, defaults to 50):
+                The number of highest probability vocabulary tokens to keep for top-k-filtering.
+            top_p (:obj:`float`, `optional`, defaults to 1.0):
+                If set to float < 1, only the most probable tokens with probabilities that add up to ``top_p`` or
+                higher are kept for generation.
+            repetition_penalty (:obj:`float`, `optional`, defaults to 1.0):
+                The parameter for repetition penalty. 1.0 means no penalty. See `this paper
+                <https://arxiv.org/pdf/1909.05858.pdf>`__ for more details.
+            pad_token_id (:obj:`int`, `optional`):
+                The id of the `padding` token.
+            bos_token_id (:obj:`int`, `optional`):
+                The id of the `beginning-of-sequence` token.
+            eos_token_id (:obj:`int`, `optional`):
+                The id of the `end-of-sequence` token.
+            length_penalty (:obj:`float`, `optional`, defaults to 1.0):
+                Exponential penalty to the length. 1.0 means no penalty.
 
-            max_length: (`optional`) int
-                The max length of the sequence to be generated.  Between `min_length` and infinity. Default to 20.
+                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
+                order to encourage the model to produce longer sequences.
+            no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
+                If set to int > 0, all ngrams of that size can only occur once.
+            bad_words_ids(:obj:`List[int]`, `optional`):
+                List of token ids that are not allowed to be generated. In order to get the tokens of the words that
+                should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
+            num_return_sequences(:obj:`int`, `optional`, defaults to 1):
+                The number of independently computed returned sequences for each element in the batch.
+            attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values are in ``[0, 1]``, 1 for
+                tokens that are not masked, and 0 for masked tokens.
 
-            min_length: (`optional`) int
-                The min length of the sequence to be generated.  Between 0 and infinity. Default to 0.
-
-            do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-
-            early_stopping: (`optional`) bool
-                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-
-            num_beams: (`optional`) int
-                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
-
-            temperature: (`optional`) float
-                The value used to module the next token probabilities. Must be strictly positive. Default to 1.0.
-
-            top_k: (`optional`) int
-                The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.
-
-            top_p: (`optional`) float
-                The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.
-
-            repetition_penalty: (`optional`) float
-                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
-
-            pad_token_id: (`optional`) int
-                Padding token. Default to specicic model pad_token_id or None if it does not exist.
-
-            bos_token_id: (`optional`) int
-                BOS token. Defaults to `bos_token_id` as defined in the models config.
-
-            eos_token_id: (`optional`) int
-                EOS token. Defaults to `eos_token_id` as defined in the models config.
-
-            length_penalty: (`optional`) float
-                Exponential penalty to the length. Default to 1.
-
-            no_repeat_ngram_size: (`optional`) int
-                If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
-            bad_words_ids: (`optional`) list of lists of int
-                `bad_words_ids` contains tokens that are not allowed to be generated. In order to get the tokens of the words that should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
-
-            num_return_sequences: (`optional`) int
-                The number of independently computed returned sequences for each element in the batch. Default to 1.
-
-            attention_mask (`optional`) obj: `torch.LongTensor` of same shape as `input_ids`
-                Mask to avoid performing attention on padding token indices.
-                Mask values selected in ``[0, 1]``:
-                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-                Defaults to `None`.
+                If not provided, will default to a tensor the same shape as :obj:`input_ids` that masks the pad token.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-
-            decoder_start_token_id=None: (`optional`) int
-                If an encoder-decoder model starts decoding with a different token than BOS.
-                Defaults to `None` and is changed to `BOS` later.
-
-            use_cache: (`optional`) bool
-                If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
-
-            model_specific_kwargs: (`optional`) dict
-                Additional model specific kwargs will be forwarded to the `forward` function of the model.
+            decoder_start_token_id (:obj:`int`, `optional`):
+                If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
+            use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not the model should use the past last key/values attentions (if applicable to the model) to
+                speed up decoding.
+            model_specific_kwargs:
+                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
         Return:
 
-            output: `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
-                sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
+            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`:
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
 
         Examples::
 
@@ -225,7 +231,7 @@ class GenerationMixin:
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3, do_sample=True)  # generate 3 candidates using sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
@@ -371,11 +377,16 @@ class GenerationMixin:
 
         if self.config.is_encoder_decoder:
             if decoder_start_token_id is None:
-                decoder_start_token_id = bos_token_id
+                # see if BOS token can be used for decoder_start_token_id
+                if bos_token_id is not None:
+                    decoder_start_token_id = bos_token_id
+                elif hasattr(self.config, "decoder") and hasattr(self.config.decoder, "bos_token_id"):
+                    decoder_start_token_id = self.config.decoder.bos_token_id
+                else:
+                    raise ValueError(
+                        "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
+                    )
 
-            assert (
-                decoder_start_token_id is not None
-            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
             assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
             assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
 
@@ -875,8 +886,8 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
         if len(tokens) == 0:
             # if bad word tokens is just one token always ban it
             return True
-        if len(tokens) > len(prev_input_ids):
-            # if bad word tokens are longer then prev input_ids they can't be equal
+        if len(tokens) > len(prev_tokens):
+            # if bad word tokens are longer than prev tokens they can't be equal
             return False
 
         if prev_tokens[-len(tokens) :] == tokens:
@@ -893,7 +904,7 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
                 bad_words_ids
             )
 
-            if _tokens_match(prev_input_ids_slice.tolist(), banned_token_seq[:-1]) is False:
+            if _tokens_match(prev_input_ids_slice, banned_token_seq[:-1]) is False:
                 # if tokens do not match continue
                 continue
 
@@ -902,6 +913,30 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iter
         banned_tokens.append(banned_tokens_slice)
 
     return banned_tokens
+
+
+def set_scores_to_inf_for_banned_tokens(scores: torch.Tensor, banned_tokens: List[List[int]]) -> None:
+    """ Modifies the scores in place by setting the banned token positions to `-inf`. Banned token is expected to be
+    a list of list of banned tokens to ban in the format [[batch index, vocabulary position],...]
+        Args:
+            scores: logits distribution of shape (batch size, vocabulary size)
+            banned_tokens: list of list of tokens to ban of length (batch_size)
+    """
+    banned_mask_list = []
+    for idx, batch_banned_tokens in enumerate(banned_tokens):
+        for token in batch_banned_tokens:
+            banned_mask_list.append([idx, token])
+    if not banned_mask_list:
+        return
+    banned_mask = torch.LongTensor(banned_mask_list)
+    indices = torch.ones(len(banned_mask))
+    # A sparse tensor is generated from a list of coordinates: [[0, 1], [0, 2], [2, 0]]. A conversion to dense tensor generates:
+    # [ 0  1  1 ]
+    # [ 0  0  0 ]
+    # [ 1  0  0 ]
+
+    banned_mask = torch.sparse.LongTensor(banned_mask.t(), indices, scores.size()).to(scores.device).to_dense().bool()
+    scores.masked_fill_(banned_mask, -float("inf"))
 
 
 def top_k_top_p_filtering(

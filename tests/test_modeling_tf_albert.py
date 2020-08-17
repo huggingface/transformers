@@ -32,6 +32,7 @@ if is_tf_available():
         TFAlbertForMultipleChoice,
         TFAlbertForSequenceClassification,
         TFAlbertForQuestionAnswering,
+        TFAlbertForTokenClassification,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -109,6 +110,7 @@ class TFAlbertModelTester:
         config = AlbertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            embedding_size=self.embedding_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -139,10 +141,8 @@ class TFAlbertModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertListEqual(
-            list(result["last_hidden_state"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(list(result["pooler_output"].shape), [self.batch_size, self.hidden_size])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_albert_for_pretraining(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -151,10 +151,8 @@ class TFAlbertModelTester:
         model = TFAlbertForPreTraining(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         result = model(inputs)
-        self.parent.assertListEqual(
-            list(result["prediction_logits"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
-        self.parent.assertListEqual(list(result["sop_logits"].shape), [self.batch_size, self.num_labels])
+        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(result.sop_logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_albert_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -162,7 +160,7 @@ class TFAlbertModelTester:
         model = TFAlbertForMaskedLM(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         result = model(inputs)
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.vocab_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_albert_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -171,7 +169,7 @@ class TFAlbertModelTester:
         model = TFAlbertForSequenceClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         result = model(inputs)
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_albert_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -179,8 +177,8 @@ class TFAlbertModelTester:
         model = TFAlbertForQuestionAnswering(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
         result = model(inputs)
-        self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_albert_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -197,6 +195,19 @@ class TFAlbertModelTester:
         }
         result = model(inputs)
         self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+
+    def create_and_check_albert_for_token_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFAlbertForTokenClassification(config=config)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
+        result = model(inputs)
+        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -223,6 +234,8 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             TFAlbertForMaskedLM,
             TFAlbertForSequenceClassification,
             TFAlbertForQuestionAnswering,
+            TFAlbertForTokenClassification,
+            TFAlbertForMultipleChoice,
         )
         if is_tf_available()
         else ()

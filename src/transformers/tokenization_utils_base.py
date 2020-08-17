@@ -553,11 +553,12 @@ class BatchEncoding(UserDict):
 
                 tensor = as_tensor(value)
 
-                # at-least2d
-                if tensor.ndim > 2:
-                    tensor = tensor.squeeze(0)
-                elif tensor.ndim < 2:
-                    tensor = tensor[None, :]
+                # Removing this for now in favor of controling the shape with `prepend_batch_axis`
+                # # at-least2d
+                # if tensor.ndim > 2:
+                #     tensor = tensor.squeeze(0)
+                # elif tensor.ndim < 2:
+                #     tensor = tensor[None, :]
 
                 self[key] = tensor
             except:  # noqa E722
@@ -587,43 +588,6 @@ class BatchEncoding(UserDict):
         """
         self.data = {k: v.to(device) for k, v in self.data.items()}
         return self
-
-
-# class AddedToken(UserString):
-#     """ AddedToken represents a token to be added to a Tokenizer
-
-#         An AddedToken can have special options defining the way it should behave.
-
-#         Args:
-#             content: str:
-#                 The content of the token
-
-#             single_word: bool
-#                 Whether this token should only match against single word. If True,
-#                 this token will never match inside of a word.
-
-#             lstrip: bool
-#                 Whether this token should strip all potential whitespaces on the left side.
-#                 If True, this token will greedily match any whitespace on the left and then strip
-#                 them out.
-
-#             rstrip: bool
-#                 Whether this token should strip all potential whitespaces on the right side.
-#                 If True, this token will greedily match any whitespace on the right and then strip
-#                 them out.
-#     """
-
-#     def __init__(
-#         self, data: str, single_word: bool = False, lstrip: bool = False, rstrip: bool = False,
-#     ):
-#         super().__init__(data)
-
-#         self._single_word = single_word
-#         self._lstrip = lstrip
-#         self._rstrip = rstrip
-
-#     def lower(self):
-#         return AddedToken(self.data.lower(), self._single_word, self._lstrip, self._rstrip)
 
 
 class SpecialTokensMixin:
@@ -1249,6 +1213,67 @@ INIT_TOKENIZER_DOCSTRING = r"""
 """
 
 
+PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
+
+        Arguments:
+            src_texts: (:obj:`list`):
+                list of documents to summarize or source language texts
+            tgt_texts: (:obj:`list`, `optional`):
+                list of tgt language texts or summaries.
+            max_length (:obj:`int`, `optional`):
+                Controls the maximum length for encoder inputs (documents to summarize or source language texts)
+                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
+                length is required by one of the truncation/padding parameters. If the model has no specific maximum
+                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+            max_target_length (:obj:`int`, `optional`):
+                Controls the maximum length of decoder inputs (target language texts or summaries)
+                If left unset or set to :obj:`None`, this will use the max_length value.
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+                Activates and controls padding. Accepts the following values:
+
+                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                  single sequence if provided).
+                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided.
+                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                  different lengths).
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`True`):
+                Activates and controls truncation. Accepts the following values:
+
+                * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
+                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
+                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
+                  if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
+                  sequence lengths greater than the model maximum admissible input size).
+
+        Return:
+            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to the encoder.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
+            - **decoder_input_ids** -- List of token ids to be fed to the decoder.
+            - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
+                This does not include causal mask, which is built by the model.
+
+            The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
+            will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
+
+"""
+
+
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerBase(SpecialTokensMixin):
     """
@@ -1562,6 +1587,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             for key, value in special_tokens_map.items():
                 if isinstance(value, dict):
                     value = AddedToken(**value)
+                elif isinstance(value, list):
+                    value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                 setattr(tokenizer, key, value)
 
         # Add supplementary tokens.
@@ -1633,6 +1660,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             for key, value in self.special_tokens_map_extended.items():
                 if isinstance(value, AddedToken):
                     write_dict[key] = value.__getstate__()
+                elif isinstance(value, list):
+                    write_dict[key] = [
+                        token.__getstate__() if isinstance(token, AddedToken) else token for token in value
+                    ]
                 else:
                     write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
@@ -2158,12 +2189,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Padding side (left/right) padding token ids are defined at the tokenizer level
         (with ``self.padding_side``, ``self.pad_token_id`` and ``self.pad_token_type_id``)
 
+        .. note::
+
+            If the ``encoded_inputs`` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+            result will use the same type unless you provide a different tensor type with ``return_tensors``. In the
+            case of PyTorch tensors, you will lose the specific device of your tensors however.
+
         Args:
             encoded_inputs (:class:`~transformers.BatchEncoding`, list of :class:`~transformers.BatchEncoding`, :obj:`Dict[str, List[int]]`, :obj:`Dict[str, List[List[int]]` or :obj:`List[Dict[str, List[int]]]`):
                 Tokenized inputs. Can represent one input (:class:`~transformers.BatchEncoding` or
                 :obj:`Dict[str, List[int]]`) or a batch of tokenized inputs (list of
                 :class:`~transformers.BatchEncoding`, `Dict[str, List[List[int]]]` or `List[Dict[str, List[int]]]`) so
                 you can use this method during preprocessing as well as in a PyTorch Dataloader collate function.
+
+                Instead of :obj:`List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                see the note above for the return type.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -2196,6 +2236,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Whether or not to print informations and warnings.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
+        # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
@@ -2209,6 +2250,40 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
+
+        # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
+        # and rebuild them afterwards if no return_tensors is specified
+        # Note that we lose the specific device the tensor may be on for PyTorch
+        first_element = encoded_inputs["input_ids"][0]
+        if isinstance(first_element, (list, tuple)) and first_element:
+            first_element = first_element[0]
+        if not isinstance(first_element, int):
+            if is_tf_available() and isinstance(first_element, tf.Tensor):
+                return_tensors = "tf" if return_tensors is None else return_tensors
+            elif is_torch_available() and isinstance(first_element, torch.Tensor):
+                return_tensors = "pt" if return_tensors is None else return_tensors
+            elif isinstance(first_element, np.ndarray):
+                return_tensors = "np" if return_tensors is None else return_tensors
+            else:
+                raise ValueError(
+                    f"type of {first_element} unknown: {type(first_element)}. "
+                    f"Should be one of a python, numpy, pytorch or tensorflow object."
+                )
+
+            def to_py_obj(obj):
+                if isinstance(obj, (list, tuple)):
+                    return [to_py_obj(o) for o in obj]
+                elif is_tf_available() and isinstance(obj, tf.Tensor):
+                    return obj.numpy().tolist()
+                elif is_torch_available() and isinstance(obj, torch.Tensor):
+                    return obj.cpu().tolist()
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                else:
+                    return obj
+
+            for key, value in encoded_inputs.items():
+                encoded_inputs[key] = to_py_obj(value)
 
         # Convert padding_strategy in PaddingStrategy
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(

@@ -18,12 +18,6 @@ IGNORE_NON_TESTED = [
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
-    "TFAlbertForMultipleChoice",  # TODO: fix
-    "TFAlbertForTokenClassification",  # TODO: fix
-    "TFBertLMHeadModel",  # TODO: fix
-    "TFElectraForMultipleChoice",  # Fix is in #6284
-    "TFElectraForQuestionAnswering",  # TODO: fix
-    "TFElectraForSequenceClassification",  # Fix is in #6284
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
 ]
@@ -35,6 +29,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_tf_camembert.py",
     "test_modeling_tf_xlm_roberta.py",
     "test_modeling_xlm_roberta.py",
+    "test_modeling_pegasus.py",
+    "test_modeling_mbart.py",
 ]
 
 # Update this list for models that are not documented with a comment explaining the reason it should not be.
@@ -111,7 +107,6 @@ def get_model_test_files():
         "test_modeling_common",
         "test_modeling_encoder_decoder",
         "test_modeling_marian",
-        "test_modeling_mbart",
         "test_modeling_tf_common",
     ]
     test_files = []

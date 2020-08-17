@@ -18,6 +18,7 @@
 import logging
 
 from .configuration_utils import PretrainedConfig
+from .file_utils import add_start_docstrings_to_callable
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,73 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
 }
 
+BART_CONFIG_ARGS_DOC = r"""
+    Args:
+        vocab_size (:obj:`int`, optional, defaults to 50265):
+            defines the different tokens that can be represented by `inputs_ids` passed to the forward method.
+        d_model (:obj:`int`, optional, defaults to 1024):
+            Dimensionality of the layers and the pooler layer.
+        encoder_layers (:obj:`int`, optional, defaults to 12):
+            Number of encoder layers, 16 for pegasus, 6 for bart-base and marian
+        decoder_layers (:obj:`int`, optional, defaults to 12):
+            Number of decoder layers, 16 for pegasus, 6 for bart-base and marian
+        encoder_attention_heads (:obj:`int`, optional, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (:obj:`int`, optional, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
+        encoder_ffn_dim (:obj:`int`, optional, defaults to 4096):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in decoder.
+        activation_function (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
+            The non-linear activation function (function or string) in the encoder and pooler.
+            If string, "gelu", "relu", "swish" and "gelu_new" are supported.
+        dropout (:obj:`float`, optional, defaults to 0.1):
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (:obj:`float`, optional, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (:obj:`float`, optional, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        classifier_dropout (:obj:`float`, optional, defaults to 0.0):
+            The dropout ratio for classifier.
+        max_position_embeddings (:obj:`int`, optional, defaults to 1024):
+            The maximum sequence length that this model might ever be used with.
+            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+        init_std (:obj:`float`, optional, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        add_bias_logits (:obj:`int`, optional, defaults to False):
+            True for marian only.
+        normalize_before (:obj:`bool`, optional, defaults to False):
+            Call layernorm before attention ops. True for pegasus, mbart. False for bart. FIXME: marian?
+        normalize_embedding (:obj:`bool`, optional, defaults to True):
+            Call layernorm after embeddings. Only True for Bart.
+        static_position_embeddings (:obj:`bool`, optional, defaults to False):
+            Don't learn positional embeddings, use sinusoidal. True for marian, pegasus.
+        add_final_layer_norm (:obj:`bool`, optional, defaults to False):
+            Why not add another layernorm?
+        scale_embedding (:obj:`bool`, optional, defaults to False):
+            Scale embeddings by diving by sqrt(d_model).
+        eos_token_id (:obj:`int`, optional, defaults to 2)
+            End of stream token id.
+        pad_token_id (:obj:`int`, optional, defaults to 1)
+            Padding token id.
+        bos_token_id (:obj:`int`, optional, defaults to 0)
+            Beginning of stream token id.
+        encoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
+            Google "layerdrop arxiv", as its not explainable in one line.
+        decoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
+            Google "layerdrop arxiv", as its not explainable in one line.
+        extra_pos_embeddings: (:obj:`int`, optional, defaults to 2):
+            How many extra learned positional embeddings to use. Should be pad_token_id+1 for bart.
+        num_labels: (:obj:`int`, optional, defaults to 2):
+            for SequenceClassification
+        is_encoder_decoder (:obj:`int`, optional, defaults to True):
+            True
 
+"""
+
+
+@add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class BartConfig(PretrainedConfig):
     r"""
         Configuration class for Bart. Parameters are renamed from the fairseq implementation
@@ -42,7 +109,7 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
-        extra_pos_embeddings=2,
+        extra_pos_embeddings=2,  # FIXME(@sshleifer): delete?
         activation_function="gelu",
         vocab_size=50265,
         d_model=1024,
@@ -81,6 +148,7 @@ class BartConfig(PretrainedConfig):
 
                 >>> config = BartConfig.from_pretrained('facebook/bart-large')
                 >>> model = BartModel(config)
+
         """
         if "hidden_size" in common_kwargs:
             raise ValueError("hidden size is called d_model")
@@ -142,7 +210,3 @@ class BartConfig(PretrainedConfig):
         if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
-
-
-class MBartConfig(BartConfig):
-    model_type = "mbart"
