@@ -166,7 +166,7 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(
 
 
 def get_polynomial_decay_schedule_with_warmup(
-    optimizer, num_warmup_steps, num_training_steps, lr_end=1e-7, power=2.0, last_epoch=-1
+    optimizer, num_warmup_steps, num_training_steps, lr_end=1e-7, power=1.0, last_epoch=-1
 ):
     """
     Create a schedule with a learning rate that decreases as a polynomial decay
@@ -187,6 +187,10 @@ def get_polynomial_decay_schedule_with_warmup(
             Power factor.
         last_epoch (:obj:`int`, `optional`, defaults to -1):
             The index of the last epoch when resuming training.
+
+    Note: `power` defaults to 1.0 as in the fairseq implementation, which in turn is
+    based on the original BERT implementation at
+    https://github.com/google-research/bert/blob/f39e881b169b9d53bea03d2d341b31707a6c052b/optimization.py#L37
 
     Return:
         :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
