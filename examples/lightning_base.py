@@ -149,11 +149,6 @@ class BaseTransformer(pl.LightningModule):
     def test_epoch_end(self, outputs):
         return self.validation_end(outputs)
 
-    @staticmethod
-    def calc_total_steps(dataset_size, effective_batch_size, epochs):
-        """Calculate the expected number of optimizer steps. (there can be multiple forward passes per optimizer step.)"""
-        return
-
     @property
     def total_steps(self) -> int:
         """The number of total training steps that will be run. Used for lr scheduler purposes."""
