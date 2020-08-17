@@ -79,21 +79,16 @@ class OnnxExportTestCase(unittest.TestCase):
                 self.fail("Quantized model is bigger than initial ONNX model")
 
     def _test_export(self, model, framework, opset, tokenizer=None):
-        try:
-            # Compute path
-            with TemporaryDirectory() as tempdir:
-                path = tempdir + "/model.onnx"
+        with TemporaryDirectory() as tempdir:
+            path = tempdir + "/model.onnx"
 
             # Remove folder if exists
             if exists(dirname(path)):
                 rmtree(dirname(path))
 
-                # Export
-                convert(framework, model, path, opset, tokenizer)
-
-                return path
-        except Exception as e:
-            self.fail(e)
+            # Export
+            convert(framework, model, Path(path), opset, tokenizer)
+            return path
 
     @require_torch
     def test_infer_dynamic_axis_pytorch(self):
