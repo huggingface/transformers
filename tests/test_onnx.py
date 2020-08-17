@@ -88,10 +88,10 @@ class OnnxExportTestCase(unittest.TestCase):
             if exists(dirname(path)):
                 rmtree(dirname(path))
 
-                # Export
-                convert(framework, model, path, opset, tokenizer)
+            # Export
+            convert(framework, model, path, opset, tokenizer)
 
-                return path
+            return path
         except Exception as e:
             self.fail(e)
 
