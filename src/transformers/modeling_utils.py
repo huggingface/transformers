@@ -25,7 +25,6 @@ import torch
 from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
-from torch.nn.modules import Module
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -418,18 +417,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
         if self.config.is_encoder_decoder and self.config.tie_encoder_decoder:
-            self._tie_encoder_decoder_weights(self.encoder, self.decoder)
+            self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
-    def _tie_encoder_decoder_weights(self, encoder, decoder):
-        uninitialized_encoder_weights = []
+    @staticmethod
+    def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
+        uninitialized_encoder_weights: List[str] = []
         assert decoder.__class__ == encoder.__class__, f"{decoder.__class__} and {encoder.__class__} have to be equal."
 
         def tie_encoder_to_decoder_recursively(
-            decoder_pointer, encoder_pointer, module_name, uninitialized_encoder_weights
+            decoder_pointer: nn.Module,
+            encoder_pointer: nn.Module,
+            module_name: str,
+            uninitialized_encoder_weights: List[str],
         ):
-            assert isinstance(decoder_pointer, Module) and isinstance(
-                encoder_pointer, Module
-            ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.modules.Module"
+            assert isinstance(decoder_pointer, nn.Module) and isinstance(
+                encoder_pointer, nn.Module
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -472,7 +475,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 uninitialized_encoder_weights += list(all_encoder_weights)
 
         # tie weights recursively
-        tie_encoder_to_decoder_recursively(decoder, encoder, self.base_model_prefix, uninitialized_encoder_weights)
+        tie_encoder_to_decoder_recursively(decoder, encoder, base_model_prefix, uninitialized_encoder_weights)
         if len(uninitialized_encoder_weights) > 0:
             logger.warning(
                 f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}"

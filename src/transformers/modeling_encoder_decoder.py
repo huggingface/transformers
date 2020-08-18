@@ -71,7 +71,7 @@ class EncoderDecoderModel(PreTrainedModel):
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
 
-        # tied weights if config set accordingly
+        # tie encoder, decoder weights if config set accordingly
         self.tie_weights()
 
     def tie_weights(self):
@@ -79,7 +79,9 @@ class EncoderDecoderModel(PreTrainedModel):
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
             decoder_base_model_prefix = self.decoder.base_model_prefix
-            self._tie_encoder_decoder_weights(self.encoder, self.decoder._modules[decoder_base_model_prefix])
+            self._tie_encoder_decoder_weights(
+                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+            )
 
     def get_encoder(self):
         return self.encoder
@@ -155,9 +157,10 @@ class EncoderDecoderModel(PreTrainedModel):
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for encoder_key, decoder_key in zip(kwargs_encoder.keys(), kwargs_decoder.keys()):
-            del kwargs["encoder_" + encoder_key]
-            del kwargs["decoder_" + decoder_key]
+        for key in kwargs_encoder.keys():
+            del kwargs["encoder_" + key]
+        for key in kwargs_decoder.keys():
+            del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
