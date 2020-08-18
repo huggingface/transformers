@@ -20,7 +20,7 @@ The Authors' code can be found `here <https://github.com/google-research/pegasus
 
 Checkpoints
 ~~~~~~~~~~~
-The `checkpoints <https://huggingface.co/models?search=pegasus>`_ all checkpoints are finetuned for summarization, besides ``pegasus-large``, whence the other checkpoints are finetuned.
+All the `checkpoints <https://huggingface.co/models?search=pegasus>`_ are finetuned for summarization, besides ``pegasus-large``, whence the other checkpoints are finetuned.
 - Each checkpoint is 2.2 GB on disk and 568M parameters.
 - FP16 is not supported (help/ideas on this appreciated!).
 - Summarizing xsum in fp32 takes about 400ms/sample, with default parameters on a v100 GPU.
