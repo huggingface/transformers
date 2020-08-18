@@ -1,9 +1,9 @@
+import random
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
-import random
 
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_base import BatchEncoding, PaddingStrategy
@@ -344,7 +344,7 @@ class DataCollatorForNSP:
         return {
             "input_ids": self._tensorize_batch(input_ids),
             "token_type_ids": self._tensorize_batch(segment_ids),
-            "next_sentence_label": torch.tensor(labels)
+            "next_sentence_label": torch.tensor(labels),
         }
 
     def _tensorize_batch(self, examples: List[torch.Tensor]) -> torch.Tensor:
@@ -360,7 +360,9 @@ class DataCollatorForNSP:
                 )
             return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
-    def create_examples_from_document(self, document: List[List[int]], doc_index: int, examples: List[List[List[int]]]):
+    def create_examples_from_document(
+        self, document: List[List[int]], doc_index: int, examples: List[List[List[int]]]
+    ):
         """Creates examples for a single document."""
 
         # Account for [CLS], [SEP], [SEP]
@@ -433,9 +435,7 @@ class DataCollatorForNSP:
                     assert len(tokens_a) >= 1
                     assert len(tokens_b) >= 1
 
-                    input_ids.append(
-                        torch.tensor(self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b))
-                    )
+                    input_ids.append(torch.tensor(self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)))
                     segment_ids.append(
                         torch.tensor(self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b))
                     )
@@ -447,5 +447,3 @@ class DataCollatorForNSP:
             i += 1
 
         return input_ids, segment_ids, labels
-
-
