@@ -2,11 +2,14 @@ import argparse
 import json
 import os
 import shutil
+import socket
+import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Tuple, Union
 from zipfile import ZipFile
 
+import git
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -14,67 +17,73 @@ from tqdm import tqdm
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 from transformers.hf_api import HfApi
 
+
 def remove_suffix(text: str, suffix: str):
     if text.endswith(suffix):
-        return text[:-len(suffix)]
+        return text[: -len(suffix)]
     return text  # or whatever
 
+
 def _process_benchmark_table_row(x):
-    fields = lmap(str.strip, x.replace('\t', '').split('|')[1:-1])
+    fields = lmap(str.strip, x.replace("\t", "").split("|")[1:-1])
     assert len(fields) == 3
     return (fields[0], float(fields[1]), float(fields[2]))
 
 
 def process_last_benchmark_table(readme_path) -> List[Tuple[str, float, float]]:
     md_content = Path(readme_path).open().read()
-    entries = md_content.split('## Benchmarks')[-1].strip().split('\n')[2:]
+    entries = md_content.split("## Benchmarks")[-1].strip().split("\n")[2:]
     data = lmap(_process_benchmark_table_row, entries)
     return data
 
 
-def check_if_models_are_dominated(old_repo_path='OPUS-MT-train/models', new_repo_path='Tatoeba-Challenge/models/'):
+def check_if_models_are_dominated(old_repo_path="OPUS-MT-train/models", new_repo_path="Tatoeba-Challenge/models/"):
     """Make a blacklist for models where we have already ported the same language pair, and the ported model has higher BLEU score."""
     import pandas as pd
-    released_cols = ['url_base',
-                     'pair',  # (ISO639-3/ISO639-5 codes),
-                     'short_pair',  # (reduced codes),
-                     'chrF2_score',
-                     'bleu',
-                     'brevity_penalty',
-                     'ref_len',
-                     'src_name', 'tgt_name']
 
-    released = pd.read_csv(f'{new_repo_path}/released-models.txt', sep='\t', header=None).iloc[:-1]
+    released_cols = [
+        "url_base",
+        "pair",  # (ISO639-3/ISO639-5 codes),
+        "short_pair",  # (reduced codes),
+        "chrF2_score",
+        "bleu",
+        "brevity_penalty",
+        "ref_len",
+        "src_name",
+        "tgt_name",
+    ]
+
+    released = pd.read_csv(f"{new_repo_path}/released-models.txt", sep="\t", header=None).iloc[:-1]
     released.columns = released_cols
     old_reg = make_registry(repo_path=old_repo_path)
-    old_reg = pd.DataFrame(old_reg, columns=['id', 'prepro', 'url_model', 'url_test_set'])
+    old_reg = pd.DataFrame(old_reg, columns=["id", "prepro", "url_model", "url_test_set"])
     assert old_reg.id.value_counts().max() == 1
-    old_reg = old_reg.set_index('id')
+    old_reg = old_reg.set_index("id")
 
-    released['fname'] = released['url_base'].apply(
-        lambda x: remove_suffix(remove_prefix(x, 'https://object.pouta.csc.fi/Tatoeba-Challenge/opus'), '.zip'))
+    released["fname"] = released["url_base"].apply(
+        lambda x: remove_suffix(remove_prefix(x, "https://object.pouta.csc.fi/Tatoeba-Challenge/opus"), ".zip")
+    )
 
-    released['2m'] = released.fname.str.startswith('2m')
-    released['date'] = pd.to_datetime(released['fname'].apply(lambda x: remove_prefix(remove_prefix(x, '2m-'), '-')))
+    released["2m"] = released.fname.str.startswith("2m")
+    released["date"] = pd.to_datetime(released["fname"].apply(lambda x: remove_prefix(remove_prefix(x, "2m-"), "-")))
 
-    newest_released = released.dsort('date').drop_duplicates(['short_pair'], keep='first')
+    newest_released = released.dsort("date").drop_duplicates(["short_pair"], keep="first")
 
+    short_to_new_bleu = newest_released.set_index("short_pair").bleu
 
-    short_to_new_bleu = newest_released.set_index('short_pair').bleu
+    assert released.groupby("short_pair").pair.nunique().max() == 1
 
-    assert released.groupby('short_pair').pair.nunique().max() == 1
-
-    short_to_long = released.groupby('short_pair').pair.first().to_dict()
+    short_to_long = released.groupby("short_pair").pair.first().to_dict()
 
     overlap_short = old_reg.index.intersection(released.short_pair.unique())
     overlap_long = [short_to_long[o] for o in overlap_short]
     new_reported_bleu = [short_to_new_bleu[o] for o in overlap_short]
 
     def get_old_bleu(o) -> float:
-        pat = old_repo_path +'/{}/README.md'
+        pat = old_repo_path + "/{}/README.md"
         bm_data = process_last_benchmark_table(pat.format(o))
-        tab = pd.DataFrame(bm_data, columns=['testset', 'bleu', 'chr-f'])
-        tato_bleu = tab.loc[lambda x: x.testset.str.startswith('Tato')].bleu
+        tab = pd.DataFrame(bm_data, columns=["testset", "bleu", "chr-f"])
+        tato_bleu = tab.loc[lambda x: x.testset.str.startswith("Tato")].bleu
         if tato_bleu.shape[0] > 0:
             return tato_bleu.iloc[0]
         else:
@@ -82,7 +91,8 @@ def check_if_models_are_dominated(old_repo_path='OPUS-MT-train/models', new_repo
 
     old_bleu = [get_old_bleu(o) for o in overlap_short]
     cmp_df = pd.DataFrame(
-        dict(short=overlap_short, long=overlap_long, old_bleu=old_bleu, new_bleu=new_reported_bleu)).fillna(-1)
+        dict(short=overlap_short, long=overlap_long, old_bleu=old_bleu, new_bleu=new_reported_bleu)
+    ).fillna(-1)
 
     dominated = cmp_df[cmp_df.old_bleu > cmp_df.new_bleu]
     blacklist = dominated.long.unique().tolist()  # 3 letter codes
@@ -223,31 +233,38 @@ def convert_hf_name_to_opus_name(hf_model_name):
     return remove_prefix(opus_w_prefix, "opus-mt-")
 
 
-
-import git
-import socket
-import time
-
 def get_system_metadata(repo_root):
-    return dict(helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
-                transformers_git_sha=git.Repo(path='.', search_parent_directories=True).head.object.hexsha,
-                port_machine=socket.gethostname(),
-                port_time=time.strftime('%Y-%m-%d-%H:%M'))
+    return dict(
+        helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
+        transformers_git_sha=git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
+        port_machine=socket.gethostname(),
+        port_time=time.strftime("%Y-%m-%d-%H:%M"),
+    )
+
+
+front_matter = """---
+language: {}
+tags:
+- translation
+
+license: apache-2.0
+---
+
+"""
+
 
 def write_model_card(
-    hf_model_name: str,
-    repo_root="OPUS-MT-train",
-    dry_run=False,
-    save_dir=Path("marian_converted/model_cards/Helsinki-NLP/"),
-    extra_metadata = {}
+    hf_model_name: str, repo_root="OPUS-MT-train", save_dir=Path("marian_converted"), dry_run=False, extra_metadata={},
 ) -> str:
     """Copy the most recent model's readme section from opus, and add metadata.
     upload command: aws s3 sync model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
     """
+    import pandas as pd
+
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     opus_name: str = convert_hf_name_to_opus_name(hf_model_name)
-    assert repo_root in ('OPUS-MT-train', 'Tatoeba-Challenge')
-    opus_readme_path = Path(repo_root).joinpath('models', opus_name, 'README.md')
+    assert repo_root in ("OPUS-MT-train", "Tatoeba-Challenge")
+    opus_readme_path = Path(repo_root).joinpath("models", opus_name, "README.md")
     assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
 
     opus_src, opus_tgt = [x.split("+") for x in opus_name.split("-")]
@@ -255,27 +272,45 @@ def write_model_card(
     readme_url = f"https://github.com/Helsinki-NLP/{repo_root}/tree/master/models/{opus_name}/README.md"
 
     s, t = ",".join(opus_src), ",".join(opus_tgt)
-    extra_markdown = f"### {hf_model_name}\n\n* source languages: {s}\n* target languages: {t}\n*  OPUS readme: [{opus_name}]({readme_url})\n"
-    metadata = {'hf_name': hf_model_name, 'source_languages': s, 'target_languages': t, 'opus_readme_url': readme_url,
-                   'original_repo': repo_root, 'tags': ['translation']
-                   }
+    metadata = {
+        "hf_name": hf_model_name,
+        "source_languages": s,
+        "target_languages": t,
+        "opus_readme_url": readme_url,
+        "original_repo": repo_root,
+        "tags": ["translation"],
+    }
     metadata.update(extra_metadata)
     metadata.update(get_system_metadata(repo_root))
 
     # combine with opus markdown
 
+    extra_markdown = f"### {hf_model_name}\n\n* source group: {metadata['src_name']} \n* target group: {metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
+
     content = opus_readme_path.open().read()
     content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
-    content = "*".join(content.split("*")[1:])
-    content = extra_markdown + "\n* " + content.replace("download", "download original weights")
-    #if dry_run:
-    return content, metadata
-    # Save string to save_dir/hf_model_name/README.md
-    save_dir.mkdir(exist_ok=True)
-    sub_dir = save_dir / hf_model_name
+    splat = content.split("*")[2:]
+    print(splat[3])
+    content = "*".join(splat)
+    content = (
+        front_matter.format(metadata["src_alpha2"])
+        + extra_markdown
+        + "\n* "
+        + content.replace("download", "download original weights")
+    )
+
+    items = "\n\n".join([f"- {k}: {v}" for k, v in metadata.items()])
+    sec3 = "\n### System Info: \n" + items
+    content += sec3
+    if dry_run:
+        return content, metadata
+    sub_dir = save_dir / f"opus-mt-{hf_model_name}"
     sub_dir.mkdir(exist_ok=True)
     dest = sub_dir / "README.md"
     dest.open("w").write(content)
+    pd.Series(metadata).to_json(sub_dir / "metadata.json")
+
+    # if dry_run:
     return content, metadata
 
 
