@@ -113,6 +113,9 @@ class TrainingArguments:
             at the next training step under the keyword argument ``mems``.
         run_name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
+        disable_tqdm (:obj:`bool`, `optional`):
+            Whether or not to disable the tqdm progress bars. Will default to :obj:`True` if the logging level is set
+            to warn or lower (default), :obj:`False` otherwise.
     """
 
     output_dir: str = field(
@@ -232,6 +235,13 @@ class TrainingArguments:
     run_name: Optional[str] = field(
         default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
     )
+    disable_tqdm: Optional[str] = field(
+        default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
+    )
+
+    def __post_init__(self):
+        if self.disable_tqdm is None:
+            self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
     @property
     def train_batch_size(self) -> int:

@@ -1,5 +1,5 @@
 import random
-from typing import Dict, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional
 
 import numpy as np
 
@@ -53,3 +53,22 @@ class TrainOutput(NamedTuple):
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
+
+
+class BestRun(NamedTuple):
+    """
+    The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
+
+    Parameters:
+        run_id (:obj:`int`):
+            The id of the best run (if models were saved, the corresponding checkpoint will be in the folder ending
+            with run-{run_id}).
+        objective (:obj:`float`):
+            The objective that was obtained for this run.
+        hyperparameters (:obj:`Dict[str, Any]`):
+            The hyperparameters picked to get this run.
+    """
+
+    run_id: int
+    objective: float
+    hyperparameters: Dict[str, Any]

@@ -20,10 +20,10 @@ from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_torch_tpu_available
-from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
+from .integrations import is_comet_available, is_optuna_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvalPrediction, PredictionOutput, TrainOutput, set_seed
 from .training_args import TrainingArguments
 
 
@@ -58,6 +58,9 @@ if is_wandb_available():
 
 if is_comet_available():
     import comet_ml
+
+if is_optuna_available():
+    import optuna
 
 logger = logging.getLogger(__name__)
 
@@ -137,10 +140,11 @@ class Trainer:
     optimized for 🤗 Transformers.
 
     Args:
-        model (:class:`~transformers.PreTrainedModel`):
-            The model to train, evaluate or use for predictions.
-        args (:class:`~transformers.TrainingArguments`):
-            The arguments to tweak training.
+        model (:class:`~transformers.PreTrainedModel`, `optional`):
+            The model to train, evaluate or use for predictions. If not provided, a ``model_init`` must be passed.
+        args (:class:`~transformers.TrainingArguments`, `optional`):
+            The arguments to tweak training. Will default to a basic instance of :class:`~transformers.TrainingArguments`
+            with the ``output_dir`` set to a directory named `tmp_trainer` in the current directory if not provided.
         data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
             The function to use to from a batch from a list of elements of :obj:`train_dataset` or
             :obj:`eval_dataset`.
@@ -148,6 +152,9 @@ class Trainer:
             The dataset to use for training.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for evaluation.
+        model_init (:obj:`Callable[[], PreTrainedModel]`, `optional`):
+            A function that instantiates the model to be used. If provided, each call to
+            :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -165,21 +172,31 @@ class Trainer:
 
     def __init__(
         self,
-        model: PreTrainedModel,
-        args: TrainingArguments,
+        model: PreTrainedModel = None,
+        args: TrainingArguments = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
+        model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         **kwargs,
     ):
-        self.model = model.to(args.device)
+        assert (
+            model is not None or model_init is not None
+        ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
+        if model is None and model_init is not None:
+            model = model_init()
+        self.model = model.to(args.device) if model is not None else None
+        if args is None:
+            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
+            args = TrainingArguments("tmp_trainer")
         self.args = args
         self.data_collator = data_collator if data_collator is not None else default_data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.model_init = model_init
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
         self.tb_writer = tb_writer
@@ -425,13 +442,45 @@ class Trainer:
                 experiment._log_parameters(self.args, prefix="args/", framework="transformers")
                 experiment._log_parameters(self.model.config, prefix="config/", framework="transformers")
 
+    def setup_optuna(self, trial: "optuna.Trial"):
+        """
+        Setup the optional optuna integration. This is setting up good defaults for hyperparameter-search, subclass and
+        override to custoize the argumnents included in the search.
+
+        Args:
+            trial (:obj:`optuna.Trial`): The trial run for which to pick hyperparameters.
+        """
+        self.args.learning_rate = trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True)
+        self.args.num_train_epochs = trial.suggest_int("num_train_epochs", 1, 5)
+        self.args.seed = trial.suggest_int("seed", 1, 40)
+        self.args.per_device_train_batch_size = trial.suggest_categorical(
+            "per_device_train_batch_size", [4, 8, 16, 32, 64]
+        )
+        logger.info("Trial:", trial.params)
+
+    def compute_objective(self, metrics: Dict[str, float]) -> float:
+        """
+        The objective to maximize/minimize when doing an hyperparameter search. By default, the objective is the
+        evaluation loss if not metrics are provided to the :class:`~transformers.Trainer`, the sum of all metrics
+        otherwise. To change this behavior, subclass and override this method.
+
+        Args:
+            metrics (:obj:`Dict[str, float]`): The metrics returned by the evaluate method.
+
+        Return:
+            :obj:`float`: The objective to minimize or maximize
+        """
+        loss = metrics.pop("eval_loss", None)
+        _ = metrics.pop("epoch", None)
+        return loss if len(metrics) == 0 else sum(metrics.values())
+
     def num_examples(self, dataloader: DataLoader) -> int:
         """
         Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
         """
         return len(dataloader.dataset)
 
-    def train(self, model_path: Optional[str] = None):
+    def train(self, model_path: Optional[str] = None, trial: Optional["optuna.Trial"] = None):
         """
         Main training entry point.
 
@@ -439,7 +488,14 @@ class Trainer:
             model_path (:obj:`str`, `optional`):
                 Local path to the model if the model to train has been instantiated from a local path. If present,
                 training will resume from the optimizer/scheduler states loaded here.
+            trial (:obj:`optuna.Trial`, `optional`):
+                The trial run for hyperameter search.
         """
+        if self.model_init is not None:
+            model = self.model_init()
+            self.model = model.to(self.args.device)
+        if trial is not None:
+            self.setup_optuna(trial)
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
@@ -529,9 +585,8 @@ class Trainer:
         tr_loss = 0.0
         logging_loss = 0.0
         model.zero_grad()
-        train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_process_zero()
-        )
+        disable_tqdm = not self.is_local_process_zero() or self.args.disable_tqdm
+        train_iterator = trange(epochs_trained, int(num_train_epochs), desc="Epoch", disable=disable_tqdm)
         for epoch in train_iterator:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -540,9 +595,9 @@ class Trainer:
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_process_zero())
+                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=disable_tqdm)
             else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_process_zero())
+                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=disable_tqdm)
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if self.args.past_index >= 0:
@@ -599,7 +654,12 @@ class Trainer:
                         self.log(logs)
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
-                        self.evaluate()
+                        metrics = self.evaluate()
+                        if is_optuna_available() and trial is not None:
+                            self.objective = self.compute_objective(metrics)
+                            trial.report(self.objective, epoch)
+                            if trial.should_prune():
+                                raise optuna.TrialPruned()
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -611,7 +671,10 @@ class Trainer:
                         else:
                             assert model is self.model, f"Model {model} should be a reference to self.model"
                         # Save model checkpoint
-                        output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
+                        checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
+                        if trial is not None:
+                            checkpoint_folder += f"-run-{trial.number}"
+                        output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
                         self.save_model(output_dir)
 
@@ -650,6 +713,51 @@ class Trainer:
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         return TrainOutput(self.global_step, tr_loss / self.global_step)
+
+    def hyperparameter_search(
+        self, n_trials: int = 100, timeout: int = 1800, n_jobs: int = 1, direction: str = "minimize", **kwargs
+    ) -> BestRun:
+        """
+        Launch an hyperparameter search using ``optuna``. The optimized quantity is determined by the
+        :meth:`~transformers.Trainer.compute_obejctive` method, which is the evaluation loss when no metric is
+        provided, the sum of all metrics otherwise (you can change that behavior by subclassing and overriding this
+        method).
+
+        Args:
+            n_trial (:obj:`int`, `optional`, defaults to 100):
+                The number of trial runs to test.
+            timeout (:obj:`int`, `optional`, defaults to 1800):
+                The number of seconds before abandoning a trial.
+            n_jobs (:obj:`int`, `optional`, defaults to 1):
+                The number of jobs to launch in parallel.
+            direction(:obj:`str`, `optional`, defaults to :obj:`"minimize"`):
+                Whether to optimize greater or lower objects. Can be :obj:`"minimize"` or :obj:`"maximize"`, you should
+                pick :obj:`"minimize"` when optimizing the validation loss, :obj:`"maximize"` when optimizing one or
+                several metrics.
+            kwargs:
+                Additional keyword arguments passed along to :obj:`optuna.create_study`.
+
+        Returns:
+            :class:`transformers.trainer_utils.BestRun`: All the informations about the best run.
+        """
+        assert is_optuna_available(), "optuna is required to do hyperparameter search, use `pip install optuna`."
+
+        def _objective(self, trial):
+            # To make sure optimizer and lr_scheduler are reset with the new choices of HPs
+            self.optimizer = None
+            self.lr_scheduler = None
+            self.objective = None
+            self.train(trial=trial)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(self, "objective", None) is None:
+                metrics = self.evaluate()
+                self.objective = self.compute_objective(metrics)
+            return self.objective
+
+        study = optuna.create_study(direction=direction, **kwargs)
+        study.optimize(lambda t: _objective(self, t), n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
+        best_trial = study.best_trial
+        return BestRun(best_trial.number, best_trial.value, best_trial.params)
 
     def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         """
@@ -988,7 +1096,8 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        for inputs in tqdm(dataloader, desc=description):
+        disable_tqdm = not self.is_local_process_zero() or self.args.disable_tqdm
+        for inputs in tqdm(dataloader, desc=description, disable=disable_tqdm):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             if loss is not None:
                 eval_losses.append(loss)
