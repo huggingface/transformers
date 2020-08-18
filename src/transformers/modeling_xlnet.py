@@ -439,7 +439,7 @@ class XLNetRelativeAttention(nn.Module):
             v_head_h = torch.einsum("ibh,hnd->ibnd", cat, self.v)
 
             # positional heads
-            k_head_r = torch.einsum("ibh,hnd->ibnd", r, self.r)
+            k_head_r = torch.einsum("ibh,hnd->ibnd", r.type(self.r.dtype), self.r)
 
             # core attention ops
             attn_vec = self.rel_attn_core(
