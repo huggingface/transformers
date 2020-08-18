@@ -26,6 +26,7 @@ from .modeling_roberta import (
     RobertaForSequenceClassification,
     RobertaForTokenClassification,
     RobertaModel,
+    RobertaForCausalLM,
 )
 
 
@@ -132,4 +133,15 @@ class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
     superclass for the appropriate documentation alongside usage examples.
     """
 
+    config_class = CamembertConfig
+
+
+@add_start_docstrings(
+    """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning. """, CAMEMBERT_START_DOCSTRING
+)
+class CamembertForCausalLM(RobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
     config_class = CamembertConfig
