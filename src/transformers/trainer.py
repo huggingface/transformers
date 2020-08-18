@@ -445,7 +445,7 @@ class Trainer:
     def setup_optuna(self, trial: "optuna.Trial"):
         """
         Setup the optional optuna integration. This is setting up good defaults for hyperparameter-search, subclass and
-        override to custoize the argumnents included in the search.
+        override to customize the arguments included in the search.
 
         Args:
             trial (:obj:`optuna.Trial`): The trial run for which to pick hyperparameters.
