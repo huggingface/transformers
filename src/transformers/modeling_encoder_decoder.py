@@ -80,7 +80,6 @@ class EncoderDecoderModel(PreTrainedModel):
             # tie encoder and decoder base model
             decoder_base_model_prefix = self.decoder.base_model_prefix
             self._tie_or_clone_encoder_decoder_weights(self.encoder, self.decoder._modules[decoder_base_model_prefix])
-        # for now no word embedding tying in encoder-decoder
 
     def get_encoder(self):
         return self.encoder
@@ -133,7 +132,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter
                 - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter
                 - To update the parent model configuration, do not use a prefix for each configuration parameter
-                Behave differently depending on whether a `config` is provided or automatically loaded:
+                Behave differently depending on whether a :obj:`config` is provided or automatically loaded:
 
         Examples::
 
@@ -155,7 +154,7 @@ class EncoderDecoderModel(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        # remove left over kwargs
+        # remove encoder, decoder kwargs from kwargs
         for encoder_key, decoder_key in zip(kwargs_encoder.keys(), kwargs_decoder.keys()):
             del kwargs["encoder_" + encoder_key]
             del kwargs["decoder_" + decoder_key]
@@ -200,7 +199,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-        # instantiate config
+        # instantiate config with corresponding kwargs
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
