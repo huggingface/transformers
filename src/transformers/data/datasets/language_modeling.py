@@ -2,8 +2,6 @@ import logging
 import os
 import pickle
 import time
-import random
-from typing import List
 
 import torch
 from filelock import FileLock
