@@ -446,28 +446,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
                 all_encoder_weights = set([module_name + "/" + sub_name for sub_name in encoder_modules.keys()])
-                encoder_layer_pos = 0
                 for name, module in decoder_modules.items():
-                    if name.isdigit():
-                        encoder_name = str(int(name) + encoder_layer_pos)
-                        decoder_name = name
-                        if not isinstance(decoder_modules[decoder_name], type(encoder_modules[encoder_name])):
-                            # this can happen if the name corresponds to the position in a list module list of layers
-                            # in this case the decoder has added a cross-attention that the encoder does not have
-                            # thus skip this step and substract one layer pos from encoder
-                            encoder_layer_pos -= 1
-                            continue
-                    elif name not in encoder_modules:
+                    if name not in encoder_modules:
                         continue
-                    else:
-                        decoder_name = encoder_name = name
+                    elif type(decoder_modules[name]) != type(encoder_modules[name]):
+                        import ipdb; ipdb.set_trace()
                     tie_encoder_to_decoder_recursively(
-                        decoder_modules[decoder_name],
-                        encoder_modules[encoder_name],
-                        module_name + "/" + name,
-                        uninitialized_encoder_weights,
+                        decoder_modules[name], encoder_modules[name], name, uninitialized_encoder_weights
                     )
-                    all_encoder_weights.remove(module_name + "/" + encoder_name)
+                    all_encoder_weights.remove(module_name + "/" + name)
 
                 uninitialized_encoder_weights += list(all_encoder_weights)
 
