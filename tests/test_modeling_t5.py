@@ -14,9 +14,9 @@
 # limitations under the License.
 
 
-import unittest
 import copy
 import tempfile
+import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
@@ -295,11 +295,17 @@ class T5ModelTester:
             )
 
             # check that models has less parameters
-            self.parent.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
+            self.parent.assertLess(
+                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             # check that outputs are equal
-            self.parent.assertTrue(torch.allclose(model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4))
+            self.parent.assertTrue(
+                torch.allclose(
+                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                )
+            )
 
             # check that outputs after saving and loading are equal
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -309,7 +315,9 @@ class T5ModelTester:
                 tied_model.eval()
 
                 # check that models has less parameters
-                self.parent.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
+                self.parent.assertLess(
+                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+                )
                 random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
                 tied_model_result = tied_model(
@@ -320,7 +328,13 @@ class T5ModelTester:
                 )
 
                 # check that outputs are equal
-                self.parent.assertTrue(torch.allclose(model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4))
+                self.parent.assertTrue(
+                    torch.allclose(
+                        model_result[0][0, :, random_slice_idx],
+                        tied_model_result[0][0, :, random_slice_idx],
+                        atol=1e-4,
+                    )
+                )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

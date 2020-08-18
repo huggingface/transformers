@@ -424,8 +424,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         uninitialized_encoder_weights = []
         assert decoder.__class__ == encoder.__class__, f"{decoder.__class__} and {encoder.__class__} have to be equal."
 
-        def tie_encoder_to_decoder_recursively(decoder_pointer, encoder_pointer, module_name, uninitialized_encoder_weights):
-            assert isinstance(decoder_pointer, Module) and isinstance(encoder_pointer, Module), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.modules.Module"
+        def tie_encoder_to_decoder_recursively(
+            decoder_pointer, encoder_pointer, module_name, uninitialized_encoder_weights
+        ):
+            assert isinstance(decoder_pointer, Module) and isinstance(
+                encoder_pointer, Module
+            ), f"{decoder_pointer} and {encoder_pointer} have to be of type torch.nn.modules.Module"
             if hasattr(decoder_pointer, "weight"):
                 assert hasattr(encoder_pointer, "weight")
                 encoder_pointer.weight = decoder_pointer.weight
@@ -437,13 +441,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             encoder_modules = encoder_pointer._modules
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
-                assert len(encoder_modules) > 0, f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
+                assert (
+                    len(encoder_modules) > 0
+                ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
                 all_encoder_weights = set([module_name + "/" + sub_name for sub_name in encoder_modules.keys()])
                 for name, module in decoder_modules.items():
                     if name not in encoder_modules:
                         continue
-                    tie_encoder_to_decoder_recursively(decoder_modules[name], encoder_modules[name], name, uninitialized_encoder_weights)
+                    tie_encoder_to_decoder_recursively(
+                        decoder_modules[name], encoder_modules[name], name, uninitialized_encoder_weights
+                    )
                     all_encoder_weights.remove(module_name + "/" + name)
 
                 uninitialized_encoder_weights += list(all_encoder_weights)
@@ -451,7 +459,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # tie weights recursively
         tie_encoder_to_decoder_recursively(decoder, encoder, self.base_model_prefix, uninitialized_encoder_weights)
         if len(uninitialized_encoder_weights) > 0:
-            logger.warning(f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}")
+            logger.warning(
+                f"The following encoder weights were not tied to the decoder {uninitialized_encoder_weights}"
+            )
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
         """ Tie or clone module weights depending of whether we are using TorchScript or not

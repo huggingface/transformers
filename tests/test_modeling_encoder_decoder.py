@@ -291,7 +291,9 @@ class EncoderDecoderMixin:
 
         torch.manual_seed(0)
         tied_encoder_model, tied_decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(tied_encoder_model.config, tied_decoder_model.config, tie_encoder_decoder=True)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            tied_encoder_model.config, tied_decoder_model.config, tie_encoder_decoder=True
+        )
         tied_model = EncoderDecoderModel(encoder=tied_encoder_model, decoder=tied_decoder_model, config=config)
         tied_model.to(torch_device)
         tied_model.eval()
@@ -315,7 +317,11 @@ class EncoderDecoderMixin:
         random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
         # check that outputs are equal
-        self.assertTrue(torch.allclose(model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4))
+        self.assertTrue(
+            torch.allclose(
+                model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+            )
+        )
 
         # check that outputs after saving and loading are equal
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -325,7 +331,9 @@ class EncoderDecoderMixin:
             tied_model.eval()
 
             # check that models has less parameters
-            self.assertLess(sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters()))
+            self.assertLess(
+                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+            )
             random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
             tied_model_result = tied_model(
@@ -336,7 +344,11 @@ class EncoderDecoderMixin:
             )
 
             # check that outputs are equal
-            self.assertTrue(torch.allclose(model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4))
+            self.assertTrue(
+                torch.allclose(
+                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                )
+            )
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
