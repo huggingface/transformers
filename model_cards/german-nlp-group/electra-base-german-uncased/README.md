@@ -20,7 +20,8 @@ This Model is suitable for Training on many downstream tasks in German (Q&A, Sen
 
 It can be used as a drop-in Replacement for **BERT** in most down-stream tasks (**ELECTRA** is even implemented as an extended **BERT** Class).
 
-On the time of the realse (August 2020) this Model is the best performing publicly available German NLP Model on various German Evaluation Metrics (CONLL, GermEval19 Coarse, GermEval19 Fine).
+At the time of release (August 2020) this Model is the best performing publicly available German NLP Model on various German Evaluation Metrics (CONLL03-DE, GermEval18 Coarse, GermEval18 Fine). For GermEval18 Coarse results see below. More will be published soon.
+
 
 ## Installation
 
@@ -159,4 +160,3 @@ We tried the following approaches which we found had no positive influence:
 
 -  **Increased Vocab Size**: Leads to more parameters and thus reduced examples/sec while no visible Performance gains were measured
 -  **Decreased Batch-Size**: The original Electra was trained with a Batch Size per TPU Core of 16 whereas this Model was trained with 32 BS / TPU Core. We found out that 32 BS leads to better results when you compare metrics over computation time
-
