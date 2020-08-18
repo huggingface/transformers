@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union
 from zipfile import ZipFile
 
-import git
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -234,6 +233,8 @@ def convert_hf_name_to_opus_name(hf_model_name):
 
 
 def get_system_metadata(repo_root):
+    import git
+
     return dict(
         helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
         transformers_git_sha=git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
