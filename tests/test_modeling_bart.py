@@ -484,7 +484,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertFalse(model.config.is_valid_mbart())
         tok = BartTokenizer.from_pretrained("facebook/bart-large")
 
-        EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
+        EXPECTED_SUMMARY = "California's largest power company has begun shutting off electricity to thousands of customers in the state."
         dct = tok.batch_encode_plus(
             [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
         ).to(torch_device)
