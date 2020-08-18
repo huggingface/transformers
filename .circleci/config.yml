@@ -150,6 +150,7 @@ jobs:
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[ja,testing]
+            - run: python -m unidic download
             - save_cache:
                   key: v0.3-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
