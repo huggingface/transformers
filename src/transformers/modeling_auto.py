@@ -78,6 +78,7 @@ from .modeling_camembert import (
     CamembertForQuestionAnswering,
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
+    CamembertForCausalLM,
     CamembertModel,
 )
 from .modeling_ctrl import CTRLLMHeadModel, CTRLModel
@@ -253,6 +254,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        (CamembertConfig, CamembertForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
