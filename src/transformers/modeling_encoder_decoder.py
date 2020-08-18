@@ -134,7 +134,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter
                 - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter
                 - To update the parent model configuration, do not use a prefix for each configuration parameter
-                Behave differently depending on whether a :obj:`config` is provided or automatically loaded:
+                Behave differently depending on whether a :obj:`config` is provided or automatically loaded.
 
         Examples::
 
