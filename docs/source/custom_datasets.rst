@@ -28,7 +28,7 @@ Sequence Classification with IMDb Reviews
 
 .. note::
 
-    This dataset can be explored in the Hugging Face model hub `here <https://huggingface.co/datasets/imdb>`_, and can
+    This dataset can be explored in the Hugging Face model hub (`IMDb <https://huggingface.co/datasets/imdb>`_), and can
     be alternatively downloaded with the 🤗 NLP library with ``load_dataset("imdb")``.
 
 In this example, we'll show how to download, tokenize, and train a model on the IMDb reviews dataset. This task
@@ -248,7 +248,7 @@ Token Classification with W-NUT Emerging Entities
 
 .. note::
 
-    This dataset can be explored in the Hugging Face model hub `here <https://huggingface.co/datasets/wnut_17>`_, and can
+    This dataset can be explored in the Hugging Face model hub (`WNUT-17 <https://huggingface.co/datasets/wnut_17>`_), and can
     be alternatively downloaded with the 🤗 NLP library with ``load_dataset("wnut_17")``.
 
 Next we will look at token classification. Rather than classifying an entire sequence, this task classifies token by
@@ -447,7 +447,7 @@ Question Answering with SQuAD 2.0
 
 .. note::
 
-    This dataset can be explored in the Hugging Face model hub `here <https://huggingface.co/datasets/squad_v2>`_, and can
+    This dataset can be explored in the Hugging Face model hub (`SQuAD V2 <https://huggingface.co/datasets/squad_v2>`_), and can
     be alternatively downloaded with the 🤗 NLP library with ``load_dataset("squad_v2")``.
 
 Question answering comes in many forms. In this example, we'll look at the particular type of extractive QA that
