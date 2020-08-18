@@ -14,8 +14,10 @@
 # limitations under the License.
 
 import logging
+from typing import List, Optional
 
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
+from .tokenization_utils_base import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
