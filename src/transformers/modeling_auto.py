@@ -73,12 +73,12 @@ from .modeling_bert import (
     BertModel,
 )
 from .modeling_camembert import (
+    CamembertForCausalLM,
     CamembertForMaskedLM,
     CamembertForMultipleChoice,
     CamembertForQuestionAnswering,
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
-    CamembertForCausalLM,
     CamembertModel,
 )
 from .modeling_ctrl import CTRLLMHeadModel, CTRLModel

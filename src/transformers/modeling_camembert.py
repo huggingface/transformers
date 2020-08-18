@@ -20,13 +20,13 @@ import logging
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
     RobertaForSequenceClassification,
     RobertaForTokenClassification,
     RobertaModel,
-    RobertaForCausalLM,
 )
 
 
@@ -144,4 +144,5 @@ class CamembertForCausalLM(RobertaForCausalLM):
     This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
+
     config_class = CamembertConfig
