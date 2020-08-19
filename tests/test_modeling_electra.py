@@ -275,6 +275,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             ElectraModel,
             ElectraForPreTraining,
             ElectraForMaskedLM,
+            ElectraForMultipleChoice,
             ElectraForTokenClassification,
             ElectraForSequenceClassification,
             ElectraForQuestionAnswering,

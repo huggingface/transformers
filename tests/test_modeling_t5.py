@@ -37,6 +37,8 @@ class T5ModelTester:
         self.batch_size = 13
         self.encoder_seq_length = 7
         self.decoder_seq_length = 9
+        # For common tests
+        self.seq_length = self.decoder_seq_length
         self.is_training = True
         self.use_attention_mask = True
         self.use_labels = True
@@ -141,9 +143,9 @@ class T5ModelTester:
             decoder_attention_mask=decoder_attention_mask,
         )
         result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        decoder_output = result["last_hidden_state"]
-        decoder_past = result["decoder_past_key_values"]
-        encoder_output = result["encoder_last_hidden_state"]
+        decoder_output = result.last_hidden_state
+        decoder_past = result.decoder_past_key_values
+        encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))

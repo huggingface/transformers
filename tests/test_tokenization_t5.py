@@ -17,6 +17,8 @@
 import os
 import unittest
 
+from transformers import BatchEncoding
+from transformers.testing_utils import _torch_available
 from transformers.tokenization_t5 import T5Tokenizer
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
@@ -24,6 +26,8 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
+
+FRAMEWORK = "pt" if _torch_available else "tf"
 
 
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -102,3 +106,77 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ".",
             ],
         )
+
+    def test_prepare_seq2seq_batch(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5]
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text, tgt_texts=tgt_text, max_length=len(expected_src_tokens), return_tensors=FRAMEWORK
+        )
+        self.assertIsInstance(batch, BatchEncoding)
+
+        self.assertEqual((2, 9), batch.input_ids.shape)
+        self.assertEqual((2, 9), batch.attention_mask.shape)
+        result = list(batch.input_ids.numpy()[0])
+        self.assertListEqual(expected_src_tokens, result)
+        # Test that special tokens are reset
+        self.assertEqual(tokenizer.prefix_tokens, [])
+
+    def test_empty_target_text(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        batch = tokenizer.prepare_seq2seq_batch(src_text, return_tensors=FRAMEWORK)
+        # check if input_ids are returned and no decoder_input_ids
+        self.assertIn("input_ids", batch)
+        self.assertIn("attention_mask", batch)
+        self.assertNotIn("decoder_input_ids", batch)
+        self.assertNotIn("decoder_attention_mask", batch)
+
+    def test_max_target_length(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text, tgt_texts=tgt_text, max_target_length=32, padding="max_length", return_tensors=FRAMEWORK
+        )
+        self.assertEqual(32, batch["decoder_input_ids"].shape[1])
+        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+
+        # test None max_target_length
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text, tgt_texts=tgt_text, max_length=32, padding="max_length", return_tensors=FRAMEWORK
+        )
+        self.assertEqual(32, batch["decoder_input_ids"].shape[1])
+        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+
+    def test_outputs_not_longer_than_maxlen(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        batch = tokenizer.prepare_seq2seq_batch(
+            ["I am a small frog" * 1000, "I am a small frog"], return_tensors=FRAMEWORK
+        )
+        self.assertIsInstance(batch, BatchEncoding)
+        self.assertEqual(batch.input_ids.shape, (2, 512))
+
+    def test_eos_in_input(self):
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        src_text = ["A long paragraph for summrization. </s>"]
+        tgt_text = ["Summary of the text. </s>"]
+        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, 1]
+        expected_tgt_tokens = [0, 20698, 13, 8, 1499, 5, 1]
+
+        batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK)
+
+        src_ids = list(batch.input_ids.numpy()[0])
+        tgt_ids = list(batch.decoder_input_ids.numpy()[0])
+
+        self.assertEqual(expected_src_tokens, src_ids)
+        self.assertEqual(expected_tgt_tokens, tgt_ids)

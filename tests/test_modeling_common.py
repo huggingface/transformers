@@ -18,7 +18,7 @@ import os.path
 import random
 import tempfile
 import unittest
-from typing import List
+from typing import List, Tuple
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
@@ -37,6 +37,11 @@ if is_torch_available():
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         top_k_top_p_filtering,
     )
 
@@ -60,16 +65,42 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     test_missing_keys = True
+    test_chunking = False
     is_encoder_decoder = False
 
-    def _prepare_for_class(self, inputs_dict, model_class):
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
         if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
-            return {
+            inputs_dict = {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
                 if isinstance(v, torch.Tensor) and v.ndim > 1
                 else v
                 for k, v in inputs_dict.items()
             }
+
+        if return_labels:
+            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+                inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+            elif model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in [
+                *MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_CAUSAL_LM_MAPPING.values(),
+                *MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
         return inputs_dict
 
     def test_save_load(self):
@@ -519,6 +550,29 @@ class ModelTesterMixin:
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def test_feed_forward_chunking(self):
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_chunking:
+            return
+
+        for model_class in self.all_model_classes:
+            torch.manual_seed(0)
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_no_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            torch.manual_seed(0)
+            config.chunk_size_feed_forward = 1
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
@@ -638,6 +692,64 @@ class ModelTesterMixin:
             # # Check that the embedding layer and decoding layer are the same in size and in value
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
+
+    def test_model_outputs_equivalence(self):
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
+            with torch.no_grad():
+                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
+                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+
+                def recursive_check(tuple_object, dict_object):
+                    if isinstance(tuple_object, (List, Tuple)):
+                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                            recursive_check(tuple_iterable_value, dict_iterable_value)
+                    elif tuple_object is None:
+                        return
+                    else:
+                        self.assertTrue(
+                            torch.allclose(tuple_object, dict_object, atol=1e-5),
+                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}",
+                        )
+
+                recursive_check(tuple_output, dict_output)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs)
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
+
+            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+            )
 
     def test_inputs_embeds(self):
 

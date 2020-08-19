@@ -11,15 +11,18 @@ import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 
+from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 
 
 if is_wandb_available():
     import wandb
 
+if is_comet_available():
+    import comet_ml
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +44,6 @@ class TFTrainer:
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
-            When performing evaluation and predictions, only returns the loss.
         tb_writer (:obj:`tf.summary.SummaryWriter`, `optional`):
             Object to write to TensorBoard.
         optimizers (:obj:`Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]`, `optional`):
@@ -51,6 +52,8 @@ class TFTrainer:
             :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
             :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else
             an instance of :class:`~transformers.WarmUp`.
+        kwargs:
+            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -60,12 +63,12 @@ class TFTrainer:
         train_dataset: Optional[tf.data.Dataset] = None,
         eval_dataset: Optional[tf.data.Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-        prediction_loss_only=False,
         tb_writer: Optional[tf.summary.SummaryWriter] = None,
         optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = (
             None,
             None,
         ),
+        **kwargs,
     ):
         assert parse(tf.__version__).release >= (2, 2, 0), (
             "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
@@ -77,11 +80,17 @@ class TFTrainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
-        self.prediction_loss_only = prediction_loss_only
         self.optimizer, self.lr_scheduler = optimizers
         self.gradient_accumulator = GradientAccumulator()
         self.global_step = 0
         self.epoch_logging = 0
+        if "prediction_loss_only" in kwargs:
+            warnings.warn(
+                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a future version. Use `args.prediction_loss_only` instead.",
+                FutureWarning,
+            )
+            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
@@ -94,6 +103,14 @@ class TFTrainer:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
+
+        if is_comet_available():
+            self.setup_comet()
+        elif os.environ.get("COMET_MODE") != "DISABLED":
+            logger.info(
+                "To use comet_ml logging, run `pip/conda install comet_ml` "
+                "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
 
         set_seed(self.args.seed)
@@ -218,6 +235,36 @@ class TFTrainer:
         combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
         wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=self.args.run_name)
 
+    def setup_comet(self):
+        """
+        Setup the optional Comet.ml integration.
+
+        Environment:
+            COMET_MODE:
+                (Optional): str - "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME:
+                (Optional): str - Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY:
+                (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+
+        For a number of configurable items in the environment,
+        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
+        """
+        comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
+        args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
+        experiment = None
+        if comet_mode == "ONLINE":
+            experiment = comet_ml.Experiment(**args)
+            logger.info("Automatic Comet.ml online logging enabled")
+        elif comet_mode == "OFFLINE":
+            args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
+            experiment = comet_ml.OfflineExperiment(**args)
+            logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
+        if experiment is not None:
+            experiment._set_model_graph(self.model, framework="transformers")
+            experiment._log_parameters(self.args, prefix="args/", framework="transformers")
+            experiment._log_parameters(self.model.config, prefix="config/", framework="transformers")
+
     def prediction_loop(
         self,
         dataset: tf.data.Dataset,
@@ -241,7 +288,9 @@ class TFTrainer:
                 dataset, steps, num_examples, description, prediction_loss_only=prediction_loss_only
             )
 
-        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
+        prediction_loss_only = (
+            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
+        )
 
         logger.info("***** Running %s *****", description)
         logger.info("  Num examples = %d", num_examples)
@@ -335,6 +384,13 @@ class TFTrainer:
 
         if is_wandb_available():
             wandb.log(logs, step=self.global_step)
+
+        if is_comet_available():
+            experiment = comet_ml.config.get_global_experiment()
+            if experiment is not None:
+                experiment._log_metrics(
+                    logs, step=self.global_step, epoch=self.epoch_logging, framework="transformers"
+                )
 
         output = {**logs, **{"step": self.global_step}}
 
