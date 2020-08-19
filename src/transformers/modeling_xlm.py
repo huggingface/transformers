@@ -50,6 +50,7 @@ from .modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
     SQuADHead,
+    apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
@@ -212,8 +213,13 @@ class TransformerFFN(nn.Module):
         self.lin1 = nn.Linear(in_dim, dim_hidden)
         self.lin2 = nn.Linear(dim_hidden, out_dim)
         self.act = gelu if config.gelu_activation else F.relu
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
 
     def forward(self, input):
+        return apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, input)
+
+    def ff_chunk(self, input):
         x = self.lin1(input)
         x = self.act(x)
         x = self.lin2(x)

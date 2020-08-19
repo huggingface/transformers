@@ -25,15 +25,15 @@ from transformers.testing_utils import require_multigpu, require_torch, slow, to
 
 
 if is_torch_available():
-    import torch
     import numpy as np
+    import torch
 
     from transformers import (
         AdaptiveEmbedding,
         PretrainedConfig,
         PreTrainedModel,
-        BertModel,
         BertConfig,
+        BertModel,
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -65,7 +65,6 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     test_missing_keys = True
-    test_chunking = False
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -552,9 +551,6 @@ class ModelTesterMixin:
 
     def test_feed_forward_chunking(self):
         (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_chunking:
-            return
-
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
