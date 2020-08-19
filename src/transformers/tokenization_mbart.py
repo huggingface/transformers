@@ -98,32 +98,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
         self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens. The special tokens depend on calling set_lang.
-        An MBART sequence has the following format, where ``X`` represents the sequence:
-        - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
-        - ``decoder_input_ids``: (for decoder) ``[tgt_lang_code] X [eos]``
-        BOS is never used.
-        Pairs of sequences are not the expected use case, but they will be handled without a separator.
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -155,6 +129,34 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if token_ids_1 is None:
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens. The special tokens depend on calling set_lang.
+        An MBART sequence has the following format, where ``X`` represents the sequence:
+        - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
+        - ``decoder_input_ids``: (for decoder) ``[tgt_lang_code] X [eos]``
+        BOS is never used.
+        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        if token_ids_1 is None:
+            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+
+
 
     @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
