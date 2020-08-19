@@ -626,10 +626,10 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+                if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                     epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:
@@ -988,10 +988,13 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
+        samples_count = 0
         for inputs in tqdm(dataloader, desc=description):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
+            batch_size = inputs[list(inputs.keys())[0]].shape[0]
+            samples_count += batch_size
             if loss is not None:
-                eval_losses.append(loss)
+                eval_losses.append(loss * batch_size)
             if logits is not None:
                 preds = logits if preds is None else torch.cat((preds, logits), dim=0)
             if labels is not None:
@@ -1025,7 +1028,7 @@ class Trainer:
         else:
             metrics = {}
         if len(eval_losses) > 0:
-            metrics["eval_loss"] = np.mean(eval_losses)
+            metrics["eval_loss"] = np.sum(eval_losses) / samples_count
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
