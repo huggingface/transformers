@@ -920,11 +920,21 @@ class TFBartModel(TFPretrainedBartModel):
             return_dict=return_dict,
 
         )
-        # Attention and hidden_states will be [] or None if they aren't needed
-        decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
-        assert isinstance(decoder_outputs[0], T)
-        encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
-        return decoder_outputs + encoder_outputs
+        if not return_dict: # Attention and hidden_states will be [] or None if they aren't needed
+            decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
+            assert isinstance(decoder_outputs[0], T), f''
+            encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
+            return decoder_outputs + encoder_outputs
+        else:
+            return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            decoder_past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
     def get_input_embeddings(self):
         return self.shared
