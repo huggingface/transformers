@@ -24,7 +24,7 @@ else:
 
 from .utils import label_smoothed_nll_loss
 
-class Seq2SeqTraine(Trainer):
+class Seq2SeqTrainer(Trainer):
     # override to support label smoothing
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> float:
         """
