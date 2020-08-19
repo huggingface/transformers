@@ -5,7 +5,7 @@ import os
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -127,7 +127,9 @@ class SummarizationModule(BaseTransformer):
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
 
-    def ids_to_clean_text(self, generated_ids: List[int]):
+    def ids_to_clean_text(self, generated_ids: Union[List[int], torch.Tensor]):
+        if isinstance(generated_ids, torch.Tensor):
+            generated_ids = generated_ids.tolist()
         gen_text = self.tokenizer.batch_decode(
             generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
