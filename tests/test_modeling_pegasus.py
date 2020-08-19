@@ -1,6 +1,7 @@
 import unittest
 
-from transformers import AutoConfig, is_torch_available
+from transformers import AutoConfig, AutoTokenizer, is_torch_available
+from transformers.configuration_pegasus import max_gen_length, max_model_length
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -16,7 +17,7 @@ XSUM_ENTRY_LONGER = """ The London trio are up for best UK act and best album, a
 
 @require_torch
 class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
-    checkpoint_name = "google/pegasus-xsum"
+    checkpoint_name = "google/pegasus-cnn_dailymail"
     src_text = [PGE_ARTICLE, XSUM_ENTRY_LONGER]
     tgt_text = [
         "California's largest electricity provider has turned off power to tens of thousands of customers.",
@@ -29,10 +30,8 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @slow
     def test_pegasus_xsum_summary(self):
-        assert self.tokenizer.model_max_length == 512
-        inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(
-            torch_device
-        )
+        # assert self.tokenizer.model_max_length == 512
+        inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, padding=True).to(torch_device)
         assert inputs.input_ids.shape == (2, 421)
         translated_tokens = self.model.generate(**inputs)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
@@ -50,28 +49,26 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
 class PegasusConfigTests(unittest.TestCase):
     def test_all_config_max_lengths(self):
-        expected_max_length = {
-            # See appendix C of paper
-            "xsum": 64,
-            "cnn_dailymail": 128,
-            "newsroom": 128,
-            "wikihow": 256,
-            "multi_news": 256,
-            "reddit_tifu": 128,
-            "big_patent": 256,
-            "arxiv": 256,
-            "pubmed": 256,
-            "gigaword": 32,
-            "aeslc": 32,
-            "billsum": 256,
-        }
         failures = []
         pegasus_prefix = "google/pegasus"
-        for dataset, max_len in expected_max_length.items():
+        for dataset, max_len in max_gen_length.items():
             mname = f"{pegasus_prefix}-{dataset}"
             cfg = AutoConfig.from_pretrained(mname)
+
             if cfg.max_length != max_len:
                 failures.append(f"config for {mname} had max_length: {cfg.max_length}, expected {max_len}")
+
+            if cfg.max_position_embeddings < max_model_length[dataset]:
+                failures.append(
+                    f"config for {mname} had max_position_embeddings: {cfg.max_position_embeddings}, expected {max_model_length[dataset]}"
+                )
+
+            tokenizer = AutoTokenizer.from_pretrained(mname)
+            if max_model_length[dataset] != tokenizer.model_max_length:
+                failures.append(
+                    f"tokenizer.model_max_length {tokenizer.model_max_length} expected {max_model_length[dataset]}"
+                )
+
         if failures == []:
             return
         # error
