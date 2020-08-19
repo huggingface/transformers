@@ -1,11 +1,9 @@
 import random
-from dataclasses import dataclass
-from typing import Callable, Dict, List, NamedTuple, Optional, Union
+from typing import Dict, NamedTuple, Optional
 
 import numpy as np
 
 from .file_utils import is_tf_available, is_torch_available
-from .tokenization_utils_base import ExplicitEnum
 
 
 SEQUENCE_CLASSIFICATION_MODELS = []
@@ -66,54 +64,3 @@ class TrainOutput(NamedTuple):
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
-
-
-class FinalActivation(ExplicitEnum):
-    """
-    Possible values for the ``final_activation`` argument in :meth:`Trainer.from_nlp_dataset`.
-    Useful for tab-completion in an IDE.
-    """
-
-    NONE = "none"
-    ARGMAX = "argmax"
-    SIGMOID = "sigmoid"
-    SOFTMAX = "softmax"
-
-
-ACTIVATION_NAME_TO_FUNCTION = {
-    FinalActivation.NONE: lambda x: x,
-    FinalActivation.ARGMAX: lambda x: x.argmax(axis=-1),
-    FinalActivation.SIGMOID: lambda x: 1 / (1 + np.exp(-x)),
-    FinalActivation.SOFTMAX: lambda x: np.exp(x) / np.exp(x).sum(-1, keepdims=True),
-}
-
-
-def auto_activation(model) -> FinalActivation:
-    model_class = model.__class__
-    if model_class in SEQUENCE_CLASSIFICATION_MODELS:
-        return FinalActivation.ARGMAX
-    return FinalActivation.NONE
-
-
-@dataclass
-class ComputeNLPMetrics:
-    metrics: Union["nlp.Metric", List["nlp.Metric"]]  # noqa: F821
-    activation: Optional[Union[str, FinalActivation, Callable]] = None
-
-    def __post_init__(self):
-        if isinstance(self.activation, str):
-            self.activation = FinalActivation(self.activation)
-
-    def __call__(self, eval_pred):
-        preds, labels = eval_pred
-        metrics = self.metrics if isinstance(self.metrics, list) else [self.metrics]
-        result = {}
-        for metric in metrics:
-            if self.activation is not None:
-                activation_function = (
-                    self.activation if callable(self.activation) else ACTIVATION_NAME_TO_FUNCTION[self.activation]
-                )
-                preds = activation_function(preds)
-            # TODO: when https://github.com/huggingface/nlp/pull/466 is merged, remove the `tolist`.
-            result = {**result, **metric.compute(preds.tolist(), references=labels.tolist())}
-        return result

@@ -24,16 +24,7 @@ from .file_utils import is_nlp_available, is_torch_tpu_available
 from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import (
-    PREFIX_CHECKPOINT_DIR,
-    ComputeNLPMetrics,
-    EvalPrediction,
-    FinalActivation,
-    PredictionOutput,
-    TrainOutput,
-    auto_activation,
-    set_seed,
-)
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, set_seed
 from .training_args import TrainingArguments
 
 
@@ -157,9 +148,11 @@ class Trainer:
             The function to use to form a batch from a list of elements of :obj:`train_dataset` or
             :obj:`eval_dataset`.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-            The dataset to use for training.
+            The dataset to use for training. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+            ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-            The dataset to use for evaluation.
+            The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+            ``model.forward()`` method are automatically removed.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -238,121 +231,31 @@ class Trainer:
                 ),
                 FutureWarning,
             )
+
+        if is_nlp_available():
+            if isinstance(train_dataset, nlp.Dataset):
+                self._remove_unused_columns(self.train_dataset, description="training")
+            if isinstance(eval_dataset, nlp.Dataset):
+                self._remove_unused_columns(self.eval_dataset, description="evaluation")
+
         self.global_step = None
         self.epoch = None
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
 
-    @classmethod
-    def from_nlp_dataset(
-        cls,
-        model: PreTrainedModel,
-        args: TrainingArguments,
-        dataset_dict: "nlp.dataset_dict.DatasetDict" = None,
-        train_dataset: "nlp.dataset_dict.Dataset" = None,
-        eval_dataset: "nlp.dataset_dict.Dataset" = None,
-        data_collator: Optional[DataCollator] = None,
-        metrics: Optional[Union["nlp.Metric", List["nlp.Metric"]]] = None,
-        final_activation: Optional[Union[str, FinalActivation, Callable]] = None,
-        tb_writer: Optional["SummaryWriter"] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-    ):
-        r"""
-        Creates an instance of :class:`~transformers.Trainer` from a nlp :obj:`DatasetDict` and `Metric`.
-
-        This method will inspect the signature of :obj:`model.forward` and remove the columns in the dataset(s) passed
-        that aren't expected by the model.
-
-        .. warning::
-
-            This API is experimental and will probably change slightly in the near future. It also requires the a
-            source install of the `nlp library <https://github.com/huggingface/nlp>`__.
-
-        Args:
-            model (:class:`~transformers.PreTrainedModel`):
-                The model to train, evaluate or use for predictions.
-            args (:class:`~transformers.TrainingArguments`):
-                The arguments to tweak for training.
-            dataset_dict (:obj:`nlp.dataset_dict.DatasetDict`, `optional`):
-                The full (train + eval) dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
-                can pass one or both of :obj:`train_dataset` and :obj:`eval_dataset`.
-            train_dataset (:obj:`nlp.dataset_dict.Dataset`, `optional`):
-                The training dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
-                can pass the full dataset in :obj:`dataset_dict`.
-            eval_dataset (:obj:`nlp.dataset_dict.Dataset`, `optional`):
-                The validation dataset, loaded and preprocessed via the :obj:`nlp` library. Alternatively, you
-                can pass the full dataset in :obj:`dataset_dict`.
-            data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
-                The function to use to form a batch from a list of elements from the :obj:`dataset`.
-            metrics (:obj:`nlp.Metric` or :obj:`List[nlp.Metric]`, `optional`):
-                One or several metrics loaded via the :obj:`nlp` library.
-            final_activation (:obj:`str` or :class:`~transformers.trainer_utils.FinalActivation` or :obj:`Callable`, `optional`):
-                The final activation to apply to the model output before feeding them to the :obj:`metrics`.
-
-                If not provided, will default to the most common activation function that goes with your model (see
-                :func:`~transformers.trainer_utils.auto_activation`).
-            tb_writer (:obj:`SummaryWriter`, `optional`):
-                Object to write to TensorBoard.
-            optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
-                A tuple containing the optimizer and the scheduler to use. Will default to an instance of
-                :class:`~transformers.AdamW` on your model and a scheduler given by
-                :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
-
-        Examples:
-
-            >>> from nlp import load_dataset, load_metric
-            >>> from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments
-            >>> dataset = load_dataset('glue', 'sst2')
-            >>> metric = load_metric('glue', 'sst2')
-
-            >>> model_name = "distilbert-base-uncased-finetuned-sst-2-english"
-            >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-            >>> model = AutoModelForSequenceClassification.from_pretrained(model_name)
-
-            >>> encoded_dataset = dataset.map(lambda examples: tokenizer(examples['sentence'], padding=True), batched=True)
-            >>> args = TrainingArguments(output_dir = "test")
-
-            >>> trainer = Trainer.from_nlp_dataset(model, args, encoded_dataset, metrics=metric)
-            >>> trainer.evaluate()
-            {'eval_loss': 0.3902028881816018, 'eval_accuracy': 0.9105504587155964, 'step': 0}
-        """
-        assert is_nlp_available(), "This method requires the nlp library: `pip install nlp`."
-        assert dataset_dict is None or (
-            train_dataset is None and eval_dataset is None
-        ), "This method accept either `dataset_dict` or `train_dataset`/ `eval_dataset`, but not both."
-        if metrics is not None:
-            if final_activation is None:
-                final_activation = auto_activation(model)
-            compute_metrics = ComputeNLPMetrics(metrics, activation=final_activation)
-        if dataset_dict is not None:
-            train_dataset = dataset_dict.get("train")
-            eval_dataset = dataset_dict.get("validation")
-
-        if train_dataset is not None or eval_dataset is not None:
-            # Inspect model forward signature to keep only the arguments it accepts.
-            signature = inspect.signature(model.forward)
-            signature_columns = list(signature.parameters.keys())
-            # Labels may be named label or label_ids, the default data collator handles that.
-            signature_columns += ["label", "label_ids"]
-            dataset_columns = (train_dataset if train_dataset is not None else eval_dataset).column_names
-            columns = [k for k in signature_columns if k in dataset_columns]
-            ignored_columns = list(set(dataset_columns) - set(signature_columns))
-            logger.info(
-                f"The following columns don't have a corresponding argument in {model.__class__.__name__} and have been ignored: {', '.join(ignored_columns)}."
-            )
-            train_dataset.set_format(columns=columns)
-            eval_dataset.set_format(columns=columns)
-
-        return cls(
-            model,
-            args,
-            data_collator=data_collator,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            compute_metrics=compute_metrics,
-            tb_writer=tb_writer,
-            optimizers=optimizers,
+    def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
+        # Inspect model forward signature to keep only the arguments it accepts.
+        signature = inspect.signature(self.model.forward)
+        signature_columns = list(signature.parameters.keys())
+        # Labels may be named label or label_ids, the default data collator handles that.
+        signature_columns += ["label", "label_ids"]
+        columns = [k for k in signature_columns if k in dataset.column_names]
+        ignored_columns = list(set(dataset.column_names) - set(signature_columns))
+        dset_description = "" if description is None else f"in the {description} set "
+        logger.info(
+            f"The following columns {dset_description}don't have a corresponding argument in `{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
         )
+        dataset.set_format(columns=columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -408,11 +311,13 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                If provided, will override :obj:`self.eval_dataset`.
+                If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`, columns not
+                accepted by the ``model.forward()`` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-
+        elif eval_dataset is not None and is_nlp_available() and isinstance(eval_dataset, nlp.Dataset):
+            self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         eval_sampler = self._get_eval_sampler(eval_dataset)
 
@@ -435,8 +340,11 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                The test dataset to use.
+                The test dataset to use. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                ``model.forward()`` method are automatically removed.
         """
+        if is_nlp_available() and isinstance(test_dataset, nlp.Dataset):
+            self._remove_unused_columns(test_dataset, description="test")
         test_sampler = self._get_eval_sampler(test_dataset)
 
         # We use the same batch_size as for eval.
@@ -1025,7 +933,8 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`,
+                columns not accepted by the ``model.forward()`` method are automatically removed.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
@@ -1051,7 +960,8 @@ class Trainer:
 
         Args:
             test_dataset (:obj:`Dataset`):
-                Dataset to run the predictions on.
+                Dataset to run the predictions on. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                ``model.forward()`` method are automatically removed.
 
         Returns:
             `NamedTuple`:
