@@ -440,8 +440,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         pbase = pipeline(task="fill-mask", model="facebook/bart-base")
         src_text = [" I went to the <mask>."]
         results = [x["token_str"] for x in pbase(src_text)]
-        expected_results = ["Ġbathroom", "Ġrestroom", "Ġhospital", "Ġkitchen", "Ġcar"]
-        self.assertListEqual(results, expected_results)
+        assert "Ġbathroom" in results
 
     @slow
     def test_bart_large_mask_filling(self):
