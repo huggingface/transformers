@@ -275,8 +275,9 @@ class TFModelTesterMixin:
 
             # Check we can load pt model in tf and vice-versa with model => model functions
 
-            tf_inputs = self._prepare_for_class(inputs_dict, model_class)
-            tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs)
+            tf_model = transformers.load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
+            )
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
@@ -413,7 +414,6 @@ class TFModelTesterMixin:
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
             inputs_dict["use_cache"] = False
             config.output_hidden_states = False
@@ -428,8 +428,6 @@ class TFModelTesterMixin:
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
             out_len = len(outputs)
-            each_len = [len(x) for x in outputs]
-            # import ipdb; ipdb.set_trace()
 
             if self.is_encoder_decoder:
                 self.assertEqual(out_len % 2, 0)

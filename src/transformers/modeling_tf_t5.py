@@ -64,7 +64,7 @@ TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # - TFPreTrainedModel for the models (it-self a sub-class of tf.keras.Model)
 ####################################################
 
-
+from typing import Tuple
 class TFT5LayerNorm(tf.keras.layers.Layer):
     def __init__(self, epsilon=1e-6, **kwargs):
         """ Construct a layernorm module in the T5 style
@@ -573,7 +573,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         output_attentions=None,
         output_hidden_states=None,
         training=False,
-    ):
+    ) -> Tuple:
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask

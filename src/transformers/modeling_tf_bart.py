@@ -36,7 +36,14 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
-
+from .modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+    Seq2SeqQuestionAnsweringModelOutput,
+    Seq2SeqSequenceClassifierOutput,
+)
 
 # from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
@@ -473,6 +480,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         output_attentions=False,
         output_hidden_states=False,
         training=False,
+        return_dict=True,
         **unused,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
@@ -535,15 +543,27 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 all_self_attns += (layer_self_attn,)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        all_hidden_states = [tf.transpose(hidden_state, perm=(1, 0, 2)) for hidden_state in all_hidden_states]
+        if output_hidden_states:
+            all_hidden_states += (x,)
+            # T x B x C -> B x T x C
+            all_hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in all_hidden_states)
+        else:
+            all_hidden_states = None
+        all_self_attns = list(all_self_attns) if output_attentions else None
+
+
         x = tf.transpose(x, perm=(1, 0, 2))
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
-
         if use_cache:
-            next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
+            next_cache = [(encoder_hidden_states, encoder_padding_mask), next_decoder_cache]
         else:
             next_cache = None
-        return x, next_cache, all_hidden_states, list(all_self_attns)
+        if not return_dict:
+            return x, next_cache, all_hidden_states, all_self_attns
+        else:
+            return BaseModelOutputWithPast(
+                last_hidden_state=x, past_key_values=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
+            )
 
 
 def _reorder_buffer(attn_cache, new_order):
@@ -847,12 +867,17 @@ class TFBartModel(TFPretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+            return_dict=None,
         **unused
     ):
         # make masks if user doesn't supply
         assert decoder_input_ids is not None
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if decoder_input_ids is None:
             use_cache = False
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -889,9 +914,11 @@ class TFBartModel(TFPretrainedBartModel):
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
             decoder_cached_states=decoder_cached_states,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            use_cache=use_cache,
+            return_dict=return_dict,
+
         )
         # Attention and hidden_states will be [] or None if they aren't needed
         decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
@@ -950,10 +977,10 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     Examples::
 
             # Mask filling only works for bart-large
-            from transformers import BartTokenizer, BartForConditionalGeneration
+            from transformers import BartTokenizer, TFBartForConditionalGeneration
             tokenizer = BartTokenizer.from_pretrained('bart-large')
             TXT = "My friends are <mask> but they eat too many carbs."
-            model = BartForConditionalGeneration.from_pretrained('bart-large')
+            model = TFBartForConditionalGeneration.from_pretrained('bart-large')
             input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
             logits = model(input_ids)[0]
             masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
@@ -970,6 +997,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         assert "input_ids" not in kwargs
 
         inputs = kwargs.pop("inputs", kwargs.pop("input_ids", None))
+        #return_dict = kwargs.pop('return_dict', None)
         # if isinstance(inputs, T):
         #     input_ids = inputs
         # elif isinstance(inputs, dict):
@@ -990,7 +1018,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         return outputs
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True):
+    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True) -> Dict:
         assert past is not None, "past has to be defined"
         if len(past) == 3:  # first step
             encoder_outputs = past
