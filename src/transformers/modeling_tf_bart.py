@@ -1168,17 +1168,14 @@ class TFBartForSequenceClassification(TFPretrainedBartModel):
             assert isinstance(inputs, T)
             input_ids = inputs
 
-        # attention_mask = kwargs.get("attention_mask", None)
-        # encoder_outputs = kwargs.get("encoder_outputs", None)
-        # decoder_input_ids = kwargs.get("decoder_input_ids", None)
-        # decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
-        # decoder_cached_states = kwargs.get('decoder_cached_states', None)
-        x, *other_outputs = self.model(input_ids, **kwargs)
-        eos_mask = tf.math.equal(input_ids, self.config.eos_token_ids[0])
-        if len(tf.unique(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
+        outputs = self.model(input_ids, **kwargs)
+        x = outputs[0]
+        assert isinstance(x, tf.Tensor), f'type (x) is {type(x)}, expected tf.Tensor'
+        eos_mask = tf.cast(tf.math.equal(input_ids, self.config.eos_token_id), tf.int32)
+        assert tf.reduce_all(tf.math.equal(tf.reduce_sum(eos_mask, axis=1), 1)), "All examples must have 1 <eos> tokens."
         sentence_representation = tf.reshape(x[eos_mask, :], (x.shape[0], -1, x.shape[-1]))[:, -1, :]
+        # TODO(SS): add new-style return_dict stuff
         logits = self.classification_head(sentence_representation)
         # Prepend logits
-        outputs = (logits,) + other_outputs  # Add hidden states and attention if they are here
+        outputs = (logits,) + outputs[1:]  # Add hidden states and attention if they are here
         return outputs

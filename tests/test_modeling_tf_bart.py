@@ -139,8 +139,9 @@ class TFBartHeadTests(unittest.TestCase):
     vocab_size = 99
 
     def _get_config_and_data(self):
-        input_ids = ids_tensor((13, 7), self.vocab_size)
-
+        eos_column_vector =  tf.ones((4,1), dtype=tf.int32)*2
+        input_ids = tf.concat([ids_tensor((4, 6), self.vocab_size-3)+3,eos_column_vector],
+                              axis=1)
         batch_size = input_ids.shape[0]
         config = BartConfig(
             vocab_size=self.vocab_size,
@@ -152,7 +153,7 @@ class TFBartHeadTests(unittest.TestCase):
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
             max_position_embeddings=48,
-            eos_token_ids=[2],
+            eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
             return_dict=True,
