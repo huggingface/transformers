@@ -582,10 +582,9 @@ class BartDecoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
         x = x.transpose(0, 1)
-
+        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         if use_cache:
-            encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None

@@ -275,7 +275,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.layernorm_embedding = LayerNorm(embed_dim, name="layernorm_embedding")
 
     def call(
-        self, input_ids=None, attention_mask=None, output_attentions=False, output_hidden_states=False, training=False,
+        self, input_ids=None, attention_mask=None, output_attentions=False, output_hidden_states=False, training=False, return_dict=True,
     ):
         """
         Args:
@@ -311,7 +311,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
         # B x T x C -> T x B x C
         x = tf.transpose(x, perm=[1, 0, 2])
 
-        encoder_states, all_attentions = [], []
+
+        encoder_states = [] if output_hidden_states else None
+        all_attentions = () if output_attentions else None
 
         # encoder layers
         for encoder_layer in self.layers:
@@ -326,14 +328,15 @@ class TFBartEncoder(tf.keras.layers.Layer):
                 x, attn = encoder_layer(x, attention_mask)
 
             if output_attentions:
-                all_attentions.append(attn)
+                all_attentions += (attn,)
 
         if output_hidden_states:
             encoder_states.append(x)
-
-        encoder_states = [tf.transpose(hidden_state, perm=(1, 0, 2)) for hidden_state in encoder_states]
+            encoder_states = [tf.transpose(hidden_state, perm=(1, 0, 2)) for hidden_state in encoder_states]
         x = tf.transpose(x, perm=(1, 0, 2))
-        return x, encoder_states, all_attentions  # Always return three things, for now
+        if not return_dict:
+            return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
 class TFDecoderLayer(tf.keras.layers.Layer):
@@ -831,11 +834,6 @@ def fill_with_neg_inf(t):
     return t.float().fill_(float("-inf")).type_as(t)
 
 
-def _filter_out_falsey_values(tup) -> Tuple:
-    """Remove entries that are None or [] from an iterable."""
-    return tuple(x for x in tup if isinstance(x, tf.Tensor) or x)
-
-
 @add_start_docstrings(
     "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
 )
@@ -893,7 +891,6 @@ class TFBartModel(TFPretrainedBartModel):
             )
         else:
             decoder_padding_mask, causal_mask = None, None
-
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -901,11 +898,18 @@ class TFBartModel(TFPretrainedBartModel):
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
             )
-        # if isinstance(encoder_outputs, T):
-        #     encoder_outputs = (encoder_outputs,)
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
 
-        assert isinstance(encoder_outputs, tuple), f"expected encoder_outputs to be a tuple, got {encoder_outputs}"
+
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
@@ -920,10 +924,9 @@ class TFBartModel(TFPretrainedBartModel):
             return_dict=return_dict,
 
         )
-        if not return_dict: # Attention and hidden_states will be [] or None if they aren't needed
-            decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
-            assert isinstance(decoder_outputs[0], T), f''
-            encoder_outputs: Tuple = _filter_out_falsey_values(encoder_outputs)
+        if not return_dict:
+            # Attention and hidden_states will be [] or None if they aren't needed
+            assert isinstance(decoder_outputs[0], T), f'got type {type(decoder_outputs[0])} for first decoder output'
             return decoder_outputs + encoder_outputs
         else:
             return Seq2SeqModelOutput(
@@ -1025,18 +1028,34 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
         outputs = self.model(inputs, **kwargs)
         lm_logits = self.model.shared(outputs[0], mode="linear")
-        outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
-        return outputs
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True) -> Dict:
+        if not isinstance(outputs, Seq2SeqModelOutput): # return_dict=False
+            return (lm_logits,) + outputs[1:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return Seq2SeqLMOutput(
+            logits=lm_logits,
+            decoder_past_key_values=outputs.decoder_past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
         assert past is not None, "past has to be defined"
+
         if len(past) == 3:  # first step
+            raise ValueError('len of past = 3')
             encoder_outputs = past
             decoder_cached_states = None
         elif len(past) == 2:
             encoder_outputs, decoder_cached_states = past
-        else:
-            raise ValueError(f"past must be of len 2 or 3, got len {len(past)} full past: {past}")
+        elif len(past) == 1:
+            encoder_outputs = past
+            decoder_cached_states = None
+            #raise ValueError(f"past must be of len 2 or 3, got len {len(past)} full past: {past}")
 
         # # first step
         # if len(past) < 2:

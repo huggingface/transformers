@@ -155,6 +155,7 @@ class TFBartHeadTests(unittest.TestCase):
             eos_token_ids=[2],
             pad_token_id=1,
             bos_token_id=0,
+            return_dict=True,
         )
         return config, input_ids, batch_size
 
@@ -170,11 +171,11 @@ class TFBartHeadTests(unittest.TestCase):
         config, input_ids, batch_size = self._get_config_and_data()
         decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
         lm_model = TFBartForConditionalGeneration(config)
-        logits, enc_features = lm_model(
+        outputs = lm_model(
             inputs=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False
         )
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
     def test_lm_uneven_forward(self):
         config = BartConfig(
@@ -187,13 +188,14 @@ class TFBartHeadTests(unittest.TestCase):
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
             max_position_embeddings=48,
+            return_dict=True,
         )
         lm_model = TFBartForConditionalGeneration(config)
         context = tf.fill((7, 2), 4)
         summary = tf.fill((7, 7), 6)
-        logits, enc_features = lm_model(inputs=context, decoder_input_ids=summary, use_cache=False)
+        outputs = lm_model(inputs=context, decoder_input_ids=summary, use_cache=False)
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
     @unittest.skip("borked")
     def test_shift_tokens_right(self):
