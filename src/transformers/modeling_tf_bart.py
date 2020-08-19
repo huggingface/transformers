@@ -25,6 +25,14 @@ from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+    Seq2SeqQuestionAnsweringModelOutput,
+    Seq2SeqSequenceClassifierOutput,
+)
 
 # Public API
 from .modeling_tf_t5 import _NoLayerEmbedTokens
@@ -36,14 +44,7 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
-from .modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
-)
+
 
 # from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
@@ -275,7 +276,13 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.layernorm_embedding = LayerNorm(embed_dim, name="layernorm_embedding")
 
     def call(
-        self, input_ids=None, attention_mask=None, output_attentions=False, output_hidden_states=False, training=False, return_dict=True,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        training=False,
+        return_dict=True,
     ):
         """
         Args:
@@ -310,7 +317,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         # B x T x C -> T x B x C
         x = tf.transpose(x, perm=[1, 0, 2])
-
 
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -554,7 +560,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
             all_hidden_states = None
         all_self_attns = list(all_self_attns) if output_attentions else None
 
-
         x = tf.transpose(x, perm=(1, 0, 2))
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
         if use_cache:
@@ -565,7 +570,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
             return x, next_cache, all_hidden_states, all_self_attns
         else:
             return BaseModelOutputWithPast(
-                last_hidden_state=x, past_key_values=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
+                last_hidden_state=x,
+                past_key_values=next_cache,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
             )
 
 
@@ -865,7 +873,7 @@ class TFBartModel(TFPretrainedBartModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
-            return_dict=None,
+        return_dict=None,
         **unused
     ):
         # make masks if user doesn't supply
@@ -908,8 +916,6 @@ class TFBartModel(TFPretrainedBartModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-
-
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
@@ -922,22 +928,21 @@ class TFBartModel(TFPretrainedBartModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-
         )
         if not return_dict:
             # Attention and hidden_states will be [] or None if they aren't needed
-            assert isinstance(decoder_outputs[0], T), f'got type {type(decoder_outputs[0])} for first decoder output'
+            assert isinstance(decoder_outputs[0], T), f"got type {type(decoder_outputs[0])} for first decoder output"
             return decoder_outputs + encoder_outputs
         else:
             return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
+                last_hidden_state=decoder_outputs.last_hidden_state,
+                decoder_past_key_values=decoder_outputs.past_key_values,
+                decoder_hidden_states=decoder_outputs.hidden_states,
+                decoder_attentions=decoder_outputs.attentions,
+                encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+                encoder_hidden_states=encoder_outputs.hidden_states,
+                encoder_attentions=encoder_outputs.attentions,
+            )
 
     def get_input_embeddings(self):
         return self.shared
@@ -1010,7 +1015,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         assert "input_ids" not in kwargs
 
         inputs = kwargs.pop("inputs", kwargs.pop("input_ids", None))
-        #return_dict = kwargs.pop('return_dict', None)
+        # return_dict = kwargs.pop('return_dict', None)
         # if isinstance(inputs, T):
         #     input_ids = inputs
         # elif isinstance(inputs, dict):
@@ -1029,7 +1034,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         outputs = self.model(inputs, **kwargs)
         lm_logits = self.model.shared(outputs[0], mode="linear")
 
-        if not isinstance(outputs, Seq2SeqModelOutput): # return_dict=False
+        if not isinstance(outputs, Seq2SeqModelOutput):  # return_dict=False
             return (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
@@ -1047,7 +1052,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         assert past is not None, "past has to be defined"
 
         if len(past) == 3:  # first step
-            raise ValueError('len of past = 3')
+            raise ValueError("len of past = 3")
             encoder_outputs = past
             decoder_cached_states = None
         elif len(past) == 2:
@@ -1055,7 +1060,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         elif len(past) == 1:
             encoder_outputs = past
             decoder_cached_states = None
-            #raise ValueError(f"past must be of len 2 or 3, got len {len(past)} full past: {past}")
+            # raise ValueError(f"past must be of len 2 or 3, got len {len(past)} full past: {past}")
 
         # # first step
         # if len(past) < 2:

@@ -171,9 +171,7 @@ class TFBartHeadTests(unittest.TestCase):
         config, input_ids, batch_size = self._get_config_and_data()
         decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
         lm_model = TFBartForConditionalGeneration(config)
-        outputs = lm_model(
-            inputs=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False
-        )
+        outputs = lm_model(inputs=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
 

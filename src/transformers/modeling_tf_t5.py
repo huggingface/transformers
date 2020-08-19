@@ -21,6 +21,7 @@ import itertools
 import logging
 import math
 import warnings
+from typing import Tuple
 
 import tensorflow as tf
 
@@ -64,7 +65,8 @@ TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # - TFPreTrainedModel for the models (it-self a sub-class of tf.keras.Model)
 ####################################################
 
-from typing import Tuple
+
+
 class TFT5LayerNorm(tf.keras.layers.Layer):
     def __init__(self, epsilon=1e-6, **kwargs):
         """ Construct a layernorm module in the T5 style
