@@ -30,7 +30,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_bert import BertIntermediate, BertLayerNorm, BertOutput, BertPooler, BertPreTrainedModel, BertSelfOutput
+from .modeling_bert import BertIntermediate, BertLayerNorm, BertOutput, BertPreTrainedModel, BertSelfOutput
 from .modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -872,7 +872,6 @@ class LongformerModel(LongformerPreTrainedModel):
 
         self.embeddings = RobertaEmbeddings(config)
         self.encoder = LongformerEncoder(config)
-        self.pooler = BertPooler(config)
 
         self.init_weights()
 
@@ -1038,7 +1037,7 @@ class LongformerModel(LongformerPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = sequence_output[:, 0]
 
         # undo padding
         if padding_len > 0:
