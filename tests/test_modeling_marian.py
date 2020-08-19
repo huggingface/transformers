@@ -205,9 +205,9 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
-class TestMarian_eng_zho(MarianIntegrationTest):
-    src = "eng"
-    tgt = "zho"
+class TestMarian_en_zh(MarianIntegrationTest):
+    src = "en"
+    tgt = "zh"
     src_text = ["My name is Wolfgang and I live in Berlin"]
     expected_text = ["我叫沃尔夫冈 我住在柏林"]
 
