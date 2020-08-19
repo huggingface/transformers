@@ -429,6 +429,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             encoder_pointer: nn.Module,
             module_name: str,
             uninitialized_encoder_weights: List[str],
+            depth=0,
         ):
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
@@ -462,6 +463,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                             continue
                     elif name not in encoder_modules:
                         continue
+                    elif depth > 500:
+                        raise ValueError(
+                            "Max depth of recursive function `tie_encoder_to_decoder` reached. It seems that there is a circular dependency between two or more `nn.Modules` of your model."
+                        )
                     else:
                         decoder_name = encoder_name = name
                     tie_encoder_to_decoder_recursively(
@@ -469,6 +474,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                         encoder_modules[encoder_name],
                         module_name + "/" + name,
                         uninitialized_encoder_weights,
+                        depth=depth + 1,
                     )
                     all_encoder_weights.remove(module_name + "/" + encoder_name)
 
