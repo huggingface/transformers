@@ -53,7 +53,6 @@ The tokenizer can decode a list of token ids in a proper sentence:
 
 As you can see, the tokenizer automatically added some special tokens that the model expect. Not all model need special
 tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we would have
-
 seen the same sentence as the original one here. You can disable this behavior (which is only advised if you have added
 those special tokens yourself) by passing ``add_special_tokens=False``.
 

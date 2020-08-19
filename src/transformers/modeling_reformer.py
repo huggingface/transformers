@@ -1369,7 +1369,7 @@ class ChunkReformerFeedForward(nn.Module):
 
     def forward(self, attention_output):
         return apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.forward_chunk, attention_output,
+            self.forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output,
         )
 
     def forward_chunk(self, hidden_states):
@@ -1730,7 +1730,7 @@ class ReformerOnlyLMHead(nn.Module):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
-        return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
+        return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
 
     def forward_chunk(self, hidden_states):
         hidden_states = self.decoder(hidden_states)

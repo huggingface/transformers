@@ -32,6 +32,7 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
     "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
 }
+
 BART_CONFIG_ARGS_DOC = r"""
     Args:
         vocab_size (:obj:`int`, optional, defaults to 50265):
@@ -94,6 +95,8 @@ BART_CONFIG_ARGS_DOC = r"""
             for SequenceClassification
         is_encoder_decoder (:obj:`int`, optional, defaults to True):
             True
+        force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
 
 """
 
@@ -136,6 +139,7 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
+        force_bos_token_to_be_generated=False,
         **common_kwargs
     ):
         r"""
@@ -194,6 +198,8 @@ class BartConfig(PretrainedConfig):
         # pos embedding offset
         self.extra_pos_embeddings = self.pad_token_id + 1
 
+        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -209,8 +215,3 @@ class BartConfig(PretrainedConfig):
         if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
             logger.info("This configuration is a mixture of MBART and BART settings")
         return False
-
-
-class MBartConfig(BartConfig):
-    model_type = "mbart"
-    """See real config values at https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json."""

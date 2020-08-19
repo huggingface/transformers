@@ -44,8 +44,10 @@ assignees: ''
  Longformer/Reformer: @patrickvonplaten
  TransfoXL/XLNet: @TevenLeScao 
  examples/seq2seq: @sshleifer
- tensorflow: @jplu 
-documentation: @sgugger
+ examples/bert-loses-patience: @JetRunner
+ tensorflow: @jplu
+ examples/token-classification: @stefan-it
+ documentation: @sgugger
  -->
 
 ## Information

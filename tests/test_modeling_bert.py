@@ -26,15 +26,15 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     from transformers import (
         BertConfig,
-        BertModel,
-        BertLMHeadModel,
         BertForMaskedLM,
+        BertForMultipleChoice,
         BertForNextSentencePrediction,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
         BertForTokenClassification,
-        BertForMultipleChoice,
+        BertLMHeadModel,
+        BertModel,
     )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -370,7 +370,6 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    test_chunking = True
 
     def setUp(self):
         self.model_tester = BertModelTester(self)
