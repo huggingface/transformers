@@ -555,7 +555,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    test_chunking = True
 
     def prepare_kwargs(self):
         return {
@@ -616,7 +615,6 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    test_chunking = True
 
     def prepare_kwargs(self):
         return {
