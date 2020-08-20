@@ -24,18 +24,24 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from .activations import gelu, gelu_new, swish
 from .configuration_mpnet import MPNetConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, prune_linear_layer
+from .file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_callable,
+)
+from .modeling_utils import (
+    PreTrainedModel, 
+    prune_linear_layer,
+    find_pruneable_heads_and_indices,
+)
 from .modeling_bert import (
+    BertLayerNorm,
     BertPreTrainedModel, 
     BertIntermediate, 
     BertOutput, 
-    BertSelfAttention,
-    BertSelfOutput, 
-    BertAttention, 
     BertModel
-    
 )
 
 from .modeling_outputs import (
@@ -46,97 +52,179 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 
-from .modeling_roberta import RobertaLMHead, RobertaClassificationHead, RobertaEmbeddings
+from .modeling_roberta import (
+    RobertaLMHead, 
+    RobertaClassificationHead,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
+MPNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    "mpnet-base": ""        
+}
+
+
+def mish(x):
+    return x * torch.tanh(nn.functional.softplus(x))
+
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
+
+
 class MPNetPreTrainedModel(PreTrainedModel):
     config_class = MPNetConfig
+    pretrained_model_archive_map = MPNET_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "mpnet"
+
+    def _init_weights(self, module):
+        """ Initialize the weights """
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, BertLayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, nn.Linear) and module.bias is not None:
+            module.bias.data.zero_()
 
 
-class MPNetSelfAttention(BertSelfAttention):
+class MPNetEmbeddings(nn.Module):
+
+    def __init__(self, config): 
+        super().__init__()
+        self.padding_idx = 1
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=self.padding_idx
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+        )
+        
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+
+    def forward(self, input_ids=None, position_ids=None, **kwargs):
+        if position_ids is None:
+            position_ids = create_position_ids_from_input_ids(input_ids)
+
+        inputs_embeds = self.word_embeddings(input_ids)
+        position_embeddings = self.position_embeddings(position_ids)
+        embeddings = inputs_embeds + position_embeddings
+        return embeddings
+
+
+
+class MPNetSelfAttention(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.q = nn.Linear(config.hidden_size, self.all_head_size)
+        self.k = nn.Linear(config.hidden_size, self.all_head_size)
+        self.v = nn.Linear(config.hidden_size, self.all_head_size)
+        self.o = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
     
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         position_bias=None,
+        **kwargs,
     ):
-        mixed_query_layer = self.query(hidden_states)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        if encoder_hidden_states is not None:
-            mixed_key_layer = self.key(encoder_hidden_states)
-            mixed_value_layer = self.value(encoder_hidden_states)
-            attention_mask = encoder_attention_mask
-        else:
-            mixed_key_layer = self.key(hidden_states)
-            mixed_value_layer = self.value(hidden_states)
+        q = self.q(hidden_states)
+        k = self.k(hidden_states)
+        v = self.v(hidden_states)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
+        q = transpose_for_scores(q)
+        k = transpose_for_scores(k)
+        v = transpose_for_scores(v)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = torch.matmul(q, k.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         
         if position_bias is not None:
             attention_scores += position_bias
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        c = torch.matmul(attention_probs, value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        c = c.permute(0, 2, 1, 3).contiguous()
+        new_c_shape = c.size()[:-2] + (self.all_head_size,)
+        c = c.view(*new_c_shape)
 
-        outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
+        o = self.o(c)
+
+        outputs = (o, attention_probs) if self.output_attentions else (o,)
         return outputs
 
 
-class MPNetAttention(BertAttention):
+class MPNetAttention(nn.Module):
     def __init__(self, config):
-        super().__init__(config)
-        self.self = MPNetSelfAttention(config)
-        self.output = BertSelfOutput(config)
-        self.pruned_heads = set()
+        super().__init__()
+        self.attn = MPNetSelfAttention(config)
+        self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        self.prune_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return 
+
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.attn.num_attention_heads, self.attn.attention_head_size, self.prune_heads
+        )
+
+        self.attn.q = prune_linear_layer(self.attn.q, index)
+        self.attn.k = prune_linear_layer(self.attn.k, index)
+        self.attn.v = prune_linear_layer(self.attn.v, index)
+        self.attn.o = prune_linear_layer(self.attn.o, index, dim=1)
+
+        self.attn.num_attention_heads = self.attn.num_attention_heads - len(heads)
+        self.attn.all_head_size = self.attn.attention_head_size * self.attn.num_attention_heads
+        self.prune_heads = self.prune_heads.union(heads)
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         position_bias=None,
+        **kwargs,
     ):
-        self_outputs = self.self(
-            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, position_bias,
+        self_outputs = self.attn(
+            hidden_states, attention_mask, head_mask, position_bias,
         )
+        attention_output = self.LayerNorm(self.dropout(self_outputs[0]) + hidden_states)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -154,11 +242,12 @@ class MPNetLayer(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         position_bias=None,
+        **kwargs,
     ):
-        self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask, position_bias=position_bias)
+        self_attention_outputs = self.attention(
+            hidden_states, attention_mask, head_mask, position_bias=position_bias
+        )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -175,15 +264,14 @@ class MPNetEncoder(nn.Module):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([MPNetLayer(config) for _ in range(config.num_hidden_layers)])
-        self.relative_attention_bias = nn.Embedding(32, self.n_heads)
+        self.relative_attention_bias = nn.Embedding(config.relative_attention_num_buckets, self.n_heads)
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        **kwargs,
     ):
         position_bias = self.compute_position_bias(hidden_states)
         all_hidden_states = ()
@@ -193,7 +281,7 @@ class MPNetEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask, position_bias,
+                hidden_states, attention_mask, head_mask[i], position_bias, **kwargs,
             )
             hidden_states = layer_outputs[0]
 
@@ -257,7 +345,7 @@ class MPNetModel(BertModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = RobertaEmbeddings(config)
+        self.embeddings = MPNetEmbeddings(config)
         self.encoder = MPNetEncoder(config)
 
         self.init_weights()
@@ -269,7 +357,7 @@ class MPNetModel(BertModel):
         self.embeddings.word_embeddings = value
 
 
-class MPNetForMaskedLM(BertPreTrainedModel):
+class MPNetForMaskedLM(MPNetPreTrainedModel):
 
     base_model_prefix = "mpnet"
 
@@ -315,7 +403,7 @@ class MPNetForMaskedLM(BertPreTrainedModel):
         return outputs
 
 
-class MPNetForSequenceClassification(BertPreTrainedModel):
+class MPNetForSequenceClassification(MPNetPreTrainedModel):
     
     base_model_prefix = "mpnet"
 
@@ -384,7 +472,7 @@ class MPNetForSequenceClassification(BertPreTrainedModel):
 
 
 
-class MPNetForMultipleChoice(BertPreTrainedModel):
+class MPNetForMultipleChoice(MPNetPreTrainedModel):
 
     base_model_prefix = "mpnet"
 
@@ -454,7 +542,7 @@ class MPNetForMultipleChoice(BertPreTrainedModel):
         )
 
 
-class MPNetForQuestionAnswering(BertPreTrainedModel):
+class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
     base_model_prefix = "mpnet"
 
