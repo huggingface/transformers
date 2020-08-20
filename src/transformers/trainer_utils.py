@@ -90,7 +90,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     return loss if len(metrics) == 0 else sum(metrics.values())
 
 
-def default_hp_space_optuna(trial: "optuna.Trial") -> Dict[str, float]:
+def default_hp_space_optuna(trial) -> Dict[str, float]:
     return {
         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
         "num_train_epochs": trial.suggest_int("num_train_epochs", 1, 5),
