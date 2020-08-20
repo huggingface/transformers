@@ -57,12 +57,8 @@ class PegasusConfig(BartConfig):
     model_type = "pegasus"
     # The implementation of the config object is in BartConfig
 
-    @property
-    def default_config_parameters(self):
-        return DEFAULTS
 
-
-# Expected values for testing
+# Expected values for testing (these vary between checkpoints)
 max_gen_length = {
     # See appendix C of paper
     "xsum": 64,
