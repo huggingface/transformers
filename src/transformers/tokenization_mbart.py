@@ -55,6 +55,7 @@ FAIRSEQ_LANGUAGE_CODES = [
     "zh_CN",
 ]
 
+
 def shift_tokens_right(input_ids, pad_token_id):
     """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
     prev_output_tokens = input_ids.clone()
@@ -62,6 +63,7 @@ def shift_tokens_right(input_ids, pad_token_id):
     prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
     prev_output_tokens[:, 1:] = input_ids[:, :-1]
     return prev_output_tokens
+
 
 class MBartTokenizer(XLMRobertaTokenizer):
     """
@@ -162,8 +164,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-
-
 
     @add_start_docstrings_to_callable(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
@@ -269,9 +269,9 @@ class MBartTokenizer(XLMRobertaTokenizer):
             max_length=max_target_length,
             truncation=True,
             **kwargs,
-        )['input_ids']
-        model_inputs['decoder_input_ids'] = shift_tokens_right(labels, self.pad_token_id)
-        model_inputs['labels'] = labels
+        )["input_ids"]
+        model_inputs["decoder_input_ids"] = shift_tokens_right(labels, self.pad_token_id)
+        model_inputs["labels"] = labels
         self.set_src_lang_special_tokens(src_lang)  # sets to src_lang
         return model_inputs
 

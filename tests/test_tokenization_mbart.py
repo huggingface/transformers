@@ -185,12 +185,13 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     def test_batch_fairseq_parity(self):
         batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, return_tensors='pt')
+            self.src_text, tgt_texts=self.tgt_text, return_tensors="pt"
+        )
         for k in batch:
             batch[k] = batch[k].tolist()
-        #batch = {k: v.tolist() for k,v in batch.items()}
+        # batch = {k: v.tolist() for k,v in batch.items()}
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
-        #batch.decoder_inputs_ids[0][0] ==
+        # batch.decoder_inputs_ids[0][0] ==
         assert batch.input_ids[1][-2:] == [2, EN_CODE]
         assert batch.decoder_input_ids[1][0] == RO_CODE
         assert batch.decoder_input_ids[1][-1] == 2

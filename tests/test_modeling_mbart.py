@@ -80,8 +80,6 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
         result_slice = logits[0, 0, :3]
         _assert_tensors_equal(expected_slice, result_slice, atol=TOLERANCE)
 
-
-
     @slow
     def test_enro_generate(self):
         batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(self.src_text).to(torch_device)

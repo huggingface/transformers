@@ -137,7 +137,10 @@ class SummarizationModule(BaseTransformer):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
 
-        if isinstance(self.model, T5ForConditionalGeneration):
+        if "labels" in batch:
+            lm_labels = batch["labels"]
+            decoder_input_ids = target_ids
+        elif isinstance(self.model, T5ForConditionalGeneration):
             decoder_input_ids = self.model._shift_right(target_ids)
             lm_labels = target_ids
         else:
