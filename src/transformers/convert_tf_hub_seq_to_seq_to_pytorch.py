@@ -18,27 +18,29 @@
 import argparse
 import logging
 
-import torch
-import tensorflow as tf  # has to be tf 1.15
-import tensorflow_text  # noqa: F401 has to be tf 1.15
-import tensorflow_hub as hub  # has to be tf 1.15
 import numpy as np
+import tensorflow.compat.v1 as tf
+import tensorflow_hub as hub
+import tensorflow_text  # noqa: F401
+import torch
 
-from transformers import RobertaConfig, EncoderDecoderConfig, EncoderDecoderModel
+from transformers import EncoderDecoderConfig, EncoderDecoderModel, RobertaConfig
 
+
+tf.disable_eager_execution()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def load_tf_weights_in_roberta_seq_to_seq(pytorch_model, tf_hub_path, model_class):
+def load_tf_weights_in_seq_to_seq(pytorch_model, tf_hub_path, model_class):
     model = hub.Module(tf_hub_path)
     init = tf.compat.v1.global_variables_initializer()
     with tf.compat.v1.Session() as sess:
         init.run()
         all_variables = model.variable_map
         keep_track_variables = all_variables.copy()
-        for key in reversed(list(all_variables.keys())):
+        for key in list(all_variables.keys()):
             if "global" in key:
                 logger.info(f"Skipping {key}...")
                 continue
@@ -63,7 +65,7 @@ def load_tf_weights_in_roberta_seq_to_seq(pytorch_model, tf_hub_path, model_clas
                 elif sub_layer == "encdec_output":
                     pytorch_model_pointer = pytorch_model_pointer.crossattention.output
                 else:
-                    if sub_layer == "attention" and "encdec" in sub_layers[i+1]:
+                    if sub_layer == "attention" and "encdec" in sub_layers[i + 1]:
                         continue
                     try:
                         pytorch_model_pointer = getattr(pytorch_model_pointer, sub_layer)
@@ -96,13 +98,17 @@ def load_tf_weights_in_roberta_seq_to_seq(pytorch_model, tf_hub_path, model_clas
 def convert_tf_checkpoint_to_pytorch(tf_hub_path, pytorch_dump_path):
     # Initialise PyTorch model
     encoder_config = RobertaConfig.from_pretrained("roberta-large", vocab_size=50358, max_position_embeddings=512)
-    decoder_config = RobertaConfig.from_pretrained("roberta-large", vocab_size=50358, is_decoder=True, add_cross_attention=True, max_position_embeddings=512)
-    config = EncoderDecoderConfig(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict())
+    decoder_config = RobertaConfig.from_pretrained(
+        "roberta-large", vocab_size=50358, is_decoder=True, add_cross_attention=True, max_position_embeddings=512
+    )
+    config = EncoderDecoderConfig(
+        encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), tie_encoder_decoder=True
+    )
     model = EncoderDecoderModel(config)
     print("Building PyTorch model from configuration: {}".format(str(config)))
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_roberta_seq_to_seq(model, tf_hub_path, model_class="roberta")
+    load_tf_weights_in_seq_to_seq(model, tf_hub_path, model_class="roberta")
 
     # Save pytorch-model
     print("Save PyTorch model and config to {}".format(pytorch_dump_path))
