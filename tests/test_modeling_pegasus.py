@@ -17,7 +17,7 @@ XSUM_ENTRY_LONGER = """ The London trio are up for best UK act and best album, a
 
 @require_torch
 class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
-    checkpoint_name = "google/pegasus-cnn_dailymail"
+    checkpoint_name = "google/pegasus-xsum"
     src_text = [PGE_ARTICLE, XSUM_ENTRY_LONGER]
     tgt_text = [
         "California's largest electricity provider has turned off power to tens of thousands of customers.",
@@ -30,8 +30,10 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @slow
     def test_pegasus_xsum_summary(self):
-        # assert self.tokenizer.model_max_length == 512
-        inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, padding=True).to(torch_device)
+        assert self.tokenizer.model_max_length == 512
+        inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(
+            torch_device
+        )
         assert inputs.input_ids.shape == (2, 421)
         translated_tokens = self.model.generate(**inputs)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
@@ -59,6 +61,8 @@ class PegasusConfigTests(unittest.TestCase):
                 failures.append(f"config for {mname} had max_length: {cfg.max_length}, expected {max_len}")
 
             if cfg.max_position_embeddings < max_model_length[dataset]:
+                # otherwise you get IndexError for e.g. position 513
+                # see https://github.com/huggingface/transformers/issues/6599
                 failures.append(
                     f"config for {mname} had max_position_embeddings: {cfg.max_position_embeddings}, expected {max_model_length[dataset]}"
                 )
