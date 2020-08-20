@@ -306,13 +306,13 @@ class TFModelTesterMixin:
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             # Debug info (remove when fixed)
-            if max_diff >= 2e-2:
+            if max_diff >= 4e-2:
                 print("===")
                 print(model_class)
                 print(config)
                 print(inputs_dict)
                 print(pt_inputs_dict)
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -348,7 +348,7 @@ class TFModelTesterMixin:
             tfo[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tfo - pto))
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
