@@ -348,7 +348,7 @@ class TFModelTesterMixin:
             tfo[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tfo - pto))
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
