@@ -43,7 +43,7 @@ from .modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices
+from .modeling_utils import PreTrainedModel, apply_chunking_to_forward, find_pruneable_heads_and_indices
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
     """ Load tf checkpoints in a pytorch model."""
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
@@ -286,6 +287,8 @@ class AlbertLayer(nn.Module):
         super().__init__()
 
         self.config = config
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
         self.full_layer_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = AlbertAttention(config)
         self.ffn = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -297,13 +300,19 @@ class AlbertLayer(nn.Module):
         self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
     ):
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
-        ffn_output = self.ffn(attention_output[0])
-        ffn_output = self.activation(ffn_output)
-        ffn_output = self.ffn_output(ffn_output)
-        ffn_output = self.dropout(ffn_output)
+
+        ffn_output = apply_chunking_to_forward(
+            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output[0],
+        )
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_output[0])
 
         return (hidden_states,) + attention_output[1:]  # add attentions if we output them
+
+    def ff_chunk(self, attention_output):
+        ffn_output = self.ffn(attention_output)
+        ffn_output = self.activation(ffn_output)
+        ffn_output = self.ffn_output(ffn_output)
+        return ffn_output
 
 
 class AlbertLayerGroup(nn.Module):

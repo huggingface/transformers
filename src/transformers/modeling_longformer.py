@@ -41,7 +41,12 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_roberta import RobertaEmbeddings, RobertaLMHead
-from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from .modeling_utils import (
+    PreTrainedModel,
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -685,6 +690,8 @@ class LongformerLayer(nn.Module):
         self.attention = LongformerAttention(config, layer_id)
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
 
     def forward(
         self, hidden_states, attention_mask=None, output_attentions=False,
@@ -693,10 +700,16 @@ class LongformerLayer(nn.Module):
         attn_output = self_attn_outputs[0]
         outputs = self_attn_outputs[1:]  # add self attentions if we output attention weights
 
-        intermediate_output = self.intermediate(attn_output)
-        layer_output = self.output(intermediate_output, attn_output)
+        layer_output = apply_chunking_to_forward(
+            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attn_output
+        )
         outputs = (layer_output,) + outputs
         return outputs
+
+    def ff_chunk(self, attn_output):
+        intermediate_output = self.intermediate(attn_output)
+        layer_output = self.output(intermediate_output, attn_output)
+        return layer_output
 
 
 class LongformerEncoder(nn.Module):

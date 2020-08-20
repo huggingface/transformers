@@ -424,7 +424,7 @@ class BertLayer(nn.Module):
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.feed_forward_chunk, attention_output
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
         return outputs

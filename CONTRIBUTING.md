@@ -65,7 +65,7 @@ Awesome! Please provide the following information:
 If you are willing to contribute the model yourself, let us know so we can best
 guide you.
 
-We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them 
+We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them
 in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates) folder.
 
 ### Do you want a new feature (that is not a model)?
@@ -87,8 +87,8 @@ A world-class feature request addresses the following points:
 If your issue is well written we're already 80% of the way there by the time you
 post it.
 
-We have added **templates** to guide you in the process of adding a new example script for training or testing the 
-models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates) 
+We have added **templates** to guide you in the process of adding a new example script for training or testing the
+models in the library. You can find them in the [`templates`](https://github.com/huggingface/transformers/tree/master/templates)
 folder.
 
 ## Start contributing! (Pull Requests)
@@ -149,6 +149,14 @@ Follow these steps to start contributing:
    $ make test
    ```
 
+   Note, that this command uses `-n auto` pytest flag, therefore, it will start as many parallel `pytest` processes as the number of your computer's CPU-cores, and if you have lots of those and a few GPUs and not a great amount of RAM, it's likely to overload your computer. Therefore, to run the test suite, you may want to consider using this command instead:
+
+   ```bash
+   $ python -m pytest -n 3 --dist=loadfile -s -v ./tests/
+   ```
+
+   Adjust the value of `-n` to fit the load your hardware can support.
+
    `transformers` relies on `black` and `isort` to format its source code
    consistently. After you make changes, format them with:
 
@@ -208,21 +216,21 @@ Follow these steps to start contributing:
    are useful to avoid duplicated work, and to differentiate it from PRs ready
    to be merged;
 4. Make sure existing tests pass;
-5. Add high-coverage tests. No quality testing = no merge. 
-   - If you are adding a new model, make sure that you use 
+5. Add high-coverage tests. No quality testing = no merge.
+   - If you are adding a new model, make sure that you use
      `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`, which triggers the common tests.
-   - If you are adding new `@slow` tests, make sure they pass using 
-     `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
-   - If you are adding a new tokenizer, write tests, and make sure 
+   - If you are adding new `@slow` tests, make sure they pass using
+     `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`.
+   - If you are adding a new tokenizer, write tests, and make sure
      `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
    CircleCI does not run the slow tests, but github actions does every night!
-6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an 
+6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an
    example.
 
 ### Tests
 
-An extensive test suite is included to test the library behavior and several examples. Library tests can be found in 
-the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the 
+An extensive test suite is included to test the library behavior and several examples. Library tests can be found in
+the [tests folder](https://github.com/huggingface/transformers/tree/master/tests) and examples tests in the
 [examples folder](https://github.com/huggingface/transformers/tree/master/examples).
 
 We like `pytest` and `pytest-xdist` because it's faster. From the root of the

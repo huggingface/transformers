@@ -53,7 +53,6 @@ The tokenizer can decode a list of token ids in a proper sentence:
 
 As you can see, the tokenizer automatically added some special tokens that the model expect. Not all model need special
 tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we would have
-
 seen the same sentence as the original one here. You can disable this behavior (which is only advised if you have added
 those special tokens yourself) by passing ``add_special_tokens=False``.
 
@@ -284,6 +283,12 @@ Pre-tokenized inputs
 The tokenizer also accept pre-tokenized inputs. This is particularly useful when you want to compute labels and extract
 predictions in `named entity recognition (NER) <https://en.wikipedia.org/wiki/Named-entity_recognition>`__ or
 `part-of-speech tagging (POS tagging) <https://en.wikipedia.org/wiki/Part-of-speech_tagging>`__.
+
+.. warning::
+
+    Pre-tokenized does not mean your inputs are already tokenized (you wouldn't need to pass them though the tokenizer
+    if that was the case) but just split into words (which is often the first step in subword tokenization algorithms
+    like BPE).
 
 If you want to use pre-tokenized inputs, just set :obj:`is_pretokenized=True` when passing your inputs to the
 tokenizer. For instance, we have:

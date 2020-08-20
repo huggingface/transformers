@@ -392,7 +392,6 @@ class GenerationMixin:
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
-
             encoder_outputs: tuple = encoder(input_ids, attention_mask=attention_mask)
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1

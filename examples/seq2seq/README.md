@@ -35,7 +35,15 @@ export ENRO_DIR=${PWD}/wmt_en_ro
 this should make a directory called `wmt_en_ro/` with files like `test.source`.
 ```
 
-If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target.
+If you are using your own data, it must be formatted as one directory with 6 files: 
+```
+train.source
+train.target
+val.source
+val.target
+test.source
+test.target
+```
 The `.source` files are the input, the `.target` files are the desired output.
 
 
