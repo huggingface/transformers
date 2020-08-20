@@ -134,8 +134,8 @@ class Seq2SeqTrainer(Trainer):
             if self.args.predict_from_generate:
                 max_length = model.config.max_length
                 logits_out = model.generate(inputs["input_ids"], attention_mask=inputs["attention_mask"])
-                # in case the batch is shorter then max length, the output should be padded
-                logits = model.config.eos_token_id * torch.ones(
+                # in case the batch is shorter than max length, the output should be padded
+                logits = model.config.pad_token_id * torch.ones(
                     (logits_out.shape[0], max_length), dtype=logits_out.dtype, device=logits_out.device
                 )
                 logits[:, : logits_out.shape[-1]] = logits_out
