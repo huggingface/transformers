@@ -73,6 +73,7 @@ class BestRun(NamedTuple):
     objective: float
     hyperparameters: Dict[str, Any]
 
+
 def default_compute_objective(metrics: Dict[str, float]) -> float:
     """
     The default objective to maximize/minimize when doing an hyperparameter search. It is the evaluation loss if no

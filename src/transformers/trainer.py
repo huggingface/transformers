@@ -23,7 +23,15 @@ from .file_utils import is_torch_tpu_available
 from .integrations import is_comet_available, is_optuna_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvalPrediction, PredictionOutput, TrainOutput, default_compute_objective, set_seed
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    BestRun,
+    EvalPrediction,
+    PredictionOutput,
+    TrainOutput,
+    default_compute_objective,
+    set_seed,
+)
 from .training_args import TrainingArguments
 
 
@@ -699,7 +707,13 @@ class Trainer:
         return TrainOutput(self.global_step, tr_loss / self.global_step)
 
     def hyperparameter_search(
-        self, compute_objective: Optional[Callable[[Dict[str, float]], float]] = None, n_trials: int = 100, timeout: int = 1800, n_jobs: int = 1, direction: str = "minimize", **kwargs
+        self,
+        compute_objective: Optional[Callable[[Dict[str, float]], float]] = None,
+        n_trials: int = 100,
+        timeout: int = 1800,
+        n_jobs: int = 1,
+        direction: str = "minimize",
+        **kwargs
     ) -> BestRun:
         """
         Launch an hyperparameter search using ``optuna``. The optimized quantity is determined by the
@@ -730,6 +744,7 @@ class Trainer:
         assert is_optuna_available(), "optuna is required to do hyperparameter search, use `pip install optuna`."
 
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
+
         def _objective(self, trial):
             # To make sure optimizer and lr_scheduler are reset with the new choices of HPs
             self.optimizer = None
