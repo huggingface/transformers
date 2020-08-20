@@ -1071,7 +1071,7 @@ class Trainer:
         """
         has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
-        inputs = self._prepare_inputs(inputs, model)
+        inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
             outputs = model(**inputs)
