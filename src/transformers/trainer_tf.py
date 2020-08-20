@@ -38,7 +38,11 @@ class TFTrainer:
         args (:class:`~transformers.TFTrainingArguments`):
             The arguments to tweak training.
         train_dataset (:class:`~tf.data.Dataset`, `optional`):
-            The dataset to use for training.
+            The dataset to use for training. The dataset should yield tuples of ``(features, labels)`` where
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
+            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``model(features, **labels)``.
         eval_dataset (:class:`~tf.data.Dataset`, `optional`):
             The dataset to use for evaluation.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
@@ -412,7 +416,7 @@ class TFTrainer:
         """
         eval_ds, steps, num_examples = self.get_eval_tfdataset(eval_dataset)
 
-        output = self._prediction_loop(eval_ds, steps, num_examples, description="Evaluation")
+        output = self.prediction_loop(eval_ds, steps, num_examples, description="Evaluation")
         logs = {**output.metrics}
         logs["epoch"] = self.epoch_logging
 
