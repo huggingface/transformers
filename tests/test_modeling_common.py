@@ -704,9 +704,6 @@ class ModelTesterMixin:
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
-                    elif torch.isinf(tuple_object).any() and torch.isinf(dict_object).any():
-                        # TODO: (Lysandre) - maybe take a look if that's ok here
-                        return
                     else:
                         self.assertTrue(
                             torch.allclose(tuple_object, dict_object, atol=1e-5),
@@ -935,6 +932,13 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
         values.append(rng.randint(0, vocab_size - 1))
 
     return torch.tensor(data=values, dtype=torch.long, device=torch_device).view(shape).contiguous()
+
+
+def random_attention_mask(shape, rng=None, name=None):
+    attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None)
+    # make sure that at least one token is attended to for each batch
+    attn_mask[:, -1] = 1
+    return attn_mask
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
