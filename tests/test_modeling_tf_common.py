@@ -306,7 +306,7 @@ class TFModelTesterMixin:
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             # Debug info (remove when fixed)
-            if max_diff >= 2e-2:
+            if max_diff >= 4e-2:
                 print("===")
                 print(model_class)
                 print(config)
