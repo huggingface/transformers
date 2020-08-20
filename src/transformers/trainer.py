@@ -23,7 +23,7 @@ from .file_utils import is_torch_tpu_available
 from .integrations import is_comet_available, is_optuna_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvalPrediction, PredictionOutput, TrainOutput, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvalPrediction, PredictionOutput, TrainOutput, default_compute_objective, set_seed
 from .training_args import TrainingArguments
 
 
@@ -458,22 +458,6 @@ class Trainer:
         )
         logger.info("Trial:", trial.params)
 
-    def compute_objective(self, metrics: Dict[str, float]) -> float:
-        """
-        The objective to maximize/minimize when doing an hyperparameter search. By default, the objective is the
-        evaluation loss if not metrics are provided to the :class:`~transformers.Trainer`, the sum of all metrics
-        otherwise. To change this behavior, subclass and override this method.
-
-        Args:
-            metrics (:obj:`Dict[str, float]`): The metrics returned by the evaluate method.
-
-        Return:
-            :obj:`float`: The objective to minimize or maximize
-        """
-        loss = metrics.pop("eval_loss", None)
-        _ = metrics.pop("epoch", None)
-        return loss if len(metrics) == 0 else sum(metrics.values())
-
     def num_examples(self, dataloader: DataLoader) -> int:
         """
         Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
@@ -489,7 +473,7 @@ class Trainer:
                 Local path to the model if the model to train has been instantiated from a local path. If present,
                 training will resume from the optimizer/scheduler states loaded here.
             trial (:obj:`optuna.Trial`, `optional`):
-                The trial run for hyperameter search.
+                The trial run for hyperparameter search.
         """
         if self.model_init is not None:
             model = self.model_init()
@@ -715,15 +699,18 @@ class Trainer:
         return TrainOutput(self.global_step, tr_loss / self.global_step)
 
     def hyperparameter_search(
-        self, n_trials: int = 100, timeout: int = 1800, n_jobs: int = 1, direction: str = "minimize", **kwargs
+        self, compute_objective: Optional[Callable[[Dict[str, float]], float]] = None, n_trials: int = 100, timeout: int = 1800, n_jobs: int = 1, direction: str = "minimize", **kwargs
     ) -> BestRun:
         """
         Launch an hyperparameter search using ``optuna``. The optimized quantity is determined by the
-        :meth:`~transformers.Trainer.compute_obejctive` method, which is the evaluation loss when no metric is
+        method, which is the evaluation loss when no metric is
         provided, the sum of all metrics otherwise (you can change that behavior by subclassing and overriding this
         method).
 
         Args:
+            compute_objective (:obj:`Callable[[Dict[str, float]], float]`, `optional`):
+                A function computing the objective to minimize or maximize from the metrics returned by the
+                :obj:`evaluate` method. Will default to :func:`~transformers.trainer_utils.default_compute_objective`.
             n_trial (:obj:`int`, `optional`, defaults to 100):
                 The number of trial runs to test.
             timeout (:obj:`int`, `optional`, defaults to 1800):
@@ -742,6 +729,7 @@ class Trainer:
         """
         assert is_optuna_available(), "optuna is required to do hyperparameter search, use `pip install optuna`."
 
+        self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
         def _objective(self, trial):
             # To make sure optimizer and lr_scheduler are reset with the new choices of HPs
             self.optimizer = None
