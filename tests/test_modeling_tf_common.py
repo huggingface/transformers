@@ -312,7 +312,7 @@ class TFModelTesterMixin:
                 print(config)
                 print(inputs_dict)
                 print(pt_inputs_dict)
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
