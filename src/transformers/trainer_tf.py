@@ -44,7 +44,11 @@ class TFTrainer:
             using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
             ``model(features, **labels)``.
         eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-            The dataset to use for evaluation.
+            The dataset to use for evaluation. The dataset should yield tuples of ``(features, labels)`` where
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
+            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``model(features, **labels)``.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -149,7 +153,11 @@ class TFTrainer:
 
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-                If provided, will override `self.eval_dataset`.
+                If provided, will override `self.eval_dataset`. The dataset should yield tuples of ``(features,
+                labels)`` where ``features`` is a dict of input features and ``labels`` is the labels. If ``labels``
+                is a tensor, the loss is calculated by the model by calling ``model(features, labels=labels)``. If
+                ``labels`` is a dict, such as when using a QuestionAnswering head model with multiple targets, the
+                loss is instead calculated by calling ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -177,7 +185,12 @@ class TFTrainer:
         Returns a test :class:`~tf.data.Dataset`.
 
         Args:
-            test_dataset (:class:`~tf.data.Dataset`): The dataset to use.
+            test_dataset (:class:`~tf.data.Dataset`):
+                The dataset to use. The dataset should yield tuples of ``(features, labels)`` where ``features`` is
+                a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+                calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such
+                as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
+                by calling ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -409,7 +422,11 @@ class TFTrainer:
 
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`. The dataset should yield tuples of
+                ``(features, labels)`` where ``features`` is a dict of input features and ``labels`` is the labels.
+                If ``labels`` is a tensor, the loss is calculated by the model by calling ``model(features,
+                labels=labels)``. If ``labels`` is a dict, such as when using a QuestionAnswering head model with
+                multiple targets, the loss is instead calculated by calling ``model(features, **labels)``.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
@@ -670,7 +687,11 @@ class TFTrainer:
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`):
-                Dataset to run the predictions on.
+                Dataset to run the predictions on. The dataset should yield tuples of ``(features, labels)`` where
+                ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor,
+                the loss is calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is
+                a dict, such as when using a QuestionAnswering head model with multiple targets, the loss is instead
+                calculated by calling ``model(features, **labels)``.
         Returns:
             `NamedTuple`:
             predictions (:obj:`np.ndarray`):
