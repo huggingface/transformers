@@ -704,9 +704,7 @@ class Trainer:
         else:
             print(output)
 
-    def _prepare_inputs(
-        self, inputs: Dict[str, Union[torch.Tensor, Any]]
-    ) -> Dict[str, Union[torch.Tensor, Any]]:
+    def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
