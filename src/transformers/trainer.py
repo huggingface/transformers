@@ -30,6 +30,7 @@ from .trainer_utils import (
     PredictionOutput,
     TrainOutput,
     default_compute_objective,
+    default_hp_space_optuna,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -450,22 +451,6 @@ class Trainer:
                 experiment._log_parameters(self.args, prefix="args/", framework="transformers")
                 experiment._log_parameters(self.model.config, prefix="config/", framework="transformers")
 
-    def setup_optuna(self, trial: "optuna.Trial"):
-        """
-        Setup the optional optuna integration. This is setting up good defaults for hyperparameter-search, subclass and
-        override to customize the arguments included in the search.
-
-        Args:
-            trial (:obj:`optuna.Trial`): The trial run for which to pick hyperparameters.
-        """
-        self.args.learning_rate = trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True)
-        self.args.num_train_epochs = trial.suggest_int("num_train_epochs", 1, 5)
-        self.args.seed = trial.suggest_int("seed", 1, 40)
-        self.args.per_device_train_batch_size = trial.suggest_categorical(
-            "per_device_train_batch_size", [4, 8, 16, 32, 64]
-        )
-        logger.info("Trial:", trial.params)
-
     def num_examples(self, dataloader: DataLoader) -> int:
         """
         Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
@@ -487,7 +472,10 @@ class Trainer:
             model = self.model_init()
             self.model = model.to(self.args.device)
         if trial is not None:
-            self.setup_optuna(trial)
+            config = self.hp_space(trial)
+            for key, value in config.items():
+                setattr(self.args, key, value)
+            logger.info("Trial:", trial.params)
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
@@ -708,6 +696,7 @@ class Trainer:
 
     def hyperparameter_search(
         self,
+        hp_space: Optional[Callable[["optuna.Trial"], Dict[str, float]]] = None,
         compute_objective: Optional[Callable[[Dict[str, float]], float]] = None,
         n_trials: int = 100,
         timeout: int = 1800,
@@ -722,6 +711,9 @@ class Trainer:
         method).
 
         Args:
+            hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
+                A function that defines the hyperparameter search space. Will default to
+                :func:`~transformers.trainer_utils.default_hyperparameter_space_optuna`.
             compute_objective (:obj:`Callable[[Dict[str, float]], float]`, `optional`):
                 A function computing the objective to minimize or maximize from the metrics returned by the
                 :obj:`evaluate` method. Will default to :func:`~transformers.trainer_utils.default_compute_objective`.
@@ -743,6 +735,7 @@ class Trainer:
         """
         assert is_optuna_available(), "optuna is required to do hyperparameter search, use `pip install optuna`."
 
+        self.hp_space = default_hp_space_optuna if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
         def _objective(self, trial):

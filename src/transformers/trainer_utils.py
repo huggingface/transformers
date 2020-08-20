@@ -88,3 +88,12 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     return loss if len(metrics) == 0 else sum(metrics.values())
+
+
+def default_hp_space_optuna(trial: "optuna.Trial") -> Dict[str, float]:
+    return {
+        "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
+        "num_train_epochs": trial.suggest_int("num_train_epochs", 1, 5),
+        "seed": trial.suggest_int("seed", 1, 40),
+        "per_device_train_batch_size": trial.suggest_categorical("per_device_train_batch_size", [4, 8, 16, 32, 64]),
+    }
