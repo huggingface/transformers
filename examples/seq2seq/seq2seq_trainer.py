@@ -53,15 +53,18 @@ class Seq2SeqTrainer(Trainer):
 
         model.train()
         inputs = self._prepare_inputs(inputs, model)
-
+        labels = inputs.pop("labels")
+        
         if self.args.fp16 and _use_native_amp:
             with autocast():
                 outputs = model(**inputs)
-                loss = outputs[0]
+                logits = outputs[0]
+                loss = self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
         else:
             outputs = model(**inputs)
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
-            loss = outputs[0]
+            logits = outputs[0]
+            loss = self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
 
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
@@ -71,19 +74,6 @@ class Seq2SeqTrainer(Trainer):
 
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
-        
-        # assuming label_smoothing is in args
-        if self.args.label_smoothing == 0:
-            outputs = model(**inputs)
-            loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
-        else:
-            labels = inputs.pop("labels")
-            labels[labels == -100] = model.config.pad_token_id
-            outputs = model(**inputs)
-            lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
-            loss, nll_loss = label_smoothed_nll_loss(
-                lprobs, labels, self.args.label_smoothing, ignore_index=model.config.pad_token_id
-            )
 
         if self.args.fp16 and _use_native_amp:
             self.scaler.scale(loss).backward()
@@ -94,3 +84,18 @@ class Seq2SeqTrainer(Trainer):
             loss.backward()
 
         return loss.item()
+    
+    def _compute_loss(self, logits, labels, ignore_index):
+        # assuming label_smoothing is in args
+        if self.args.label_smoothing == 0:
+            # Same behavior as modeling_bart.py
+            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
+            assert logits.shape[-1] == self.model.config.vocab_size
+            loss = loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
+        else:
+            lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
+            loss, nll_loss = label_smoothed_nll_loss(
+                lprobs, labels, self.args.label_smoothing, ignore_index=ignore_index
+            )
+        
+        return loss
