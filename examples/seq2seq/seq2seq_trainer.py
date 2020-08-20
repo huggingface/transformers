@@ -1,9 +1,13 @@
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, List, Optional, Tuple
 from packaging import version
 import warnings
+import logging
 
+import numpy as np
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm, trange
 
 from transformers import Trainer
 from transformers.file_utils import is_apex_available
@@ -23,6 +27,8 @@ else:
     from torch.cuda.amp import autocast
 
 from .utils import label_smoothed_nll_loss
+
+logger = logging.getLogger(__name__)
 
 class Seq2SeqTrainer(Trainer):
     # override to support label smoothing
@@ -99,3 +105,64 @@ class Seq2SeqTrainer(Trainer):
             )
         
         return loss
+
+    def prediction_step(
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
+    ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """
+        Perform an evaluation step on :obj:`model` using obj:`inputs`.
+
+        Subclass and override to inject custom behavior.
+
+        Args:
+            model (:obj:`nn.Module`):
+                The model to evaluate.
+            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+
+                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
+                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+            prediction_loss_only (:obj:`bool`):
+                Whether or not to return the loss only.
+
+        Return:
+            Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
+            A tuple with the loss, logits and labels (each being optional).
+        """
+        has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
+
+        inputs = self._prepare_inputs(inputs, model)
+
+        with torch.no_grad():
+            if self.args.predict_from_generate:
+                max_length = model.config.max_length
+                logits_out = model.generate(inputs["input_ids"], attention_mask=inputs["attention_mask"])
+                # in case the batch is shorter then max length, the output should be padded
+                logits = model.config.eos_token_id * torch.ones(
+                    (logits_out.shape[0], max_length), dtype=logits_out.dtype, device=logits_out.device
+                )
+                logits[:, : logits_out.shape[-1]] = logits_out
+
+                if has_labels:
+                    outputs = model(**inputs)
+                    loss = outputs[0]
+                else:
+                    loss = None
+            else:
+                outputs = model(**inputs)
+                if has_labels:
+                    loss, logits = outputs[:2]
+                    loss = loss.mean().item()
+                else:
+                    loss = None
+                    logits = outputs[0]
+                if self.args.past_index >= 0:
+                    self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
+
+        if prediction_loss_only:
+            return (loss, None, None)
+
+        labels = inputs.get("labels")
+        if labels is not None:
+            labels = labels.detach()
+        return (loss, logits.detach(), labels)
