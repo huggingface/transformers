@@ -937,7 +937,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 def random_attention_mask(shape, rng=None, name=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None)
     # make sure that at least one token is attended to for each batch
-    attn_mask = attn_mask[:, -1] = 1
+    attn_mask[:, -1] = 1
     return attn_mask
 
 
