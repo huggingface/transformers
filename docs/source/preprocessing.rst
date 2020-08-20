@@ -284,6 +284,12 @@ The tokenizer also accept pre-tokenized inputs. This is particularly useful when
 predictions in `named entity recognition (NER) <https://en.wikipedia.org/wiki/Named-entity_recognition>`__ or
 `part-of-speech tagging (POS tagging) <https://en.wikipedia.org/wiki/Part-of-speech_tagging>`__.
 
+.. warning::
+
+    Pre-tokenized does not mean your inputs are already tokenized (you wouldn't need to pass them though the tokenizer
+    if that was the case) but just split into words (which is often the first step in subword tokenization algorithms
+    like BPE).
+
 If you want to use pre-tokenized inputs, just set :obj:`is_pretokenized=True` when passing your inputs to the
 tokenizer. For instance, we have:
 
