@@ -30,7 +30,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
     @slow
     def test_pegasus_xsum_summary(self):
         assert self.tokenizer.model_max_length == 512
-        inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(
+        inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, padding=True).to(
             torch_device
         )
         assert inputs.input_ids.shape == (2, 421)
