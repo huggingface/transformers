@@ -439,6 +439,8 @@ class XLNetRelativeAttention(nn.Module):
             v_head_h = torch.einsum("ibh,hnd->ibnd", cat, self.v)
 
             # positional heads
+
+            # 16-bit precision tensors support
             k_head_r = torch.einsum("ibh,hnd->ibnd", r.type(self.r.dtype), self.r)
 
             # core attention ops
