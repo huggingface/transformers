@@ -1,27 +1,9 @@
-import os
 import random
 from typing import Dict, NamedTuple, Optional
 
 import numpy as np
 
 from .file_utils import is_tf_available, is_torch_available
-
-
-try:
-    import wandb
-
-    wandb.ensure_configured()
-    if wandb.api.api_key is None:
-        _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
-    else:
-        _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except (ImportError, AttributeError):
-    _has_wandb = False
-
-
-def is_wandb_available():
-    return _has_wandb
 
 
 def set_seed(seed: int):

@@ -51,7 +51,9 @@ if _has_sklearn:
         }
 
     def glue_compute_metrics(task_name, preds, labels):
-        assert len(preds) == len(labels)
+        assert len(preds) == len(
+            labels
+        ), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
         if task_name == "cola":
             return {"mcc": matthews_corrcoef(labels, preds)}
         elif task_name == "sst-2":
@@ -78,7 +80,9 @@ if _has_sklearn:
             raise KeyError(task_name)
 
     def xnli_compute_metrics(task_name, preds, labels):
-        assert len(preds) == len(labels)
+        assert len(preds) == len(
+            labels
+        ), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
         if task_name == "xnli":
             return {"acc": simple_accuracy(preds, labels)}
         else:

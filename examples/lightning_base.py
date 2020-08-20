@@ -20,7 +20,12 @@ from transformers import (
     AutoTokenizer,
     PretrainedConfig,
     PreTrainedTokenizer,
+)
+from transformers.optimization import (
+    get_cosine_schedule_with_warmup,
+    get_cosine_with_hard_restarts_schedule_with_warmup,
     get_linear_schedule_with_warmup,
+    get_polynomial_decay_schedule_with_warmup,
 )
 
 
@@ -37,6 +42,19 @@ MODEL_MODES = {
     "summarization": AutoModelForSeq2SeqLM,
     "translation": AutoModelForSeq2SeqLM,
 }
+
+
+# update this and the import above to support new schedulers from transformers.optimization
+arg_to_scheduler = {
+    "linear": get_linear_schedule_with_warmup,
+    "cosine": get_cosine_schedule_with_warmup,
+    "cosine_w_restarts": get_cosine_with_hard_restarts_schedule_with_warmup,
+    "polynomial": get_polynomial_decay_schedule_with_warmup,
+    # '': get_constant_schedule,             # not supported for now
+    # '': get_constant_schedule_with_warmup, # not supported for now
+}
+arg_to_scheduler_choices = sorted(arg_to_scheduler.keys())
+arg_to_scheduler_metavar = "{" + ", ".join(arg_to_scheduler_choices) + "}"
 
 
 class BaseTransformer(pl.LightningModule):
@@ -56,9 +74,8 @@ class BaseTransformer(pl.LightningModule):
         # self.save_hyperparameters()
         # can also expand arguments into trainer signature for easier reading
 
-        self.hparams = hparams
+        self.save_hyperparameters(hparams)
         self.step_count = 0
-        self.tfmr_ckpts = {}
         self.output_dir = Path(self.hparams.output_dir)
         cache_dir = self.hparams.cache_dir if self.hparams.cache_dir else None
         if config is None:
@@ -98,8 +115,16 @@ class BaseTransformer(pl.LightningModule):
     def load_hf_checkpoint(self, *args, **kwargs):
         self.model = self.model_type.from_pretrained(*args, **kwargs)
 
+    def get_lr_scheduler(self):
+        get_schedule_func = arg_to_scheduler[self.hparams.lr_scheduler]
+        scheduler = get_schedule_func(
+            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps
+        )
+        scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
+        return scheduler
+
     def configure_optimizers(self):
-        "Prepare optimizer and schedule (linear warmup and decay)"
+        """Prepare optimizer and schedule (linear warmup and decay)"""
         model = self.model
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
@@ -115,10 +140,8 @@ class BaseTransformer(pl.LightningModule):
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
         self.opt = optimizer
 
-        scheduler = get_linear_schedule_with_warmup(
-            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=self.total_steps
-        )
-        scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
+        scheduler = self.get_lr_scheduler()
+
         return [optimizer], [scheduler]
 
     def test_step(self, batch, batch_nb):
@@ -127,15 +150,20 @@ class BaseTransformer(pl.LightningModule):
     def test_epoch_end(self, outputs):
         return self.validation_end(outputs)
 
-    def setup(self, step):
-        train_batch_size = self.hparams.train_batch_size
-        dataloader = self.get_dataloader("train", train_batch_size)
-        self.train_loader = dataloader
-        self.total_steps = (
-            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.gpus)))
-            // self.hparams.accumulate_grad_batches
-            * float(self.hparams.max_epochs)
-        )
+    @property
+    def total_steps(self) -> int:
+        """The number of total training steps that will be run. Used for lr scheduler purposes."""
+        num_devices = max(1, self.hparams.gpus)  # TODO: consider num_tpu_cores
+        effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
+        dataset_size = len(self.train_loader.dataset)
+        return (dataset_size / effective_batch_size) * self.hparams.max_epochs
+
+    def setup(self, mode):
+        if mode == "fit":
+            self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
+
+    def get_dataloader(self, type_path, batch_size, shuffle=False):
+        raise NotImplementedError("You must implement this for your task")
 
     def train_dataloader(self):
         return self.train_loader
@@ -159,11 +187,9 @@ class BaseTransformer(pl.LightningModule):
     @pl.utilities.rank_zero_only
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         save_path = self.output_dir.joinpath("best_tfmr")
-        save_path.mkdir(exist_ok=True)
         self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
-        self.tfmr_ckpts[self.step_count] = save_path
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -206,6 +232,14 @@ class BaseTransformer(pl.LightningModule):
             "--attention_dropout", type=float, help="Attention dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+        parser.add_argument(
+            "--lr_scheduler",
+            default="linear",
+            choices=arg_to_scheduler_choices,
+            metavar=arg_to_scheduler_metavar,
+            type=str,
+            help="Learning rate scheduler",
+        )
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
         parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
@@ -217,7 +251,8 @@ class BaseTransformer(pl.LightningModule):
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
-        lrs = {f"lr_group_{i}": lr for i, lr in enumerate(self.lr_scheduler.get_lr())}
+        lr_scheduler = trainer.lr_schedulers[0]["scheduler"]
+        lrs = {f"lr_group_{i}": lr for i, lr in enumerate(lr_scheduler.get_lr())}
         pl_module.logger.log_metrics(lrs)
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
@@ -249,7 +284,6 @@ def add_generic_args(parser, root_dir) -> None:
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
-
     parser.add_argument(
         "--fp16",
         action="store_true",
@@ -263,7 +297,7 @@ def add_generic_args(parser, root_dir) -> None:
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-    parser.add_argument("--n_tpu_cores", dest="tpu_cores", type=int, default=0)
+    parser.add_argument("--n_tpu_cores", dest="tpu_cores", type=int)
     parser.add_argument("--max_grad_norm", dest="gradient_clip_val", default=1.0, type=float, help="Max gradient norm")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
@@ -274,8 +308,14 @@ def add_generic_args(parser, root_dir) -> None:
         default=1,
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
-
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+    parser.add_argument(
+        "--data_dir",
+        default=None,
+        type=str,
+        required=True,
+        help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
+    )
 
 
 def generic_train(

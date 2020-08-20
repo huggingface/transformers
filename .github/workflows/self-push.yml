@@ -25,6 +25,14 @@ jobs:
     - name: Current dir
       run: pwd
     - run: nvidia-smi
+
+    - name: Loading cache.
+      uses: actions/cache@v2
+      id: cache
+      with:
+        path: .env
+        key: v0-tests_tf_torch_gpu-${{ hashFiles('setup.py') }}
+
     - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
       run: |
         python -m venv .env
@@ -35,7 +43,8 @@ jobs:
     - name: Install dependencies
       run: |
         source .env/bin/activate
-        pip install torch
+        pip install --upgrade pip
+        pip install torch!=1.6.0
         pip install .[sklearn,testing]
 
     - name: Are GPUs recognized by our DL frameworks

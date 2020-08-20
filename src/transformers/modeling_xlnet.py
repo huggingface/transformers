@@ -35,7 +35,14 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
+from .modeling_utils import (
+    PoolerAnswerClass,
+    PoolerEndLogits,
+    PoolerStartLogits,
+    PreTrainedModel,
+    SequenceSummary,
+    apply_chunking_to_forward,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -169,11 +176,15 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             array = np.transpose(array)
         if isinstance(pointer, list):
             # Here we will split the TF weights
-            assert len(pointer) == array.shape[0]
+            assert (
+                len(pointer) == array.shape[0]
+            ), f"Pointer length {len(pointer)} and array length {array.shape[0]} mismatched"
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
                 try:
-                    assert p_i.shape == arr_i.shape
+                    assert (
+                        p_i.shape == arr_i.shape
+                    ), f"Pointer shape {p_i.shape} and array shape {arr_i.shape} mismatched"
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
@@ -181,7 +192,9 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
-                assert pointer.shape == array.shape
+                assert (
+                    pointer.shape == array.shape
+                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
@@ -433,7 +446,8 @@ class XLNetRelativeAttention(nn.Module):
             v_head_h = torch.einsum("ibh,hnd->ibnd", cat, self.v)
 
             # positional heads
-            k_head_r = torch.einsum("ibh,hnd->ibnd", r, self.r)
+            # type casting for fp16 support
+            k_head_r = torch.einsum("ibh,hnd->ibnd", r.type(self.r.dtype), self.r)
 
             # core attention ops
             attn_vec = self.rel_attn_core(
@@ -489,6 +503,8 @@ class XLNetLayer(nn.Module):
         self.rel_attn = XLNetRelativeAttention(config)
         self.ff = XLNetFeedForward(config)
         self.dropout = nn.Dropout(config.dropout)
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
 
     def forward(
         self,
@@ -518,11 +534,17 @@ class XLNetLayer(nn.Module):
         output_h, output_g = outputs[:2]
 
         if output_g is not None:
-            output_g = self.ff(output_g)
-        output_h = self.ff(output_h)
+            output_g = apply_chunking_to_forward(
+                self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, output_g
+            )
+        output_h = apply_chunking_to_forward(self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, output_h)
 
         outputs = (output_h, output_g) + outputs[2:]  # Add again attentions if there are there
         return outputs
+
+    def ff_chunk(self, output_x):
+        output_x = self.ff(output_x)
+        return output_x
 
 
 class XLNetPreTrainedModel(PreTrainedModel):
@@ -705,7 +727,7 @@ class XLNetForTokenClassificationOutput(ModelOutput):
 @dataclass
 class XLNetForMultipleChoiceOutput(ModelOutput):
     """
-    Base class for outputs of multiple choice models.
+    Output type of :class:`~transformers.XLNetForMultipleChoice`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -741,7 +763,7 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     """
-    Base class for outputs of question answering models.
+    Output type of :class:`~transformers.XLNetForQuestionAnsweringSimple`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -778,7 +800,7 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringOutput(ModelOutput):
     """
-    Base class for outputs of question answering models using a :obj:`SquadHead`.
+    Output type of :class:`~transformers.XLNetForQuestionAnswering`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
@@ -1221,7 +1243,6 @@ class XLNetModel(XLNetPreTrainedModel):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         output = output.permute(1, 0, 2).contiguous()
 
-        # TODO Teven: fix this test to only use use_cache.
         if not use_cache:
             new_mems = None
 

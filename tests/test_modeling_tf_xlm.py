@@ -112,6 +112,7 @@ class TFXLMModelTester:
             summary_type=self.summary_type,
             use_proj=self.use_proj,
             bos_token_id=self.bos_token_id,
+            return_dict=True,
         )
 
         return (
@@ -140,17 +141,11 @@ class TFXLMModelTester:
     ):
         model = TFXLMModel(config=config)
         inputs = {"input_ids": input_ids, "lengths": input_lengths, "langs": token_type_ids}
-        outputs = model(inputs)
+        result = model(inputs)
 
         inputs = [input_ids, input_mask]
-        outputs = model(inputs)
-        sequence_output = outputs[0]
-        result = {
-            "sequence_output": sequence_output.numpy(),
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        result = model(inputs)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_xlm_lm_head(
         self,
@@ -169,13 +164,9 @@ class TFXLMModelTester:
         inputs = {"input_ids": input_ids, "lengths": input_lengths, "langs": token_type_ids}
         outputs = model(inputs)
 
-        logits = outputs[0]
+        result = outputs
 
-        result = {
-            "logits": logits.numpy(),
-        }
-
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.vocab_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_xlm_qa(
         self,
@@ -193,15 +184,10 @@ class TFXLMModelTester:
 
         inputs = {"input_ids": input_ids, "lengths": input_lengths}
 
-        start_logits, end_logits = model(inputs)
+        result = model(inputs)
 
-        result = {
-            "start_logits": start_logits.numpy(),
-            "end_logits": end_logits.numpy(),
-        }
-
-        self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_xlm_sequence_classif(
         self,
@@ -219,13 +205,9 @@ class TFXLMModelTester:
 
         inputs = {"input_ids": input_ids, "lengths": input_lengths}
 
-        (logits,) = model(inputs)
+        result = model(inputs)
 
-        result = {
-            "logits": logits.numpy(),
-        }
-
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def create_and_check_xlm_for_token_classification(
         self,
@@ -242,11 +224,8 @@ class TFXLMModelTester:
         config.num_labels = self.num_labels
         model = TFXLMForTokenClassification(config=config)
         inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
-        (logits,) = model(inputs)
-        result = {
-            "logits": logits.numpy(),
-        }
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels])
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_xlm_for_multiple_choice(
         self,
@@ -270,9 +249,8 @@ class TFXLMModelTester:
             "attention_mask": multiple_choice_input_mask,
             "token_type_ids": multiple_choice_token_type_ids,
         }
-        (logits,) = model(inputs)
-        result = {"logits": logits.numpy()}
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_choices])
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

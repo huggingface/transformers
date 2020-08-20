@@ -20,7 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -88,7 +88,7 @@ class DPRModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -115,6 +115,7 @@ class DPRModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            return_dict=True,
         )
         config = DPRConfig(projection_dim=self.projection_dim, **config.to_dict())
 
@@ -126,16 +127,10 @@ class DPRModelTester:
         model = DPRContextEncoder(config=config)
         model.to(torch_device)
         model.eval()
-        embeddings = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)[0]
-        embeddings = model(input_ids, token_type_ids=token_type_ids)[0]
-        embeddings = model(input_ids)[0]
-
-        result = {
-            "embeddings": embeddings,
-        }
-        self.parent.assertListEqual(
-            list(result["embeddings"].size()), [self.batch_size, self.projection_dim or self.hidden_size]
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids)
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_question_encoder(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -143,16 +138,10 @@ class DPRModelTester:
         model = DPRQuestionEncoder(config=config)
         model.to(torch_device)
         model.eval()
-        embeddings = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)[0]
-        embeddings = model(input_ids, token_type_ids=token_type_ids)[0]
-        embeddings = model(input_ids)[0]
-
-        result = {
-            "embeddings": embeddings,
-        }
-        self.parent.assertListEqual(
-            list(result["embeddings"].size()), [self.batch_size, self.projection_dim or self.hidden_size]
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids)
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_reader(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -160,15 +149,11 @@ class DPRModelTester:
         model = DPRReader(config=config)
         model.to(torch_device)
         model.eval()
-        start_logits, end_logits, relevance_logits, *_ = model(input_ids, attention_mask=input_mask,)
-        result = {
-            "relevance_logits": relevance_logits,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["relevance_logits"].size()), [self.batch_size])
+        result = model(input_ids, attention_mask=input_mask,)
+
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.relevance_logits.shape, (self.batch_size,))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

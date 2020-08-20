@@ -20,7 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -72,7 +72,7 @@ class FlaubertModelTester(object):
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
+        input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         input_lengths = None
         if self.use_input_lengths:
@@ -110,6 +110,7 @@ class FlaubertModelTester(object):
             initializer_range=self.initializer_range,
             summary_type=self.summary_type,
             use_proj=self.use_proj,
+            return_dict=True,
         )
 
         return (
@@ -123,9 +124,6 @@ class FlaubertModelTester(object):
             choice_labels,
             input_mask,
         )
-
-    def check_loss_output(self, result):
-        self.parent.assertListEqual(list(result["loss"].size()), [])
 
     def create_and_check_flaubert_model(
         self,
@@ -142,16 +140,10 @@ class FlaubertModelTester(object):
         model = FlaubertModel(config=config)
         model.to(torch_device)
         model.eval()
-        outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
-        outputs = model(input_ids, langs=token_type_ids)
-        outputs = model(input_ids)
-        sequence_output = outputs[0]
-        result = {
-            "sequence_output": sequence_output,
-        }
-        self.parent.assertListEqual(
-            list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
-        )
+        result = model(input_ids, lengths=input_lengths, langs=token_type_ids)
+        result = model(input_ids, langs=token_type_ids)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_flaubert_lm_head(
         self,
@@ -169,15 +161,9 @@ class FlaubertModelTester(object):
         model.to(torch_device)
         model.eval()
 
-        loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
-
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size])
+        result = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_flaubert_simple_qa(
         self,
@@ -195,19 +181,11 @@ class FlaubertModelTester(object):
         model.to(torch_device)
         model.eval()
 
-        outputs = model(input_ids)
+        result = model(input_ids)
 
-        outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
-        loss, start_logits, end_logits = outputs
-
-        result = {
-            "loss": loss,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
-        self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
-        self.check_loss_output(result)
+        result = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_flaubert_qa(
         self,
@@ -225,10 +203,9 @@ class FlaubertModelTester(object):
         model.to(torch_device)
         model.eval()
 
-        outputs = model(input_ids)
-        start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = outputs
+        result = model(input_ids)
 
-        outputs = model(
+        result_with_labels = model(
             input_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -237,7 +214,7 @@ class FlaubertModelTester(object):
             p_mask=input_mask,
         )
 
-        outputs = model(
+        result_with_labels = model(
             input_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -245,36 +222,22 @@ class FlaubertModelTester(object):
             is_impossible=is_impossible_labels,
         )
 
-        (total_loss,) = outputs
+        (total_loss,) = result_with_labels.to_tuple()
 
-        outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+        result_with_labels = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
 
-        (total_loss,) = outputs
+        (total_loss,) = result_with_labels.to_tuple()
 
-        result = {
-            "loss": total_loss,
-            "start_top_log_probs": start_top_log_probs,
-            "start_top_index": start_top_index,
-            "end_top_log_probs": end_top_log_probs,
-            "end_top_index": end_top_index,
-            "cls_logits": cls_logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(
-            list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
+        self.parent.assertEqual(result_with_labels.loss.shape, ())
+        self.parent.assertEqual(result.start_top_log_probs.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(result.start_top_index.shape, (self.batch_size, model.config.start_n_top))
+        self.parent.assertEqual(
+            result.end_top_log_probs.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
-        self.parent.assertListEqual(
-            list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
+        self.parent.assertEqual(
+            result.end_top_index.shape, (self.batch_size, model.config.start_n_top * model.config.end_n_top)
         )
-        self.parent.assertListEqual(
-            list(result["end_top_log_probs"].size()),
-            [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(
-            list(result["end_top_index"].size()), [self.batch_size, model.config.start_n_top * model.config.end_n_top],
-        )
-        self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
+        self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
 
     def create_and_check_flaubert_sequence_classif(
         self,
@@ -292,16 +255,11 @@ class FlaubertModelTester(object):
         model.to(torch_device)
         model.eval()
 
-        (logits,) = model(input_ids)
-        loss, logits = model(input_ids, labels=sequence_labels)
+        result = model(input_ids)
+        result = model(input_ids, labels=sequence_labels)
 
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-
-        self.parent.assertListEqual(list(result["loss"].size()), [])
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size])
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def create_and_check_flaubert_token_classif(
         self,
@@ -320,13 +278,8 @@ class FlaubertModelTester(object):
         model.to(torch_device)
         model.eval()
 
-        loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
-        self.check_loss_output(result)
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_flaubert_multiple_choice(
         self,
@@ -347,18 +300,13 @@ class FlaubertModelTester(object):
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        loss, logits = model(
+        result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        result = {
-            "loss": loss,
-            "logits": logits,
-        }
-        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
-        self.check_loss_output(result)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

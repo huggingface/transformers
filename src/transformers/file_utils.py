@@ -65,6 +65,14 @@ except (ImportError, AssertionError):
 
 
 try:
+    import nlp  # noqa: F401
+
+    _nlp_available = True
+
+except ImportError:
+    _nlp_available = False
+
+try:
     from torch.hub import _get_torch_home
 
     torch_cache_home = _get_torch_home()
@@ -144,6 +152,10 @@ def is_torch_tpu_available():
     return _torch_tpu_available
 
 
+def is_nlp_available():
+    return _nlp_available
+
+
 def is_psutil_available():
     return _psutil_available
 
@@ -190,11 +202,21 @@ def add_end_docstrings(*docstr):
     return docstring_decorator
 
 
-RETURN_INTRODUCTION = r"""
+PT_RETURN_INTRODUCTION = r"""
     Returns:
         :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`:
         A :class:`~{full_output_type}` (if ``return_dict=True`` is passed or when ``config.return_dict=True``) or a
         tuple of :obj:`torch.FloatTensor` comprising various elements depending on the configuration
+        (:class:`~transformers.{config_class}`) and inputs.
+
+"""
+
+
+TF_RETURN_INTRODUCTION = r"""
+    Returns:
+        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`:
+        A :class:`~{full_output_type}` (if ``return_dict=True`` is passed or when ``config.return_dict=True``) or a
+        tuple of :obj:`tf.Tensor` comprising various elements depending on the configuration
         (:class:`~transformers.{config_class}`) and inputs.
 
 """
@@ -249,7 +271,8 @@ def _prepare_output_docstrings(output_type, config_class):
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
-    intro = RETURN_INTRODUCTION.format(full_output_type=full_output_type, config_class=config_class)
+    intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
+    intro = intro.format(full_output_type=full_output_type, config_class=config_class)
     return intro + docstrings
 
 

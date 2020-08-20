@@ -1369,7 +1369,7 @@ class ChunkReformerFeedForward(nn.Module):
 
     def forward(self, attention_output):
         return apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.forward_chunk, attention_output,
+            self.forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output,
         )
 
     def forward_chunk(self, hidden_states):
@@ -1399,15 +1399,16 @@ class ReformerLayer(nn.Module):
         """
 
         # randomize seeds
-        if next(self.parameters()).device.type == "cuda":
+        # use cuda generator if available
+        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.attention_seed = torch.cuda.default_generators[device_idx].seed()
-            torch.cuda.manual_seed(self.attention_seed)
         else:
             # CPU
             self.attention_seed = int(torch.seed() % sys.maxsize)
-            torch.manual_seed(self.attention_seed)
+
+        torch.manual_seed(self.attention_seed)
 
     def _init_feed_forward_seed(self):
         """
@@ -1417,17 +1418,17 @@ class ReformerLayer(nn.Module):
             call and 1 forward call in backward
             to recalculate activations.
         """
-
         # randomize seeds
-        if next(self.parameters()).device.type == "cuda":
+        # use cuda generator if available
+        if hasattr(torch.cuda, "default_generators") and len(torch.cuda.default_generators) > 0:
             # GPU
             device_idx = torch.cuda.current_device()
             self.feed_forward_seed = torch.cuda.default_generators[device_idx].seed()
-            torch.cuda.manual_seed(self.feed_forward_seed)
         else:
             # CPU
             self.feed_forward_seed = int(torch.seed() % sys.maxsize)
-            torch.manual_seed(self.feed_forward_seed)
+
+        torch.manual_seed(self.feed_forward_seed)
 
     def forward(
         self,
@@ -1729,7 +1730,7 @@ class ReformerOnlyLMHead(nn.Module):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
-        return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
+        return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
 
     def forward_chunk(self, hidden_states):
         hidden_states = self.decoder(hidden_states)
@@ -2386,6 +2387,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
                 If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
                 If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.reformer(
             input_ids,
