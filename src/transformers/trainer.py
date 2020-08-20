@@ -20,17 +20,18 @@ from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_torch_tpu_available
-from .integrations import is_comet_available, is_optuna_available, is_tensorboard_available, is_wandb_available
+from .integrations import default_hp_search_backend, is_comet_available, is_optuna_available, is_ray_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     BestRun,
     EvalPrediction,
+    HPSearchBackend,
     PredictionOutput,
     TrainOutput,
     default_compute_objective,
-    default_hp_space_optuna,
+    default_hp_space,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -70,6 +71,9 @@ if is_comet_available():
 
 if is_optuna_available():
     import optuna
+
+if is_ray_available():
+    from ray import tune
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +262,7 @@ class Trainer:
         self.epoch = None
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
+        self.hp_search_backend = None
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -457,7 +462,7 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
-    def train(self, model_path: Optional[str] = None, trial: Optional["optuna.Trial"] = None):
+    def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
         """
         Main training entry point.
 
@@ -465,17 +470,29 @@ class Trainer:
             model_path (:obj:`str`, `optional`):
                 Local path to the model if the model to train has been instantiated from a local path. If present,
                 training will resume from the optimizer/scheduler states loaded here.
-            trial (:obj:`optuna.Trial`, `optional`):
-                The trial run for hyperparameter search.
+            trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
+                The trial run or the hyperparameter dictionary for hyperparameter search.
         """
+        # Model re-init
         if self.model_init is not None:
             model = self.model_init()
             self.model = model.to(self.args.device)
-        if trial is not None:
-            config = self.hp_space(trial)
+
+        # HP search specific code
+        if self.hp_search_backend is not None and trial is not None:
+            config = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
             for key, value in config.items():
+                if not hasattr(self.args, key):
+                    logger.warn(f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`.")
+                old_attr = getattr(self.args, key, None)
+                # Casting value to the proper type
+                if old_attr is not None:
+                    value = type(old_attr)(value)
                 setattr(self.args, key, value)
-            logger.info("Trial:", trial.params)
+            if self.hp_search_backend == HPSearchBackend.OPTUNA:
+                logger.info("Trial:", trial.params)
+
+        # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
@@ -635,11 +652,14 @@ class Trainer:
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                         metrics = self.evaluate()
-                        if is_optuna_available() and trial is not None:
+                        if self.hp_search_backend is not None and trial is not None:
                             self.objective = self.compute_objective(metrics)
-                            trial.report(self.objective, epoch)
-                            if trial.should_prune():
-                                raise optuna.TrialPruned()
+                            if self.hp_search_backend == HPSearchBackend.OPTUNA:
+                                trial.report(self.objective, epoch)
+                                if trial.should_prune():
+                                    raise optuna.TrialPruned()
+                            elif self.hp_search_backend == HPSearchBackend.RAY:
+                                tune.report(objective=self.objective, **metrics)
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -652,7 +672,8 @@ class Trainer:
                             assert model is self.model, f"Model {model} should be a reference to self.model"
                         # Save model checkpoint
                         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
-                        if trial is not None:
+                        if self.hp_search_backend == HPSearchBackend.OPTUNA is not None and trial is not None:
+                            # TODO, find id from config in Ray
                             checkpoint_folder += f"-run-{trial.number}"
                         output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
@@ -702,13 +723,13 @@ class Trainer:
         timeout: int = 1800,
         n_jobs: int = 1,
         direction: str = "minimize",
+        backend: Optional[Union["str", HPSearchBackend]] = None,
         **kwargs
     ) -> BestRun:
         """
-        Launch an hyperparameter search using ``optuna``. The optimized quantity is determined by the
-        method, which is the evaluation loss when no metric is
-        provided, the sum of all metrics otherwise (you can change that behavior by subclassing and overriding this
-        method).
+        Launch an hyperparameter search using ``optuna`` or ``ray``. The optimized quantity is determined by the
+        method, which is the evaluation loss when no metric is provided, the sum of all metrics otherwise (you can
+        change that behavior by subclassing and overriding this method).
 
         Args:
             hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
@@ -727,15 +748,31 @@ class Trainer:
                 Whether to optimize greater or lower objects. Can be :obj:`"minimize"` or :obj:`"maximize"`, you should
                 pick :obj:`"minimize"` when optimizing the validation loss, :obj:`"maximize"` when optimizing one or
                 several metrics.
+            backend(:obj:`str` or :class:`~transformers.training_utils.HPSearchBackend`, `optional`):
+                The backend to use for hyperparameter search. Will default to optuna or ray, depending on which one is
+                installed. If both are installed, will default to optuna.
             kwargs:
-                Additional keyword arguments passed along to :obj:`optuna.create_study`.
+                Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`.
 
         Returns:
             :class:`transformers.trainer_utils.BestRun`: All the informations about the best run.
         """
-        assert is_optuna_available(), "optuna is required to do hyperparameter search, use `pip install optuna`."
+        if backend is None:
+            backend = default_hp_search_backend()
+            if backend is None:
+                raise RuntimeError(
+                    "At least one of optuna or ray should be installed. "
+                    "To install optuna run `pip install optuna`."
+                    "To install ray run `pip install ray[tune]`."
+                ) 
+        backend = HPSearchBackend(backend)
+        if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
+            raise RuntimeError(" You picked the optuna backend, but optuna is not installed. Use `pip install optuna`.")
+        if backend == HPSearchBackend.RAY and not is_ray_available():
+            raise RuntimeError(" You picked the ray backend, but ray is not installed. Use `pip install ray[tune]`.")
+        self.hp_search_backend = backend
 
-        self.hp_space = default_hp_space_optuna if hp_space is None else hp_space
+        self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
         def _objective(self, trial):
@@ -750,10 +787,14 @@ class Trainer:
                 self.objective = self.compute_objective(metrics)
             return self.objective
 
-        study = optuna.create_study(direction=direction, **kwargs)
-        study.optimize(lambda t: _objective(self, t), n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
-        best_trial = study.best_trial
-        return BestRun(best_trial.number, best_trial.value, best_trial.params)
+        if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            study = optuna.create_study(direction=direction, **kwargs)
+            study.optimize(lambda t: _objective(self, t), n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
+            best_trial = study.best_trial
+            return BestRun(best_trial.number, best_trial.value, best_trial.params)
+        elif self.hp_search_backend == HPSearchBackend.RAY:
+            analysis = tune.run(lambda t: _objective(self, t), config=self.hp_space(None), num_samples=n_jobs, **kwargs)
+            return analysis
 
     def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         """
