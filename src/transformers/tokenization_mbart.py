@@ -55,6 +55,13 @@ FAIRSEQ_LANGUAGE_CODES = [
     "zh_CN",
 ]
 
+def shift_tokens_right(input_ids, pad_token_id):
+    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
+    prev_output_tokens = input_ids.clone()
+    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
+    prev_output_tokens[:, 1:] = input_ids[:, :-1]
+    return prev_output_tokens
 
 class MBartTokenizer(XLMRobertaTokenizer):
     """
@@ -253,7 +260,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if max_target_length is None:
             max_target_length = max_length
         self.set_tgt_lang_special_tokens(tgt_lang)
-        decoder_inputs: BatchEncoding = self(
+
+        labels = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
@@ -261,10 +269,9 @@ class MBartTokenizer(XLMRobertaTokenizer):
             max_length=max_target_length,
             truncation=True,
             **kwargs,
-        )
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
-
+        )['input_ids']
+        model_inputs['decoder_input_ids'] = shift_tokens_right(labels, self.pad_token_id)
+        model_inputs['labels'] = labels
         self.set_src_lang_special_tokens(src_lang)  # sets to src_lang
         return model_inputs
 
@@ -277,5 +284,5 @@ class MBartTokenizer(XLMRobertaTokenizer):
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. Prefix [tgt_lang_code], suffix =[eos]."""
         self.cur_lang_code = self.lang_code_to_id[lang]
-        self.prefix_tokens = [self.cur_lang_code]
-        self.suffix_tokens = [self.eos_token_id]
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
