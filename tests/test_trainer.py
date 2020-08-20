@@ -121,8 +121,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         # Check passing num_train_epochs works (and a float version too):
         trainer = get_regression_trainer(learning_rate=0.1, num_train_epochs=1.5)
         train_output = trainer.train()
-        # TODO: should it be int(1.5 * 64 / batch_size) instead?
-        self.assertEqual(train_output.global_step, 64 / self.batch_size)
+        self.assertEqual(train_output.global_step, int(1.5 * 64 / self.batch_size))
 
         # If we pass a max_steps, num_train_epochs is ignored
         trainer = get_regression_trainer(learning_rate=0.1, max_steps=10)

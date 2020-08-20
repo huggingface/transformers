@@ -449,6 +449,7 @@ class Trainer:
         else:
             t_total = int(len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.num_train_epochs)
             num_train_epochs = self.args.num_train_epochs
+            self.args.max_steps = t_total
 
         self.create_optimizer_and_scheduler(num_training_steps=t_total)
 
@@ -530,7 +531,7 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_process_zero()
+            epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=not self.is_local_process_zero()
         )
         for epoch in train_iterator:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):

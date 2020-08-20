@@ -68,8 +68,9 @@ class TrainingArguments:
             Epsilon for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
-        num_train_epochs(:obj:`int`, `optional`, defaults to 3):
-            Total number of training epochs to perform.
+        num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
+            Total number of training epochs to perform (if not an integer, will perform the decimal part percents of
+            the last epoch before stopping training).
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
@@ -172,7 +173,7 @@ class TrainingArguments:
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
-    num_train_epochs: int = field(default=3, metadata={"help": "Total number of training epochs to perform."})
+    num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
     max_steps: int = field(
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
