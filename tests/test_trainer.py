@@ -26,15 +26,14 @@ class RegressionDataset:
     def __init__(self, a=2, b=3, length=64, seed=42):
         np.random.seed(seed)
         self.length = length
-        self.x = np.random.normal(size=(length,))
+        self.x = np.random.normal(size=(length,)).astype(np.float32)
         self.y = a * self.x + b + np.random.normal(scale=0.1, size=(length,))
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, i):
-        # Workaround the fact the default data collator wants tensors of ints except for the labels.
-        return {"input_ids": i, "label": self.y[i]}
+        return {"input_x": self.x[i], "label": self.y[i]}
 
 
 class AlmostAccuracy:
@@ -61,19 +60,13 @@ if is_torch_available():
             return iter(self.parse_file())
 
     class RegressionModel(torch.nn.Module):
-        def __init__(self, a=0, b=0, x_train=None, x_eval=None):
+        def __init__(self, a=0, b=0):
             super().__init__()
             self.a = torch.nn.Parameter(torch.tensor(a).float())
             self.b = torch.nn.Parameter(torch.tensor(b).float())
-            # Hack to deal with the fact our inputs are floats and the data_collator only deals with ints.
-            # It has the advantage of indirectly checking the model is in the right mode (training/eval)
-            self.x_train = x_train
-            self.x_eval = x_eval
 
-        def forward(self, input_ids=None, labels=None):
-            x = self.x_train if self.training else self.x_eval
-            x = x[input_ids] if x is not None else input_ids
-            y = x * self.a + self.b
+        def forward(self, input_x=None, labels=None):
+            y = input_x * self.a + self.b
             if labels is None:
                 return (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
@@ -82,9 +75,7 @@ if is_torch_available():
     def get_regression_trainer(a=0, b=0, train_len=64, eval_len=64, **kwargs):
         train_dataset = RegressionDataset(length=train_len)
         eval_dataset = RegressionDataset(length=eval_len)
-        model = RegressionModel(
-            a=a, b=b, x_train=torch.tensor(train_dataset.x).float(), x_eval=torch.tensor(eval_dataset.x).float(),
-        )
+        model = RegressionModel(a, b)
         compute_metrics = kwargs.pop("compute_metrics", None)
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
