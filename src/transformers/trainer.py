@@ -20,7 +20,14 @@ from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
 from .file_utils import is_torch_tpu_available
-from .integrations import default_hp_search_backend, is_comet_available, is_optuna_available, is_ray_available, is_tensorboard_available, is_wandb_available
+from .integrations import (
+    default_hp_search_backend,
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import (
@@ -483,7 +490,9 @@ class Trainer:
             config = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
             for key, value in config.items():
                 if not hasattr(self.args, key):
-                    logger.warn(f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`.")
+                    logger.warn(
+                        f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
+                    )
                 old_attr = getattr(self.args, key, None)
                 # Casting value to the proper type
                 if old_attr is not None:
@@ -764,10 +773,12 @@ class Trainer:
                     "At least one of optuna or ray should be installed. "
                     "To install optuna run `pip install optuna`."
                     "To install ray run `pip install ray[tune]`."
-                ) 
+                )
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
-            raise RuntimeError(" You picked the optuna backend, but optuna is not installed. Use `pip install optuna`.")
+            raise RuntimeError(
+                " You picked the optuna backend, but optuna is not installed. Use `pip install optuna`."
+            )
         if backend == HPSearchBackend.RAY and not is_ray_available():
             raise RuntimeError(" You picked the ray backend, but ray is not installed. Use `pip install ray[tune]`.")
         self.hp_search_backend = backend
@@ -793,7 +804,9 @@ class Trainer:
             best_trial = study.best_trial
             return BestRun(best_trial.number, best_trial.value, best_trial.params)
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            analysis = tune.run(lambda t: _objective(self, t), config=self.hp_space(None), num_samples=n_jobs, **kwargs)
+            analysis = tune.run(
+                lambda t: _objective(self, t), config=self.hp_space(None), num_samples=n_jobs, **kwargs
+            )
             return analysis
 
     def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
