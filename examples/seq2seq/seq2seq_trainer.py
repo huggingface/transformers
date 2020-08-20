@@ -72,9 +72,6 @@ class Seq2SeqTrainer(Trainer):
             logits = outputs[0]
             loss = self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
 
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
-
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
@@ -156,8 +153,6 @@ class Seq2SeqTrainer(Trainer):
                 else:
                     loss = None
                     logits = outputs[0]
-                if self.args.past_index >= 0:
-                    self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
 
         if prediction_loss_only:
             return (loss, None, None)
