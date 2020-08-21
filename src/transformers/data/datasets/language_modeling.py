@@ -101,7 +101,7 @@ class LineByLineTextDataset(Dataset):
         return torch.tensor(self.examples[i], dtype=torch.long)
 
 
-class TextDatasetForNSP(Dataset):
+class TextDatasetForNextSentencePrediction(Dataset):
     """
     This will be superseded by a framework-agnostic approach
     soon.
@@ -166,13 +166,6 @@ class TextDatasetForNSP(Dataset):
                         tokens = tokenizer.convert_tokens_to_ids(tokens)
                         if tokens:
                             self.examples[-1].append(tokens)
-
-                    # print(self.documents)
-                    # print(len(self.documents))
-
-                    # for doc_index, doc in enumerate(self.documents):
-                    #     examples_in_doc = self.create_examples_from_document(doc, doc_index)
-                    #     self.examples.extend(examples_in_doc)
 
                 start = time.time()
                 with open(cached_features_file, "wb") as handle:

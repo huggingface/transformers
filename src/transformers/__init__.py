@@ -442,14 +442,14 @@ if is_torch_available():
         DataCollator,
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
-        DataCollatorForNSP,
+        DataCollatorForNextSentencePrediction,
         DataCollatorWithPadding,
     )
     from .data.datasets import (
         GlueDataset,
         TextDataset,
         LineByLineTextDataset,
-        TextDatasetForNSP,
+        TextDatasetForNextSentencePrediction,
         GlueDataTrainingArguments,
         SquadDataset,
         SquadDataTrainingArguments,
