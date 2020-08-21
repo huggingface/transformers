@@ -1180,8 +1180,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         super().__init__(config)
 
         self.bert = BertModel(config)
-        self.mlm_cls = BertOnlyMLMHead(config)
-        self.nsp_cls = BertOnlyNSPHead(config)
+        self.cls = BertOnlyNSPHead(config)
 
         self.init_weights()
 
@@ -1195,7 +1194,6 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
         next_sentence_label=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1240,38 +1238,21 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # For Masked LM task.
-        sequence_output = outputs[0]
-        prediction_scores = self.mlm_cls(sequence_output)
-
-        masked_lm_loss = None
-        if masked_lm_labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
-
-        # For NSP task.
         pooled_output = outputs[1]
-        seq_relationship_scores = self.nsp_cls(pooled_output)
+
+        seq_relationship_scores = self.cls(pooled_output)
 
         next_sentence_loss = None
         if next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
             next_sentence_loss = loss_fct(seq_relationship_scores.view(-1, 2), next_sentence_label.view(-1))
 
-        loss = None
-        if masked_lm_loss is not None and next_sentence_loss is not None:
-            loss = masked_lm_loss + next_sentence_loss
-        elif next_sentence_loss is not None:
-            loss = next_sentence_loss
-
         if not return_dict:
-
-            output = (prediction_scores,) + (seq_relationship_scores,) + outputs[2:]
-            return ((next_sentence_loss,) + output) if loss is not None else output
+            output = (seq_relationship_scores,) + outputs[2:]
+            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
         return NextSentencePredictorOutput(
-            loss=loss,
-            mlm_logits=prediction_scores,
+            loss=next_sentence_loss,
             logits=seq_relationship_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
