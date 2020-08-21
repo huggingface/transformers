@@ -177,7 +177,7 @@ class TFGenerationMixin:
 
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
-            input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
+            input_context = 'My cute dog'
             bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
