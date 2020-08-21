@@ -478,6 +478,31 @@ pretraining tasks, a composition of the following transformations are applied:
 
 The library provides a version of this model for conditional generation and sequence classification.
 
+Pegasus
+----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=pegasus">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-pegasus-blueviolet">
+   </a>
+   <a href="model_doc/pegasus.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-pegasus-blueviolet">
+   </a>
+
+`PEGASUS: Pre-training with Extracted Gap-sentences forAbstractive Summarization 
+<https://arxiv.org/pdf/1912.08777.pdf>`_, Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
+
+Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training objective, called Gap Sentence Generation (GSG).
+
+  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like in BERT)
+  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a causal mask to hide the future words like a regular auto-regressive transformer decoder.
+
+In contrast to BART, Pegasus' pretraining task is intentionally similar to summarization: important sentences are masked and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
+
+The library provides a version of this model for conditional generation, which should be used for summarization.
+
+
 MarianMT
 ----------------------------------------------
 
