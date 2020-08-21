@@ -571,7 +571,11 @@ The model architecture and pre-training objective is same as BART, but MBart is 
 and is intended for supervised and unsupervised machine translation. MBart is one of the first methods 
 for pre-training a complete sequence-to-sequence model by denoising full texts in multiple languages,
 
-The library provides a version of this model for conditional generation, which should be used for translation.
+The library provides a version of this model for conditional generation.
+
+The `mbart-large-en-ro checkpoint <https://huggingface.co/facebook/mbart-large-en-ro>`_ can be used for english -> romanian translation.
+
+The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ checkpoint can be finetuned for other translation and summarization tasks, using code in ```examples/seq2seq/``` , but is not very useful without finetuning.
 
 .. _multimodal-models:
 
