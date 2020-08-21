@@ -331,6 +331,7 @@ if is_torch_available():
         CamembertForMultipleChoice,
         CamembertForTokenClassification,
         CamembertForQuestionAnswering,
+        CamembertForCausalLM,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_encoder_decoder import EncoderDecoderModel

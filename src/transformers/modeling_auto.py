@@ -73,6 +73,7 @@ from .modeling_bert import (
     BertModel,
 )
 from .modeling_camembert import (
+    CamembertForCausalLM,
     CamembertForMaskedLM,
     CamembertForMultipleChoice,
     CamembertForQuestionAnswering,
@@ -253,6 +254,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        (CamembertConfig, CamembertForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
