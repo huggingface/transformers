@@ -500,7 +500,8 @@ Sequence-to-sequence model with the same encoder-decoder model architecture as B
 
 In contrast to BART, Pegasus' pretraining task is intentionally similar to summarization: important sentences are masked and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
 
-For this model, the library provides a version of this model for conditional generation, which should be used for summarization.
+The library provides a version of this model for conditional generation, which should be used for summarization.
+
 
 MarianMT
 ----------------------------------------------
