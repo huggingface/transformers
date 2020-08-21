@@ -1271,7 +1271,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         return NextSentencePredictorOutput(
             loss=loss,
             mlm_logits=prediction_scores,
-            nsp_logits=seq_relationship_scores,
+            logits=seq_relationship_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
