@@ -807,7 +807,7 @@ class Trainer:
             # search.
             _tb_writer = self.tb_writer
             self.tb_writer = None
-            if resources_pre_trial not in kwargs and self.args.n_gpu > 0:
+            if "resources_per_trial" not in kwargs and self.args.n_gpu > 0:
                 kwargs["resources_per_trial"] = {"gpu": self.args.n_gpu}
             analysis = tune.run(_objective, config=self.hp_space(None), num_samples=n_trials, **kwargs)
             best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
