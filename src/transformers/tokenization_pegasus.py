@@ -133,8 +133,8 @@ class PegasusTokenizer(ReformerTokenizer):
             return model_inputs
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
-        labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)['input_ids']
-        model_inputs['labels'] = labels
-        #for k, v in decoder_inputs.items():
+        labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
+        model_inputs["labels"] = labels
+        # for k, v in decoder_inputs.items():
         #    model_inputs[f"decoder_{k}"] = v
         return model_inputs

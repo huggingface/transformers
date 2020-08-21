@@ -5,7 +5,6 @@ from transformers.file_utils import cached_property
 
 
 class TestTokenizationBart(unittest.TestCase):
-
     @cached_property
     def default_tokenizer(self):
         return BartTokenizer.from_pretrained("facebook/bart-large")
@@ -58,14 +57,12 @@ class TestTokenizationBart(unittest.TestCase):
                 src_text, tgt_texts=tgt_text, max_target_length=32, padding="max_length", return_tensors="pt"
             )
             self.assertEqual(32, batch["labels"].shape[1])
-            
 
             # test None max_target_length
             batch = tokenizer.prepare_seq2seq_batch(
                 src_text, tgt_texts=tgt_text, max_length=32, padding="max_length", return_tensors="pt"
             )
             self.assertEqual(32, batch["labels"].shape[1])
-
 
     def test_outputs_not_longer_than_maxlen(self):
         tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]

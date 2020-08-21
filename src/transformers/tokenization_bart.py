@@ -142,8 +142,8 @@ class BartTokenizer(RobertaTokenizer):
             max_length=max_target_length,
             truncation=truncation,
             **kwargs,
-        )['input_ids']
-        model_inputs['labels'] = labels
+        )["input_ids"]
+        model_inputs["labels"] = labels
         return model_inputs
 
 
@@ -252,6 +252,6 @@ class BartTokenizerFast(RobertaTokenizerFast):
             max_length=max_target_length,
             truncation=truncation,
             **kwargs,
-        )['input_ids']
-        model_inputs['labels'] = labels
+        )["input_ids"]
+        model_inputs["labels"] = labels
         return model_inputs
