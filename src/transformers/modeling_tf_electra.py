@@ -134,8 +134,8 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-        position_embeddings = self.position_embeddings(position_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        position_embeddings = tf.cast(self.position_embeddings(position_ids), inputs_embeds.dtype)
+        token_type_embeddings = tf.cast(self.token_type_embeddings(token_type_ids), inputs_embeds.dtype)
 
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
@@ -194,7 +194,7 @@ class TFElectraPreTrainedModel(TFBertPreTrainedModel):
     config_class = ElectraConfig
     base_model_prefix = "electra"
 
-    def get_extended_attention_mask(self, attention_mask, input_shape):
+    def get_extended_attention_mask(self, attention_mask, input_shape, dtype):
         if attention_mask is None:
             attention_mask = tf.fill(input_shape, 1)
 
@@ -211,7 +211,7 @@ class TFElectraPreTrainedModel(TFBertPreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
 
-        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         return extended_attention_mask
@@ -314,10 +314,10 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = tf.fill(input_shape, 0)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
-        head_mask = self.get_head_mask(head_mask)
-
         hidden_states = self.embeddings(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
+
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, hidden_states.dtype)
+        head_mask = self.get_head_mask(head_mask)
 
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states, training=training)
