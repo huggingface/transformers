@@ -736,30 +736,27 @@ class Trainer:
         **kwargs
     ) -> BestRun:
         """
-        Launch an hyperparameter search using ``optuna`` or ``ray``. The optimized quantity is determined by the
+        Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by the
         method, which is the evaluation loss when no metric is provided, the sum of all metrics otherwise (you can
         change that behavior by subclassing and overriding this method).
 
         Args:
             hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
                 A function that defines the hyperparameter search space. Will default to
-                :func:`~transformers.trainer_utils.default_hyperparameter_space_optuna`.
+                :func:`~transformers.trainer_utils.default_hp_space_optuna` or
+                :func:`~transformers.trainer_utils.default_hp_space_ray` depending on your backend.
             compute_objective (:obj:`Callable[[Dict[str, float]], float]`, `optional`):
                 A function computing the objective to minimize or maximize from the metrics returned by the
                 :obj:`evaluate` method. Will default to :func:`~transformers.trainer_utils.default_compute_objective`.
             n_trial (:obj:`int`, `optional`, defaults to 100):
                 The number of trial runs to test.
-            timeout (:obj:`int`, `optional`, defaults to 1800):
-                The number of seconds before abandoning a trial.
-            n_jobs (:obj:`int`, `optional`, defaults to 1):
-                The number of jobs to launch in parallel.
             direction(:obj:`str`, `optional`, defaults to :obj:`"minimize"`):
                 Whether to optimize greater or lower objects. Can be :obj:`"minimize"` or :obj:`"maximize"`, you should
                 pick :obj:`"minimize"` when optimizing the validation loss, :obj:`"maximize"` when optimizing one or
                 several metrics.
             backend(:obj:`str` or :class:`~transformers.training_utils.HPSearchBackend`, `optional`):
-                The backend to use for hyperparameter search. Will default to optuna or ray, depending on which one is
-                installed. If both are installed, will default to optuna.
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune, depending on which
+                one is installed. If both are installed, will default to optuna.
             kwargs:
                 Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`.
 
@@ -776,17 +773,17 @@ class Trainer:
                 )
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
-            raise RuntimeError(
-                " You picked the optuna backend, but optuna is not installed. Use `pip install optuna`."
-            )
+            raise RuntimeError(" You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
         if backend == HPSearchBackend.RAY and not is_ray_available():
-            raise RuntimeError(" You picked the ray backend, but ray is not installed. Use `pip install ray[tune]`.")
+            raise RuntimeError(
+                " You picked the Ray Tune backend, but it is not installed. Use `pip install ray[tune]`."
+            )
         self.hp_search_backend = backend
 
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        def _objective(self, trial):
+        def _objective(trial):
             # To make sure optimizer and lr_scheduler are reset with the new choices of HPs
             self.optimizer = None
             self.lr_scheduler = None
@@ -799,15 +796,24 @@ class Trainer:
             return self.objective
 
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            timeout = kwargs.pop("timeout", None)
+            n_jobs = kwargs.pop("n_jobs", 1)
             study = optuna.create_study(direction=direction, **kwargs)
-            study.optimize(lambda t: _objective(self, t), n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
+            study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
             best_trial = study.best_trial
-            return BestRun(best_trial.number, best_trial.value, best_trial.params)
+            best_run = BestRun(str(best_trial.number), best_trial.value, best_trial.params)
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            analysis = tune.run(
-                lambda t: _objective(self, t), config=self.hp_space(None), num_samples=n_jobs, **kwargs
-            )
-            return analysis
+            # The TensorBoard writer does not pickle so we have to remove it (if it exists) while doing the ray hp
+            # search.
+            _tb_writer = self.tb_writer
+            self.tb_writer = None
+            analysis = tune.run(_objective, config=self.hp_space(None), num_samples=n_trials, **kwargs)
+            best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
+            best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
+            self.tb_writer = _tb_writer
+
+        self.hp_search_backend = None
+        return best_run
 
     def log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         """

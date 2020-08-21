@@ -62,7 +62,7 @@ class BestRun(NamedTuple):
     The best run found by an hyperparameter search (see :class:`~transformers.Trainer.hyperparameter_search`).
 
     Parameters:
-        run_id (:obj:`int`):
+        run_id (:obj:`str`):
             The id of the best run (if models were saved, the corresponding checkpoint will be in the folder ending
             with run-{run_id}).
         objective (:obj:`float`):
@@ -71,7 +71,7 @@ class BestRun(NamedTuple):
             The hyperparameters picked to get this run.
     """
 
-    run_id: int
+    run_id: str
     objective: float
     hyperparameters: Dict[str, Any]
 
