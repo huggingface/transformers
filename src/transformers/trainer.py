@@ -681,9 +681,9 @@ class Trainer:
                             assert model is self.model, f"Model {model} should be a reference to self.model"
                         # Save model checkpoint
                         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
-                        if self.hp_search_backend == HPSearchBackend.OPTUNA is not None and trial is not None:
-                            # TODO, find id from config in Ray
-                            checkpoint_folder += f"-run-{trial.number}"
+                        if self.hp_search_backend is not None and trial is not None:
+                            run_id = trial.number if self.hp_search_backend.OPTUNA else tune.get_trial_id()
+                            checkpoint_folder += f"-run-{run_id}"
                         output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
                         self.save_model(output_dir)
