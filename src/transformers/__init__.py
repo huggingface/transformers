@@ -298,8 +298,7 @@ if is_torch_available():
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
-        BartForQuestionAnswering,
-        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BartForQuestionAnswering
     )
     from .modeling_mbart import MBartForConditionalGeneration
     from .modeling_marian import MarianMTModel

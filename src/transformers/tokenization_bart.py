@@ -33,6 +33,7 @@ _all_bart_models = [
     "facebook/bart-large-cnn",
     "facebook/bart-large-xsum",
     "yjernite/bart_eli5",
+    # This is not exhaustive: see https://huggingface.co/models?filter=bart
 ]
 
 
@@ -133,7 +134,7 @@ class BartTokenizer(RobertaTokenizer):
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
-        decoder_inputs: BatchEncoding = self(
+        labels = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
@@ -141,10 +142,8 @@ class BartTokenizer(RobertaTokenizer):
             max_length=max_target_length,
             truncation=truncation,
             **kwargs,
-        )
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
-
+        )['input_ids']
+        model_inputs['labels'] = labels
         return model_inputs
 
 
@@ -245,7 +244,7 @@ class BartTokenizerFast(RobertaTokenizerFast):
         # Process tgt_texts
         if max_target_length is None:
             max_target_length = max_length
-        decoder_inputs: BatchEncoding = self(
+        labels = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
@@ -253,8 +252,6 @@ class BartTokenizerFast(RobertaTokenizerFast):
             max_length=max_target_length,
             truncation=truncation,
             **kwargs,
-        )
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
-
+        )['input_ids']
+        model_inputs['labels'] = labels
         return model_inputs
