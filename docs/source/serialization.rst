@@ -52,15 +52,17 @@ Below are some of the operators which can be enabled to speed up inference throu
 * Skip connection LayerNormalization fusing
 * FastGeLU approximation
 
+Some of the optimizations performed by ONNX runtime can be hardware specific and thus lead to different performances
+if used on another machine with a different hardware configuration than the one used for exporting the model.
+For this reason, when using ``convert_graph_to_onnx.py`` optimizations are not enabled,
+ensuring the model can be easily exported to various hardware.
+Optimizations can then be enabled when loading the model through ONNX runtime for inference.
 
-Fortunately, you can let ONNXRuntime find all the possible optimized operators for you. Simply add ``--optimize``
-when exporting your model through ``convert_graph_to_onnx.py``.
 
-Example:
-
-.. code-block:: bash
-
-    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --optimize bert-base-cased.onnx
+.. note::
+    When quantization is enabled (see below), ``convert_graph_to_onnx.py`` script will enable optimizations on the model
+    because quantization would modify the underlying graph making it impossible for ONNX runtime to do the optimizations
+    afterwards.
 
 .. note::
     For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
@@ -112,8 +114,6 @@ Example of quantized BERT model export:
     above command will contain the original ONNX model storing `float32` weights.
     The second one, with ``-quantized`` suffix, will hold the quantized parameters.
 
-.. note::
-    The quantization export gives the best performances when used in combination with ``--optimize``.
 
 TorchScript
 =======================================
