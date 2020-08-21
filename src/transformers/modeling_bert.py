@@ -1265,7 +1265,8 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             loss = next_sentence_loss
 
         if not return_dict:
-            output = ((prediction_scores, seq_relationship_scores),) + outputs[2:]
+
+            output = (prediction_scores,) + (seq_relationship_scores,) + outputs[2:]
             return ((next_sentence_loss,) + output) if loss is not None else output
 
         return NextSentencePredictorOutput(
