@@ -1,11 +1,11 @@
 ---
 language:
-- hi
+- ne
 - en
 ---
 
-# codeswitch-hineng-lid-lince
-This is a pretrained model for **language identification** of `hindi-english` code-mixed data used from [LinCE](https://ritual.uh.edu/lince/home)
+# codeswitch-nepeng-lid-lince
+This is a pretrained model for **language identification** of `nepali-english` code-mixed data used from [LinCE](https://ritual.uh.edu/lince/home).
 
 This model is trained for this below repository. 
 
@@ -25,12 +25,12 @@ pip install codeswitch
 
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 
-tokenizer = AutoTokenizer.from_pretrained("sagorsarker/codeswitch-hineng-lid-lince")
+tokenizer = AutoTokenizer.from_pretrained("sagorsarker/codeswitch-nepeng-lid-lince")
 
-model = AutoModelForTokenClassification.from_pretrained("sagorsarker/codeswitch-hineng-lid-lince")
+model = AutoModelForTokenClassification.from_pretrained("sagorsarker/codeswitch-nepeng-lid-lince")
 lid_model = pipeline('ner', model=model, tokenizer=tokenizer)
 
-lid_model("put any hindi english code-mixed sentence")
+lid_model("put any nepali english code-mixed sentence")
 
 ```
 
@@ -38,9 +38,10 @@ lid_model("put any hindi english code-mixed sentence")
 
 ```py
 from codeswitch.codeswitch import LanguageIdentification
-lid = LanguageIdentification('hin-eng') 
+lid = LanguageIdentification('nep-eng') 
 text = "" # your code-mixed sentence 
 result = lid.identify(text)
 print(result)
+
 ```
 
