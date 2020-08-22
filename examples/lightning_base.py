@@ -66,6 +66,7 @@ class BaseTransformer(pl.LightningModule):
         config=None,
         tokenizer=None,
         model=None,
+        from_scratch=False,
         **config_kwargs
     ):
         """Initialize a model, tokenizer and config."""
@@ -103,12 +104,15 @@ class BaseTransformer(pl.LightningModule):
             self.tokenizer: PreTrainedTokenizer = tokenizer
         self.model_type = MODEL_MODES[mode]
         if model is None:
-            self.model = self.model_type.from_pretrained(
-                self.hparams.model_name_or_path,
-                from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
-                config=self.config,
-                cache_dir=cache_dir,
-            )
+            if from_scratch:
+                self.model = self.model_type(config)
+            else:
+                self.model = self.model_type.from_pretrained(
+                    self.hparams.model_name_or_path,
+                    from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
+                    config=self.config,
+                    cache_dir=cache_dir,
+                )
         else:
             self.model = model
 
@@ -247,6 +251,8 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--num_train_epochs", dest="max_epochs", default=3, type=int)
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
+        parser.add_argument('--from_scratch', action='store_true', default=False)
+
 
 
 class LoggingCallback(pl.Callback):

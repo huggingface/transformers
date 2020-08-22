@@ -140,7 +140,7 @@ class SummarizationModule(BaseTransformer):
 
         if "labels" in batch:
             lm_labels = batch["labels"]
-            decoder_input_ids = shift_tokens_right(lm_labels)
+            decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
         elif isinstance(self.model, T5ForConditionalGeneration):
             decoder_input_ids = self.model._shift_right(target_ids)
             lm_labels = target_ids
