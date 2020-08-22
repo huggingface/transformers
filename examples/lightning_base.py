@@ -66,7 +66,7 @@ class BaseTransformer(pl.LightningModule):
         config=None,
         tokenizer=None,
         model=None,
-        from_scratch=False,
+
         **config_kwargs
     ):
         """Initialize a model, tokenizer and config."""
@@ -104,8 +104,9 @@ class BaseTransformer(pl.LightningModule):
             self.tokenizer: PreTrainedTokenizer = tokenizer
         self.model_type = MODEL_MODES[mode]
         if model is None:
-            if from_scratch:
-                self.model = self.model_type(config)
+            if hparams.from_scratch:
+                from transformers.modeling_marian import MarianMTModel
+                self.model = MarianMTModel(config)
             else:
                 self.model = self.model_type.from_pretrained(
                     self.hparams.model_name_or_path,
