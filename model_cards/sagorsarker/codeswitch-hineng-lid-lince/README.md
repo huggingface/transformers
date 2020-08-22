@@ -1,3 +1,9 @@
+---
+language:
+- hi
+- en
+---
+
 # codeswitch-hineng-lid-lince
 This is a pretrained model for **language identification** of `hindi-english` code-mixed data used from [LinCE](https://ritual.uh.edu/lince/home)
 
