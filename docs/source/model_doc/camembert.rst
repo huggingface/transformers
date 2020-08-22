@@ -49,6 +49,13 @@ CamembertModel
     :members:
 
 
+CamembertForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.CamembertForCausalLM
+    :members:
+
+
 CamembertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

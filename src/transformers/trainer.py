@@ -1,3 +1,4 @@
+import inspect
 import logging
 import math
 import os
@@ -19,7 +20,7 @@ from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, default_data_collator
-from .file_utils import is_torch_tpu_available
+from .file_utils import is_nlp_available, is_torch_tpu_available
 from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -41,6 +42,8 @@ else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
 
+if is_nlp_available():
+    import nlp
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
@@ -140,19 +143,19 @@ class Trainer:
         model (:class:`~transformers.PreTrainedModel`):
             The model to train, evaluate or use for predictions.
         args (:class:`~transformers.TrainingArguments`):
-            The arguments to tweak training.
+            The arguments to tweak for training.
         data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
-            The function to use to from a batch from a list of elements of :obj:`train_dataset` or
+            The function to use to form a batch from a list of elements of :obj:`train_dataset` or
             :obj:`eval_dataset`.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-            The dataset to use for training.
+            The dataset to use for training. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+            ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-            The dataset to use for evaluation.
+            The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+            ``model.forward()`` method are automatically removed.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
-            When performing evaluation and predictions, only returns the loss.
         tb_writer (:obj:`SummaryWriter`, `optional`):
             Object to write to TensorBoard.
         optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`):
@@ -228,10 +231,31 @@ class Trainer:
                 ),
                 FutureWarning,
             )
+
+        if is_nlp_available():
+            if isinstance(train_dataset, nlp.Dataset):
+                self._remove_unused_columns(self.train_dataset, description="training")
+            if isinstance(eval_dataset, nlp.Dataset):
+                self._remove_unused_columns(self.eval_dataset, description="evaluation")
+
         self.global_step = None
         self.epoch = None
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
+
+    def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
+        # Inspect model forward signature to keep only the arguments it accepts.
+        signature = inspect.signature(self.model.forward)
+        signature_columns = list(signature.parameters.keys())
+        # Labels may be named label or label_ids, the default data collator handles that.
+        signature_columns += ["label", "label_ids"]
+        columns = [k for k in signature_columns if k in dataset.column_names]
+        ignored_columns = list(set(dataset.column_names) - set(signature_columns))
+        dset_description = "" if description is None else f"in the {description} set "
+        logger.info(
+            f"The following columns {dset_description}don't have a corresponding argument in `{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
+        )
+        dataset.set_format(columns=columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
@@ -287,11 +311,13 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                If provided, will override :obj:`self.eval_dataset`.
+                If provided, will override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`, columns not
+                accepted by the ``model.forward()`` method are automatically removed.
         """
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-
+        elif eval_dataset is not None and is_nlp_available() and isinstance(eval_dataset, nlp.Dataset):
+            self._remove_unused_columns(eval_dataset, description="evaluation")
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
         eval_sampler = self._get_eval_sampler(eval_dataset)
 
@@ -314,8 +340,11 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
-                The test dataset to use.
+                The test dataset to use. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                ``model.forward()`` method are automatically removed.
         """
+        if is_nlp_available() and isinstance(test_dataset, nlp.Dataset):
+            self._remove_unused_columns(test_dataset, description="test")
         test_sampler = self._get_eval_sampler(test_dataset)
 
         # We use the same batch_size as for eval.
@@ -449,6 +478,7 @@ class Trainer:
         else:
             t_total = int(len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.num_train_epochs)
             num_train_epochs = self.args.num_train_epochs
+            self.args.max_steps = t_total
 
         self.create_optimizer_and_scheduler(num_training_steps=t_total)
 
@@ -530,7 +560,7 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_process_zero()
+            epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=not self.is_local_process_zero()
         )
         for epoch in train_iterator:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
@@ -626,10 +656,10 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
-                if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+                if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                     epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
+            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:
@@ -704,9 +734,7 @@ class Trainer:
         else:
             print(output)
 
-    def _prepare_inputs(
-        self, inputs: Dict[str, Union[torch.Tensor, Any]], model: nn.Module
-    ) -> Dict[str, Union[torch.Tensor, Any]]:
+    def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
         handling potential state.
@@ -746,7 +774,7 @@ class Trainer:
             return self._training_step(model, inputs, self.optimizer)
 
         model.train()
-        inputs = self._prepare_inputs(inputs, model)
+        inputs = self._prepare_inputs(inputs)
 
         if self.args.fp16 and _use_native_amp:
             with autocast():
@@ -904,7 +932,8 @@ class Trainer:
 
         Args:
             eval_dataset (:obj:`Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`nlp.Dataset`,
+                columns not accepted by the ``model.forward()`` method are automatically removed.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
@@ -930,7 +959,8 @@ class Trainer:
 
         Args:
             test_dataset (:obj:`Dataset`):
-                Dataset to run the predictions on.
+                Dataset to run the predictions on. If it is an :obj:`nlp.Dataset`, columns not accepted by the
+                ``model.forward()`` method are automatically removed.
 
         Returns:
             `NamedTuple`:
@@ -988,10 +1018,13 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
+        samples_count = 0
         for inputs in tqdm(dataloader, desc=description):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
+            batch_size = inputs[list(inputs.keys())[0]].shape[0]
+            samples_count += batch_size
             if loss is not None:
-                eval_losses.append(loss)
+                eval_losses.append(loss * batch_size)
             if logits is not None:
                 preds = logits if preds is None else torch.cat((preds, logits), dim=0)
             if labels is not None:
@@ -1025,7 +1058,7 @@ class Trainer:
         else:
             metrics = {}
         if len(eval_losses) > 0:
-            metrics["eval_loss"] = np.mean(eval_losses)
+            metrics["eval_loss"] = np.sum(eval_losses) / samples_count
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
@@ -1071,7 +1104,7 @@ class Trainer:
         """
         has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
-        inputs = self._prepare_inputs(inputs, model)
+        inputs = self._prepare_inputs(inputs)
 
         with torch.no_grad():
             outputs = model(**inputs)

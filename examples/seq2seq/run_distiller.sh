@@ -7,4 +7,4 @@ python distillation.py \
 --do_predict \
 --fp16 \
 --val_check_interval 0.1 \
-$@
+"$@"

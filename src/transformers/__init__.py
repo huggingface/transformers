@@ -82,6 +82,7 @@ from .file_utils import (
     add_start_docstrings,
     cached_path,
     is_apex_available,
+    is_nlp_available,
     is_psutil_available,
     is_py3nvml_available,
     is_tf_available,
@@ -330,6 +331,7 @@ if is_torch_available():
         CamembertForMultipleChoice,
         CamembertForTokenClassification,
         CamembertForQuestionAnswering,
+        CamembertForCausalLM,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_encoder_decoder import EncoderDecoderModel

@@ -17,15 +17,13 @@
 import argparse
 import logging
 import os
-import shutil
 import sys
-import unittest
 from unittest.mock import patch
 
 import torch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import torch_device
+from transformers.testing_utils import torch_device, TestCasePlus
 
 
 SRC_DIRS = [
@@ -64,15 +62,18 @@ def clean_test_dir(path):
     shutil.rmtree(path, ignore_errors=True)
 
 
-class ExamplesTests(unittest.TestCase):
+class ExamplesTests(TestCasePlus):
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
-        testargs = """
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
             run_glue.py
             --model_name_or_path distilbert-base-uncased
             --data_dir ./tests/fixtures/tests_samples/MRPC/
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
             --task_name mrpc
             --do_train
             --do_eval
@@ -81,7 +82,6 @@ class ExamplesTests(unittest.TestCase):
             --learning_rate=1e-4
             --max_steps=10
             --warmup_steps=2
-            --overwrite_output_dir
             --seed=42
             --max_seq_length=128
             """
@@ -97,16 +97,17 @@ class ExamplesTests(unittest.TestCase):
             del result["eval_loss"]
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
-        clean_test_dir(output_dir)
 
     def test_run_pl_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
-        testargs = """
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
             run_pl_glue.py
             --model_name_or_path bert-base-cased
             --data_dir ./tests/fixtures/tests_samples/MRPC/
+            --output_dir {tmp_dir}
             --task mrpc
             --do_train
             --do_predict
@@ -115,11 +116,7 @@ class ExamplesTests(unittest.TestCase):
             --num_train_epochs=1
             --seed=42
             --max_seq_length=128
-            """
-        output_dir = "./tests/fixtures/tests_samples/temp_dir_{}".format(hash(testargs))
-        testargs += "--output_dir " + output_dir
-        testargs = testargs.split()
-
+            """.split()
         if torch.cuda.is_available():
             testargs += ["--fp16", "--gpus=1"]
 
@@ -135,13 +132,13 @@ class ExamplesTests(unittest.TestCase):
             #     for k, v in result.items():
             #         self.assertGreaterEqual(v, 0.75, f"({k})")
             #
-        clean_test_dir(output_dir)
 
     def test_run_language_modeling(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
-        testargs = """
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
             run_language_modeling.py
             --model_name_or_path distilroberta-base
             --model_type roberta
@@ -149,6 +146,7 @@ class ExamplesTests(unittest.TestCase):
             --line_by_line
             --train_data_file ./tests/fixtures/sample_text.txt
             --eval_data_file ./tests/fixtures/sample_text.txt
+            --output_dir {tmp_dir}
             --overwrite_output_dir
             --do_train
             --do_eval
@@ -164,17 +162,19 @@ class ExamplesTests(unittest.TestCase):
         with patch.object(sys, "argv", testargs):
             result = run_language_modeling.main()
             self.assertLess(result["perplexity"], 35)
-        clean_test_dir(output_dir)
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
-        testargs = """
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
             run_squad.py
             --model_type=distilbert
             --model_name_or_path=sshleifer/tiny-distilbert-base-cased-distilled-squad
             --data_dir=./tests/fixtures/tests_samples/SQUAD
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
             --max_steps=10
             --warmup_steps=2
             --do_train
@@ -183,17 +183,13 @@ class ExamplesTests(unittest.TestCase):
             --learning_rate=2e-4
             --per_gpu_train_batch_size=2
             --per_gpu_eval_batch_size=1
-            --overwrite_output_dir
             --seed=42
-        """
-        output_dir = "./tests/fixtures/tests_samples/temp_dir_{}".format(hash(testargs))
-        testargs += "--output_dir " + output_dir
-        testargs = testargs.split()
+        """.split()
+
         with patch.object(sys, "argv", testargs):
             result = run_squad.main()
             self.assertGreaterEqual(result["f1"], 25)
             self.assertGreaterEqual(result["exact"], 21)
-        clean_test_dir(output_dir)
 
     def test_generation(self):
         stream_handler = logging.StreamHandler(sys.stdout)

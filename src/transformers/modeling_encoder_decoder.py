@@ -71,9 +71,17 @@ class EncoderDecoderModel(PreTrainedModel):
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
 
+        # tie encoder, decoder weights if config set accordingly
+        self.tie_weights()
+
     def tie_weights(self):
-        # for now no weights tying in encoder-decoder
-        pass
+        # tie encoder & decoder if needed
+        if self.config.tie_encoder_decoder:
+            # tie encoder and decoder base model
+            decoder_base_model_prefix = self.decoder.base_model_prefix
+            self._tie_encoder_decoder_weights(
+                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+            )
 
     def get_encoder(self):
         return self.encoder
@@ -122,7 +130,11 @@ class EncoderDecoderModel(PreTrainedModel):
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``).
+                - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter
+                - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter
+                - To update the parent model configuration, do not use a prefix for each configuration parameter
+                Behave differently depending on whether a :obj:`config` is provided or automatically loaded.
 
         Examples::
 
@@ -143,6 +155,12 @@ class EncoderDecoderModel(PreTrainedModel):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+
+        # remove encoder, decoder kwargs from kwargs
+        for key in kwargs_encoder.keys():
+            del kwargs["encoder_" + key]
+        for key in kwargs_decoder.keys():
+            del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
@@ -184,7 +202,9 @@ class EncoderDecoderModel(PreTrainedModel):
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-        return cls(encoder=encoder, decoder=decoder)
+        # instantiate config with corresponding kwargs
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        return cls(encoder=encoder, decoder=decoder, config=config)
 
     def forward(
         self,

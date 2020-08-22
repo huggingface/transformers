@@ -205,6 +205,17 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
+class TestMarian_en_zh(MarianIntegrationTest):
+    src = "en"
+    tgt = "zh"
+    src_text = ["My name is Wolfgang and I live in Berlin"]
+    expected_text = ["我叫沃尔夫冈 我住在柏林"]
+
+    @slow
+    def test_batch_generation_eng_zho(self):
+        self._assert_generated_batch_equal_expected()
+
+
 class TestMarian_en_ROMANCE(MarianIntegrationTest):
     """Multilingual on target side."""
 
