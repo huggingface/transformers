@@ -29,9 +29,7 @@ lid_model("put any hindi english code-mixed sentence")
 ```py
 # !pip install codeswitch
 from codeswitch.codeswitch import LanguageIdentification
-lid = LanguageIdentification('spa-eng') 
-# for hindi-english use 'hin-eng', 
-# for nepali-english use 'nep-eng'
+lid = LanguageIdentification('hin-eng') 
 text = "" # your code-mixed sentence 
 result = lid.identify(text)
 print(result)
