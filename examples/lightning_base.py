@@ -106,7 +106,7 @@ class BaseTransformer(pl.LightningModule):
         if model is None:
             if hparams.from_scratch:
                 from transformers.modeling_marian import MarianMTModel
-                self.model = MarianMTModel(config)
+                self.model = MarianMTModel(self.config)
             else:
                 self.model = self.model_type.from_pretrained(
                     self.hparams.model_name_or_path,
