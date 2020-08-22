@@ -30,7 +30,7 @@ from transformers.testing_utils import torch_device
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
-    for dirname in ["text-generation", "text-classification", "language-modeling", "question-answering",]
+    for dirname in ["text-generation", "text-classification", "language-modeling", "question-answering"]
 ]
 sys.path.extend(SRC_DIRS)
 
