@@ -2,7 +2,7 @@
 export PYTHONPATH="../":"${PYTHONPATH}"
 
 python finetune.py \
-    --learning_rate=3e-5 \
+    --learning_rate=3e-4 \
     --fp16 \
     --do_train \
     --val_check_interval=0.25 \
@@ -13,6 +13,4 @@ python finetune.py \
     --train_batch_size=$BS --eval_batch_size=$BS \
     --task translation \
     --warmup_steps 500 \
-    --freeze_embeds \
-    --model_name_or_path=facebook/mbart-large-cc25 \
     "$@"
