@@ -23,7 +23,7 @@ from unittest.mock import patch
 import torch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import torch_device, TestCasePlus
+from transformers.testing_utils import TestCasePlus, torch_device
 
 
 SRC_DIRS = [
