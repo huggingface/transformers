@@ -7,15 +7,6 @@ language:
 # codeswitch-spaeng-lid-lince
 This is a pretrained model for **language identification** of `spanish-english` code-mixed data used from [LinCE](https://ritual.uh.edu/lince/home)
 
-This model is trained for this below repository. 
-
-[https://github.com/sagorbrur/codeswitch](https://github.com/sagorbrur/codeswitch)
-
-To install codeswitch:
-
-```
-pip install codeswitch
-```
 
 ## Identify Language
 
