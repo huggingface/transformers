@@ -220,7 +220,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     """Multilingual on target side."""
 
     src = "en"
-    tgt = "ROMANCE"
+    tgt = "es"
     src_text = [
         ">>fr<< Don't spend so much time watching TV.",
         ">>pt<< Your message has been sent.",

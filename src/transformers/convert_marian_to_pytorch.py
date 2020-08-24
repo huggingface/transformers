@@ -702,6 +702,7 @@ def convert(source_dir: Path, dest_dir):
     # ^^ Save human readable marian config for debugging
 
     model = opus_state.load_marian_model()
+    model = model.half()
     model.save_pretrained(dest_dir)
     model.from_pretrained(dest_dir)  # sanity check
 
