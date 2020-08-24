@@ -114,6 +114,11 @@ class TrainingArguments:
             at the next training step under the keyword argument ``mems``.
         run_name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
+        remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
+            forward method.
+
+            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
     """
 
     output_dir: str = field(
@@ -232,6 +237,10 @@ class TrainingArguments:
 
     run_name: Optional[str] = field(
         default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
+    )
+
+    remove_unused_columns: Optional[bool] = field(
+        default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
     )
 
     @property
