@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class Seq2SeqTrainingArguments(TrainingArguments):
+    label_smoothing: Optional[float] = field(default=0.0, metadata={"help": "Label smoothing"})
+    sortish_sampler: bool = field(default=False, metadata={"help": "Sortish Sampler"})
+
+
+@dataclass
 class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
@@ -51,6 +57,9 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
+    data_dir: str = field(
+        metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
+    )
     max_source_length: Optional[int] = field(
         default=1024,
         metadata={
@@ -92,7 +101,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
 
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
