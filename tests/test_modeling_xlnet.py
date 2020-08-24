@@ -29,13 +29,13 @@ if is_torch_available():
 
     from transformers import (
         XLNetConfig,
-        XLNetModel,
-        XLNetLMHeadModel,
         XLNetForMultipleChoice,
-        XLNetForSequenceClassification,
-        XLNetForTokenClassification,
         XLNetForQuestionAnswering,
         XLNetForQuestionAnsweringSimple,
+        XLNetForSequenceClassification,
+        XLNetForTokenClassification,
+        XLNetLMHeadModel,
+        XLNetModel,
     )
     from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 

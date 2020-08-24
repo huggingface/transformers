@@ -23,18 +23,18 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
 
     from transformers import (
+        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         FlaubertConfig,
+        TFFlaubertForMultipleChoice,
+        TFFlaubertForQuestionAnsweringSimple,
+        TFFlaubertForSequenceClassification,
+        TFFlaubertForTokenClassification,
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
-        TFFlaubertForSequenceClassification,
-        TFFlaubertForQuestionAnsweringSimple,
-        TFFlaubertForTokenClassification,
-        TFFlaubertForMultipleChoice,
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 

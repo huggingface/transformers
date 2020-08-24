@@ -25,11 +25,12 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers import (
         LongformerConfig,
-        TFLongformerModel,
         TFLongformerForMaskedLM,
         TFLongformerForQuestionAnswering,
+        TFLongformerModel,
         TFLongformerSelfAttention,
     )
 

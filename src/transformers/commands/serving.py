@@ -8,11 +8,11 @@ from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
 
 try:
-    from uvicorn import run
-    from fastapi import FastAPI, HTTPException, Body
+    from fastapi import Body, FastAPI, HTTPException
     from fastapi.routing import APIRoute
     from pydantic import BaseModel
     from starlette.responses import JSONResponse
+    from uvicorn import run
 
     _serve_dependencies_installed = True
 except (ImportError, AttributeError):

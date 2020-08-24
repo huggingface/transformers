@@ -24,16 +24,17 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy
+    import tensorflow as tf
+
     from transformers.modeling_tf_roberta import (
-        TFRobertaModel,
+        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,
+        TFRobertaForMultipleChoice,
+        TFRobertaForQuestionAnswering,
         TFRobertaForSequenceClassification,
         TFRobertaForTokenClassification,
-        TFRobertaForQuestionAnswering,
-        TFRobertaForMultipleChoice,
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFRobertaModel,
     )
 
 

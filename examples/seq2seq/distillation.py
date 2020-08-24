@@ -15,27 +15,27 @@ from transformers import BartConfig, BartForConditionalGeneration, MBartTokenize
 
 try:
     from .finetune import SummarizationModule, TranslationModule
-    from .initialization_utils import init_student, copy_layers
-    from .utils import (
-        use_task_specific_params,
-        pickle_load,
-        freeze_params,
-        assert_all_frozen,
-        any_requires_grad,
-        calculate_bleu_score,
-    )
     from .finetune import main as ft_main
+    from .initialization_utils import copy_layers, init_student
+    from .utils import (
+        any_requires_grad,
+        assert_all_frozen,
+        calculate_bleu_score,
+        freeze_params,
+        pickle_load,
+        use_task_specific_params,
+    )
 except ImportError:
     from finetune import SummarizationModule, TranslationModule
     from finetune import main as ft_main
-    from initialization_utils import init_student, copy_layers
+    from initialization_utils import copy_layers, init_student
     from utils import (
-        use_task_specific_params,
-        pickle_load,
-        freeze_params,
-        assert_all_frozen,
         any_requires_grad,
+        assert_all_frozen,
         calculate_bleu_score,
+        freeze_params,
+        pickle_load,
+        use_task_specific_params,
     )
 
 
