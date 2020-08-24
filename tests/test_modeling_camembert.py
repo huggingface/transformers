@@ -21,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
+
     from transformers import CamembertModel
 
 

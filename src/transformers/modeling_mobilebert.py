@@ -68,6 +68,7 @@ def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
     """
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:

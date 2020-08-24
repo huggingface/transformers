@@ -26,13 +26,13 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     from transformers import (
         ElectraConfig,
-        ElectraModel,
         ElectraForMaskedLM,
-        ElectraForTokenClassification,
-        ElectraForPreTraining,
         ElectraForMultipleChoice,
-        ElectraForSequenceClassification,
+        ElectraForPreTraining,
         ElectraForQuestionAnswering,
+        ElectraForSequenceClassification,
+        ElectraForTokenClassification,
+        ElectraModel,
     )
     from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 

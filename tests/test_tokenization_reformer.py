@@ -232,7 +232,8 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_torch_encode_plus_sent_to_model(self):
         import torch
-        from transformers import ReformerModel, ReformerConfig
+
+        from transformers import ReformerConfig, ReformerModel
 
         # Build sequence
         first_ten_tokens = list(self.big_tokenizer.get_vocab().keys())[:10]

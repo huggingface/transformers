@@ -25,15 +25,16 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers import (
-        XLMConfig,
+        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLMForMultipleChoice,
+        TFXLMForQuestionAnsweringSimple,
+        TFXLMForSequenceClassification,
+        TFXLMForTokenClassification,
         TFXLMModel,
         TFXLMWithLMHeadModel,
-        TFXLMForSequenceClassification,
-        TFXLMForQuestionAnsweringSimple,
-        TFXLMForTokenClassification,
-        TFXLMForMultipleChoice,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLMConfig,
     )
 
 

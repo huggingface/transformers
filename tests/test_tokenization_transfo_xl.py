@@ -24,7 +24,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 
 if is_torch_available():
-    from transformers.tokenization_transfo_xl import TransfoXLTokenizer, VOCAB_FILES_NAMES
+    from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
 
 
 @require_torch
