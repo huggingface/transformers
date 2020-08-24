@@ -23,13 +23,13 @@ import logging
 import os
 import re
 import string
-from collections import Counter
 
 import pandas as pd
 import torch
 from tqdm import tqdm
 
-from transformers import WEIGHTS_NAME, RagConfig, RagSequenceModel, RagTokenModel
+from transformers import WEIGHTS_NAME, BartForConditionalGeneration, BartTokenizer, RagSequenceModel, RagTokenModel
+from utils import exact_match_score, f1_score
 
 
 logger = logging.getLogger(__name__)
@@ -37,48 +37,12 @@ logger = logging.getLogger(__name__)
 
 def infer_model_type(model_name_or_path):
     if "token" in model_name_or_path:
-        return "token"
+        return "rag_token"
     if "sequence" in model_name_or_path:
-        return "sequence"
+        return "rag_sequence"
+    if "bart" in model_name_or_path:
+        return "bart"
     return None
-
-
-def normalize_answer(s):
-    """Lower text and remove punctuation, articles and extra whitespace."""
-
-    def remove_articles(text):
-        return re.sub(r"\b(a|an|the)\b", " ", text)
-
-    def white_space_fix(text):
-        return " ".join(text.split())
-
-    def remove_punc(text):
-        exclude = set(string.punctuation)
-        return "".join(ch for ch in text if ch not in exclude)
-
-    def lower(text):
-        return text.lower()
-
-    return white_space_fix(remove_articles(remove_punc(lower(s))))
-
-
-def f1_score(prediction, ground_truth):
-    prediction_tokens = normalize_answer(prediction).split()
-    ground_truth_tokens = normalize_answer(ground_truth).split()
-    common = Counter(prediction_tokens) & Counter(ground_truth_tokens)
-    num_same = sum(common.values())
-    if num_same == 0:
-        return 0
-    precision = 1.0 * num_same / len(prediction_tokens)
-    recall = 1.0 * num_same / len(ground_truth_tokens)
-    f1 = (2 * precision * recall) / (precision + recall)
-    return f1
-
-
-def exact_match_score(prediction, ground_truth):
-    if normalize_answer(prediction) != normalize_answer(ground_truth):
-        print(normalize_answer(prediction), "---", normalize_answer(ground_truth))
-    return normalize_answer(prediction) == normalize_answer(ground_truth)
 
 
 def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
@@ -115,11 +79,11 @@ def get_scores(preds_path, gold_data_path, gold_data_mode):
     print("EM: {}".format(em))
 
 
-def evaluate_batch(args, rag_model, questions):
+def evaluate_batch(args, rag_model, tokenizer, questions):
     with torch.no_grad():
-        input_ids = rag_model.model.generator_tokenizer.batch_encode_plus(
-            questions, return_tensors="pt", padding=True, truncation=True
-        )["input_ids"].to(args.device)
+        input_ids = tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
+            "input_ids"
+        ].to(args.device)
         outputs = rag_model.generate(
             input_ids,
             num_beams=args.num_beams,
@@ -128,8 +92,9 @@ def evaluate_batch(args, rag_model, questions):
             early_stopping=False,
             num_return_sequences=1,
             bad_words_ids=[[0, 0]],  # BART likes to repeat BOS tokens, dont allow it to generate more than one
+            clean_up_tokenization=True,
         )
-        output_strings = rag_model.model.generator_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        output_strings = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         return output_strings
 
 
@@ -139,13 +104,13 @@ def main():
     # Required parameters
     parser.add_argument(
         "--model_type",
-        choices=["sequence", "token"],
+        choices=["rag_sequence", "rag_token", "bart"],
         type=str,
-        help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
+        help="RAG model type: rag_sequence, rag_token or bart, if none specified, the type is inferred from the model_name_or_path",
     )
     parser.add_argument(
         "--retriever_type",
-        default="hf_retriever",
+        default=None,
         choices=["hf_retriever", "mpi_retriever"],
         type=str,
         help="RAG model retriever type",
@@ -187,24 +152,22 @@ def main():
         action="store_true",
         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
-    parser.add_argument("--eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.")
     parser.add_argument(
-        "--recalculate", help="Recalculate predictions even if the prediction file exists", action="store_true"
+        "--eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.",
     )
     parser.add_argument(
-        "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
+        "--recalculate", help="Recalculate predictions even if the prediction file exists", action="store_true",
+    )
+    parser.add_argument(
+        "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model.",
     )
     parser.add_argument(
         "--num_beams", default=4, type=int, help="Number of beams to be used when generating answers",
     )
 
-    parser.add_argument(
-        "--min_length", default=1, type=int, help="Min length of the generated answers",
-    )
+    parser.add_argument("--min_length", default=1, type=int, help="Min length of the generated answers")
 
-    parser.add_argument(
-        "--max_length", default=50, type=int, help="Max length of the generated answers",
-    )
+    parser.add_argument("--max_length", default=50, type=int, help="Max length of the generated answers")
 
     args = parser.parse_args()
 
@@ -212,23 +175,31 @@ def main():
 
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    model_kwargs = {}
     if args.model_type is None:
         args.model_type = infer_model_type(args.model_name_or_path)
         assert args.model_type is not None
-    model_class = RagSequenceModel if args.model_type == "sequence" else RagTokenModel
+    if args.model_type == "rag_sequence":
+        model_class = RagSequenceModel
+        if args.retriever_type is not None:
+            model_kwargs["retriever_type"] = args.retriever_type
+    elif args.model_type == "rag_token":
+        model_class = RagTokenModel
+        if args.retriever_type is not None:
+            model_kwargs["retriever_type"] = args.retriever_type
+    else:
+        model_class = BartForConditionalGeneration
 
-    checkpoints = [args.model_name_or_path]
-    if args.eval_all_checkpoints:
-        checkpoints = list(
-            os.path.dirname(c)
-            for c in sorted(glob.glob(args.model_name_or_path + "/**/" + WEIGHTS_NAME, recursive=True))
-        )
+    checkpoints = (
+        [f.path for f in os.scandir(args.model_name_or_path) if f.is_dir()]
+        if args.eval_all_checkpoints
+        else [args.model_name_or_path]
+    )
+
     logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
     for checkpoint in checkpoints:
-        config = RagConfig.from_pretrained(checkpoint, retriever_type=args.retriever_type)
-
-        predictions_path = os.path.join(config.pretrained_generator_name_or_path, args.predictions_filename)
+        predictions_path = os.path.join(checkpoint, args.predictions_filename)
         if os.path.exists(predictions_path) and (not args.recalculate):
             logger.info("Calculating metrics based on an existing predictions file: {}".format(predictions_path))
             get_scores(predictions_path, args.gold_data_path, args.gold_data_mode)
@@ -238,15 +209,22 @@ def main():
         logger.info("  Batch size = %d", args.eval_batch_size)
         logger.info("  Predictions will be stored under {}".format(predictions_path))
 
-        model = model_class.from_pretrained(checkpoint, retriever_type=args.retriever_type)
+        model = model_class.from_pretrained(checkpoint, **model_kwargs)
         model.to(args.device)
+        tokenizer = (
+            model.model.generator_tokenizer
+            if args.model_type != "bart"
+            else BartTokenizer.from_pretrained("facebook/bart-large")
+        )
+        if args.model_type != "bart":
+            model.model.retriever.init_retrieval(12345)
 
         with open(args.evaluation_set, "r") as eval_file, open(predictions_path, "w") as preds_file:
             questions = []
             for line in tqdm(eval_file):
                 questions.append(line.strip())
                 if len(questions) == args.eval_batch_size:
-                    answers = evaluate_batch(args, model, questions)
+                    answers = evaluate_batch(args, model, tokenizer, questions)
                     preds_file.write("\n".join(answers) + "\n")
                     preds_file.flush()
                     for q, a in zip(questions, answers):
@@ -254,7 +232,7 @@ def main():
                     questions = []
                     print()
             if len(questions) > 0:
-                answers = evaluate_batch(args, model, questions)
+                answers = evaluate_batch(args, model, tokenizer, questions)
                 preds_file.write("\n".join(answers))
                 preds_file.flush()
 

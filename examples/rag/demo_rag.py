@@ -1,6 +1,6 @@
 import torch
 
-from transformers import BartTokenizer, RagSequenceModel, RagTokenModel, T5Tokenizer
+from transformers import BartTokenizer, RagSequenceModel, RagTokenModel, T5ForConditionalGeneration, T5Tokenizer
 
 
 if torch.cuda.is_available():
@@ -9,22 +9,23 @@ else:
     device = torch.device("cpu")
 
 
-def generate_from_rag(rag_model, questions, inputs, num_beams=4):
+def generate_from_rag(rag_model, tokenizer, questions, inputs, num_beams=4):
     with torch.no_grad():
         rag_model = rag_model.eval().to(device)
         outputs = rag_model.generate(
             inputs,
             num_beams=num_beams,
             min_length=1,  # make sure short answers are allowed
-            max_length=50,  # no need for crazy long answers in NQ
+            max_length=25,  # no need for crazy long answers in NQ
             # early_stopping=True,
             num_return_sequences=num_beams,
+            use_cache=True,
             # use_cache=False, - doesn't work for bart
             # repetition_penalty=10,
-            bad_words_ids=[[0, 0]],
+            # bad_words_ids=[[0, 0]],
             # BART likes to repeat BOS tokens, dont allow it to generate more than one
         )
-        answers = rag_model.model.generator_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        answers = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         for i in range(0, len(questions)):
             print("Question: " + questions[i])
             print("Top {} answers:".format(num_beams))
@@ -42,34 +43,43 @@ if __name__ == "__main__":
 
     rag_sequence_model_path = "/private/home/piktus/rag_huggingface/data/repro-rag-sequence-99"
 
-    print("\nRAG with T5 MODEL")
-    t5_tokenizer = T5Tokenizer.from_pretrained("t5-base")
-    t5_inputs = t5_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
-        "input_ids"
-    ].to(device)
-    rag_t5_model = RagSequenceModel.from_pretrained(
-        rag_sequence_model_path,
-        pretrained_generator_tokenizer_name_or_path="t5-base",
-        pretrained_generator_name_or_path="t5-base",
-    )
-    generate_from_rag(rag_t5_model, questions, t5_inputs, num_beams=4)
-
     bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
     inputs = bart_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
         "input_ids"
     ].to(device)
+
+    print(inputs)
+    print("\nSEQUENCE MODEL - HF retriever")
+    model_path = "/checkpoint/piktus/2020-08-14/rag_seq_hf.rag_sequence.batch_size8.ls0.1.dr0.1.atdr0.1.wd0.001.eps1e-08.clip0.1.lr3e-05.num_epochs100.warm500.ngpu8/checkpoint35/"
+    rag_model = RagSequenceModel.from_pretrained(
+        rag_sequence_model_path, retriever_type="hf_retriever", uncompressed=False
+    )
+    generate_from_rag(rag_model, bart_tokenizer, questions, inputs, num_beams=4)
+
     print("\nTOKEN MODEL - HF retriever")
     rag_model = RagTokenModel.from_pretrained(
         rag_sequence_model_path, retriever_type="hf_retriever", uncompressed=False
     )
-    generate_from_rag(rag_model, questions, inputs, num_beams=4)
+    generate_from_rag(rag_model, bart_tokenizer, questions, inputs, num_beams=4)
 
-    print("\nSEQUENCE MODEL - HF retriever")
-    rag_model = RagSequenceModel.from_pretrained(
-        rag_sequence_model_path, retriever_type="hf_retriever", uncompressed=False
+    print("\SEQUENCE MODEL WITH T5 GENERATOR")
+    t5_tokenizer = T5Tokenizer.from_pretrained("t5-large")
+    questions = [
+        "generate answer: who sings does he love me with reba" + t5_tokenizer.eos_token,
+        "generate answer: who sings does he love me with reba",
+    ]
+
+    t5_inputs = t5_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
+        "input_ids"
+    ].to(device)
+    rag_t5_model = RagSequenceModel.from_pretrained(
+        "/private/home/piktus/rag_huggingface/data/test_training_t5_large/", retriever_type="hf_retriever",
     )
-    generate_from_rag(rag_model, questions, inputs, num_beams=4)
 
+    prefix = "generate answer: "
+    rag_t5_model.model.generator.config.prefix = prefix
+
+    generate_from_rag(rag_t5_model, t5_tokenizer, questions, t5_inputs, num_beams=1)
 
 # Top contexts
 """

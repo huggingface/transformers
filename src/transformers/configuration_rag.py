@@ -39,12 +39,12 @@ class RagConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50264,
+        vocab_size=None,
         is_encoder_decoder=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        decoder_start_token_id=2,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
+        decoder_start_token_id=None,
         title_sep=" / ",
         doc_sep=" // ",
         n_docs=5,

@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import pprint
@@ -13,12 +14,14 @@ from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_bart import BartForConditionalGeneration
 from .modeling_dpr import DPRContextEncoder, DPRQuestionEncoder
 from .modeling_outputs import Seq2SeqLMOutputWithDocs
+from .modeling_t5 import T5ForConditionalGeneration
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import HFRetriever, MPIRetriever
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bart import BartTokenizer
 from .tokenization_dpr import DPRContextEncoderTokenizer
 from .tokenization_rag import RagDefaultTokenizer
+from .tokenization_t5 import T5Tokenizer
 from .tokenization_utils import PreTrainedTokenizer
 
 
@@ -47,11 +50,6 @@ def _cat_and_pad(tensors, pad_token_id):
     return output
 
 
-def _shift_tokens_left(input_ids, pad_token_id):
-    """Shift input ids one token to the left, and add a pad to right"""
-    return torch.cat([input_ids[:, 1:], input_ids.new(input_ids.shape[0], 1).fill_(pad_token_id)], 1)
-
-
 class RagModel(torch.nn.Module):
     """This is a basic RAG model returning raw sequence and document logprobs.
     The model takes a retriever (with a tokenizer) and a generator (with a tokenizer)
@@ -71,7 +69,29 @@ class RagModel(torch.nn.Module):
         self.generator_tokenizer = generator_tokenizer
         self.n_docs = self.config.n_docs
         assert self.n_docs > 1  # dont support k > 1
-        # TODO(piktus) validate if generator and retriever compatible / generator rag config compatible ??
+        self._validate_configs_match(self.config, self.generator.config)
+
+    def _validate_configs_match(self, rag_config, gen_config):
+        assert rag_config.pad_token_id == gen_config.pad_token_id, "pad_token_id mismatch: {} vs. {}".format(
+            rag_config.pad_token_id, gen_config.pad_token_id
+        )
+        assert rag_config.bos_token_id == gen_config.bos_token_id, "bos_token_id mismatch: {} vs. {}".format(
+            rag_config.bos_token_id, gen_config.bos_token_id
+        )
+        assert rag_config.eos_token_id == gen_config.eos_token_id, "eos_token_id mismatch: {} vs. {}".format(
+            rag_config.eos_token_id, gen_config.eos_token_id
+        )
+        assert (
+            rag_config.decoder_start_token_id == gen_config.decoder_start_token_id
+        ), "decoder_start_token_id mismatch: {} vs. {}".format(
+            rag_config.decoder_start_token_id, gen_config.decoder_start_token_id
+        )
+        assert (
+            rag_config.is_encoder_decoder == gen_config.is_encoder_decoder
+        ), "pad_token_id mismatch: {} vs. {}".format(rag_config.is_encoder_decoder, gen_config.is_encoder_decoder)
+        assert rag_config.vocab_size == gen_config.vocab_size, "vocab_size mismatch: {} vs. {}".format(
+            rag_config.vocab_size, gen_config.vocab_size
+        )
 
     def forward(
         self, input_ids, decoder_input_ids=None, encoder_outputs: Optional[Tuple] = None, doc_scores=None, **kwargs,
@@ -84,7 +104,7 @@ class RagModel(torch.nn.Module):
             doc_scores = encoder_outputs[-1]
         else:
             # Add context documents to input
-            input_ids, attention_mask, doc_scores = self.contextualize(input_ids)
+            input_ids, attention_mask, doc_scores = self.contextualize(input_ids, print_docs=False)
             kwargs["attention_mask"] = attention_mask
 
         # Decoder input without context documents
@@ -106,13 +126,22 @@ class RagModel(torch.nn.Module):
             doc_scores=doc_scores,
         )
 
-    def _cat_input_and_doc(self, doc_score, doc_title, doc_text, input_string, print_docs=False):
+    def _cat_input_and_doc(self, doc_score, doc_title, doc_text, input_string, add_eos, print_docs=False):
         # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
         if doc_title.startswith('"'):
             doc_title = doc_title[1:]
         if doc_title.endswith('"'):
             doc_title = doc_title[:-1]
-        out = (doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace("  ", " ")
+        suffix = self.generator_tokenizer.eos_token if add_eos else ""
+        out = (
+            self.generator.config.prefix
+            + doc_title
+            + self.config.title_sep
+            + doc_text
+            + self.config.doc_sep
+            + input_string
+            + suffix
+        ).replace("  ", " ")
         if print_docs:
             print(doc_score, out)
             print()
@@ -125,8 +154,26 @@ class RagModel(torch.nn.Module):
         input_ids dim: [batch_size, src_len]
         ctxt_input_ids dim [batch_size * num_docs, src_len]
         """
+
         device = input_ids.device
+        # T5 tokenizer doesn't add eos token by default evan with add_special_tokens set to True
+        add_eos = (input_ids == self.generator_tokenizer.eos_token_id).any() and isinstance(
+            self.generator, T5ForConditionalGeneration
+        )
+
         input_strings = self.generator_tokenizer.batch_decode(input_ids, skip_special_tokens=True)
+
+        # handle prefix for T5
+        if isinstance(self.generator, T5ForConditionalGeneration):
+            for i, s in enumerate(input_strings):
+                if not s.startswith(self.generator.config.prefix):
+                    print("PREFIX MISMATCH:", i, s)
+                if len(input_strings[i]) <= len(self.generator.config.prefix):
+                    input_strings[i] = ""
+                else:
+                    input_strings[i] = input_strings[i][len(self.generator.config.prefix) :]
+        print("Search queries", input_strings)
+
         retriever_inputs = self.retriever_tokenizer.batch_encode_plus(
             input_strings, return_tensors="pt", padding=True, truncation=True,
         )
@@ -134,15 +181,15 @@ class RagModel(torch.nn.Module):
         doc_scores, docs = self.retriever.retrieve(
             retriever_input_embs, n_docs=self.n_docs, query_strings=input_strings
         )
-        # top_doc_scores = torch.bmm(query_vectors.unsqueeze(1), top_doc_vectors.transpose(1, 2)).squeeze(1)
 
         rag_input_strings = [
             self._cat_input_and_doc(
-                doc_scores[i][j], docs[i]["title"][j], docs[i]["text"][j], input_strings[i], print_docs
+                doc_scores[i][j], docs[i]["title"][j], docs[i]["text"][j], input_strings[i], add_eos, print_docs
             )
             for i in range(len(docs))
             for j in range(self.n_docs)
         ]
+
         contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
             rag_input_strings,
             max_length=self.config.max_combined_length,
@@ -150,10 +197,11 @@ class RagModel(torch.nn.Module):
             padding="max_length",
             truncation=True,
         ).to(device)
+
         return (
             contextualized_inputs["input_ids"],
             contextualized_inputs["attention_mask"],
-            torch.FloatTensor(doc_scores).to(device),
+            doc_scores.to(device),
         )
 
 
@@ -167,13 +215,13 @@ class RAGEncoder(torch.nn.Module):
         self.rag_model = rag_model
 
     def forward(self, input_ids=None, attention_mask=None):
-        ctxt_input_ids, ctxt_attention_mask, doc_scores = self.rag_model.contextualize(input_ids, print_docs=True)
+        ctxt_input_ids, ctxt_attention_mask, doc_scores = self.rag_model.contextualize(input_ids, print_docs=False)
         encoder = self.rag_model.generator.get_encoder()  # stacked
-        encoder_outputs = encoder(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask)
+        encoder_outputs = encoder(input_ids=ctxt_input_ids, attention_mask=ctxt_attention_mask, return_dict=True)
         # needed to satisfy assertions in generation_utils
         unstacked_x = _unstack_ctxt(encoder_outputs.last_hidden_state, self.rag_model.n_docs)
 
-        return (unstacked_x, encoder_outputs.hidden_states, doc_scores)
+        return (unstacked_x, encoder_outputs.hidden_states, ctxt_attention_mask, doc_scores)
 
 
 class PreTrainedRagModel(PreTrainedModel):
@@ -188,13 +236,15 @@ class PreTrainedRagModel(PreTrainedModel):
         assert self.n_docs > 1  # dont support k > 1
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path=None, *model_args, **kwargs):
         """RAG models wrap 2 core components: a retriever and a generator, but as such they don't have any trainable parameters
         other then those encapsulated in the components. We specialize from_pretrained function to reflect this.
         """
+        assert pretrained_model_name_or_path is not None or "config" in kwargs
+        print("pretrained", pretrained_model_name_or_path)
         config = (
             RagConfig.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-            if "config" not in kwargs
+            if pretrained_model_name_or_path is not None
             else kwargs["config"]
         )
         retriever_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_context_tokenizer_name_or_path)
@@ -222,9 +272,48 @@ class PreTrainedRagModel(PreTrainedModel):
             )
 
         generator_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
-        generator = AutoModelWithLMHead.from_pretrained(config.pretrained_generator_name_or_path)
+        generator = AutoModelWithLMHead.from_pretrained(config.pretrained_generator_name_or_path, return_dict=True)
+
         model = cls(config, retriever, retriever_tokenizer, generator, generator_tokenizer, question_encoder)
         return model
+
+    def save_pretrained(self, save_directory):
+        """
+        Save a model and its configuration file to a directory, so that it can be re-loaded using the
+        `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
+
+        Arguments:
+            save_directory (:obj:`str`):
+                Directory to which to save. Will be created if it doesn't exist.
+        """
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
+        generator_output_dir = os.path.join(save_directory, "generator")
+        self.model.generator.save_pretrained(generator_output_dir)
+        qe_output_dir = os.path.join(save_directory, "question_encoder")
+        self.model.question_encoder.save_pretrained(qe_output_dir)
+        config = copy.deepcopy(self.config)
+        config.pretrained_generator_name_or_path = generator_output_dir
+        config.pretrained_question_encoder_name_or_path = qe_output_dir
+        config.vocab_size = self.model.generator.config.vocab_size
+        config.save_pretrained(save_directory)
+
+    def shift_tokens_left(self, input_ids, pad_token_id=None):
+        """Shift input ids one token to the left, and add a pad to right"""
+        if pad_token_id is None:
+            pad_token_id = self.config.pad_token_id
+        return torch.cat([input_ids[:, 1:], input_ids.new(input_ids.shape[0], 1).fill_(pad_token_id)], 1)
+
+    def shift_tokens_right(self, input_ids, start_token_id=None):
+        """Shift input ids one token to the right, and pad with start_token_id"""
+        if start_token_id is None:
+            start_token_id = self.config.decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+        shifted_input_ids[:, 0] = start_token_id
+        return shifted_input_ids
 
 
 class RagSequenceModel(PreTrainedRagModel):
@@ -238,21 +327,54 @@ class RagSequenceModel(PreTrainedRagModel):
     def forward(self, input_ids, decoder_input_ids=None, return_loss=False, **kwargs):
         if return_loss:
             kwargs["use_cache"] = False
+
+        reduce = kwargs.pop("reduce", False)
+        label_smoothing = kwargs.pop("label_smoothing", 0.0)
+        score = kwargs.pop("score", False)
+
         outputs = self.model(input_ids, decoder_input_ids, **kwargs)
 
         if return_loss:
             assert decoder_input_ids is not None
-            outputs.loss = self.get_nll(outputs.logits, outputs.doc_scores, decoder_input_ids)
+            loss = self.get_nll(
+                outputs.logits,
+                outputs.doc_scores,
+                decoder_input_ids,
+                reduce=reduce,
+                epsilon=label_smoothing,
+                score=score,
+            )
+            return Seq2SeqLMOutputWithDocs(
+                loss=loss,
+                logits=outputs.logits,
+                decoder_past_key_values=outputs.decoder_past_key_values,
+                decoder_hidden_states=outputs.decoder_hidden_states,
+                decoder_attentions=outputs.decoder_attentions,
+                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+                encoder_hidden_states=outputs.encoder_hidden_states,
+                encoder_attentions=outputs.encoder_attentions,
+                doc_scores=outputs.doc_scores,
+            )
 
-        return outputs
+        return Seq2SeqLMOutputWithDocs(
+            loss=None,
+            logits=outputs.logits,
+            decoder_past_key_values=outputs.decoder_past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            doc_scores=outputs.doc_scores,
+        )
 
-    def generate(self, input_ids, **kwargs):
+    def generate(self, input_ids, dedup=True, **kwargs):
         """implements RAG sequence "thorough" decoding"""
 
         def _get_unique_rows(_input_ids):
             return torch.stack(list({str(k.tolist()): k for k in _input_ids}.values()))
 
-        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, print_docs=True)
+        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, print_docs=False)
         nrs = kwargs.get("num_return_sequences", 1)
         kwargs["num_return_sequences"] = kwargs.get("num_beams", 1)
         hypos = []
@@ -260,61 +382,84 @@ class RagSequenceModel(PreTrainedRagModel):
         for index in range(len(input_ids)):
             # first, generate beams from documents:
             generator_input_ids = ctxt_input_ids[index * self.n_docs : (index + 1) * self.n_docs]  # (n_docs, max_len)
+            kwargs["attention_mask"] = None
 
-            output_sequences = self.model.generator.generate(
-                generator_input_ids, **kwargs
-            )  # n_docs * n_beam, max_output_len
-            output_sequences = _get_unique_rows(output_sequences)  # dedup, max_output_len
-            output_strings = self.model.generator_tokenizer.batch_decode(
-                output_sequences
-            )  # , skip_special_tokens=True)
+            output_sequences = self.model.generator.generate(generator_input_ids, **kwargs)  # n_docs * n_beam, tgt_len
+            if dedup:
+                output_sequences = _get_unique_rows(output_sequences)  # dedup, max_output_len
 
             # then, run model forwards to get nll scores:
             new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
-
-            outputs = self.forward(new_input_ids, decoder_input_ids=output_sequences, return_loss=True)
-            top_cand_inds = (-outputs.loss).topk(nrs)[1]
+            outputs = self.forward(new_input_ids, decoder_input_ids=output_sequences, return_loss=True, score=True)
+            top_cand_inds = (-outputs["loss"]).topk(nrs)[1]
 
             """
+            output_strings = self.model.generator_tokenizer.batch_decode(output_sequences)
             print("hypos with scores")
             for score, hypo in zip(outputs.loss, output_strings):
-                print("\t", score, hypo)
+                print("\t", -score, hypo)
             """
+
             hypos.append(output_sequences[top_cand_inds])
 
         return _cat_and_pad(hypos, pad_token_id=self.model.generator_tokenizer.pad_token_id)
 
-    def get_nll(self, seq_logits, doc_scores, target):
+    def get_nll(self, seq_logits, doc_scores, target, reduce=False, epsilon=0.0, score=False):
         """get negative log likelihood from rag log probs"""
 
-        ignore_index = self.model.generator_tokenizer.pad_token_id
-        target = _shift_tokens_left(target, ignore_index)
+        target = self.shift_tokens_left(target)
+        # bos_token_id is None for T5
+        use_bos = self.config.bos_token_id and (target[:, 0] == self.config.bos_token_id).all()
+        print("use_bos", use_bos)
 
-        def _mask_pads(ll):
-            pad_mask = target.eq(ignore_index)
+        def _mask_pads(ll, smooth_obj):
+            pad_mask = target.eq(self.config.pad_token_id)
             if pad_mask.any():
                 ll.masked_fill_(pad_mask, 0.0)
-            return ll.squeeze(-1)
+                smooth_obj.masked_fill_(pad_mask, 0.0)
+            return ll.squeeze(-1), smooth_obj.squeeze(-1)
 
         seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
             seq_logits.shape[0] // self.n_docs, self.n_docs, -1, seq_logits.size(-1)
-        )
-        print("doc scores", doc_scores[0])
+        )  # batch_size x n_docs x tgt_len x dim
         doc_logprobs = torch.nn.functional.log_softmax(doc_scores, dim=1).unsqueeze(-1).unsqueeze(-1)
-        print("doc probs", torch.exp(doc_logprobs)[0].squeeze())
 
         # RAG-sequence marginaliation
+        # first_token_scores = seq_logprobs[:, :, :1, :]
+        # remainder = seq_logprobs[:, :, 1:, :]
+        # first_rag_logprobs = torch.cat([first_token_scores + doc_logprobs, remainder], dim=2,)
         first_token_scores = seq_logprobs[:, :, :1, :]
-        remainder = seq_logprobs[:, :, 1:, :]
-        rag_logprobs = torch.cat([first_token_scores + doc_logprobs, remainder], dim=2,)
+        second_token_scores = seq_logprobs[:, :, 1:2, :]
+        remainder = seq_logprobs[:, :, 2:, :]
+        rag_logprobs = torch.cat([first_token_scores, second_token_scores + doc_logprobs, remainder], dim=2)
 
         # calcualate loss
         target = target.unsqueeze(1).unsqueeze(-1).repeat(1, self.n_docs, 1, 1)
+        assert target.dim() == rag_logprobs.dim()
+
         ll = rag_logprobs.gather(dim=-1, index=target)
-        ll = _mask_pads(ll)
-        ll = ll.sum(2)  # sum over tokens
+        smooth_obj = rag_logprobs.sum(dim=-1, keepdim=True)  # total sum of all (normalised) logits
+
+        ll, smooth_obj = _mask_pads(ll, smooth_obj)
+
+        # sum over tokens, exclude bos while scoring
+        ll = ll[:, :, 1:].sum(2) if score and use_bos else ll.sum(2)
+
+        smooth_obj = smooth_obj.sum(2)
+
         ll = ll.logsumexp(1)  # logsumexp over docs
-        return -ll
+        smooth_obj = smooth_obj.logsumexp(1)
+
+        nll_loss = -ll
+        smooth_loss = -smooth_obj
+
+        if reduce:
+            nll_loss = nll_loss.sum()
+            smooth_loss = smooth_loss.sum()
+
+        eps_i = epsilon / rag_logprobs.size(-1)
+        loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
+        return loss
 
 
 class RagTokenModel(PreTrainedRagModel):
@@ -325,10 +470,11 @@ class RagTokenModel(PreTrainedRagModel):
     config_class = RagConfig
     base_model_prefix = "rag_token"
 
-    # TODO(piktus) BART specific adjustment - figure out how to generalize to other architectures
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        """Copied from BART
+        """Copied from BART.
+        TODO(piktus) BART specific adjustment - figure out how to generalize to other architectures
         """
+        assert isinstance(self.model.generator, BartForConditionalGeneration)
         if cur_len == 1:
             self._force_token_ids_generation(logits, self.config.bos_token_id)
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
@@ -353,22 +499,23 @@ class RagTokenModel(PreTrainedRagModel):
 
         # past cold start
         if past[1] is None:
-            encoder_last_hidden_state, encoder_hidden_states, doc_scores = past[0]
+            encoder_last_hidden_state, encoder_hidden_states, attention_mask, doc_scores = past[0]
             beam_size = encoder_last_hidden_state.shape[0] // doc_scores.shape[0]
-            # resize doc_scores: batch_size -> batch_size * beam_size
-            doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)
-            encoder_outputs = _stack_ctxt(encoder_last_hidden_state), encoder_hidden_states, doc_scores
+            doc_scores = doc_scores.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
+            attention_mask = attention_mask.repeat_interleave(beam_size, dim=0)  # batch_size -> batch_size * beam_size
+            encoder_outputs = (_stack_ctxt(encoder_last_hidden_state), encoder_hidden_states, doc_scores)
             decoder_past_key_values = None
         # past warm start
         else:
             encoder_outputs, decoder_past_key_values = past
+            attention_mask = encoder_outputs[-2]
 
         return {
             "input_ids": None,
             "encoder_outputs": encoder_outputs,
             "decoder_past_key_values": decoder_past_key_values,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask.repeat_interleave(self.n_docs, dim=0),
+            "attention_mask": attention_mask,
             "use_cache": use_cache,
             "marginalize": True,
         }
@@ -377,7 +524,7 @@ class RagTokenModel(PreTrainedRagModel):
     def _reorder_cache(past, beam_idx):
         """Mostly copied from BART, but you need to handle extra dimensions"""
 
-        (enc_out, enc_mask, doc_scores), decoder_past_key_values = past
+        (enc_out, enc_mask, attention_mask, doc_scores), decoder_past_key_values = past
         n_docs = doc_scores.shape[1]
 
         def _reorder_stacked(t):
@@ -399,8 +546,9 @@ class RagTokenModel(PreTrainedRagModel):
         enc_out = _reorder_stacked(enc_out) if enc_out is not None else None
         enc_mask = _reorder_stacked(enc_mask) if enc_mask is not None else None
         doc_scores = doc_scores.index_select(0, beam_idx)
+        attention_mask = _reorder_stacked(attention_mask)
 
-        return ((enc_out, enc_mask, doc_scores), reordered_decoder_past_key_values)
+        return ((enc_out, enc_mask, attention_mask, doc_scores), reordered_decoder_past_key_values)
 
     def marginalize(self, seq_logits, doc_scores):
         # RAG-token marginalization
@@ -423,19 +571,51 @@ class RagTokenModel(PreTrainedRagModel):
         if return_loss:
             kwargs["use_cache"] = False
 
+        reduce = kwargs.pop("reduce", False)
+        label_smoothing = kwargs.pop("label_smoothing", 0.0)
+
         outputs = self.model(input_ids, decoder_input_ids, encoder_outputs, **kwargs)
 
-        (enc_out, enc_mask), decoder_past_key_values = outputs.decoder_past_key_values
-        outputs.decoder_past_key_values = (enc_out, enc_mask, outputs.doc_scores), decoder_past_key_values
+        if outputs.decoder_past_key_values is not None:
+            (enc_out, enc_mask), decoder_past_key_values = outputs.decoder_past_key_values
+            assert "attention_mask" in kwargs
+            decoder_past_key_values = (
+                (enc_out, enc_mask, kwargs["attention_mask"], outputs.doc_scores),
+                decoder_past_key_values,
+            )
+        else:
+            decoder_past_key_values = None
 
         if return_loss:
             assert decoder_input_ids is not None
-            outputs.loss = self.get_nll(rag_logprobs, decoder_input_ids)
-            return outputs
+            loss = self.get_nll(
+                outputs.logits, outputs.doc_scores, decoder_input_ids, reduce=reduce, epsilon=label_smoothing
+            )
+            return Seq2SeqLMOutputWithDocs(
+                loss=loss,
+                logits=outputs.logits,
+                decoder_past_key_values=decoder_past_key_values,
+                decoder_hidden_states=outputs.decoder_hidden_states,
+                decoder_attentions=outputs.decoder_attentions,
+                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+                encoder_hidden_states=outputs.encoder_hidden_states,
+                encoder_attentions=outputs.encoder_attentions,
+                doc_scores=outputs.doc_scores,
+            )
 
-        if marginalize:
-            outputs.logits = self.marginalize(outputs.logits, outputs.doc_scores)
-        return outputs
+        logits = self.marginalize(outputs.logits, outputs.doc_scores) if marginalize else outputs.logits
+
+        return Seq2SeqLMOutputWithDocs(
+            loss=None,
+            logits=logits,
+            decoder_past_key_values=decoder_past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            doc_scores=outputs.doc_scores,
+        )
 
     def get_input_embeddings(self):
         return self.model.generator.get_input_embeddings()
@@ -446,26 +626,39 @@ class RagTokenModel(PreTrainedRagModel):
     def get_encoder(self):
         return RAGEncoder(self.model)
 
-    def get_nll(self, rag_logprobs, target):
+    def get_nll(self, seq_logits, doc_scores, target, reduce=False, epsilon=0.0):
         """get negative log likelihood from rag log probs"""
-        ignore_index = self.model.generator_tokenizer.pad_token_id
-        target = _shift_tokens_left(target, ignore_index)
 
-        def _mask_pads(ll):
-            pad_mask = target.eq(ignore_index)
+        target = self.shift_tokens_left(target)
+
+        def _mask_pads(ll, smooth_obj):
+            pad_mask = target.eq(self.config.pad_token_id)
             if pad_mask.any():
                 ll.masked_fill_(pad_mask, 0.0)
-            return ll.squeeze(-1)
+                smooth_obj.masked_fill_(pad_mask, 0.0)
+            return ll.squeeze(-1), smooth_obj.squeeze(-1)
 
         rag_logprobs = self.marginalize(seq_logits, doc_scores)
 
-        target = target.unsqueeze(1)
+        target = target.unsqueeze(-1)
+        assert target.dim() == rag_logprobs.dim()
 
         ll = rag_logprobs.gather(dim=-1, index=target)
-        ll = _mask_pads(ll)
+        smooth_obj = rag_logprobs.sum(dim=-1, keepdim=True)  # total sum of all (normalised) logits
+        ll, smooth_obj = _mask_pads(ll, smooth_obj)
         ll = ll.sum(1)  # sum over tokens
+        smooth_obj = smooth_obj.sum(1)
 
-        return -ll
+        nll_loss = -ll
+        smooth_loss = -smooth_obj
+
+        if reduce:
+            nll_loss = nll_loss.sum()
+            smooth_loss = smooth_loss.sum()
+
+        eps_i = epsilon / rag_logprobs.size(-1)
+        loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
+        return loss
 
 
 # TODO(piktus): class RagForSequenceClassification(PreTrainedModel):

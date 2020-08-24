@@ -1,5 +1,7 @@
+import os
 import time
 
+import psutil
 import torch
 import torch.distributed as dist
 from nlp import load_dataset
@@ -17,6 +19,9 @@ class Retriever(object):
     def retrieve(self, query_vectors, ndocs, **kwargs):
         raise NotImplementedError
 
+    def init_retrieval(self, distributed_port):
+        raise NotImplementedError
+
 
 class MPIRetriever(Retriever):
     def __init__(
@@ -29,11 +34,13 @@ class MPIRetriever(Retriever):
         use_sampling,
         nucleus_size=-1,
         sampling_temperature=-1,
-        distributed_port=-1,
     ):
         super().__init__()
+        self.retriever = None
         self.process_group = None
         self.passages = load_passages(passages_path)
+        self.vector_size = vector_size
+        self.index_path = index_path
         self.n_docs = n_docs
         # replicating the batch sizing logic from Postman
         self.batch_size = batch_size * torch.cuda.device_count()
@@ -41,10 +48,14 @@ class MPIRetriever(Retriever):
         self.nucleus_size = nucleus_size
         self.sampling_temperature = sampling_temperature
 
+    def init_retrieval(self, distributed_port):
+        print("initializing retrieval")
+
         # initializing a separate process group for retrievel as the default
         # nccl backend doesn't support gather/scatter operations while gloo
         # is too slow to replace nccl for the core gpu communication
         if dist.is_initialized():
+            print("dist initialized")
             # needs to be set manually
             os.environ["GLOO_SOCKET_IFNAME"] = self._infer_socket_ifname()
             # avoid clash with the NCCL port
@@ -54,15 +65,16 @@ class MPIRetriever(Retriever):
         # initialize retriever only on the master worker
         # TODO(piktus) initialize retrieval per node
         if not dist.is_initialized() or self._is_master():
-            index = DenseHNSWFlatIndexer(vector_size)
-            index.deserialize_from(index_path)
+            print("dist not initialized / master")
+            index = DenseHNSWFlatIndexer(self.vector_size)
+            index.deserialize_from(self.index_path)
             self.retriever = DenseRetriever(None, -1, None, index)
 
     def _is_master(self):
         return dist.get_rank(group=self.process_group) == 0
 
     def _chunk_tensor(self, t, chunk_size):
-        n_chunks = t.shape[0] // chunk_size + t.shape[0] % chunk_size
+        n_chunks = t.shape[0] // chunk_size + int(t.shape[0] % chunk_size > 0)
         return list(torch.chunk(t, n_chunks, dim=0))
 
     def _scattered(self, scatter_list, target_shape, target_type=torch.float32):
@@ -109,7 +121,7 @@ class MPIRetriever(Retriever):
     def _finalize_retrieval(self, query_vectors, doc_ids, doc_scores, doc_vectors, device):
         doc_ids = doc_ids[:, : self.n_docs]
         doc_vectors = doc_vectors[:, : self.n_docs, :]
-        doc_vectors = torch.tensor(doc_vectors)
+        doc_vectors = torch.tensor(doc_vectors).to(query_vectors)
         doc_scores = torch.bmm(query_vectors.unsqueeze(1), doc_vectors.transpose(1, 2)).squeeze(1)
         doc_list = []
         for i in range(query_vectors.shape[0]):
@@ -122,27 +134,38 @@ class MPIRetriever(Retriever):
             doc_dict["title"] = [doc[1] for doc in docs]
             doc_dict["text"] = [doc[0] for doc in docs]
             doc_dicts.append(doc_dict)
-        doc_scores = doc_scores
+        # doc_scores = doc_scores.to(query_vectors)
 
         return doc_scores, doc_dicts
 
     def retrieve(self, query_vectors, **kwargs):
+
+        # Hacky - non-ddp secnario initialization, init_retiever() is called
+        # at ddp initialization, if no ddp, then it's never called, so it has to be initalized
+        # separately.
+        if not dist.is_initialized() and self.retriever is None:
+            print("Initializing index at first query")
+            index = DenseHNSWFlatIndexer(self.vector_size)
+            index.deserialize_from(self.index_path)
+            self.retriever = DenseRetriever(None, -1, None, index)
+
         device = query_vectors.device
-        query_vectors = query_vectors.cpu().detach().to(torch.float32)
+        query_vectors_detached = query_vectors.cpu().detach().to(torch.float32)
 
         # single GPU training
         if not dist.is_initialized():
-            doc_ids, doc_scores, doc_vectors = self._master_retrieve(query_vectors, **kwargs)
+            doc_ids, doc_scores, doc_vectors = self._master_retrieve(query_vectors_detached, **kwargs)
             return self._finalize_retrieval(query_vectors, doc_ids, doc_scores, doc_vectors, device)
 
         # distributed training
         world_size = dist.get_world_size(group=self.process_group)
+        print("world_size", world_size)
 
         # gather logic
         gather_list = None
         if self._is_master():
             gather_list = [torch.empty(query_vectors.shape, dtype=torch.float32) for _ in range(world_size)]
-        dist.gather(query_vectors, dst=0, gather_list=gather_list, group=self.process_group)
+        dist.gather(query_vectors_detached, dst=0, gather_list=gather_list, group=self.process_group)
         # scatter logic
         n_queries = query_vectors.shape[0]
         scatter_ids = []
@@ -226,6 +249,9 @@ class HFRetriever(Retriever):
         dataset_with_embeddings.add_faiss_index(column=self.index_name)
         return dataset_with_embeddings
 
+    def init_retrieval(self, distributed_port):
+        pass
+
     # Loading a dataset with a pre-computed index.
     def load_index(self):
         # any risk datasets will be silently updated? can I trust it'll remain build by a specific model? add version?
@@ -237,14 +263,19 @@ class HFRetriever(Retriever):
                 index_name=self.index_name, file=self.uncompressed_index_path,
             )
             return dataset
-        return load_dataset(self.dataset, self.dataset_name, with_index=True, split=self.dataset_split)
+        return load_dataset(
+            self.dataset, with_embeddings=False, with_index=True, split=self.dataset_split
+        )  # self.dataset_name, with_index=True, split=self.dataset_split)
 
     def retrieve(self, question_embs, n_docs=5, **kwargs):
         question_embs = question_embs.detach().cpu().numpy()
         time0 = time.time()
-        print("searching {} queries".format(question_embs.shape[0]))
-        results = self.index.get_nearest_examples_batch(self.index_name, question_embs, n_docs)
+        # print("searching {} queries".format(question_embs.shape[0]))
+        doc_scores, docs = self.index.get_nearest_examples_batch(self.index_name, question_embs, n_docs)
+        """
         print(
             "index search time: {} sec for a batch of {} queries.".format(time.time() - time0, question_embs.shape[0])
         )
-        return results
+        """
+        # TODO(piktus) Doesn't backprop!
+        return torch.FloatTensor(doc_scores), docs
