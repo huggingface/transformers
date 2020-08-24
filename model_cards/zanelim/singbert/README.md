@@ -2,8 +2,10 @@
 language: english, chinese, malay
 tags:
 - singapore
+- sg
 - singlish
 - malaysia
+- my
 - manglish
 - bert-base-uncased
 license: mit
@@ -13,6 +15,8 @@ datasets:
 ---
 
 # Model name
+
+SingBert - Bert for Singlish (SG) and Manglish (MY).
 
 ## Model description
 
