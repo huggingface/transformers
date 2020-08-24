@@ -639,9 +639,7 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
-        train_iterator = trange(
-            epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm
-        )
+        train_iterator = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
         for epoch in train_iterator:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
