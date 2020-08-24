@@ -22,6 +22,7 @@ import tensorflow as tf
 
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_start_docstrings
+from .modeling_tf_outputs import TFBaseModelOutput
 from .modeling_tf_utils import keras_serializable, shape_list
 from .modeling_tf_xlm import (
     TFXLMForMultipleChoice,
@@ -103,6 +104,11 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -126,6 +132,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         self.pre_norm = getattr(config, "pre_norm", False)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.return_dict = config.use_return_dict
 
     def call(
         self,
@@ -140,6 +147,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
     ):
         # removed: src_enc=None, src_len=None
@@ -155,7 +163,8 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
             output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
-            assert len(inputs) <= 11, "Too many inputs."
+            return_dict = inputs[11] if len(inputs) > 11 else return_dict
+            assert len(inputs) <= 12, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -168,12 +177,14 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 11, "Too many inputs."
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 12, "Too many inputs."
         else:
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -260,8 +271,8 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         tensor = tensor * mask[..., tf.newaxis]
 
         # transformer layers
-        hidden_states = ()
-        attentions = ()
+        hidden_states = () if output_hidden_states else None
+        attentions = () if output_attentions else None
         for i in range(self.n_layers):
             # LayerDrop
             dropout_probability = random.uniform(0, 1)
@@ -321,12 +332,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
 
-        outputs = (tensor,)
-        if output_hidden_states:
-            outputs = outputs + (hidden_states,)
-        if output_attentions:
-            outputs = outputs + (attentions,)
-        return outputs  # outputs, (hidden_states), (attentions)
+        if not return_dict:
+            return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
+        return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
 @add_start_docstrings(

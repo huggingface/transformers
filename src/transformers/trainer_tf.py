@@ -11,15 +11,18 @@ import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 
+from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 
 
 if is_wandb_available():
     import wandb
 
+if is_comet_available():
+    import comet_ml
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +97,14 @@ class TFTrainer:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
+
+        if is_comet_available():
+            self.setup_comet()
+        elif os.environ.get("COMET_MODE") != "DISABLED":
+            logger.info(
+                "To use comet_ml logging, run `pip/conda install comet_ml` "
+                "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
 
         set_seed(self.args.seed)
@@ -218,6 +229,36 @@ class TFTrainer:
         combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
         wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=self.args.run_name)
 
+    def setup_comet(self):
+        """
+        Setup the optional Comet.ml integration.
+
+        Environment:
+            COMET_MODE:
+                (Optional): str - "OFFLINE", "ONLINE", or "DISABLED"
+            COMET_PROJECT_NAME:
+                (Optional): str - Comet.ml project name for experiments
+            COMET_OFFLINE_DIRECTORY:
+                (Optional): str - folder to use for saving offline experiments when `COMET_MODE` is "OFFLINE"
+
+        For a number of configurable items in the environment,
+        see `here <https://www.comet.ml/docs/python-sdk/advanced/#comet-configuration-variables>`__
+        """
+        comet_mode = os.getenv("COMET_MODE", "ONLINE").upper()
+        args = {"project_name": os.getenv("COMET_PROJECT_NAME", "huggingface")}
+        experiment = None
+        if comet_mode == "ONLINE":
+            experiment = comet_ml.Experiment(**args)
+            logger.info("Automatic Comet.ml online logging enabled")
+        elif comet_mode == "OFFLINE":
+            args["offline_directory"] = os.getenv("COMET_OFFLINE_DIRECTORY", "./")
+            experiment = comet_ml.OfflineExperiment(**args)
+            logger.info("Automatic Comet.ml offline logging enabled; use `comet upload` when finished")
+        if experiment is not None:
+            experiment._set_model_graph(self.model, framework="transformers")
+            experiment._log_parameters(self.args, prefix="args/", framework="transformers")
+            experiment._log_parameters(self.model.config, prefix="config/", framework="transformers")
+
     def prediction_loop(
         self,
         dataset: tf.data.Dataset,
@@ -335,6 +376,13 @@ class TFTrainer:
 
         if is_wandb_available():
             wandb.log(logs, step=self.global_step)
+
+        if is_comet_available():
+            experiment = comet_ml.config.get_global_experiment()
+            if experiment is not None:
+                experiment._log_metrics(
+                    logs, step=self.global_step, epoch=self.epoch_logging, framework="transformers"
+                )
 
         output = {**logs, **{"step": self.global_step}}
 

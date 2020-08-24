@@ -586,9 +586,9 @@ class BertPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class BertForPretrainingOutput(ModelOutput):
+class BertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.BertForPretrainingModel`.
+    Output type of :class:`~transformers.BertForPreTrainingModel`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -837,7 +837,7 @@ class BertForPreTraining(BertPreTrainedModel):
         return self.cls.predictions.decoder
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @replace_return_docstrings(output_type=BertForPretrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -918,7 +918,7 @@ class BertForPreTraining(BertPreTrainedModel):
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return BertForPretrainingOutput(
+        return BertForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,

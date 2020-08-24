@@ -711,7 +711,7 @@ class XLNetForTokenClassificationOutput(ModelOutput):
 @dataclass
 class XLNetForMultipleChoiceOutput(ModelOutput):
     """
-    Base class for outputs of multiple choice models.
+    Output type of :class:`~transformers.XLNetForMultipleChoice`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -747,7 +747,7 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     """
-    Base class for outputs of question answering models.
+    Output type of :class:`~transformers.XLNetForQuestionAnsweringSimple`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -784,7 +784,7 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
 @dataclass
 class XLNetForQuestionAnsweringOutput(ModelOutput):
     """
-    Base class for outputs of question answering models using a :obj:`SquadHead`.
+    Output type of :class:`~transformers.XLNetForQuestionAnswering`.
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned if both :obj:`start_positions` and :obj:`end_positions` are provided):
@@ -1227,7 +1227,6 @@ class XLNetModel(XLNetPreTrainedModel):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         output = output.permute(1, 0, 2).contiguous()
 
-        # TODO Teven: fix this test to only use use_cache.
         if not use_cache:
             new_mems = None
 
