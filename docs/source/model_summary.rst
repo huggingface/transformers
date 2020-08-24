@@ -611,7 +611,8 @@ The pretrained model only works for classification.
 Retrieval-based models
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Some models use documents retrieval during (pre)training and inference for open-domain QA for example.
+Some models use documents retrieval during (pre)training and inference for open-domain question answering, for example.
+
 
 DPR
 ----------------------------------------------
