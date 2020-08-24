@@ -94,8 +94,9 @@ def check_if_models_are_dominated(old_repo_path="OPUS-MT-train/models", new_repo
     ).fillna(-1)
 
     dominated = cmp_df[cmp_df.old_bleu > cmp_df.new_bleu]
+    whitelist_df = cmp_df[cmp_df.old_bleu <= cmp_df.new_bleu]
     blacklist = dominated.long.unique().tolist()  # 3 letter codes
-    return dominated, blacklist
+    return whitelist_df, dominated, blacklist
 
 
 def remove_prefix(text: str, prefix: str):
