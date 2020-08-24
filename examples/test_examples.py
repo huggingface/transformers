@@ -58,10 +58,6 @@ def is_cuda_and_apex_avaliable():
     return is_using_cuda and is_apex_available()
 
 
-def clean_test_dir(path):
-    shutil.rmtree(path, ignore_errors=True)
-
-
 class ExamplesTests(TestCasePlus):
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
