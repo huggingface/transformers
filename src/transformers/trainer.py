@@ -780,7 +780,7 @@ class Trainer:
             raise RuntimeError(" You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
         if backend == HPSearchBackend.RAY and not is_ray_available():
             raise RuntimeError(
-                " You picked the Ray Tune backend, but it is not installed. Use `pip install ray[tune]`."
+                " You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
         self.hp_search_backend = backend
 
