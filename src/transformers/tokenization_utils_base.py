@@ -1897,7 +1897,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 len(text) == 0
                 or (
                     isinstance(text[0], str)
-                    or (isinstance(text[0], (list, tuple, np.ndarray)) and (len(text[0]) == 0 or isinstance(text[0][0], str)))
+                    or (
+                        isinstance(text[0], (list, tuple, np.ndarray))
+                        and (len(text[0]) == 0 or isinstance(text[0][0], str))
+                    )
                 )
             )
         ), (
@@ -1928,7 +1931,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         is_batched = bool(
             (not is_pretokenized and isinstance(text, (list, tuple, np.ndarray)))
-            or (is_pretokenized and isinstance(text, (list, tuple, np.ndarray)) and len(text) and isinstance(text[0], (list, tuple, np.ndarray)))
+            or (
+                is_pretokenized
+                and isinstance(text, (list, tuple, np.ndarray))
+                and len(text)
+                and isinstance(text[0], (list, tuple, np.ndarray))
+            )
         )
 
         if is_batched:
