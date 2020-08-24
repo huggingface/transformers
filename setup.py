@@ -114,7 +114,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.8.1.rc2",
+        "tokenizers == 0.9.0.dev0",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # utilities from PyPA to e.g. compare versions
