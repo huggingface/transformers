@@ -2440,6 +2440,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
 
         # Truncation: Handle max sequence length
+        overflowing_tokens = []
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -2448,9 +2449,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation_strategy=truncation_strategy,
                 stride=stride,
             )
-            if return_overflowing_tokens:
-                encoded_inputs["overflowing_tokens"] = overflowing_tokens
-                encoded_inputs["num_truncated_tokens"] = total_len - max_length
+
+        if return_overflowing_tokens:
+            encoded_inputs["overflowing_tokens"] = overflowing_tokens
+            encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
         if add_special_tokens:
