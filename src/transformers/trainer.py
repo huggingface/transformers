@@ -843,6 +843,8 @@ class Trainer:
             if getattr(self, "objective", None) is None:
                 metrics = self.evaluate()
                 self.objective = self.compute_objective(metrics)
+                if self.hp_search_backend == HPSearchBackend.RAY:
+                    tune.report(objective=self.objective)
             return self.objective
 
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
