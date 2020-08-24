@@ -28,20 +28,20 @@ from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
 
     from transformers import (
-        tf_top_k_top_p_filtering,
-        TFAdaptiveEmbedding,
-        TFSharedEmbeddings,
-        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TFAdaptiveEmbedding,
+        TFSharedEmbeddings,
+        tf_top_k_top_p_filtering,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -260,6 +260,7 @@ class TFModelTesterMixin:
             return
 
         import torch
+
         import transformers
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

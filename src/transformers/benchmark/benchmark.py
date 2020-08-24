@@ -42,6 +42,7 @@ from .benchmark_utils import (
 
 if is_torch_available():
     import torch
+
     from .benchmark_args import PyTorchBenchmarkArguments
 
 

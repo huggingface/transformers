@@ -35,8 +35,8 @@ sys.path.extend(SRC_DIRS)
 if SRC_DIRS is not None:
     import run_generation
     import run_glue
-    import run_pl_glue
     import run_language_modeling
+    import run_pl_glue
     import run_squad
 
 

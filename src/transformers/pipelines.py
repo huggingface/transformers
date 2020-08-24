@@ -43,39 +43,41 @@ from .tokenization_utils_base import BatchEncoding, PaddingStrategy
 
 if is_tf_available():
     import tensorflow as tf
+
     from .modeling_tf_auto import (
-        TFAutoModel,
-        TFAutoModelForSequenceClassification,
-        TFAutoModelForQuestionAnswering,
-        TFAutoModelForTokenClassification,
-        TFAutoModelWithLMHead,
-        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TFAutoModel,
         TFAutoModelForCausalLM,
+        TFAutoModelForQuestionAnswering,
+        TFAutoModelForSequenceClassification,
+        TFAutoModelForTokenClassification,
+        TFAutoModelWithLMHead,
     )
 
 if is_torch_available():
     import torch
+
     from .modeling_auto import (
-        AutoModel,
-        AutoModelForSequenceClassification,
-        AutoModelForQuestionAnswering,
-        AutoModelForTokenClassification,
-        AutoModelForSeq2SeqLM,
-        AutoModelForCausalLM,
-        AutoModelForMaskedLM,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        AutoModel,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
+        AutoModelForQuestionAnswering,
+        AutoModelForSeq2SeqLM,
+        AutoModelForSequenceClassification,
+        AutoModelForTokenClassification,
     )
 
 if TYPE_CHECKING:
-    from .modeling_utils import PreTrainedModel
     from .modeling_tf_utils import TFPreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)

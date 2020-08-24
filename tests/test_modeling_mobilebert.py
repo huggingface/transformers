@@ -25,16 +25,17 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 if is_torch_available():
     import torch
+
     from transformers import (
         MobileBertConfig,
-        MobileBertModel,
         MobileBertForMaskedLM,
+        MobileBertForMultipleChoice,
         MobileBertForNextSentencePrediction,
         MobileBertForPreTraining,
         MobileBertForQuestionAnswering,
         MobileBertForSequenceClassification,
         MobileBertForTokenClassification,
-        MobileBertForMultipleChoice,
+        MobileBertModel,
     )
 
 
