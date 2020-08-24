@@ -1,16 +1,17 @@
-from typing import Any, Dict, Union, List, Optional, Tuple
-from packaging import version
-import warnings
 import logging
+import warnings
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm, trange
 
 from transformers import Trainer
 from transformers.file_utils import is_apex_available
+
 
 _use_native_amp = False
 _use_apex = False
@@ -28,7 +29,9 @@ else:
 
 from .utils import label_smoothed_nll_loss
 
+
 logger = logging.getLogger(__name__)
+
 
 class Seq2SeqTrainer(Trainer):
     # override to support label smoothing
@@ -60,7 +63,7 @@ class Seq2SeqTrainer(Trainer):
         model.train()
         inputs = self._prepare_inputs(inputs, model)
         labels = inputs.pop("labels")
-        
+
         if self.args.fp16 and _use_native_amp:
             with autocast():
                 outputs = model(**inputs)
@@ -87,7 +90,7 @@ class Seq2SeqTrainer(Trainer):
             loss.backward()
 
         return loss.item()
-    
+
     def _compute_loss(self, logits, labels, ignore_index):
         # assuming label_smoothing is in args
         if self.args.label_smoothing == 0:
@@ -100,7 +103,7 @@ class Seq2SeqTrainer(Trainer):
             loss, nll_loss = label_smoothed_nll_loss(
                 lprobs, labels, self.args.label_smoothing, ignore_index=ignore_index
             )
-        
+
         return loss
 
     def prediction_step(
