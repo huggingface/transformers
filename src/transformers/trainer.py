@@ -469,6 +469,37 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
+    def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
+        """ HP search setup code """
+        if self.hp_search_backend is None or trial is None:
+            return
+        params = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
+        for key, value in params.items():
+            if not hasattr(self.args, key):
+                raise AttributeError(
+                    f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
+                )
+            old_attr = getattr(self.args, key, None)
+            # Casting value to the proper type
+            if old_attr is not None:
+                value = type(old_attr)(value)
+            setattr(self.args, key, value)
+        if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            logger.info("Trial:", trial.params)
+
+    def _report_to_hp_search(
+        self, trial: Union["optuna.Trial", Dict[str, Any]], epoch: int, metrics: Dict[str, float]
+    ):
+        if self.hp_search_backend is None or trial is None:
+            return
+        self.objective = self.compute_objective(metrics)
+        if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            trial.report(self.objective, epoch)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+        elif self.hp_search_backend == HPSearchBackend.RAY:
+            tune.report(objective=self.objective, **metrics)
+
     def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
         """
         Main training entry point.
@@ -485,21 +516,7 @@ class Trainer:
             model = self.model_init()
             self.model = model.to(self.args.device)
 
-        # HP search specific code
-        if self.hp_search_backend is not None and trial is not None:
-            config = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
-            for key, value in config.items():
-                if not hasattr(self.args, key):
-                    logger.warn(
-                        f"Trying to set {key} in the hyperparameter search but there is no corresponding field in `TrainingArguments`."
-                    )
-                old_attr = getattr(self.args, key, None)
-                # Casting value to the proper type
-                if old_attr is not None:
-                    value = type(old_attr)(value)
-                setattr(self.args, key, value)
-            if self.hp_search_backend == HPSearchBackend.OPTUNA:
-                logger.info("Trial:", trial.params)
+        self._hp_search_setup(trial)
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -591,7 +608,7 @@ class Trainer:
         tr_loss = 0.0
         logging_loss = 0.0
         model.zero_grad()
-        disable_tqdm = not self.is_local_process_zero() or self.args.disable_tqdm
+        disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
         train_iterator = trange(epochs_trained, int(num_train_epochs), desc="Epoch", disable=disable_tqdm)
         for epoch in train_iterator:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
@@ -661,14 +678,7 @@ class Trainer:
 
                     if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                         metrics = self.evaluate()
-                        if self.hp_search_backend is not None and trial is not None:
-                            self.objective = self.compute_objective(metrics)
-                            if self.hp_search_backend == HPSearchBackend.OPTUNA:
-                                trial.report(self.objective, epoch)
-                                if trial.should_prune():
-                                    raise optuna.TrialPruned()
-                            elif self.hp_search_backend == HPSearchBackend.RAY:
-                                tune.report(objective=self.objective, **metrics)
+                        self._report_to_hp_search(trial, epoch, metrics)
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference
@@ -752,7 +762,7 @@ class Trainer:
             compute_objective (:obj:`Callable[[Dict[str, float]], float]`, `optional`):
                 A function computing the objective to minimize or maximize from the metrics returned by the
                 :obj:`evaluate` method. Will default to :func:`~transformers.trainer_utils.default_compute_objective`.
-            n_trial (:obj:`int`, `optional`, defaults to 100):
+            n_trials (:obj:`int`, `optional`, defaults to 100):
                 The number of trial runs to test.
             direction(:obj:`str`, `optional`, defaults to :obj:`"minimize"`):
                 Whether to optimize greater or lower objects. Can be :obj:`"minimize"` or :obj:`"maximize"`, you should
@@ -762,7 +772,11 @@ class Trainer:
                 The backend to use for hyperparameter search. Will default to optuna or Ray Tune, depending on which
                 one is installed. If both are installed, will default to optuna.
             kwargs:
-                Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`.
+                Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
+                more information see:
+
+                - the documentation of `optuna.create_stufy <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                - the documentation of `tune.run <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
         Returns:
             :class:`transformers.trainer_utils.BestRun`: All the informations about the best run.
@@ -811,8 +825,13 @@ class Trainer:
             # search.
             _tb_writer = self.tb_writer
             self.tb_writer = None
+            # Setup default `resources_per_trial` and `reporter`.
             if "resources_per_trial" not in kwargs and self.args.n_gpu > 0:
                 kwargs["resources_per_trial"] = {"gpu": self.args.n_gpu}
+            if "reporter" not in kwargs:
+                from ray.tune import CLIReporter
+
+                kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
             analysis = tune.run(_objective, config=self.hp_space(None), num_samples=n_trials, **kwargs)
             best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
             best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
