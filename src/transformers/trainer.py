@@ -19,11 +19,12 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
-from .data.data_collator import DataCollator, default_data_collator
+from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import is_nlp_available, is_torch_tpu_available
 from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
+from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, set_seed
 from .training_args import TrainingArguments
 
@@ -144,15 +145,20 @@ class Trainer:
             The model to train, evaluate or use for predictions.
         args (:class:`~transformers.TrainingArguments`):
             The arguments to tweak for training.
-        data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
+        data_collator (:obj:`DataCollator`, `optional`):
             The function to use to form a batch from a list of elements of :obj:`train_dataset` or
-            :obj:`eval_dataset`.
+            :obj:`eval_dataset`. Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is
+            provided, an instance of :func:`~transformers.DataCollatorWithPadding` otherwise.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training. If it is an :obj:`nlp.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
+        tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
+            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
+            maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
+            interrupted training or reuse the fine-tuned model.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
@@ -173,6 +179,7 @@ class Trainer:
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
@@ -180,9 +187,11 @@ class Trainer:
     ):
         self.model = model.to(args.device)
         self.args = args
-        self.data_collator = data_collator if data_collator is not None else default_data_collator
+        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.tokenizer = tokenizer
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
         self.tb_writer = tb_writer
@@ -877,6 +886,8 @@ class Trainer:
 
         xm.rendezvous("saving_checkpoint")
         self.model.save_pretrained(output_dir)
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -887,6 +898,8 @@ class Trainer:
         if not isinstance(self.model, PreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
         self.model.save_pretrained(output_dir)
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
