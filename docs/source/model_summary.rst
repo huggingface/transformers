@@ -629,7 +629,8 @@ DPR
 `Dense Passage Retrieval for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_,
 Vladimir Karpukhin et al.
 
-Dense Passage Retrieval (DPR) - is a set of tools and models for state-of-the-art open-domain QA research.
+Dense Passage Retrieval (DPR) - is a set of tools and models for state-of-the-art open-domain question-answering research.
+
 
 DPR consists in three models:
 
