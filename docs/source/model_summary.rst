@@ -638,9 +638,6 @@ DPR consists in three models:
 
 DPR is used to do open-domain QA by using a retrieval step that finds the top k contexts given a certain question, and then calling DPR's reader with the question and the retrieved documents.
 
-..
-    More information in this :doc:`model documentation </model_doc/dpr.html>`.
-
 More technical aspects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
