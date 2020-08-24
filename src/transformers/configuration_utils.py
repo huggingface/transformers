@@ -56,6 +56,8 @@ class PretrainedConfig(object):
                 Whether the model is used as an encoder/decoder or not.
             is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether the model is used as decoder or not (in which case it's used as an encoder).
+            tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the model has a output word embedding layer.
             add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether cross-attention layers should be added to the model. Note, this option is only relevant for models that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
             tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`)
@@ -150,6 +152,7 @@ class PretrainedConfig(object):
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
+        self.tie_word_embeddings = kwargs.pop("tie_word_embeddings", True)  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)

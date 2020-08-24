@@ -17,6 +17,7 @@
 
 
 import logging
+import warnings
 
 from .configuration_utils import PretrainedConfig
 
@@ -80,7 +81,7 @@ class TransfoXLConfig(PretrainedConfig):
             adaptive (:obj:`boolean`, optional, defaults to :obj:`True`):
                 use adaptive softmax
             tie_weight (:obj:`boolean`, optional, defaults to :obj:`True`):
-                tie the word embedding and softmax weights
+                tie the word embedding and softmax weights. THIS PARAMETER IS DEPRECIATED.
             dropout (:obj:`float`, optional, defaults to 0.1):
                 The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
             dropatt (:obj:`float`, optional, defaults to 0):
@@ -135,7 +136,6 @@ class TransfoXLConfig(PretrainedConfig):
         attn_type=0,
         sample_softmax=-1,
         adaptive=True,
-        tie_weight=True,
         dropout=0.1,
         dropatt=0.0,
         untie_r=True,
@@ -147,12 +147,14 @@ class TransfoXLConfig(PretrainedConfig):
         eos_token_id=0,
         **kwargs
     ):
-        super().__init__(eos_token_id=eos_token_id, **kwargs)
+        if "tie_weight" in kwargs:
+            warnings.warn("The config parameter `tie_weight` is depreciated. Please use `tie_word_embeddings` instead.", FutureWarning)
+            tie_word_embeddings = kwargs["tie_weight"]
 
+        super().__init__(eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
         self.cutoffs = []
         self.cutoffs.extend(cutoffs)
-        self.tie_weight = tie_weight
         if proj_share_all_but_first:
             self.tie_projs = [False] + [True] * len(self.cutoffs)
         else:
