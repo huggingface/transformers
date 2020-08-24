@@ -5,7 +5,7 @@ tags:
 - sg
 - singlish
 - malaysia
-- my
+- ms
 - manglish
 - bert-base-uncased
 license: mit
