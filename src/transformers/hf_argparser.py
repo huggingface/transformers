@@ -88,7 +88,7 @@ class HfArgumentParser(ArgumentParser):
             self.add_argument(field_name, **kwargs)
 
     def parse_args_into_dataclasses(
-        self, args=None, return_remaining_strings=False, look_for_args_file=True
+        self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None
     ) -> Tuple[DataClass, ...]:
         """
         Parse command-line args into instances of the specified dataclass types.
@@ -107,6 +107,9 @@ class HfArgumentParser(ArgumentParser):
                 If true, will look for a ".args" file with the same base name
                 as the entry point script for this process, and will append its
                 potential content to the command line args.
+            args_filename:
+                If not None, will uses this file instead of the ".args" file
+                specified in the previous argument.
 
         Returns:
             Tuple consisting of:
@@ -118,8 +121,12 @@ class HfArgumentParser(ArgumentParser):
                 - The potential list of remaining argument strings.
                   (same as argparse.ArgumentParser.parse_known_args)
         """
-        if look_for_args_file and len(sys.argv):
-            args_file = Path(sys.argv[0]).with_suffix(".args")
+        if args_filename or (look_for_args_file and len(sys.argv)):
+            if args_filename:
+                args_file = Path(args_filename)
+            else:
+                args_file = Path(sys.argv[0]).with_suffix(".args")
+
             if args_file.exists():
                 fargs = args_file.read_text().split()
                 args = fargs + args if args is not None else fargs + sys.argv[1:]

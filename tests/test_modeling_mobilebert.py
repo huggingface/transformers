@@ -20,21 +20,22 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
+
     from transformers import (
         MobileBertConfig,
-        MobileBertModel,
         MobileBertForMaskedLM,
+        MobileBertForMultipleChoice,
         MobileBertForNextSentencePrediction,
         MobileBertForPreTraining,
         MobileBertForQuestionAnswering,
         MobileBertForSequenceClassification,
         MobileBertForTokenClassification,
-        MobileBertForMultipleChoice,
+        MobileBertModel,
     )
 
 
@@ -94,7 +95,7 @@ class MobileBertModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:

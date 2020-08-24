@@ -17,44 +17,43 @@ from transformers import MarianTokenizer, MBartTokenizer, T5ForConditionalGenera
 
 
 try:
-    from .utils import (
-        assert_all_frozen,
-        use_task_specific_params,
-        lmap,
-        flatten_list,
-        pickle_save,
-        save_git_info,
-        save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        Seq2SeqDataset,
-        TranslationDataset,
-        label_smoothed_nll_loss,
-    )
-
     from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-except ImportError:
-    from utils import (
+    from .utils import (
+        ROUGE_KEYS,
         Seq2SeqDataset,
         TranslationDataset,
         assert_all_frozen,
-        use_task_specific_params,
-        lmap,
+        calculate_bleu_score,
+        calculate_rouge,
         flatten_list,
+        freeze_params,
+        get_git_info,
+        label_smoothed_nll_loss,
+        lmap,
         pickle_save,
         save_git_info,
         save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        label_smoothed_nll_loss,
+        use_task_specific_params,
     )
+except ImportError:
     from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
+    from utils import (
+        ROUGE_KEYS,
+        Seq2SeqDataset,
+        TranslationDataset,
+        assert_all_frozen,
+        calculate_bleu_score,
+        calculate_rouge,
+        flatten_list,
+        freeze_params,
+        get_git_info,
+        label_smoothed_nll_loss,
+        lmap,
+        pickle_save,
+        save_git_info,
+        save_json,
+        use_task_specific_params,
+    )
 
 logger = logging.getLogger(__name__)
 

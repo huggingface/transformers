@@ -81,41 +81,37 @@ from transformers.file_utils import hf_bucket_url
 
 
 if is_torch_available():
-    import torch
     import numpy as np
+    import torch
+
     from transformers import (
+        AlbertForPreTraining,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
+        CamembertForMaskedLM,
         BartForConditionalGeneration,
+        CTRLLMHeadModel,
+        DistilBertForMaskedLM,
+        DistilBertForQuestionAnswering,
+        ElectraForPreTraining,
+        FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
-        XLNetLMHeadModel,
-        XLMWithLMHeadModel,
-        XLMRobertaForMaskedLM,
-        TransfoXLLMHeadModel,
         OpenAIGPTLMHeadModel,
         RobertaForMaskedLM,
         RobertaForSequenceClassification,
-        CamembertForMaskedLM,
-        FlaubertWithLMHeadModel,
-        DistilBertForMaskedLM,
-        DistilBertForQuestionAnswering,
-        CTRLLMHeadModel,
-        AlbertForPreTraining,
         T5ForConditionalGeneration,
-        ElectraForPreTraining,
+        TransfoXLLMHeadModel,
+        XLMRobertaForMaskedLM,
+        XLMWithLMHeadModel,
+        XLNetLMHeadModel,
     )
 
 
 logging.basicConfig(level=logging.INFO)
 
 MODEL_CLASSES = {
-    "bart": (
-        BartConfig,
-        TFBartForConditionalGeneration,
-        BartForConditionalGeneration,
-        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
-    ),
+    "bart": (BartConfig, TFBartForConditionalGeneration, BartForConditionalGeneration, BART_PRETRAINED_MODEL_ARCHIVE_LIST,),
     "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,

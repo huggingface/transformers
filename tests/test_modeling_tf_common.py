@@ -28,20 +28,20 @@ from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
 
     from transformers import (
-        tf_top_k_top_p_filtering,
-        TFAdaptiveEmbedding,
-        TFSharedEmbeddings,
-        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TFAdaptiveEmbedding,
+        TFSharedEmbeddings,
+        tf_top_k_top_p_filtering,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -260,6 +260,7 @@ class TFModelTesterMixin:
             return
 
         import torch
+
         import transformers
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -306,13 +307,13 @@ class TFModelTesterMixin:
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             # Debug info (remove when fixed)
-            if max_diff >= 2e-2:
+            if max_diff >= 4e-2:
                 print("===")
                 print(model_class)
                 print(config)
                 print(inputs_dict)
                 print(pt_inputs_dict)
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -348,7 +349,7 @@ class TFModelTesterMixin:
             tfo[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tfo - pto))
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

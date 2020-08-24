@@ -24,9 +24,10 @@ from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
 import numpy as np
+from tqdm.auto import tqdm
+
 import requests
 from filelock import FileLock
-from tqdm.auto import tqdm
 
 from . import __version__
 
@@ -63,6 +64,14 @@ try:
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
+
+try:
+    import nlp  # noqa: F401
+
+    _nlp_available = True
+
+except ImportError:
+    _nlp_available = False
 
 try:
     from torch.hub import _get_torch_home
@@ -142,6 +151,10 @@ def is_tf_available():
 
 def is_torch_tpu_available():
     return _torch_tpu_available
+
+
+def is_nlp_available():
+    return _nlp_available
 
 
 def is_psutil_available():

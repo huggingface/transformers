@@ -25,16 +25,17 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers.modeling_tf_bert import (
-        TFBertModel,
-        TFBertLMHeadModel,
         TFBertForMaskedLM,
+        TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,
         TFBertForPreTraining,
-        TFBertForSequenceClassification,
-        TFBertForMultipleChoice,
-        TFBertForTokenClassification,
         TFBertForQuestionAnswering,
+        TFBertForSequenceClassification,
+        TFBertForTokenClassification,
+        TFBertLMHeadModel,
+        TFBertModel,
     )
 
 

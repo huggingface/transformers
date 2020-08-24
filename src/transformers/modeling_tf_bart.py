@@ -1012,9 +1012,10 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             kwargs.update(inputs)
         else:
             kwargs["inputs"] = inputs
-        assert "input_ids" not in kwargs
+
 
         inputs = kwargs.pop("inputs", kwargs.pop("input_ids", None))
+        assert "input_ids" not in kwargs
         # return_dict = kwargs.pop('return_dict', None)
         # if isinstance(inputs, T):
         #     input_ids = inputs
@@ -1030,8 +1031,8 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         # decoder_input_ids = kwargs.get("decoder_input_ids", None)
         # decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
         # decoder_cached_states = kwargs.get('decoder_cached_states', None)
-
         outputs = self.model(inputs, **kwargs)
+
         lm_logits = self.model.shared(outputs[0], mode="linear")
 
         if not isinstance(outputs, Seq2SeqModelOutput):  # return_dict=False

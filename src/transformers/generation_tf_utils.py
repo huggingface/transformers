@@ -177,7 +177,7 @@ class TFGenerationMixin:
 
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
-            input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
+            input_context = 'My cute dog'
             bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
@@ -353,17 +353,30 @@ class TFGenerationMixin:
         ), f"The context has {cur_len} number of tokens, but `max_length` is only {max_length}. Please make sure that `max_length` is bigger than the number of tokens, by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
 
         if num_beams > 1:
-            output = self._generate_beam_search(input_ids, cur_len=cur_len, max_length=max_length,
-                                                min_length=min_length, do_sample=do_sample,
-                                                early_stopping=early_stopping, temperature=temperature, top_k=top_k,
-                                                top_p=top_p, repetition_penalty=repetition_penalty,
-                                                no_repeat_ngram_size=no_repeat_ngram_size, bad_words_ids=bad_words_ids,
-                                                pad_token_id=pad_token_id, eos_token_id=eos_token_id,
-                                                batch_size=effective_batch_size,
-                                                num_return_sequences=num_return_sequences,
-                                                length_penalty=length_penalty, num_beams=num_beams,
-                                                vocab_size=vocab_size, encoder_outputs=encoder_outputs,
-                                                attention_mask=attention_mask, use_cache=use_cache)
+            output = self._generate_beam_search(
+                input_ids,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                early_stopping=early_stopping,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_ids=bad_words_ids,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                batch_size=effective_batch_size,
+                num_return_sequences=num_return_sequences,
+                length_penalty=length_penalty,
+                num_beams=num_beams,
+                vocab_size=vocab_size,
+                encoder_outputs=encoder_outputs,
+                attention_mask=attention_mask,
+                use_cache=use_cache,
+            )
         else:
             output = self._generate_no_beam_search(
                 input_ids,
@@ -549,10 +562,31 @@ class TFGenerationMixin:
 
         return decoded
 
-    def _generate_beam_search(self, input_ids, cur_len, max_length, min_length, do_sample, early_stopping, temperature,
-                              top_k, top_p, repetition_penalty, no_repeat_ngram_size, bad_words_ids, pad_token_id,
-                              eos_token_id, batch_size, num_return_sequences, length_penalty, num_beams, vocab_size,
-                              encoder_outputs, attention_mask, use_cache):
+    def _generate_beam_search(
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        min_length,
+        do_sample,
+        early_stopping,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        no_repeat_ngram_size,
+        bad_words_ids,
+        pad_token_id,
+        eos_token_id,
+        batch_size,
+        num_return_sequences,
+        length_penalty,
+        num_beams,
+        vocab_size,
+        encoder_outputs,
+        attention_mask,
+        use_cache,
+    ):
         """ Generate sequences for each example with beam search.
         """
 

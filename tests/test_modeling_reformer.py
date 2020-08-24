@@ -19,22 +19,23 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
+        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerConfig,
         ReformerForMaskedLM,
+        ReformerForQuestionAnswering,
+        ReformerForSequenceClassification,
+        ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
-        ReformerForSequenceClassification,
         ReformerTokenizer,
-        ReformerLayer,
-        ReformerForQuestionAnswering,
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    import torch
 
 
 class ReformerModelTester:
@@ -133,7 +134,7 @@ class ReformerModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         choice_labels = None
         if self.use_labels:
@@ -555,7 +556,6 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    test_chunking = True
 
     def prepare_kwargs(self):
         return {
@@ -616,7 +616,6 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
-    test_chunking = True
 
     def prepare_kwargs(self):
         return {

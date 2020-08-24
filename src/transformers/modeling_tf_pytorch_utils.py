@@ -108,8 +108,8 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
     """ Load pytorch state_dict in a TF 2.0 model.
     """
     try:
-        import torch  # noqa: F401
         import tensorflow as tf  # noqa: F401
+        import torch  # noqa: F401
         from tensorflow.python.keras import backend as K
     except ImportError:
         logger.error(

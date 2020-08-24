@@ -478,6 +478,31 @@ pretraining tasks, a composition of the following transformations are applied:
 
 The library provides a version of this model for conditional generation and sequence classification.
 
+Pegasus
+----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=pegasus">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-pegasus-blueviolet">
+   </a>
+   <a href="model_doc/pegasus.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-pegasus-blueviolet">
+   </a>
+
+`PEGASUS: Pre-training with Extracted Gap-sentences forAbstractive Summarization 
+<https://arxiv.org/pdf/1912.08777.pdf>`_, Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
+
+Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training objective, called Gap Sentence Generation (GSG).
+
+  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like in BERT)
+  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a causal mask to hide the future words like a regular auto-regressive transformer decoder.
+
+In contrast to BART, Pegasus' pretraining task is intentionally similar to summarization: important sentences are masked and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
+
+The library provides a version of this model for conditional generation, which should be used for summarization.
+
+
 MarianMT
 ----------------------------------------------
 
@@ -526,6 +551,31 @@ For instance, if we have the sentence “My dog is very cute .”, and we decide
 input becomes “My <x> very <y> .” and the target input becomes “<x> dog is <y> cute .<z>”
 
 The library provides a version of this model for conditional generation.
+
+MBart
+----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=mbart">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-mbart-blueviolet">
+   </a>
+   <a href="model_doc/mbart.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mbart-blueviolet">
+   </a>
+
+`Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov
+Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
+
+The model architecture and pre-training objective is same as BART, but MBart is trained on 25 languages 
+and is intended for supervised and unsupervised machine translation. MBart is one of the first methods 
+for pre-training a complete sequence-to-sequence model by denoising full texts in multiple languages,
+
+The library provides a version of this model for conditional generation.
+
+The `mbart-large-en-ro checkpoint <https://huggingface.co/facebook/mbart-large-en-ro>`_ can be used for english -> romanian translation.
+
+The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ checkpoint can be finetuned for other translation and summarization tasks, using code in ```examples/seq2seq/``` , but is not very useful without finetuning.
 
 .. _multimodal-models:
 
