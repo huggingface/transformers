@@ -775,8 +775,6 @@ class Trainer:
         hp_space: Optional[Callable[["optuna.Trial"], Dict[str, float]]] = None,
         compute_objective: Optional[Callable[[Dict[str, float]], float]] = None,
         n_trials: int = 20,
-        timeout: int = 1800,
-        n_jobs: int = 1,
         direction: str = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
         **kwargs
