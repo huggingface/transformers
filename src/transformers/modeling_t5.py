@@ -887,10 +887,12 @@ class T5Model(T5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.is_encoder_decoder = False
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.init_weights()
@@ -1040,10 +1042,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        decoder_config.is_encoder_decoder = False
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)

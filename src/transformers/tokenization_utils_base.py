@@ -1088,7 +1088,8 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 returned to provide some overlap between truncated and overflowing sequences. The value of this
                 argument defines the number of overlapping tokens.
             is_pretokenized (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the input is already tokenized.
+                Whether or not the input is already pre-tokenized (e.g., split into words), in which case the tokenizer
+                will skip the pre-tokenization step. This is useful for NER or token classification.
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
