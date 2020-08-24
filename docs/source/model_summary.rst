@@ -636,7 +636,7 @@ DPR consists in three models:
   * Context encoder: encode contexts as vectors
   * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
 
-DPR is used to do open-domain QA by using a retrieval step that finds the top k contexts given a certain question, and then calling DPR's reader with the question and the retrieved documents.
+DPR's pipeline (not implemented yet) uses a retrieval step to find the top k contexts given a certain question, and then it calls the reader with the question and the retrieved documents to get the answer.
 
 More technical aspects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
