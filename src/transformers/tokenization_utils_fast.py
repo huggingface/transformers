@@ -21,6 +21,7 @@ import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
@@ -341,7 +342,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         **kwargs
     ) -> BatchEncoding:
 
-        if not isinstance(batch_text_or_text_pairs, list):
+        if not isinstance(batch_text_or_text_pairs, (list, np.ndarray)):
             raise ValueError(
                 "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
             )

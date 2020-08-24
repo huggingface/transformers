@@ -1892,12 +1892,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         """
         # Input type checking for clearer error
         assert isinstance(text, str) or (
-            isinstance(text, (list, tuple))
+            isinstance(text, (list, tuple, np.ndarray))
             and (
                 len(text) == 0
                 or (
                     isinstance(text[0], str)
-                    or (isinstance(text[0], (list, tuple)) and (len(text[0]) == 0 or isinstance(text[0][0], str)))
+                    or (isinstance(text[0], (list, tuple, np.ndarray)) and (len(text[0]) == 0 or isinstance(text[0][0], str)))
                 )
             )
         ), (
@@ -1909,13 +1909,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             text_pair is None
             or isinstance(text_pair, str)
             or (
-                isinstance(text_pair, (list, tuple))
+                isinstance(text_pair, (list, tuple, np.ndarray))
                 and (
                     len(text_pair) == 0
                     or (
                         isinstance(text_pair[0], str)
                         or (
-                            isinstance(text_pair[0], (list, tuple))
+                            isinstance(text_pair[0], (list, tuple, np.ndarray))
                             and (len(text_pair[0]) == 0 or isinstance(text_pair[0][0], str))
                         )
                     )
@@ -1927,8 +1927,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         )
 
         is_batched = bool(
-            (not is_pretokenized and isinstance(text, (list, tuple)))
-            or (is_pretokenized and isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple)))
+            (not is_pretokenized and isinstance(text, (list, tuple, np.ndarray)))
+            or (is_pretokenized and isinstance(text, (list, tuple, np.ndarray)) and len(text) and isinstance(text[0], (list, tuple, np.ndarray)))
         )
 
         if is_batched:
