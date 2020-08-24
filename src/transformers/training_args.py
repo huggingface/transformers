@@ -117,6 +117,11 @@ class TrainingArguments:
         disable_tqdm (:obj:`bool`, `optional`):
             Whether or not to disable the tqdm progress bars. Will default to :obj:`True` if the logging level is set
             to warn or lower (default), :obj:`False` otherwise.
+        remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
+            forward method.
+
+            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
     """
 
     output_dir: str = field(
@@ -243,6 +248,10 @@ class TrainingArguments:
     def __post_init__(self):
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
+
+    remove_unused_columns: Optional[bool] = field(
+        default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
+    )
 
     @property
     def train_batch_size(self) -> int:
