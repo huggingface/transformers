@@ -28,13 +28,13 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.modeling_tf_xlnet import (
-        TFXLNetModel,
-        TFXLNetLMHeadModel,
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLNetForMultipleChoice,
+        TFXLNetForQuestionAnsweringSimple,
         TFXLNetForSequenceClassification,
         TFXLNetForTokenClassification,
-        TFXLNetForQuestionAnsweringSimple,
-        TFXLNetForMultipleChoice,
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLNetLMHeadModel,
+        TFXLNetModel,
     )
 
 

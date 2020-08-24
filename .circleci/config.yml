@@ -235,8 +235,7 @@ jobs:
                       - v0.3-code_quality-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            # we need a version of isort with https://github.com/timothycrosley/isort/pull/1000
-            - run: pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+            - run: pip install isort
             - run: pip install .[tf,torch,quality]
             - save_cache:
                   key: v0.3-code_quality-{{ checksum "setup.py" }}

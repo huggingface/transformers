@@ -28,11 +28,7 @@ from transformers.tokenization_utils import AddedToken
 
 
 if TYPE_CHECKING:
-    from transformers import (
-        PretrainedConfig,
-        PreTrainedModel,
-        TFPreTrainedModel,
-    )
+    from transformers import PretrainedConfig, PreTrainedModel, TFPreTrainedModel
 
 
 def merge_model_tokenizer_mappings(
@@ -1398,6 +1394,7 @@ class TokenizerTesterMixin:
     @require_torch
     def test_torch_encode_plus_sent_to_model(self):
         import torch
+
         from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)

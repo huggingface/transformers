@@ -26,13 +26,13 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     from transformers import (
         AlbertConfig,
-        AlbertModel,
-        AlbertForPreTraining,
         AlbertForMaskedLM,
         AlbertForMultipleChoice,
+        AlbertForPreTraining,
+        AlbertForQuestionAnswering,
         AlbertForSequenceClassification,
         AlbertForTokenClassification,
-        AlbertForQuestionAnswering,
+        AlbertModel,
     )
     from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 

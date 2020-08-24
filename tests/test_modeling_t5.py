@@ -28,7 +28,8 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
-    from transformers import T5Config, T5Model, T5ForConditionalGeneration
+
+    from transformers import T5Config, T5ForConditionalGeneration, T5Model
     from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.tokenization_t5 import T5Tokenizer
 

@@ -27,13 +27,13 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.modeling_tf_electra import (
-        TFElectraModel,
         TFElectraForMaskedLM,
         TFElectraForMultipleChoice,
         TFElectraForPreTraining,
+        TFElectraForQuestionAnswering,
         TFElectraForSequenceClassification,
         TFElectraForTokenClassification,
-        TFElectraForQuestionAnswering,
+        TFElectraModel,
     )
 
 

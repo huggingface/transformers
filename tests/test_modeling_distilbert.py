@@ -25,14 +25,14 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 if is_torch_available():
     from transformers import (
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DistilBertConfig,
-        DistilBertModel,
         DistilBertForMaskedLM,
         DistilBertForMultipleChoice,
-        DistilBertForTokenClassification,
         DistilBertForQuestionAnswering,
         DistilBertForSequenceClassification,
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DistilBertForTokenClassification,
+        DistilBertModel,
     )
 
     class DistilBertModelTester(object):
