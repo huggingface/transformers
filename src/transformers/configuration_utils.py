@@ -56,6 +56,10 @@ class PretrainedConfig(object):
                 Whether the model is used as an encoder/decoder or not.
             is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether the model is used as decoder or not (in which case it's used as an encoder).
+            add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether cross-attention layers should be added to the model. Note, this option is only relevant for models that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
+            tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`)
+                Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder and decoder model to have the exact same parameter names.
             prune_heads (:obj:`Dict[int, List[int]]`, `optional`, defaults to :obj:`{}`):
                 Pruned heads of the model. The keys are the selected layer indices and the associated values, the list
                 of heads to prune in said layer.
@@ -64,6 +68,11 @@ class PretrainedConfig(object):
                 2.
             xla_device (:obj:`bool`, `optional`):
                 A flag to indicate if TPU are available or not.
+            chunk_size_feed_forward (:obj:`int`, `optional`, defaults to :obj:`0`):
+                The chunk size of all feed forward layers in the residual attention blocks.
+                A chunk size of :obj:`0` means that the feed forward layer is not chunked.
+                A chunk size of n means that the feed forward layer processes :obj:`n` < sequence_length embeddings at a time.
+                For more information on feed forward chunking, see `How does Feed Forward Chunking work? <../glossary.html#feed-forward-chunking>`__ .
 
         Parameters for sequence generation
             - **max_length** (:obj:`int`, `optional`, defaults to 20) -- Maximum length that will be used by
@@ -84,7 +93,7 @@ class PretrainedConfig(object):
               keep for top-k-filtering that will be used by default in the :obj:`generate` method of the model.
             - **top_p** (:obj:`float`, `optional`, defaults to 1) --  Value that will be used by default in the
               :obj:`generate` method of the model for ``top_p``. If set to float < 1, only the most probable tokens
-              with probabilities that add up to ``top_p`` or highest are kept for generation.
+              with probabilities that add up to ``top_p`` or higher are kept for generation.
             - **repetition_penalty** (:obj:`float`, `optional`, defaults to 1) -- Parameter for repetition penalty
               that will be used by default in the :obj:`generate` method of the model. 1.0 means no penalty.
             - **length_penalty** (:obj:`float`, `optional`, defaults to 1) -- Exponential penalty to the length that
@@ -145,6 +154,8 @@ class PretrainedConfig(object):
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
+        self.add_cross_attention = kwargs.pop("add_cross_attention", False)
+        self.tie_encoder_decoder = kwargs.pop("tie_encoder_decoder", False)
 
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
@@ -160,6 +171,7 @@ class PretrainedConfig(object):
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
+        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -179,6 +191,7 @@ class PretrainedConfig(object):
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
+        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forwar", 0)
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)

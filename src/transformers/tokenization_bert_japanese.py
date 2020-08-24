@@ -167,30 +167,89 @@ class BertJapaneseTokenizer(BertTokenizer):
 class MecabTokenizer:
     """Runs basic tokenization with MeCab morphological parser."""
 
-    def __init__(self, do_lower_case=False, never_split=None, normalize_text=True, mecab_option: Optional[str] = None):
+    def __init__(
+        self,
+        do_lower_case=False,
+        never_split=None,
+        normalize_text=True,
+        mecab_dic: Optional[str] = "ipadic",
+        mecab_option: Optional[str] = None,
+    ):
         """Constructs a MecabTokenizer.
 
         Args:
             **do_lower_case**: (`optional`) boolean (default True)
-                Whether to lower case the input.
+                Whether to lowercase the input.
             **never_split**: (`optional`) list of str
                 Kept for backward compatibility purposes.
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
-                List of token not to split.
+                List of tokens not to split.
             **normalize_text**: (`optional`) boolean (default True)
                 Whether to apply unicode normalization to text before tokenization.
-            **mecab_option**: (`optional`) string passed to `MeCab.Tagger` constructor (default "")
+            **mecab_dic**: (`optional`) string (default "ipadic")
+                Name of dictionary to be used for MeCab initialization.
+                If you are using a system-installed dictionary, set thi option to `None` and modify `mecab_option`.
+            **mecab_option**: (`optional`) string
+                String passed to MeCab constructor.
         """
         self.do_lower_case = do_lower_case
         self.never_split = never_split if never_split is not None else []
         self.normalize_text = normalize_text
 
-        import fugashi
-        import ipadic
+        try:
+            import fugashi
+        except ModuleNotFoundError as error:
+            raise error(
+                "You need to install fugashi to use MecabTokenizer."
+                "See https://pypi.org/project/fugashi/ for installation."
+            )
 
-        # Use ipadic by default (later options can override it)
         mecab_option = mecab_option or ""
-        mecab_option = ipadic.MECAB_ARGS + " " + mecab_option
+
+        if mecab_dic is not None:
+            if mecab_dic == "ipadic":
+                try:
+                    import ipadic
+                except ModuleNotFoundError as error:
+                    raise error(
+                        "The ipadic dictionary is not installed. "
+                        "See https://github.com/polm/ipadic-py for installation."
+                    )
+
+                dic_dir = ipadic.DICDIR
+
+            elif mecab_dic == "unidic_lite":
+                try:
+                    import unidic_lite
+                except ModuleNotFoundError as error:
+                    raise error(
+                        "The unidic_lite dictionary is not installed. "
+                        "See https://github.com/polm/unidic-lite for installation."
+                    )
+
+                dic_dir = unidic_lite.DICDIR
+
+            elif mecab_dic == "unidic":
+                try:
+                    import unidic
+                except ModuleNotFoundError as error:
+                    raise error(
+                        "The unidic dictionary is not installed. "
+                        "See https://github.com/polm/unidic-py for installation."
+                    )
+
+                dic_dir = unidic.DICDIR
+                if not os.path.isdir(dic_dir):
+                    raise RuntimeError(
+                        "The unidic dictionary itself is not found."
+                        "See https://github.com/polm/unidic-py for installation."
+                    )
+
+            else:
+                raise ValueError("Invalid mecab_dic is specified.")
+
+            mecabrc = os.path.join(dic_dir, "mecabrc")
+            mecab_option = "-d {} -r {} ".format(dic_dir, mecabrc) + mecab_option
 
         self.mecab = fugashi.GenericTagger(mecab_option)
 
@@ -213,7 +272,7 @@ class MecabTokenizer:
         return tokens
 
 
-class CharacterTokenizer(object):
+class CharacterTokenizer:
     """Runs Character tokenziation."""
 
     def __init__(self, vocab, unk_token, normalize_text=True):
@@ -247,7 +306,7 @@ class CharacterTokenizer(object):
             text = unicodedata.normalize("NFKC", text)
 
         output_tokens = []
-        for i, char in enumerate(text):
+        for char in text:
             if char not in self.vocab:
                 output_tokens.append(self.unk_token)
                 continue

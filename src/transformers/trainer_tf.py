@@ -38,14 +38,20 @@ class TFTrainer:
         args (:class:`~transformers.TFTrainingArguments`):
             The arguments to tweak training.
         train_dataset (:class:`~tf.data.Dataset`, `optional`):
-            The dataset to use for training.
+            The dataset to use for training. The dataset should yield tuples of ``(features, labels)`` where
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
+            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``model(features, **labels)``.
         eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-            The dataset to use for evaluation.
+            The dataset to use for evaluation. The dataset should yield tuples of ``(features, labels)`` where
+            ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+            calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such as when
+            using a QuestionAnswering head model with multiple targets, the loss is instead calculated by calling
+            ``model(features, **labels)``.
         compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
-        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
-            When performing evaluation and predictions, only returns the loss.
         tb_writer (:obj:`tf.summary.SummaryWriter`, `optional`):
             Object to write to TensorBoard.
         optimizers (:obj:`Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]`, `optional`):
@@ -54,6 +60,8 @@ class TFTrainer:
             :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
             :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else
             an instance of :class:`~transformers.WarmUp`.
+        kwargs:
+            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -63,12 +71,12 @@ class TFTrainer:
         train_dataset: Optional[tf.data.Dataset] = None,
         eval_dataset: Optional[tf.data.Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-        prediction_loss_only=False,
         tb_writer: Optional[tf.summary.SummaryWriter] = None,
         optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = (
             None,
             None,
         ),
+        **kwargs,
     ):
         assert parse(tf.__version__).release >= (2, 2, 0), (
             "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
@@ -80,11 +88,17 @@ class TFTrainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
-        self.prediction_loss_only = prediction_loss_only
         self.optimizer, self.lr_scheduler = optimizers
         self.gradient_accumulator = GradientAccumulator()
         self.global_step = 0
         self.epoch_logging = 0
+        if "prediction_loss_only" in kwargs:
+            warnings.warn(
+                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a future version. Use `args.prediction_loss_only` instead.",
+                FutureWarning,
+            )
+            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
@@ -139,7 +153,11 @@ class TFTrainer:
 
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-                If provided, will override `self.eval_dataset`.
+                If provided, will override `self.eval_dataset`. The dataset should yield tuples of ``(features,
+                labels)`` where ``features`` is a dict of input features and ``labels`` is the labels. If ``labels``
+                is a tensor, the loss is calculated by the model by calling ``model(features, labels=labels)``. If
+                ``labels`` is a dict, such as when using a QuestionAnswering head model with multiple targets, the
+                loss is instead calculated by calling ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -167,7 +185,12 @@ class TFTrainer:
         Returns a test :class:`~tf.data.Dataset`.
 
         Args:
-            test_dataset (:class:`~tf.data.Dataset`): The dataset to use.
+            test_dataset (:class:`~tf.data.Dataset`):
+                The dataset to use. The dataset should yield tuples of ``(features, labels)`` where ``features`` is
+                a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor, the loss is
+                calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is a dict, such
+                as when using a QuestionAnswering head model with multiple targets, the loss is instead calculated
+                by calling ``model(features, **labels)``.
 
         Subclass and override this method if you want to inject some custom behavior.
         """
@@ -282,7 +305,9 @@ class TFTrainer:
                 dataset, steps, num_examples, description, prediction_loss_only=prediction_loss_only
             )
 
-        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
+        prediction_loss_only = (
+            prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
+        )
 
         logger.info("***** Running %s *****", description)
         logger.info("  Num examples = %d", num_examples)
@@ -397,14 +422,18 @@ class TFTrainer:
 
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
-                Pass a dataset if you wish to override :obj:`self.eval_dataset`.
+                Pass a dataset if you wish to override :obj:`self.eval_dataset`. The dataset should yield tuples of
+                ``(features, labels)`` where ``features`` is a dict of input features and ``labels`` is the labels.
+                If ``labels`` is a tensor, the loss is calculated by the model by calling ``model(features,
+                labels=labels)``. If ``labels`` is a dict, such as when using a QuestionAnswering head model with
+                multiple targets, the loss is instead calculated by calling ``model(features, **labels)``.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
         """
         eval_ds, steps, num_examples = self.get_eval_tfdataset(eval_dataset)
 
-        output = self._prediction_loop(eval_ds, steps, num_examples, description="Evaluation")
+        output = self.prediction_loop(eval_ds, steps, num_examples, description="Evaluation")
         logs = {**output.metrics}
         logs["epoch"] = self.epoch_logging
 
@@ -658,7 +687,11 @@ class TFTrainer:
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`):
-                Dataset to run the predictions on.
+                Dataset to run the predictions on. The dataset should yield tuples of ``(features, labels)`` where
+                ``features`` is a dict of input features and ``labels`` is the labels. If ``labels`` is a tensor,
+                the loss is calculated by the model by calling ``model(features, labels=labels)``. If ``labels`` is
+                a dict, such as when using a QuestionAnswering head model with multiple targets, the loss is instead
+                calculated by calling ``model(features, **labels)``.
         Returns:
             `NamedTuple`:
             predictions (:obj:`np.ndarray`):

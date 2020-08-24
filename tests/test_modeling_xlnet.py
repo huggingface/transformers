@@ -21,7 +21,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -100,7 +100,7 @@ class XLNetModelTester:
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids_2 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         segment_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-        input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
+        input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
         perm_mask = torch.zeros(
@@ -192,8 +192,8 @@ class XLNetModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_model_use_cache(
@@ -305,22 +305,22 @@ class XLNetModelTester:
 
         result1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
 
-        result2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=result1["mems"])
+        result2 = model(input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=result1.mems)
 
         _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
 
         self.parent.assertEqual(result1.loss.shape, ())
         self.parent.assertEqual(result1.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result1["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result1.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
         self.parent.assertEqual(result2.loss.shape, ())
         self.parent.assertEqual(result2.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result2["mems"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result2.mems],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_qa(
@@ -378,8 +378,8 @@ class XLNetModelTester:
         )
         self.parent.assertEqual(result.cls_logits.shape, (self.batch_size,))
         self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_token_classif(
@@ -407,8 +407,8 @@ class XLNetModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_xlnet_sequence_classif(
@@ -436,8 +436,8 @@ class XLNetModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
         self.parent.assertListEqual(
-            list(list(mem.size()) for mem in result["mems"]),
-            [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in result.mems],
+            [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def prepare_config_and_inputs_for_common(self):

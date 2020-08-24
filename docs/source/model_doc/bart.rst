@@ -17,13 +17,23 @@ According to the abstract,
 The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_
 
 
-Implementation Notes:
+Implementation Notes
+~~~~~~~~~~~~~~~~~~~~
 
 - Bart doesn't use :obj:`token_type_ids` for sequence classification. Use BartTokenizer.encode to get the proper splitting.
 - The forward pass of ``BartModel`` will create decoder inputs (using the helper function ``transformers.modeling_bart._prepare_bart_decoder_inputs``)  if they are not passed. This is different than some other modeling APIs.
 - Model predictions are intended to be identical to the original implementation. This only works, however, if the string you pass to ``fairseq.encode`` starts with a space.
 - ``BartForConditionalGeneration.generate`` should be used for conditional generation tasks like summarization, see the example in that docstrings
 - Models that load the ``"facebook/bart-large-cnn"`` weights will not have a ``mask_token_id``, or be able to perform mask filling tasks.
+- for training/forward passes that don't involve beam search, pass ``use_cache=False``
+
+
+BartForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartForConditionalGeneration
+    :members: generate, forward
+
 
 BartConfig
 ~~~~~~~~~~~~~~~~~~~~~
@@ -39,17 +49,6 @@ BartTokenizer
     :members:
 
 
-MBartTokenizer
-~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.MBartTokenizer
-    :members: build_inputs_with_special_tokens, prepare_translation_batch
-
-BartForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BartForConditionalGeneration
-    :members: generate, forward
 
 BartModel
 ~~~~~~~~~~~~~
