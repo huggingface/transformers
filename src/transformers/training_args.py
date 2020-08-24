@@ -118,7 +118,7 @@ class TrainingArguments:
             If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
             forward method.
 
-            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.) 
+            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
     """
 
     output_dir: str = field(
