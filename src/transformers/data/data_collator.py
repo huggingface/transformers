@@ -331,7 +331,10 @@ class DataCollatorForNextSentencePrediction:
     nsp_probability: float = 0.5
     mlm_probability: float = 0.15
 
-    def __call__(self, examples: List[List[List[int]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, examples: List[Union[List[List[int]], Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        if isinstance(examples[0], (dict, BatchEncoding)):
+            examples = [e["input_ids"] for e in examples]
+
         input_ids = []
         segment_ids = []
         nsp_labels = []
