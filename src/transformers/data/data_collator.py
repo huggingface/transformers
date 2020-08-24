@@ -371,7 +371,7 @@ class DataCollatorForNextSentencePrediction:
     ):
         """Creates examples for a single document."""
 
-        max_num_tokens = self.block_size - self.tokenizer.num_special_tokens_to_add(pair=False)
+        max_num_tokens = self.block_size - self.tokenizer.num_special_tokens_to_add(pair=True)
 
         # We *usually* want to fill up the entire sequence since we are padding
         # to `block_size` anyways, so short sequences are generally wasted
@@ -439,6 +439,13 @@ class DataCollatorForNextSentencePrediction:
 
                     assert len(tokens_a) >= 1
                     assert len(tokens_b) >= 1
+
+                    tokens_a, tokens_b, _ = self.tokenizer.truncate_sequences(
+                        tokens_a,
+                        tokens_b,
+                        num_tokens_to_remove=len(tokens_a) + len(tokens_b) - max_num_tokens,
+                        truncation_strategy="longest_first",
+                    )
 
                     input_ids.append(torch.tensor(self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)))
                     segment_ids.append(

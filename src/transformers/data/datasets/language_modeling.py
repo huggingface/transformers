@@ -112,14 +112,13 @@ class TextDatasetForNextSentencePrediction(Dataset):
     ):
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
-        block_size = block_size - tokenizer.num_special_tokens_to_add(pair=False)
+        block_size = block_size - tokenizer.num_special_tokens_to_add(pair=True)
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
             directory, "cached_lm_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
         )
 
-        self.block_size = block_size
         self.tokenizer = tokenizer
         self.examples = []
 
@@ -160,7 +159,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
                         line = line.strip()
 
                         # Empty lines are used as document delimiters
-                        if not line:
+                        if not line and len(self.examples[-1]) != 0:
                             self.examples.append([])
                         tokens = tokenizer.tokenize(line)
                         tokens = tokenizer.convert_tokens_to_ids(tokens)
