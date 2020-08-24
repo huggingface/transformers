@@ -35,6 +35,20 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
+try:
+    import optuna  # noqa: F401
+
+    _has_optuna = True
+except (ImportError):
+    _has_optuna = False
+
+try:
+    import ray  # noqa: F401
+
+    _has_ray = True
+except (ImportError):
+    _has_ray = False
+
 
 def is_wandb_available():
     return _has_wandb
@@ -46,3 +60,18 @@ def is_comet_available():
 
 def is_tensorboard_available():
     return _has_tensorboard
+
+
+def is_optuna_available():
+    return _has_optuna
+
+
+def is_ray_available():
+    return _has_ray
+
+
+def default_hp_search_backend():
+    if is_optuna_available():
+        return "optuna"
+    elif is_ray_available():
+        return "ray"

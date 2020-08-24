@@ -92,7 +92,13 @@ from .file_utils import (
 from .hf_argparser import HfArgumentParser
 
 # Integrations
-from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
+from .integrations import (
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
 
 # Model Cards
 from .modelcard import ModelCard
