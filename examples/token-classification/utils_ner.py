@@ -23,7 +23,6 @@ from enum import Enum
 from typing import List, Optional, Union
 
 from filelock import FileLock
-
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 

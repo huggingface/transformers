@@ -15,8 +15,9 @@
 # limitations under the License.
 
 try:
-    from scipy.stats import pearsonr, spearmanr
     from sklearn.metrics import f1_score, matthews_corrcoef
+
+    from scipy.stats import pearsonr, spearmanr
 
     _has_sklearn = True
 except (AttributeError, ImportError):
