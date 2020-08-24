@@ -1,5 +1,5 @@
 ---
-language: ukrainian
+language: uk
 ---
 
 Note: **default code snippet above won't work** because we are using `AlbertTokenizer` with `GPT2LMHeadModel`, see [issue](https://github.com/huggingface/transformers/issues/4285).

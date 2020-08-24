@@ -1,3 +1,6 @@
+---
+language: tr
+---
 
 # For Turkish language, here is an easy-to-use NER application. 
  ** Türkçe için kolay bir python  NER (Bert + Transfer Learning)  (İsim Varlık Tanıma) modeli... 

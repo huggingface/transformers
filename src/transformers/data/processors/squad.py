@@ -9,7 +9,12 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
+from ...tokenization_utils_base import TruncationStrategy
 from .utils import DataProcessor
+
+
+# Store the tokenizers which insert 2 separators tokens
+MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
 
 
 if is_torch_available():
@@ -83,7 +88,9 @@ def _is_whitespace(c):
     return False
 
 
-def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_query_length, is_training):
+def squad_convert_example_to_features(
+    example, max_seq_length, doc_stride, max_query_length, padding_strategy, is_training
+):
     features = []
     if is_training and not example.is_impossible:
         # Get start and end position
@@ -123,9 +130,13 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
     truncated_query = tokenizer.encode(
         example.question_text, add_special_tokens=False, truncation=True, max_length=max_query_length
     )
+
+    # Tokenizers who insert 2 SEP tokens in-between <context> & <question> need to have special handling
+    # in the way they compute mask of added tokens.
+    tokenizer_type = type(tokenizer).__name__.replace("Tokenizer", "").lower()
     sequence_added_tokens = (
         tokenizer.max_len - tokenizer.max_len_single_sentence + 1
-        if "roberta" in str(type(tokenizer)) or "camembert" in str(type(tokenizer))
+        if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
         else tokenizer.max_len - tokenizer.max_len_single_sentence
     )
     sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair
@@ -133,11 +144,21 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
 
+        # Define the side we want to truncate / pad and the text/pair sorting
+        if tokenizer.padding_side == "right":
+            texts = truncated_query
+            pairs = span_doc_tokens
+            truncation = TruncationStrategy.ONLY_SECOND.value
+        else:
+            texts = span_doc_tokens
+            pairs = truncated_query
+            truncation = TruncationStrategy.ONLY_FIRST.value
+
         encoded_dict = tokenizer.encode_plus(  # TODO(thom) update this logic
-            truncated_query if tokenizer.padding_side == "right" else span_doc_tokens,
-            span_doc_tokens if tokenizer.padding_side == "right" else truncated_query,
-            truncation="only_second" if tokenizer.padding_side == "right" else "only_first",
-            padding="max_length",
+            texts,
+            pairs,
+            truncation=truncation,
+            padding=padding_strategy,
             max_length=max_seq_length,
             return_overflowing_tokens=True,
             stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
@@ -277,6 +298,7 @@ def squad_convert_examples_to_features(
     doc_stride,
     max_query_length,
     is_training,
+    padding_strategy="max_length",
     return_dataset=False,
     threads=1,
     tqdm_enabled=True,
@@ -292,6 +314,7 @@ def squad_convert_examples_to_features(
         doc_stride: The stride used when the context is too large and is split across several features.
         max_query_length: The maximum length of the query.
         is_training: whether to create features for model evaluation or model training.
+        padding_strategy: Default to "max_length". Which padding strategy to use
         return_dataset: Default False. Either 'pt' or 'tf'.
             if 'pt': returns a torch.data.TensorDataset,
             if 'tf': returns a tf.data.Dataset
@@ -325,6 +348,7 @@ def squad_convert_examples_to_features(
             max_seq_length=max_seq_length,
             doc_stride=doc_stride,
             max_query_length=max_query_length,
+            padding_strategy=padding_strategy,
             is_training=is_training,
         )
         features = list(
@@ -612,11 +636,7 @@ class SquadProcessor(DataProcessor):
                     answer_text = None
                     answers = []
 
-                    if "is_impossible" in qa:
-                        is_impossible = qa["is_impossible"]
-                    else:
-                        is_impossible = False
-
+                    is_impossible = qa.get("is_impossible", False)
                     if not is_impossible:
                         if is_training:
                             answer = qa["answers"][0]
@@ -635,7 +655,6 @@ class SquadProcessor(DataProcessor):
                         is_impossible=is_impossible,
                         answers=answers,
                     )
-
                     examples.append(example)
         return examples
 
@@ -650,7 +669,7 @@ class SquadV2Processor(SquadProcessor):
     dev_file = "dev-v2.0.json"
 
 
-class SquadExample(object):
+class SquadExample:
     """
     A single training/test example for the Squad dataset, as loaded from disk.
 
@@ -713,7 +732,7 @@ class SquadExample(object):
             ]
 
 
-class SquadFeatures(object):
+class SquadFeatures:
     """
     Single squad example features to be fed to a model.
     Those features are model-specific and can be crafted from :class:`~transformers.data.processors.squad.SquadExample`
@@ -775,7 +794,7 @@ class SquadFeatures(object):
         self.qas_id = qas_id
 
 
-class SquadResult(object):
+class SquadResult:
     """
     Constructs a SquadResult which can be used to evaluate a model's output on the SQuAD dataset.
 

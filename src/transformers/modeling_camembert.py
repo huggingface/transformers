@@ -20,6 +20,7 @@ import logging
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -51,8 +52,6 @@ CAMEMBERT_START_DOCSTRING = r"""
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
-            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -131,6 +130,18 @@ class CamembertForTokenClassification(RobertaForTokenClassification):
 class CamembertForQuestionAnswering(RobertaForQuestionAnswering):
     """
     This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = CamembertConfig
+
+
+@add_start_docstrings(
+    """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning. """, CAMEMBERT_START_DOCSTRING
+)
+class CamembertForCausalLM(RobertaForCausalLM):
+    """
+    This class overrides :class:`~transformers.RobertaForCausalLM`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 

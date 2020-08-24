@@ -18,7 +18,7 @@ import unittest
 
 import timeout_decorator  # noqa
 
-from transformers import is_torch_available
+from transformers import BatchEncoding, is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -31,7 +31,6 @@ if is_torch_available():
     from transformers import (
         AutoModel,
         AutoModelForSequenceClassification,
-        AutoModelForSeq2SeqLM,
         AutoTokenizer,
         BartModel,
         BartForConditionalGeneration,
@@ -39,7 +38,7 @@ if is_torch_available():
         BartForQuestionAnswering,
         BartConfig,
         BartTokenizer,
-        BatchEncoding,
+        BartTokenizerFast,
         pipeline,
     )
     from transformers.modeling_bart import (
@@ -48,6 +47,7 @@ if is_torch_available():
         _prepare_bart_decoder_inputs,
         SinusoidalPositionalEmbedding,
     )
+PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
 
 @require_torch
@@ -120,7 +120,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False
-    test_torchscript = False
+    test_torchscript = True
     test_head_masking = False
     test_resize_embeddings = True  # This requires inputs_dict['input_ids']
     test_missing_keys = False  # because BartForConditionalGeneration and BartModel now have identical state_dict
@@ -133,7 +133,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_initialization_more(self):
-        # (config, input_ids, token_type_ids, input_mask, *unused) = \
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = BartModel(config)
         model.to(torch_device)
@@ -203,140 +202,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             tiny(**inputs_dict)
 
 
-EN_CODE = 250004
-
-
-@require_torch
-class MBartIntegrationTests(unittest.TestCase):
-    src_text = [
-        " UN Chief Says There Is No Military Solution in Syria",
-        """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
-    ]
-    tgt_text = [
-        "Şeful ONU declară că nu există o soluţie militară în Siria",
-        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.',
-    ]
-
-    expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
-
-    @classmethod
-    def setUpClass(cls):
-        checkpoint_name = "facebook/mbart-large-en-ro"
-        cls.tokenizer = AutoTokenizer.from_pretrained(checkpoint_name)
-        cls.pad_token_id = 1
-        return cls
-
-    @cached_property
-    def model(self):
-        """Only load the model if needed."""
-        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro").to(torch_device)
-        if "cuda" in torch_device:
-            model = model.half()
-        return model
-
-    @slow
-    @unittest.skip("This has been failing since June 20th at least.")
-    def test_enro_forward(self):
-        model = self.model
-        net_input = {
-            "input_ids": _long_tensor(
-                [
-                    [3493, 3060, 621, 104064, 1810, 100, 142, 566, 13158, 6889, 5, 2, 250004],
-                    [64511, 7, 765, 2837, 45188, 297, 4049, 237, 10, 122122, 5, 2, 250004],
-                ]
-            ),
-            "decoder_input_ids": _long_tensor(
-                [
-                    [250020, 31952, 144, 9019, 242307, 21980, 55749, 11, 5, 2, 1, 1],
-                    [250020, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2],
-                ]
-            ),
-        }
-        net_input["attention_mask"] = net_input["input_ids"].ne(self.pad_token_id)
-        with torch.no_grad():
-            logits, *other_stuff = model(**net_input)
-
-        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=logits.device, dtype=logits.dtype)
-        result_slice = logits[0, 0, :3]
-        _assert_tensors_equal(expected_slice, result_slice, atol=TOLERANCE)
-
-    @slow
-    def test_enro_generate(self):
-        batch: BatchEncoding = self.tokenizer.prepare_translation_batch(self.src_text).to(torch_device)
-        translated_tokens = self.model.generate(**batch)
-        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
-        self.assertEqual(self.tgt_text[0], decoded[0])
-        self.assertEqual(self.tgt_text[1], decoded[1])
-
-    def test_mbart_enro_config(self):
-        mbart_models = ["facebook/mbart-large-en-ro"]
-        expected = {"scale_embedding": True, "output_past": True}
-        for name in mbart_models:
-            config = BartConfig.from_pretrained(name)
-            self.assertTrue(config.is_valid_mbart())
-            for k, v in expected.items():
-                try:
-                    self.assertEqual(v, getattr(config, k))
-                except AssertionError as e:
-                    e.args += (name, k)
-                    raise
-
-    def test_mbart_fast_forward(self):
-        config = BartConfig(
-            vocab_size=99,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            add_final_layer_norm=True,
-        )
-        lm_model = BartForConditionalGeneration(config).to(torch_device)
-        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
-        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
-        expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
-
-    def test_enro_tokenizer_prepare_translation_batch(self):
-        batch = self.tokenizer.prepare_translation_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens),
-        )
-        self.assertIsInstance(batch, BatchEncoding)
-
-        self.assertEqual((2, 14), batch.input_ids.shape)
-        self.assertEqual((2, 14), batch.attention_mask.shape)
-        result = batch.input_ids.tolist()[0]
-        self.assertListEqual(self.expected_src_tokens, result)
-        self.assertEqual(2, batch.decoder_input_ids[0, -2])  # EOS
-
-    def test_enro_tokenizer_batch_encode_plus(self):
-        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
-        self.assertListEqual(self.expected_src_tokens, ids)
-
-    def test_enro_tokenizer_decode_ignores_language_codes(self):
-        self.assertIn(250020, self.tokenizer.all_special_ids)
-        generated_ids = [250020, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2]
-        result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
-        self.assertEqual(result, expected_romanian)
-        self.assertNotIn(self.tokenizer.eos_token, result)
-
-    def test_enro_tokenizer_truncation(self):
-        src_text = ["this is gunna be a long sentence " * 20]
-        assert isinstance(src_text[0], str)
-        desired_max_length = 10
-        ids = self.tokenizer.prepare_translation_batch(
-            src_text, return_tensors=None, max_length=desired_max_length
-        ).input_ids[0]
-        self.assertEqual(ids[-2], 2)
-        self.assertEqual(ids[-1], EN_CODE)
-        self.assertEqual(len(ids), desired_max_length)
-
-
 @require_torch
 class BartHeadTests(unittest.TestCase):
     vocab_size = 99
@@ -376,6 +241,7 @@ class BartHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
+            return_dict=True,
         )
         return config, input_ids, batch_size
 
@@ -385,24 +251,20 @@ class BartHeadTests(unittest.TestCase):
         model = BartForSequenceClassification(config)
         model.to(torch_device)
         outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=labels)
-        logits = outputs[1]
         expected_shape = torch.Size((batch_size, config.num_labels))
-        self.assertEqual(logits.shape, expected_shape)
-        loss = outputs[0]
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     def test_question_answering_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = BartForQuestionAnswering(config)
         model.to(torch_device)
-        loss, start_logits, end_logits, _ = model(
-            input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
-        )
+        outputs = model(input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,)
 
-        self.assertEqual(start_logits.shape, input_ids.shape)
-        self.assertEqual(end_logits.shape, input_ids.shape)
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
+        self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     @timeout_decorator.timeout(1)
     def test_lm_forward(self):
@@ -410,10 +272,10 @@ class BartHeadTests(unittest.TestCase):
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
         lm_model = BartForConditionalGeneration(config)
         lm_model.to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=input_ids, labels=lm_labels)
+        outputs = lm_model(input_ids=input_ids, labels=lm_labels)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
-        self.assertIsInstance(loss.item(), float)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
+        self.assertIsInstance(outputs["loss"].item(), float)
 
     def test_lm_uneven_forward(self):
         config = BartConfig(
@@ -426,13 +288,14 @@ class BartHeadTests(unittest.TestCase):
             encoder_ffn_dim=8,
             decoder_ffn_dim=8,
             max_position_embeddings=48,
+            return_dict=True,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
+        outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(logits.shape, expected_shape)
+        self.assertEqual(outputs["logits"].shape, expected_shape)
 
     def test_generate_beam_search(self):
         input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
@@ -555,6 +418,14 @@ TOLERANCE = 1e-4
 
 @require_torch
 class BartModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_tokenizer(self):
+        return BartTokenizer.from_pretrained("facebook/bart-large")
+
+    @cached_property
+    def default_tokenizer_fast(self):
+        return BartTokenizerFast.from_pretrained("facebook/bart-large")
+
     @slow
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("facebook/bart-large").to(torch_device)
@@ -574,8 +445,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         pbase = pipeline(task="fill-mask", model="facebook/bart-base")
         src_text = [" I went to the <mask>."]
         results = [x["token_str"] for x in pbase(src_text)]
-        expected_results = ["Ġbathroom", "Ġrestroom", "Ġhospital", "Ġkitchen", "Ġcar"]
-        self.assertListEqual(results, expected_results)
+        assert "Ġbathroom" in results
 
     @slow
     def test_bart_large_mask_filling(self):
@@ -618,8 +488,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertFalse(model.config.is_valid_mbart())
         tok = BartTokenizer.from_pretrained("facebook/bart-large")
 
-        PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
-        EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
+        EXPECTED_SUMMARY = "California's largest power company has begun shutting off electricity to thousands of customers in the state."
         dct = tok.batch_encode_plus(
             [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
         ).to(torch_device)
@@ -698,6 +567,84 @@ class BartModelIntegrationTests(unittest.TestCase):
         )
         # TODO(SS): run fairseq again with num_beams=2, min_len=20.
         # TODO(SS): add test case that hits max_length
+
+    def test_prepare_seq2seq_batch(self):
+        tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        expected_src_tokens = [0, 250, 251, 17818, 13, 32933, 21645, 1258, 4, 2]
+
+        for tokenizer in tokenizers:
+            batch = tokenizer.prepare_seq2seq_batch(
+                src_text, tgt_texts=tgt_text, max_length=len(expected_src_tokens), return_tensors="pt"
+            )
+            self.assertIsInstance(batch, BatchEncoding)
+
+            self.assertEqual((2, 10), batch.input_ids.shape)
+            self.assertEqual((2, 10), batch.attention_mask.shape)
+            result = batch.input_ids.tolist()[0]
+            self.assertListEqual(expected_src_tokens, result)
+            # Test that special tokens are reset
+
+    def test_empty_target_text(self):
+        tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        for tokenizer in tokenizers:
+            batch = tokenizer.prepare_seq2seq_batch(src_text, return_tensors="pt")
+            # check if input_ids are returned and no decoder_input_ids
+            self.assertIn("input_ids", batch)
+            self.assertIn("attention_mask", batch)
+            self.assertNotIn("decoder_input_ids", batch)
+            self.assertNotIn("decoder_attention_mask", batch)
+
+    def test_max_target_length(self):
+        tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
+        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        for tokenizer in tokenizers:
+            batch = tokenizer.prepare_seq2seq_batch(
+                src_text, tgt_texts=tgt_text, max_target_length=32, padding="max_length", return_tensors="pt"
+            )
+            self.assertEqual(32, batch["decoder_input_ids"].shape[1])
+            self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+
+            # test None max_target_length
+            batch = tokenizer.prepare_seq2seq_batch(
+                src_text, tgt_texts=tgt_text, max_length=32, padding="max_length", return_tensors="pt"
+            )
+            self.assertEqual(32, batch["decoder_input_ids"].shape[1])
+            self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+
+    def test_outputs_not_longer_than_maxlen(self):
+        tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
+
+        for tokenizer in tokenizers:
+            batch = tokenizer.prepare_seq2seq_batch(
+                ["I am a small frog" * 1024, "I am a small frog"], return_tensors="pt"
+            )
+            self.assertIsInstance(batch, BatchEncoding)
+            self.assertEqual(batch.input_ids.shape, (2, 1024))
+
+    def test_special_tokens(self):
+        tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
+        src_text = ["A long paragraph for summrization."]
+        tgt_text = [
+            "Summary of the text.",
+        ]
+        for tokenizer in tokenizers:
+            batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors="pt")
+            input_ids = batch["input_ids"]
+            decoder_input_ids = batch["decoder_input_ids"]
+            self.assertTrue((input_ids[:, 0] == tokenizer.bos_token_id).all().item())
+            self.assertTrue((decoder_input_ids[:, 0] == tokenizer.bos_token_id).all().item())
+            self.assertTrue((input_ids[:, -1] == tokenizer.eos_token_id).all().item())
+            self.assertTrue((decoder_input_ids[:, -1] == tokenizer.eos_token_id).all().item())
 
 
 @require_torch

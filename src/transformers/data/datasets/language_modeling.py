@@ -22,7 +22,7 @@ class TextDataset(Dataset):
     def __init__(
         self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, overwrite_cache=False,
     ):
-        assert os.path.isfile(file_path)
+        assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
         block_size = block_size - tokenizer.num_special_tokens_to_add(pair=False)
 
@@ -82,7 +82,7 @@ class LineByLineTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
-        assert os.path.isfile(file_path)
+        assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
         # that we will soon use fast multithreaded tokenizers from the
         # `tokenizers` repo everywhere =)

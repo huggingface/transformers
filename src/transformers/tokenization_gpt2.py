@@ -102,17 +102,26 @@ def get_pairs(word):
 
 class GPT2Tokenizer(PreTrainedTokenizer):
     """
-    GPT-2 BPE tokenizer. Peculiarities:
+    GPT-2 BPE tokenizer, using byte-level Byte-Pair-Encoding.
 
-    - Byte-level Byte-Pair-Encoding
-    - Requires a space to start the input string => the encoding methods should be called with the
-      ``add_prefix_space`` flag set to ``True``.
-      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
-      the absence of a space at the beginning of a string:
+    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
+    be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ::
 
-        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+        >>> from transformers import GPT2Tokenizer
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> tokenizer("Hello world")['input_ids']
+        [15496, 995]
+        >>> tokenizer(" Hello world")['input_ids']
+        [18435, 995]
+
+    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
+
+    .. note::
+
+        When used with ``is_pretokenized=True``, this tokenizer will add a space before each word (even the first one).
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
@@ -137,6 +146,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
@@ -287,21 +297,30 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
     """
-    Constructs a "Fast" GPT-2 BPE tokenizer (backed by HuggingFace's `tokenizers` library).
+    Constructs a "Fast" GPT-2 BPE tokenizer (backed by HuggingFace's `tokenizers` library), using byte-level
+    Byte-Pair-Encoding.
 
-    Peculiarities:
-
-    - Byte-level Byte-Pair-Encoding
-    - Requires a space to start the input string => the encoding methods should be called with the
-      ``add_prefix_space`` flag set to ``True``.
-      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
-      the absence of a space at the beginning of a string:
+    This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
+    be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ::
 
-        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+        >>> from transformers import GPT2TokenizerFast
+        >>> tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+        >>> tokenizer("Hello world")['input_ids']
+        [15496, 995]
+        >>> tokenizer(" Hello world")['input_ids']
+        [18435, 995]
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
+    You can get around that behavior by passing ``add_prefix_space=True`` when instantiating this tokenizer or when you
+    call it on some text, but since the model was not pretrained this way, it might yield a decrease in performance.
+
+    .. note::
+
+        When used with ``is_pretokenized=True``, this tokenizer needs to be instantiated with
+        ``add_prefix_space=True``.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
 
     Args:
@@ -330,6 +349,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,

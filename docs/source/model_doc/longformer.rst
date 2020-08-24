@@ -16,7 +16,7 @@ Longformer Self Attention
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 Longformer self attention employs self attention on both a "local" context and a "global" context.
 Most tokens only attend "locally" to each other meaning that each token attends to its :math:`\frac{1}{2} w` previous tokens and :math:`\frac{1}{2} w` succeding tokens with :math:`w` being the window length as defined in `config.attention_window`. Note that `config.attention_window` can be of type ``list`` to define a different :math:`w` for each layer. 
-A selecetd few tokens attend "globally" to all other tokens, as it is conventionally done for all tokens in *e.g.* `BertSelfAttention`.
+A selected few tokens attend "globally" to all other tokens, as it is conventionally done for all tokens in *e.g.* `BertSelfAttention`.
 
 Note that "locally" and "globally" attending tokens are projected by different query, key and value matrices.
 Also note that every "locally" attending token not only attends to tokens within its window :math:`w`, but also to all "globally" attending tokens so that global attention is *symmetric*.
@@ -102,3 +102,25 @@ LongformerForQuestionAnswering
 
 .. autoclass:: transformers.LongformerForQuestionAnswering
     :members:
+
+
+TFLongformerModel
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFLongformerModel
+    :members:
+
+
+TFLongformerForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFLongformerForMaskedLM
+    :members:
+
+
+TFLongformerForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFLongformerForQuestionAnswering
+    :members:
+

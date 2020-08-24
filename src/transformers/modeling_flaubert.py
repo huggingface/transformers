@@ -23,10 +23,13 @@ from torch.nn import functional as F
 
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_outputs import BaseModelOutput
 from .modeling_xlm import (
+    XLMForMultipleChoice,
     XLMForQuestionAnswering,
     XLMForQuestionAnsweringSimple,
     XLMForSequenceClassification,
+    XLMForTokenClassification,
     XLMModel,
     XLMWithLMHeadModel,
     get_masks,
@@ -35,6 +38,7 @@ from .modeling_xlm import (
 
 logger = logging.getLogger(__name__)
 
+_CONFIG_FOR_DOC = "FlaubertConfig"
 _TOKENIZER_FOR_DOC = "FlaubertTokenizer"
 
 FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -104,6 +108,11 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
@@ -121,7 +130,12 @@ class FlaubertModel(XLMModel):
         self.pre_norm = getattr(config, "pre_norm", False)
 
     @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="flaubert/flaubert_base_cased")
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="flaubert/flaubert_base_cased",
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -135,28 +149,13 @@ class FlaubertModel(XLMModel):
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
     ):
-        r"""
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # removed: src_enc=None, src_len=None
         if input_ids is not None:
@@ -164,11 +163,13 @@ class FlaubertModel(XLMModel):
         else:
             bs, slen = inputs_embeds.size()[:-1]
 
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
         if lengths is None:
             if input_ids is not None:
                 lengths = (input_ids != self.pad_index).sum(dim=1).long()
             else:
-                lengths = torch.LongTensor([slen] * bs)
+                lengths = torch.tensor([slen] * bs, device=device)
         # mask = input_ids != self.pad_index
 
         # check inputs
@@ -184,8 +185,6 @@ class FlaubertModel(XLMModel):
         mask, attn_mask = get_masks(slen, lengths, self.causal, padding_mask=attention_mask)
         # if self.is_decoder and src_enc is not None:
         #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
-
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # position_ids
         if position_ids is None:
@@ -227,8 +226,8 @@ class FlaubertModel(XLMModel):
         tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # transformer layers
-        hidden_states = ()
-        attentions = ()
+        hidden_states = () if output_hidden_states else None
+        attentions = () if output_attentions else None
         for i in range(self.n_layers):
             # LayerDrop
             dropout_probability = random.uniform(0, 1)
@@ -286,12 +285,10 @@ class FlaubertModel(XLMModel):
         # move back sequence length to dimension 0
         # tensor = tensor.transpose(0, 1)
 
-        outputs = (tensor,)
-        if output_hidden_states:
-            outputs = outputs + (hidden_states,)
-        if output_attentions:
-            outputs = outputs + (attentions,)
-        return outputs  # outputs, (hidden_states), (attentions)
+        if not return_dict:
+            return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
+
+        return BaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
 @add_start_docstrings(
@@ -333,6 +330,25 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
 
 
 @add_start_docstrings(
+    """Flaubert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    FLAUBERT_START_DOCSTRING,
+)
+class FlaubertForTokenClassification(XLMForTokenClassification):
+    """
+    This class overrides :class:`~transformers.XLMForTokenClassification`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = FlaubertConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.transformer = FlaubertModel(config)
+        self.init_weights()
+
+
+@add_start_docstrings(
     """Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     FLAUBERT_START_DOCSTRING,
@@ -359,6 +375,25 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
 class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
     """
     This class overrides :class:`~transformers.XLMForQuestionAnswering`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = FlaubertConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.transformer = FlaubertModel(config)
+        self.init_weights()
+
+
+@add_start_docstrings(
+    """Flaubert Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    FLAUBERT_START_DOCSTRING,
+)
+class FlaubertForMultipleChoice(XLMForMultipleChoice):
+    """
+    This class overrides :class:`~transformers.XLMForMultipleChoice`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 

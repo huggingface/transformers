@@ -1,14 +1,15 @@
 ---
-language: setswana
+language: tn
 ---
 
 # TswanaBert
+Pretrained model on the Tswana language using a masked language modeling (MLM) objective.
 
 ## Model Description.
-TswanaBERT is a transformers model pretrained on a corpus of Setswana data in a self-supervised fashion by masking part of the input words and training to predict the masks.
+TswanaBERT is a transformer model pre-trained on a corpus of Setswana in a self-supervised fashion by masking part of the input words and training to predict the masks by using byte-level tokens.
 
 ## Intended uses & limitations
-The model can  be used for either masked language modeling or next word prediction. it can also be fine-tuned for a specifict application. 
+The model can  be used for either masked language modeling or next word prediction. It can also be fine-tuned on a specific down-stream NLP application. 
 
 #### How to use
 
@@ -44,13 +45,15 @@ The model can  be used for either masked language modeling or next word predicti
 ```
 
 #### Limitations and bias
-The model is trained on a fairly small collection of setwana, mostly from news articles and creative writtings, and so is not representative enough of the language as yet.
+The model is trained on a relatively small collection of setwana, mostly from news articles and creative writtings, and so is not representative enough of the language as yet.
 
 ## Training data
 
-The largest portion of this dataset (10k)  lines of text, comes from the [Leipzig Corpora Collection](https://wortschatz.uni-leipzig.de/en/download)
+1. The largest portion of this dataset (10k)  sentences of text, comes from the [Leipzig Corpora Collection](https://wortschatz.uni-leipzig.de/en/download)
 
-The I then added 200 more phrases and sentences by scrapping following sites. I continue to expand the dataset
+2. I Then added SABC news headlines collected by Marivate Vukosi, & Sefara Tshephisho, (2020)  that is generously made available on [zenoodo](http://doi.org/10.5281/zenodo.3668495 ). This added 185 tswana sentences to my corpus. 
+
+3. I went on to add 300 more sentences by scrapping following news sites and blogs that mosty originate in Botswana. I actively continue to expand the dataset.
 
 * http://setswana.blogspot.com/
 * https://omniglot.com/writing/tswana.php
@@ -58,10 +61,9 @@ The I then added 200 more phrases and sentences by scrapping following sites. I 
 * http://www.mmegi.bw/index.php
 * https://tsena.co.bw
 * http://www.botswana.co.za/Cultural_Issues-travel/botswana-country-guide-en-route.html
-
-## Training procedure
-The model was trained on a google colab Tesla T4 GPU for 200 epochs with a batch size of 64, on 13446 learned tokens.
-Other model training configuration setting can be found [here](https://s3.amazonaws.com/models.huggingface.co/bert/MoseliMotsoehli/TswanaBert/config.json)
+* https://www.poemhunter.com/poem/2013-setswana/
+https://www.poemhunter.com/poem/ngwana-wa-mosetsana/
+ 
 
 ### BibTeX entry and citation info
 

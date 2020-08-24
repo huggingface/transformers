@@ -184,7 +184,7 @@ def main():
 
         for i in range(batch_size):
             for j in range(seq_len):
-                if label_ids[i, j] != -1:
+                if label_ids[i, j] != -100:
                     out_label_list[i].append(label_map[label_ids[i][j]])
                     preds_list[i].append(label_map[preds[i][j]])
 

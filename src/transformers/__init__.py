@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "3.0.0"
+__version__ = "3.0.2"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -27,15 +27,18 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
+from .configuration_mbart import MBartConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_pegasus import PegasusConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -79,6 +82,7 @@ from .file_utils import (
     add_start_docstrings,
     cached_path,
     is_apex_available,
+    is_nlp_available,
     is_psutil_available,
     is_py3nvml_available,
     is_tf_available,
@@ -86,6 +90,9 @@ from .file_utils import (
     is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
+
+# Integrations
+from .integrations import is_comet_available, is_tensorboard_available, is_wandb_available
 
 # Model Cards
 from .modelcard import ModelCard
@@ -103,6 +110,8 @@ from .modeling_tf_pytorch_utils import (
 
 # Pipelines
 from .pipelines import (
+    Conversation,
+    ConversationalPipeline,
     CsvPipelineDataFormat,
     FeatureExtractionPipeline,
     FillMaskPipeline,
@@ -117,24 +126,35 @@ from .pipelines import (
     TextGenerationPipeline,
     TokenClassificationPipeline,
     TranslationPipeline,
+    ZeroShotClassificationPipeline,
     pipeline,
 )
 
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from .tokenization_bart import BartTokenizer, BartTokenizerFast, MBartTokenizer
+from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from .tokenization_dpr import (
+    DPRContextEncoderTokenizer,
+    DPRContextEncoderTokenizerFast,
+    DPRQuestionEncoderTokenizer,
+    DPRQuestionEncoderTokenizerFast,
+    DPRReaderTokenizer,
+    DPRReaderTokenizerFast,
+)
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_pegasus import PegasusTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -269,8 +289,10 @@ if is_torch_available():
         XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForQuestionAnsweringSimple,
+        XLMForMultipleChoice,
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+    from .modeling_pegasus import PegasusForConditionalGeneration
     from .modeling_bart import (
         PretrainedBartModel,
         BartForSequenceClassification,
@@ -279,10 +301,12 @@ if is_torch_available():
         BartForQuestionAnswering,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+    from .modeling_mbart import MBartForConditionalGeneration
     from .modeling_marian import MarianMTModel
     from .tokenization_marian import MarianTokenizer
     from .modeling_roberta import (
         RobertaForMaskedLM,
+        RobertaForCausalLM,
         RobertaModel,
         RobertaForSequenceClassification,
         RobertaForMultipleChoice,
@@ -307,6 +331,7 @@ if is_torch_available():
         CamembertForMultipleChoice,
         CamembertForTokenClassification,
         CamembertForQuestionAnswering,
+        CamembertForCausalLM,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_encoder_decoder import EncoderDecoderModel
@@ -344,8 +369,11 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
         FlaubertForSequenceClassification,
+        FlaubertForTokenClassification,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
+        FlaubertForTokenClassification,
+        FlaubertForMultipleChoice,
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
@@ -368,6 +396,7 @@ if is_torch_available():
         ReformerModel,
         ReformerForMaskedLM,
         ReformerModelWithLMHead,
+        ReformerForSequenceClassification,
         ReformerForQuestionAnswering,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -379,9 +408,18 @@ if is_torch_available():
         LongformerForMultipleChoice,
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
+        LongformerSelfAttention,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
+    from .modeling_dpr import (
+        DPRPretrainedContextEncoder,
+        DPRPretrainedQuestionEncoder,
+        DPRPretrainedReader,
+        DPRContextEncoder,
+        DPRQuestionEncoder,
+        DPRReader,
+    )
     from .modeling_retribert import (
         RetriBertPreTrainedModel,
         RetriBertModel,
@@ -396,12 +434,26 @@ if is_torch_available():
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_linear_schedule_with_warmup,
+        get_polynomial_decay_schedule_with_warmup,
     )
 
     # Trainer
-    from .trainer import Trainer, torch_distributed_zero_first
-    from .data.data_collator import default_data_collator, DataCollator, DataCollatorForLanguageModeling
-    from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
+    from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
+    from .data.data_collator import (
+        default_data_collator,
+        DataCollator,
+        DataCollatorForLanguageModeling,
+        DataCollatorForPermutationLanguageModeling,
+        DataCollatorWithPadding,
+    )
+    from .data.datasets import (
+        GlueDataset,
+        TextDataset,
+        LineByLineTextDataset,
+        GlueDataTrainingArguments,
+        SquadDataset,
+        SquadDataTrainingArguments,
+    )
 
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
@@ -424,6 +476,9 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TFAutoModel,
         TFAutoModelForMultipleChoice,
         TFAutoModelForPreTraining,
@@ -431,6 +486,9 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
+        TFAutoModelForCausalLM,
+        TFAutoModelForMaskedLM,
+        TFAutoModelForSeq2SeqLM,
     )
 
     from .modeling_tf_albert import (
@@ -449,6 +507,7 @@ if is_tf_available():
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
+        TFBertLMHeadModel,
         TFBertForMaskedLM,
         TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,
@@ -493,8 +552,10 @@ if is_tf_available():
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFElectraForMaskedLM,
+        TFElectraForMultipleChoice,
         TFElectraForPreTraining,
         TFElectraForQuestionAnswering,
+        TFElectraForSequenceClassification,
         TFElectraForTokenClassification,
         TFElectraModel,
         TFElectraPreTrainedModel,
@@ -517,6 +578,14 @@ if is_tf_available():
         TFGPT2MainLayer,
         TFGPT2Model,
         TFGPT2PreTrainedModel,
+    )
+
+    from .modeling_tf_longformer import (
+        TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFLongformerModel,
+        TFLongformerForMaskedLM,
+        TFLongformerForQuestionAnswering,
+        TFLongformerSelfAttention,
     )
 
     from .modeling_tf_mobilebert import (

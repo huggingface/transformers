@@ -15,8 +15,8 @@
 # limitations under the License.
 """ XLNet configuration """
 
-
 import logging
+import warnings
 
 from .configuration_utils import PretrainedConfig
 
@@ -82,7 +82,7 @@ class XLNetConfig(PretrainedConfig):
                 Whether to use the same attention length for each token.
             summary_type (:obj:`string`, optional, defaults to "last"):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
-                :class:transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
+                :class:`~transformers.XLNetForSequenceClassification` and :class:`~transformers.XLNetForMultipleChoice`.
                 Is one of the following options:
 
                 - 'last' => take the last token hidden state (like XLNet)
@@ -110,6 +110,12 @@ class XLNetConfig(PretrainedConfig):
                 Used in the SQuAD evaluation script for XLM and XLNet.
             end_n_top (:obj:`int`, optional, defaults to 5):
                 Used in the SQuAD evaluation script for XLM and XLNet.
+            use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not the model should return the last pre-computed hidden states.
+
+                .. note::
+                    This flag behaves differently from with other models: it just controls the inference behavior, during
+                    training the model always uses ``use_cache=True``.
 
         Example::
 
@@ -194,6 +200,17 @@ class XLNetConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+
+        if mem_len is None or mem_len == 0:
+            warnings.warn(
+                "This config doesn't use attention memories, a core feature of XLNet."
+                " Consider setting `men_len` to a non-zero value, for example "
+                "`xlnet = XLNetLMHeadModel.from_pretrained('xlnet-base-cased'', mem_len=1024)`,"
+                " for accurate training performance as well as an order of magnitude faster inference."
+                " Starting from version 3.5.0, the default parameter will be 1024, following"
+                " the implementation in https://arxiv.org/abs/1906.08237",
+                FutureWarning,
+            )
 
     @property
     def max_position_embeddings(self):

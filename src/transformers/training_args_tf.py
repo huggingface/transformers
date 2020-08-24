@@ -69,7 +69,7 @@ class TFTrainingArguments(TrainingArguments):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wherher to not use CUDA even when it is available or not.
+            Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
             Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -95,6 +95,8 @@ class TFTrainingArguments(TrainingArguments):
             at the next training step under the keyword argument ``mems``.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
     """
 
     tpu_name: str = field(
@@ -162,7 +164,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     def eval_batch_size(self) -> int:
@@ -175,7 +177,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     @tf_required

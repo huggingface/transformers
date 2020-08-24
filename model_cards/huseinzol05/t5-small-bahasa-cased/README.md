@@ -1,5 +1,5 @@
 ---
-language: malay
+language: ms
 ---
 
 # Bahasa T5 Model
