@@ -409,7 +409,7 @@ class RagSequenceModel(PreTrainedRagModel):
 
         target = self.shift_tokens_left(target)
         # bos_token_id is None for T5
-        use_bos = self.config.bos_token_id and (target[:, 0] == self.config.bos_token_id).all()
+        use_bos = self.config.bos_token_id is not None and target[:, 0].eq(self.config.bos_token_id).all()
         print("use_bos", use_bos)
 
         def _mask_pads(ll, smooth_obj):
