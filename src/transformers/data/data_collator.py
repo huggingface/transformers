@@ -128,7 +128,7 @@ class DataCollatorForLanguageModeling:
     mlm: bool = True
     mlm_probability: float = 0.15
 
-    def __call__(self, examples: List[InputDataClass]) -> Dict[str, torch.Tensor]:
+    def __call__(self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
@@ -141,7 +141,7 @@ class DataCollatorForLanguageModeling:
                 labels[labels == self.tokenizer.pad_token_id] = -100
             return {"input_ids": batch, "labels": labels}
 
-    def _tensorize_batch(self, examples: List[InputDataClass]) -> torch.Tensor:
+    def _tensorize_batch(self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]) -> torch.Tensor:
         # In order to accept both lists of lists and lists of Tensors
         if isinstance(examples[0], (list, tuple)):
             examples = [torch.Tensor(e) for e in examples]
@@ -205,14 +205,14 @@ class DataCollatorForPermutationLanguageModeling:
     plm_probability: float = 1 / 6
     max_span_length: int = 5  # maximum length of a span of masked tokens
 
-    def __call__(self, examples: List[InputDataClass]) -> Dict[str, torch.Tensor]:
+    def __call__(self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             examples = [e["input_ids"] for e in examples]
         batch = self._tensorize_batch(examples)
         inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
-    def _tensorize_batch(self, examples: List[InputDataClass]) -> torch.Tensor:
+    def _tensorize_batch(self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]) -> torch.Tensor:
         # In order to accept both lists of lists and lists of Tensors
         if isinstance(examples[0], (list, tuple)):
             examples = [torch.Tensor(e) for e in examples]
