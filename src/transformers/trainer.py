@@ -244,7 +244,7 @@ class Trainer:
             self.scaler = torch.cuda.amp.GradScaler()
 
     def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
-        if not self.ars.remove_unused_columns:
+        if not self.args.remove_unused_columns:
             return
         # Inspect model forward signature to keep only the arguments it accepts.
         signature = inspect.signature(self.model.forward)
