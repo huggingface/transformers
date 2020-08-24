@@ -1,5 +1,5 @@
 ---
-language: english, chinese, malay
+language: en
 tags:
 - singapore
 - sg
