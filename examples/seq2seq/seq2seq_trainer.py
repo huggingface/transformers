@@ -6,11 +6,12 @@ import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, DistributedSampler, RandomSampler
 from tqdm.auto import tqdm, trange
 
 from transformers import Trainer
-from transformers.file_utils import is_apex_available
+from transformers.file_utils import is_apex_available, is_torch_tpu_available
+from transformers.trainer import get_tpu_sampler
 
 
 _use_native_amp = False
@@ -27,13 +28,28 @@ else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
 
-from .utils import label_smoothed_nll_loss
+from .utils import SortishSampler, label_smoothed_nll_loss
 
 
 logger = logging.getLogger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
+    def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
+        if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
+            return None
+        elif is_torch_tpu_available():
+            return get_tpu_sampler(self.train_dataset)
+        else:
+            if self.args.sortish_sampler and self.args.n_gpu <= 1 and self.args.local_rank == -1:
+                return SortishSampler
+
+            return (
+                RandomSampler(self.train_dataset)
+                if self.args.local_rank == -1
+                else DistributedSampler(self.train_dataset)
+            )
+
     # override to support label smoothing
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> float:
         """
