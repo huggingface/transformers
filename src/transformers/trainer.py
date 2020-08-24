@@ -796,6 +796,13 @@ class Trainer:
         method, which is the evaluation loss when no metric is provided, the sum of all metrics otherwise (you can
         change that behavior by subclassing and overriding this method).
 
+        .. warning::
+
+            To use this method, you need to have provided a ``model_init`` when initializing your
+            :class:`~transformers.Trainer`: we need to reinitialize the model at each new run. This is incompatible
+            with the ``optimizers`` argument, so you need to subclass :class:`~transformers.Trainer` and override the
+            method :meth:`~transformers.Trainer.create_optimizer_and_scheduler` for custom optimizer/scheduler.
+
         Args:
             hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
                 A function that defines the hyperparameter search space. Will default to
