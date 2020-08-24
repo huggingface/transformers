@@ -1,5 +1,6 @@
 import unittest
 
+import nlp
 import numpy as np
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
@@ -93,6 +94,17 @@ if is_torch_available():
 
 @require_torch
 class TrainerIntegrationTest(unittest.TestCase):
+    def check_trained_model(self, model, alternate_seed=False):
+        # Checks a training seeded with learning_rate = 0.1
+        if alternate_seed:
+            # With args.seed = 314
+            self.assertTrue(torch.abs(model.a - 1.0171) < 1e-4)
+            self.assertTrue(torch.abs(model.b - 1.2494) < 1e-4)
+        else:
+            # With default args.seed
+            self.assertTrue(torch.abs(model.a - 0.6975) < 1e-4)
+            self.assertTrue(torch.abs(model.b - 1.2415) < 1e-4)
+
     def setUp(self):
         # Get the default values (in case they change):
         args = TrainingArguments(".")
@@ -103,14 +115,12 @@ class TrainerIntegrationTest(unittest.TestCase):
         # Checks that training worked, model trained and seed made a reproducible training.
         trainer = get_regression_trainer(learning_rate=0.1)
         trainer.train()
-        self.assertTrue(torch.abs(trainer.model.a - 0.6975) < 1e-4)
-        self.assertTrue(torch.abs(trainer.model.b - 1.2415) < 1e-4)
+        self.check_trained_model(trainer.model)
 
         # Checks that a different seed gets different (reproducible) results.
         trainer = get_regression_trainer(learning_rate=0.1, seed=314)
         trainer.train()
-        self.assertTrue(torch.abs(trainer.model.a - 1.0171) < 1e-4)
-        self.assertTrue(torch.abs(trainer.model.b - 1.2494) < 1e-4)
+        self.check_trained_model(trainer.model, alternate_seed=True)
 
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
@@ -189,6 +199,63 @@ class TrainerIntegrationTest(unittest.TestCase):
         preds = trainer.predict(trainer.eval_dataset).predictions
         x = trainer.eval_dataset.x
         self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+    def test_trainer_with_nlp(self):
+        np.random.seed(42)
+        x = np.random.normal(size=(64,)).astype(np.float32)
+        y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,))
+        train_dataset = nlp.Dataset.from_dict({"input_x": x, "label": y})
+
+        # Base training. Should have the same results as test_reproducible_training
+        model = RegressionModel()
+        args = TrainingArguments("./regression", learning_rate=0.1)
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Can return tensors.
+        train_dataset.set_format(type="torch")
+        model = RegressionModel()
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Adding one column not used by the model should have no impact
+        z = np.random.normal(size=(64,)).astype(np.float32)
+        train_dataset = nlp.Dataset.from_dict({"input_x": x, "label": y, "extra": z})
+        model = RegressionModel()
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+    def test_custom_optimizer(self):
+        train_dataset = RegressionDataset()
+        args = TrainingArguments("./regression")
+        model = RegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
+        trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
+        trainer.train()
+
+        self.assertTrue(torch.abs(trainer.model.a - 1.8950) < 1e-4)
+        self.assertTrue(torch.abs(trainer.model.b - 2.5656) < 1e-4)
+        self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
+
+    def test_model_init(self):
+        train_dataset = RegressionDataset()
+        args = TrainingArguments("./regression", learning_rate=0.1)
+        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Re-training should restart from scratch, thus lead the same results.
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
+        # Re-training should restart from scratch, thus lead the same results and new seed should be used.
+        trainer.args.seed = 314
+        trainer.train()
+        self.check_trained_model(trainer.model, alternate_seed=True)
 
     def test_trainer_eval_mrpc(self):
         MODEL_ID = "bert-base-cased-finetuned-mrpc"
