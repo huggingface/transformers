@@ -206,22 +206,29 @@ class Trainer:
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         **kwargs,
     ):
+        if args is None:
+            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
+            args = TrainingArguments("tmp_trainer")
+        self.args = args
+        # Seed must be set before instantiating the model when using model
+        set_seed(self.args.seed)
         assert (
             model is not None or model_init is not None
         ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
         if model is None and model_init is not None:
             model = model_init()
         self.model = model.to(args.device) if model is not None else None
-        if args is None:
-            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
-            args = TrainingArguments("tmp_trainer")
-        self.args = args
         self.data_collator = data_collator if data_collator is not None else default_data_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.model_init = model_init
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
+        if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
+            raise RuntimeError(
+                "Passing a `model_init` is incompatible with providing the `optimizers` argument."
+                "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
+            )
         self.tb_writer = tb_writer
         if "prediction_loss_only" in kwargs:
             warnings.warn(
@@ -251,7 +258,6 @@ class Trainer:
                 "To use comet_ml logging, run `pip/conda install comet_ml` "
                 "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
-        set_seed(self.args.seed)
         # Create output directory if needed
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
@@ -542,12 +548,18 @@ class Trainer:
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
         """
+        # This might change the seed so needs to run first.
+        self._hp_search_setup(trial)
+
         # Model re-init
         if self.model_init is not None:
+            # Seed must be set before instantiating the model when using model_init.
+            set_seed(self.args.seed)
             model = self.model_init()
             self.model = model.to(self.args.device)
 
-        self._hp_search_setup(trial)
+            # Reinitializes optimizer and scheduler
+            self.optimizer, self.lr_scheduler = None, None
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -788,6 +800,13 @@ class Trainer:
         :obj:`compute_objectie`, which defaults to a function returning the evaluation loss when no metric is provided,
         the sum of all metrics otherwise.
 
+        .. warning::
+
+            To use this method, you need to have provided a ``model_init`` when initializing your
+            :class:`~transformers.Trainer`: we need to reinitialize the model at each new run. This is incompatible
+            with the ``optimizers`` argument, so you need to subclass :class:`~transformers.Trainer` and override the
+            method :meth:`~transformers.Trainer.create_optimizer_and_scheduler` for custom optimizer/scheduler.
+
         Args:
             hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
                 A function that defines the hyperparameter search space. Will default to
@@ -825,20 +844,22 @@ class Trainer:
                 )
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
-            raise RuntimeError(" You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
+            raise RuntimeError("You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
         if backend == HPSearchBackend.RAY and not is_ray_available():
             raise RuntimeError(
-                " You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
+                "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
         self.hp_search_backend = backend
+
+        if self.model_init is None:
+            raise RuntimeError(
+                "To use hyperparameter search, you need to pass your model through a model_init function."
+            )
 
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
         def _objective(trial):
-            # To make sure optimizer and lr_scheduler are reset with the new choices of HPs
-            self.optimizer = None
-            self.lr_scheduler = None
             self.objective = None
             self.train(trial=trial)
             # If there hasn't been any evaluation during the training loop.
