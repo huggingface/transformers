@@ -24,7 +24,7 @@ from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor, require_tf
 
 
-if is_tf_available():  
+if is_tf_available():
     import tensorflow as tf
     from transformers import (
         BartConfig,
@@ -38,7 +38,7 @@ if is_tf_available():
 
 @require_tf
 class ModelTester:
-    def __init__(self, parent,):
+    def __init__(self, parent):
         self.parent = parent
         self.batch_size = 13
         self.seq_length = 7
@@ -156,7 +156,7 @@ class TFBartHeadTests(unittest.TestCase):
     def test_sequence_classification_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
         model = TFBartForSequenceClassification(config)
-        outputs = model(inputs=input_ids, decoder_input_ids=input_ids)
+        outputs = model(inputs=input_ids)
         logits = outputs[0]
         expected_shape = (batch_size, config.num_labels)
         self.assertEqual(logits.shape, expected_shape)
