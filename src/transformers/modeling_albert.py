@@ -403,6 +403,7 @@ class AlbertPreTrainedModel(PreTrainedModel):
 
     config_class = AlbertConfig
     base_model_prefix = "albert"
+    authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights.
