@@ -16,23 +16,15 @@
 import logging
 import math
 import random
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
-import numpy as np
 import tensorflow as tf
 from tensorflow import Tensor
 from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPast,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
-)
+from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 
 # Public API
 from .modeling_tf_t5 import _NoLayerEmbedTokens
@@ -42,7 +34,6 @@ from .modeling_tf_utils import (
     TFSharedEmbeddings,
     cast_bool_to_primitive,
     keras_serializable,
-    shape_list,
 )
 
 
@@ -121,25 +112,6 @@ def invert_mask(attention_mask: T):
     return ret
 
 
-def _prepare_bart_decoder_inputs(
-    config, input_ids: T, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
-):
-    """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
-    none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
-    """
-    pad_token_id = config.pad_token_id
-    if decoder_input_ids is None:
-        decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
-    bsz, tgt_len = decoder_input_ids.shape[:2]
-    if decoder_attn_mask is None:
-        decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
-    else:
-        decoder_padding_mask = invert_mask(T)
-
-    causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
-    return decoder_input_ids, decoder_padding_mask, causal_lm_mask
-
-
 class TFPretrainedBartModel(TFPreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
@@ -162,22 +134,6 @@ class TFPretrainedBartModel(TFPreTrainedModel):
 def _check_shapes(shape_1, shape2):
     if shape_1 != shape2:
         raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
-
-
-def shift_tokens_right(input_ids, pad_token_id):
-    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
-    raise NotImplementedError("Doesnt work at all.")
-    prev_output_tokens = tf.identity(input_ids)
-    index_of_eos = tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), tf.int8), axis=1) - 1
-    index_of_eos = tf.cast(tf.expand_dims(index_of_eos, -1), input_ids.dtype)
-    import ipdb
-
-    ipdb.set_trace()
-    gathered = tf.gather(input_ids, index_of_eos, axis=1)
-    return tf.concat([gathered, input_ids[:, :-1]], axis=1)
-    #    prev_output_tokens[:, 1:] = input_ids[:, :-1]
-    #    return prev_output_tokens
-    # index_of_eos = (input_ids.ne(pad_token_id).sum(axis=1) - 1).unsqueeze(-1)
 
 
 def make_padding_mask(input_ids, padding_idx=1):
@@ -861,6 +817,24 @@ class TFBartModel(TFPretrainedBartModel):
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
+    def _prepare_bart_decoder_inputs(
+        self, config, input_ids: T, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
+    ):
+        """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
+        none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
+        """
+        pad_token_id = config.pad_token_id
+        if decoder_input_ids is None:
+            decoder_input_ids = self._shift_right(input_ids, pad_token_id)
+        bsz, tgt_len = decoder_input_ids.shape[:2]
+        if decoder_attn_mask is None:
+            decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
+        else:
+            decoder_padding_mask = invert_mask(T)
+
+        causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
+        return decoder_input_ids, decoder_padding_mask, causal_lm_mask
+
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def call(
         self,
@@ -880,7 +854,7 @@ class TFBartModel(TFPretrainedBartModel):
         assert decoder_input_ids is not None
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        if decoder_input_ids is None:
+        if decoder_input_ids is None:  # GLUE MODE
             use_cache = False
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -890,7 +864,7 @@ class TFBartModel(TFPretrainedBartModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         if not use_cache:
-            decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(
+            decoder_input_ids, decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
                 self.config,
                 input_ids,
                 decoder_input_ids=decoder_input_ids,
@@ -1013,31 +987,14 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         else:
             kwargs["inputs"] = inputs
 
-
         inputs = kwargs.pop("inputs", kwargs.pop("input_ids", None))
         assert "input_ids" not in kwargs
-        # return_dict = kwargs.pop('return_dict', None)
-        # if isinstance(inputs, T):
-        #     input_ids = inputs
-        # elif isinstance(inputs, dict):
-        #     kwargs.update(**inputs)
-        #     input_ids = kwargs.pop("input_ids", None)  # KeyError possible
-        #
-        # if kwargs.get('inputs', None) is not None and input_ids is None:
-        #     input_ids = kwargs.pop('inputs')
-
-        # attention_mask = kwargs.get("attention_mask", None)
-        # encoder_outputs = kwargs.get("encoder_outputs", None)
-        # decoder_input_ids = kwargs.get("decoder_input_ids", None)
-        # decoder_attention_mask = kwargs.get("decoder_attention_mask", None)
-        # decoder_cached_states = kwargs.get('decoder_cached_states', None)
         outputs = self.model(inputs, **kwargs)
 
         lm_logits = self.model.shared(outputs[0], mode="linear")
 
         if not isinstance(outputs, Seq2SeqModelOutput):  # return_dict=False
             return (lm_logits,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return Seq2SeqLMOutput(
             logits=lm_logits,
@@ -1171,9 +1128,11 @@ class TFBartForSequenceClassification(TFPretrainedBartModel):
 
         outputs = self.model(input_ids, **kwargs)
         x = outputs[0]
-        assert isinstance(x, tf.Tensor), f'type (x) is {type(x)}, expected tf.Tensor'
+        assert isinstance(x, tf.Tensor), f"type (x) is {type(x)}, expected tf.Tensor"
         eos_mask = tf.cast(tf.math.equal(input_ids, self.config.eos_token_id), tf.int32)
-        assert tf.reduce_all(tf.math.equal(tf.reduce_sum(eos_mask, axis=1), 1)), "All examples must have 1 <eos> tokens."
+        assert tf.reduce_all(
+            tf.math.equal(tf.reduce_sum(eos_mask, axis=1), 1)
+        ), "All examples must have 1 <eos> tokens."
         sentence_representation = tf.reshape(x[eos_mask, :], (x.shape[0], -1, x.shape[-1]))[:, -1, :]
         # TODO(SS): add new-style return_dict stuff
         logits = self.classification_head(sentence_representation)

@@ -86,11 +86,11 @@ if is_torch_available():
 
     from transformers import (
         AlbertForPreTraining,
+        BartForConditionalGeneration,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
         CamembertForMaskedLM,
-        BartForConditionalGeneration,
         CTRLLMHeadModel,
         DistilBertForMaskedLM,
         DistilBertForQuestionAnswering,
@@ -111,7 +111,12 @@ if is_torch_available():
 logging.basicConfig(level=logging.INFO)
 
 MODEL_CLASSES = {
-    "bart": (BartConfig, TFBartForConditionalGeneration, BartForConditionalGeneration, BART_PRETRAINED_MODEL_ARCHIVE_LIST,),
+    "bart": (
+        BartConfig,
+        TFBartForConditionalGeneration,
+        BartForConditionalGeneration,
+        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
+    ),
     "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,

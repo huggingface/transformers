@@ -66,7 +66,6 @@ TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ####################################################
 
 
-
 class TFT5LayerNorm(tf.keras.layers.Layer):
     def __init__(self, epsilon=1e-6, **kwargs):
         """ Construct a layernorm module in the T5 style

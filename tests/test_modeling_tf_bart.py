@@ -14,10 +14,7 @@
 # limitations under the License.
 
 
-import tempfile
 import unittest
-
-import numpy as np
 
 from transformers import is_tf_available
 from transformers.file_utils import cached_property
@@ -27,16 +24,15 @@ from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor, require_tf
 
 
-if is_tf_available():
+if is_tf_available():  
     import tensorflow as tf
     from transformers import (
+        BartConfig,
         TFAutoModelForSequenceClassification,
-        TFBartModel,
         TFBartForConditionalGeneration,
         TFBartForSequenceClassification,
-        BartConfig,
+        TFBartModel,
     )
-    from transformers.modeling_tf_bart import shift_tokens_right
     from transformers.tokenization_bart import BartTokenizer
 
 
@@ -137,9 +133,8 @@ class TFBartHeadTests(unittest.TestCase):
     vocab_size = 99
 
     def _get_config_and_data(self):
-        eos_column_vector =  tf.ones((4,1), dtype=tf.int32)*2
-        input_ids = tf.concat([ids_tensor((4, 6), self.vocab_size-3)+3,eos_column_vector],
-                              axis=1)
+        eos_column_vector = tf.ones((4, 1), dtype=tf.int32) * 2
+        input_ids = tf.concat([ids_tensor((4, 6), self.vocab_size - 3) + 3, eos_column_vector], axis=1)
         batch_size = input_ids.shape[0]
         config = BartConfig(
             vocab_size=self.vocab_size,

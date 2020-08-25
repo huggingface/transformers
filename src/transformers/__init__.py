@@ -494,10 +494,10 @@ if is_tf_available():
         TFAutoModelWithLMHead,
     )
     from .modeling_tf_bart import (
+        TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TFBartForConditionalGeneration,
         TFBartForSequenceClassification,
         TFBartModel,
-        TFBartForConditionalGeneration,
-        TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
