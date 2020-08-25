@@ -321,29 +321,20 @@ class AdamW(Optimizer):
 #
 # This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
 #
-# AdaFactor was introduced by Shazeer at al as a more memory efficient drop-in replacement for ADAM,
+# AdaFactor was introduced by Shazeer at al as a more memory efficient drop-in replacement for Adam,
 # specifically for training large Transformer models.
 # https://arxiv.org/abs/1804.04235
 #
 # For T5 finetuning, recommended settings:
 #   * scheduled LR warm-up to fixed LR, disable relative updates, use clip threshold
 # https://arxiv.org/abs/2004.14546
-# optimizer = Adafactor(model.parameters(),
-#   lr=self.learning_rate, # 1e-3
-#   eps=(1e-30, 1e-3),
-#   clip_threshold=1.0,
-#   decay_rate=-0.8,
-#   beta1=None,
-#   weight_decay=0.0,
-#   relative_step=False,
-#   scale_parameter=False,
-#   warmup_init=False,
-# )
+#
 # Alternatively, relative_step with warmup_init can also be used.
 # Training without LR warmup or clip threshold, is not recommended. Additional optimizer operations
 # like gradient clipping, should not be used.
 class Adafactor(Optimizer):
-    """Implements Adafactor algorithm.
+    """
+    Implements Adafactor algorithm.
     This implementation is based on:
     `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost`
     (see https://arxiv.org/abs/1804.04235)
@@ -371,6 +362,11 @@ class Adafactor(Optimizer):
             instead of external learning rate (default: True)
         warmup_init (bool): time-dependent learning rate computation depends on
             whether warm-up initialization is being used (default: False)
+
+    Usage::
+        Adafactor(model.parameters(), lr=1e-3, eps=(1e-30, 1e-3), clip_threshold=1.0,
+            decay_rate=-0.8, beta1=None, weight_decay=0.0, relative_step=False,
+            scale_parameter=False, warmup_init=False,)
     """
 
     def __init__(self, params, lr=None, eps=(1e-30, 1e-3), clip_threshold=1.0,
@@ -385,14 +381,6 @@ class Adafactor(Optimizer):
                         beta1=beta1, weight_decay=weight_decay, scale_parameter=scale_parameter,
                         relative_step=relative_step, warmup_init=warmup_init)
         super(Adafactor, self).__init__(params, defaults)
-
-    @property
-    def supports_memory_efficient_fp16(self):
-        return True
-
-    @property
-    def supports_flat_params(self):
-        return False
 
     def _get_lr(self, param_group, param_state):
         rel_step_sz = param_group['lr']
