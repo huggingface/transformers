@@ -33,7 +33,7 @@ from transformers import (
     TFTrainer,
     TFTrainingArguments,
 )
-from .utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
+from utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
 
 
 logger = logging.getLogger(__name__)
