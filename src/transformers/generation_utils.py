@@ -535,7 +535,7 @@ class GenerationMixin:
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
 
-            outputs = self(**model_inputs)
+            outputs = self(**model_inputs, return_dict=True)
             next_token_logits = outputs[0][:, -1, :]
 
             scores = self.postprocess_next_token_scores(
