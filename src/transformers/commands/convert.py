@@ -1,7 +1,8 @@
 from argparse import ArgumentParser, Namespace
-from .. import hf_logging
 
 from transformers.commands import BaseTransformersCLICommand
+
+from .. import hf_logging
 
 
 def convert_command_factory(args: Namespace):

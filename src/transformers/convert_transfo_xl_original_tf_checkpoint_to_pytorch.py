@@ -16,7 +16,6 @@
 
 
 import argparse
-import hf_logging
 import os
 import pickle
 import sys
@@ -32,6 +31,8 @@ from transformers import (
     load_tf_weights_in_transfo_xl,
 )
 from transformers.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
+
+from . import hf_logging
 
 
 hf_logging.set_verbosity_info()

@@ -16,7 +16,6 @@
 
 
 import json
-import hf_logging
 import os
 import re
 import sys
@@ -25,6 +24,7 @@ from typing import List, Optional
 
 import sacremoses as sm
 
+from . import hf_logging
 from .tokenization_utils import PreTrainedTokenizer
 
 

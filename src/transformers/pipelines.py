@@ -16,7 +16,6 @@
 
 import csv
 import json
-import hf_logging
 import os
 import pickle
 import sys
@@ -30,6 +29,7 @@ from uuid import UUID
 
 import numpy as np
 
+from . import hf_logging
 from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
 from .data import SquadExample, squad_convert_examples_to_features

@@ -16,8 +16,7 @@
 """ TF 2.0 CamemBERT model. """
 
 
-import hf_logging
-
+from . import hf_logging
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_roberta import (

@@ -16,11 +16,12 @@
 """ PyTorch - TF 2.0 general utilities."""
 
 
-import hf_logging
 import os
 import re
 
 import numpy
+
+from . import hf_logging
 
 
 logger = hf_logging.get_logger(__name__)

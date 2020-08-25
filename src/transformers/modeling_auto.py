@@ -15,10 +15,10 @@
 """ Auto Model class. """
 
 
-from . import hf_logging
 import warnings
 from collections import OrderedDict
 
+from . import hf_logging
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,

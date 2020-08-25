@@ -2,8 +2,8 @@ import unittest
 
 from transformers import hf_logging
 
-class HfArgumentParserTest(unittest.TestCase):
 
+class HfArgumentParserTest(unittest.TestCase):
     def test_set_level(self):
         logger = hf_logging.get_logger()
 

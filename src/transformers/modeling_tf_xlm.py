@@ -17,7 +17,6 @@
 
 
 import itertools
-import hf_logging
 import math
 import warnings
 from dataclasses import dataclass
@@ -26,6 +25,7 @@ from typing import Optional, Tuple
 import numpy as np
 import tensorflow as tf
 
+from . import hf_logging
 from .configuration_xlm import XLMConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,

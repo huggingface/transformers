@@ -18,12 +18,12 @@
 
 import copy
 import itertools
-import hf_logging
 import math
 import warnings
 
 import tensorflow as tf
 
+from . import hf_logging
 from .configuration_t5 import T5Config
 from .file_utils import (
     DUMMY_INPUTS,

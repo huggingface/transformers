@@ -15,11 +15,11 @@
 """Tokenization classes for Flaubert, based on XLM."""
 
 
-import hf_logging
 import unicodedata
 
 import six
 
+from . import hf_logging
 from .tokenization_xlm import XLMTokenizer
 
 

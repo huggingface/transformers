@@ -16,11 +16,12 @@
 
 
 import argparse
-import hf_logging
 
 import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME, OpenAIGPTConfig, OpenAIGPTModel, load_tf_weights_in_openai_gpt
+
+from . import hf_logging
 
 
 hf_logging.set_verbosity_info()

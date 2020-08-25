@@ -15,8 +15,7 @@
 """ RetriBERT model configuration """
 
 
-import hf_logging
-
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 
 

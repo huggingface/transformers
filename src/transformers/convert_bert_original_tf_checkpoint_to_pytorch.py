@@ -16,11 +16,12 @@
 
 
 import argparse
-import hf_logging
 
 import torch
 
 from transformers import BertConfig, BertForPreTraining, load_tf_weights_in_bert
+
+from . import hf_logging
 
 
 hf_logging.set_verbosity_info()

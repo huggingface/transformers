@@ -19,7 +19,6 @@
 
 
 import copy
-import hf_logging
 import math
 import warnings
 
@@ -28,6 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from . import hf_logging
 from .activations import gelu
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import (

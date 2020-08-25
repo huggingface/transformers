@@ -16,11 +16,12 @@
 
 
 import argparse
-import hf_logging
 
 import torch
 
 from transformers import ElectraConfig, ElectraForMaskedLM, ElectraForPreTraining, load_tf_weights_in_electra
+
+from . import hf_logging
 
 
 hf_logging.set_verbosity_info()

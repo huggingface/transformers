@@ -16,11 +16,12 @@
 
 
 import argparse
-import hf_logging
 
 import torch
 
 from transformers import T5Config, T5Model, load_tf_weights_in_t5
+
+from . import hf_logging
 
 
 hf_logging.set_verbosity_info()

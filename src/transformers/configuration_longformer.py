@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Longformer configuration """
 
-import hf_logging
 from typing import List, Union
 
+from . import hf_logging
 from .configuration_roberta import RobertaConfig
 
 

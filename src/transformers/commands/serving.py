@@ -1,10 +1,11 @@
-from .. import hf_logging
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
 from transformers import Pipeline
 from transformers.commands import BaseTransformersCLICommand
 from transformers.pipelines import SUPPORTED_TASKS, pipeline
+
+from .. import hf_logging
 
 
 try:

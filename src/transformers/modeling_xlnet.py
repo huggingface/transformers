@@ -17,7 +17,6 @@
 """
 
 
-import hf_logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -26,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from . import hf_logging
 from .activations import gelu_new, swish
 from .configuration_xlnet import XLNetConfig
 from .file_utils import (

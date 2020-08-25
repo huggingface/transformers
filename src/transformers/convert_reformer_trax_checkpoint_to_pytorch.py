@@ -16,12 +16,12 @@
 
 
 import argparse
-import hf_logging
 import pickle
 
 import numpy as np
 import torch
 
+import hf_logging
 from transformers import ReformerConfig, ReformerModelWithLMHead
 
 

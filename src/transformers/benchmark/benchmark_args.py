@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .. import hf_logging
 from dataclasses import dataclass, field
 from typing import Tuple
 
+from .. import hf_logging
 from ..file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
 from .benchmark_args_utils import BenchmarkArguments
 

@@ -1,4 +1,3 @@
-import hf_logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -6,6 +5,7 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
+from . import hf_logging
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
