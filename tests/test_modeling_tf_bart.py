@@ -229,7 +229,7 @@ TOLERANCE = 1e-4
 class TFBartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = TFBartModel.from_pretrained("bart-large")
+        model = TFBartModel.from_pretrained("facebook/bart-large")
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
         # with torch.no_grad():

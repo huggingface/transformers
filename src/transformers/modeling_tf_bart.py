@@ -20,11 +20,11 @@ from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 from tensorflow import Tensor
-from tensorflow.keras.layers import Dense, Dropout, LayerNormalization
+from tensorflow.keras.layers import Dense, LayerNormalization
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
+from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
 
 # Public API
 from .modeling_tf_t5 import _NoLayerEmbedTokens
@@ -35,9 +35,6 @@ from .modeling_tf_utils import (
     cast_bool_to_primitive,
     keras_serializable,
 )
-
-
-# from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -298,7 +295,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         x = tf.transpose(x, perm=(1, 0, 2))
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
+        return TFBaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
 
 
 class TFDecoderLayer(tf.keras.layers.Layer):
@@ -525,7 +522,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         if not return_dict:
             return x, next_cache, all_hidden_states, all_self_attns
         else:
-            return BaseModelOutputWithPast(
+            return TFBaseModelOutputWithPast(
                 last_hidden_state=x,
                 past_key_values=next_cache,
                 hidden_states=all_hidden_states,
@@ -851,9 +848,9 @@ class TFBartModel(TFPretrainedBartModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
+        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOuput when return_dict=False
+        elif return_dict and not isinstance(encoder_outputs, TFBaseModelOutput):
+            encoder_outputs = TFBaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
@@ -877,7 +874,7 @@ class TFBartModel(TFPretrainedBartModel):
             assert isinstance(decoder_outputs[0], T), f"got type {type(decoder_outputs[0])} for first decoder output"
             return tuple(x for x in decoder_outputs + encoder_outputs if x is not None)
         else:
-            return Seq2SeqModelOutput(
+            return TFSeq2SeqModelOutput(
                 last_hidden_state=decoder_outputs.last_hidden_state,
                 decoder_past_key_values=decoder_outputs.past_key_values,
                 decoder_hidden_states=decoder_outputs.hidden_states,
@@ -962,10 +959,10 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
         lm_logits = self.model.shared(outputs[0], mode="linear")
 
-        if not isinstance(outputs, Seq2SeqModelOutput):  # return_dict=False
+        if not isinstance(outputs, TFSeq2SeqModelOutput):  # return_dict=False
             return (lm_logits,) + outputs[1:]
 
-        return Seq2SeqLMOutput(
+        return TFSeq2SeqLMOutput(
             logits=lm_logits,
             decoder_past_key_values=outputs.decoder_past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
