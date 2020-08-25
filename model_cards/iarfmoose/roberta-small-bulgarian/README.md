@@ -21,4 +21,4 @@ This model was trained on the following data:
 
 The model was pretrained using a masked language-modeling objective with dynamic masking as described [here](https://huggingface.co/roberta-base#preprocessing)
 
-It was trained for 200k steps. The batch size was limited to 8 due to GPU memory limitations.
+It was trained for 160k steps. The batch size was limited to 8 due to GPU memory limitations.
