@@ -6,8 +6,9 @@ from enum import Enum
 from typing import List, Optional, Union
 
 import torch
-from filelock import FileLock
 from torch.utils.data.dataset import Dataset
+
+from filelock import FileLock
 
 from ...tokenization_bart import BartTokenizer, BartTokenizerFast
 from ...tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast

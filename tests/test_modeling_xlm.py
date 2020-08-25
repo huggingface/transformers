@@ -25,15 +25,16 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 if is_torch_available():
     import torch
+
     from transformers import (
         XLMConfig,
+        XLMForMultipleChoice,
+        XLMForQuestionAnswering,
+        XLMForQuestionAnsweringSimple,
+        XLMForSequenceClassification,
+        XLMForTokenClassification,
         XLMModel,
         XLMWithLMHeadModel,
-        XLMForTokenClassification,
-        XLMForQuestionAnswering,
-        XLMForSequenceClassification,
-        XLMForQuestionAnsweringSimple,
-        XLMForMultipleChoice,
     )
     from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
 

@@ -24,18 +24,19 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        AutoTokenizer,
-        MarianConfig,
         AutoConfig,
         AutoModelWithLMHead,
-        MarianTokenizer,
+        AutoTokenizer,
+        MarianConfig,
         MarianMTModel,
+        MarianTokenizer,
     )
     from transformers.convert_marian_to_pytorch import (
+        ORG_NAME,
         convert_hf_name_to_opus_name,
         convert_opus_name_to_hf_name,
-        ORG_NAME,
     )
     from transformers.pipelines import TranslationPipeline
 

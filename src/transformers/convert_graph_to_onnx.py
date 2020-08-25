@@ -273,7 +273,9 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
-        from keras2onnx import convert_keras, save_model, __version__ as k2ov
+
+        from keras2onnx import __version__ as k2ov
+        from keras2onnx import convert_keras, save_model
 
         print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
 
@@ -340,7 +342,7 @@ def optimize(onnx_model_path: Path) -> Path:
     Returns: Path where the optimized model binary description has been saved
 
     """
-    from onnxruntime import SessionOptions, InferenceSession
+    from onnxruntime import InferenceSession, SessionOptions
 
     # Generate model name with suffix "optimized"
     opt_model_path = generate_identified_filename(onnx_model_path, "-optimized")
@@ -364,7 +366,7 @@ def quantize(onnx_model_path: Path) -> Path:
     """
     try:
         import onnx
-        from onnxruntime.quantization import quantize, QuantizationMode
+        from onnxruntime.quantization import QuantizationMode, quantize
 
         onnx_model = onnx.load(onnx_model_path.as_posix())
 

@@ -25,12 +25,13 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        GPT2Config,
-        GPT2Model,
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2LMHeadModel,
+        GPT2Config,
         GPT2DoubleHeadsModel,
+        GPT2LMHeadModel,
+        GPT2Model,
     )
 
 

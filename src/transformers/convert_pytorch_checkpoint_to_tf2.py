@@ -78,28 +78,29 @@ from transformers.file_utils import hf_bucket_url
 
 
 if is_torch_available():
-    import torch
     import numpy as np
+    import torch
+
     from transformers import (
+        AlbertForPreTraining,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
+        CamembertForMaskedLM,
+        CTRLLMHeadModel,
+        DistilBertForMaskedLM,
+        DistilBertForQuestionAnswering,
+        ElectraForPreTraining,
+        FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
-        XLNetLMHeadModel,
-        XLMWithLMHeadModel,
-        XLMRobertaForMaskedLM,
-        TransfoXLLMHeadModel,
         OpenAIGPTLMHeadModel,
         RobertaForMaskedLM,
         RobertaForSequenceClassification,
-        CamembertForMaskedLM,
-        FlaubertWithLMHeadModel,
-        DistilBertForMaskedLM,
-        DistilBertForQuestionAnswering,
-        CTRLLMHeadModel,
-        AlbertForPreTraining,
         T5ForConditionalGeneration,
-        ElectraForPreTraining,
+        TransfoXLLMHeadModel,
+        XLMRobertaForMaskedLM,
+        XLMWithLMHeadModel,
+        XLNetLMHeadModel,
     )
 
 

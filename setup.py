@@ -91,12 +91,7 @@ extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "psutil"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
-extras["quality"] = [
-    "black",
-    # "isort",
-    "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
-    "flake8",
-]
+extras["quality"] = ["black", "isort >= 5", "flake8"]
 extras["dev"] = extras["testing"] + extras["quality"] + extras["ja"] + ["scikit-learn", "tensorflow", "torch"]
 
 setup(

@@ -22,14 +22,9 @@ import logging
 import timeit
 from typing import Callable, Optional
 
-from transformers import (
-    MODEL_MAPPING,
-    MODEL_WITH_LM_HEAD_MAPPING,
-    PretrainedConfig,
-    is_py3nvml_available,
-    is_torch_available,
-)
-
+from ..configuration_utils import PretrainedConfig
+from ..file_utils import is_py3nvml_available, is_torch_available
+from ..modeling_auto import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -42,6 +37,7 @@ from .benchmark_utils import (
 
 if is_torch_available():
     import torch
+
     from .benchmark_args import PyTorchBenchmarkArguments
 
 

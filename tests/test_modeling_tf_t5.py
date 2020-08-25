@@ -26,7 +26,8 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import TFT5Model, TFT5ForConditionalGeneration, T5Tokenizer
+
+    from transformers import T5Tokenizer, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:

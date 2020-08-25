@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import tqdm
-from filelock import FileLock
 
+from filelock import FileLock
 from transformers import (
     BartTokenizer,
     BartTokenizerFast,

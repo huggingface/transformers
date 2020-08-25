@@ -24,14 +24,9 @@ import timeit
 from functools import wraps
 from typing import Callable, Optional
 
-from transformers import (
-    TF_MODEL_MAPPING,
-    TF_MODEL_WITH_LM_HEAD_MAPPING,
-    PretrainedConfig,
-    is_py3nvml_available,
-    is_tf_available,
-)
-
+from ..configuration_utils import PretrainedConfig
+from ..file_utils import is_py3nvml_available, is_tf_available
+from ..modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -44,8 +39,9 @@ from .benchmark_utils import (
 
 if is_tf_available():
     import tensorflow as tf
-    from .benchmark_args_tf import TensorFlowBenchmarkArguments
     from tensorflow.python.framework.errors_impl import ResourceExhaustedError
+
+    from .benchmark_args_tf import TensorFlowBenchmarkArguments
 
 if is_py3nvml_available():
     import py3nvml.py3nvml as nvml
