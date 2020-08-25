@@ -672,7 +672,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
         shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
 
-
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
             shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
@@ -726,8 +725,6 @@ class TFConv1D(tf.keras.layers.Layer):
         x = tf.reshape(x, [bz, sl, self.nf])
 
         return x
-
-
 
 
 class TFSharedEmbeddings(tf.keras.layers.Layer):

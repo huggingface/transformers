@@ -738,29 +738,6 @@ def gelu(x):
     return x * cdf
 
 
-class BartClassificationHead(tf.keras.layers.Layer):
-    """Head for sentence-level classification tasks."""
-
-    # This can trivially be shared with RobertaClassificationHead
-
-    def __init__(
-        self, input_dim, inner_dim, num_classes, pooler_dropout,
-    ):
-        super().__init__()
-
-        self.dense = Dense(inner_dim)
-        self.dropout = Dropout(pooler_dropout)
-        self.out_proj = Dense(num_classes)
-
-    def call(self, x):
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = tf.tanh(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
 class LearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -791,11 +768,6 @@ class LearnedPositionalEmbedding(TFSharedEmbeddings):
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True, **kwargs):
     return tf.keras.layers.LayerNormalization(epsilon=eps, **kwargs)
-
-
-def fill_with_neg_inf(t):
-    """FP16-compatible function that fills a input_ids with -inf."""
-    return t.float().fill_(float("-inf")).type_as(t)
 
 
 @add_start_docstrings(
@@ -903,7 +875,7 @@ class TFBartModel(TFPretrainedBartModel):
         if not return_dict:
             # Attention and hidden_states will be [] or None if they aren't needed
             assert isinstance(decoder_outputs[0], T), f"got type {type(decoder_outputs[0])} for first decoder output"
-            return decoder_outputs + encoder_outputs
+            return tuple(x for x in decoder_outputs + encoder_outputs if x is not None)
         else:
             return Seq2SeqModelOutput(
                 last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1004,27 +976,15 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         )
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
-        assert past is not None, "past has to be defined"
-
-        if len(past) == 3:  # first step
-            raise ValueError("len of past = 3")
+        assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
+        if len(past) == 1:
             encoder_outputs = past
             decoder_cached_states = None
-        elif len(past) == 2:
+        else:
             encoder_outputs, decoder_cached_states = past
-        elif len(past) == 1:
-            encoder_outputs = past
-            decoder_cached_states = None
-            # raise ValueError(f"past must be of len 2 or 3, got len {len(past)} full past: {past}")
-
-        # # first step
-        # if len(past) < 2:
-        #     encoder_outputs, decoder_cached_states = past, None
-        # else:
-        #     encoder_outputs, decoder_cached_states = past[0], past[1]
-        assert (
-            decoder_cached_states is None or decoder_cached_states
-        ), f"decoder cached states must be None or a truthy list. got {decoder_cached_states}"
+            assert (
+                decoder_cached_states
+            ), f"decoder cached states must be truthy. got {decoder_cached_states} from the 2nd element of past"
 
         return {
             "inputs": None,  # encoder_outputs is defined. input_ids not needed
@@ -1036,7 +996,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         }
 
     def prepare_scores_for_generation(self, scores, cur_len, max_length):
-        if cur_len == 1:
+        raise NotImplementedError("FIXME: This never gets called, but should.")
+        if self.config.force_bos_token_to_be_generated and cur_len == 1:
+            # force bos token to be generated: discussion https://github.com/huggingface/transformers/pull/6526
             self._force_token_ids_generation(scores, self.config.bos_token_id)
         if cur_len == max_length - 1 and self.config.eos_token_ids[0] is not None:
             self._force_token_ids_generation(scores, self.config.eos_token_ids[0])

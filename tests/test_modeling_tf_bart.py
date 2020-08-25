@@ -26,11 +26,8 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor, require_tf
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import (
-        BartConfig,
-        TFBartForConditionalGeneration,
-        TFBartModel,
-    )
+
+    from transformers import BartConfig, TFBartForConditionalGeneration, TFBartModel
     from transformers.tokenization_bart import BartTokenizer
 
 
@@ -130,6 +127,7 @@ class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_compile_tf_model(self):
         "I guess if I don't add all the boilerplate some feature I don't understand doesn't work."
         pass
+
 
 @require_tf
 class TFBartHeadTests(unittest.TestCase):

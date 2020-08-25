@@ -785,8 +785,6 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         return dummy_inputs
 
 
-
-
 T5_START_DOCSTRING = r"""
     The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
     <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
@@ -1008,8 +1006,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-        # If decoding with past key value states, only the last tokens
-        # should be given as an input
+        # If decoding with past key value states, only the last tokens should be used as decoder input
         if decoder_past_key_value_states is not None:
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
