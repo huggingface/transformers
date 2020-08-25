@@ -88,17 +88,16 @@ classifier(sequence_to_classify, candidate_labels, hypothesis_template=hypothesi
 
 ```python
 # pose sequence as a NLI premise and label as a hypothesis
-from transformers import BartForSequenceClassification, BartTokenizer
-nli_model = BartForSequenceClassification.from_pretrained('joeddav/xlm-roberta-large-xnli')
-tokenizer = BartTokenizer.from_pretrained('joeddav/xlm-roberta-large-xnli')
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+nli_model = AutoModelForSequenceClassification.from_pretrained('joeddav/xlm-roberta-large-xnli')
+tokenizer = AutoTokenizer.from_pretrained('joeddav/xlm-roberta-large-xnli')
 
 premise = sequence
 hypothesis = f'This example is {label}.'
 
 # run through model pre-trained on MNLI
 x = tokenizer.encode(premise, hypothesis, return_tensors='pt',
-                        max_length=tokenizer.max_len,
-                        truncation_strategy='only_first')
+                     truncation_strategy='only_first')
 logits = nli_model(x.to(device))[0]
 
 # we throw away "neutral" (dim 1) and take the probability of
