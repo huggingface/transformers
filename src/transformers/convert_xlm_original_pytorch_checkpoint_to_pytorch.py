@@ -17,7 +17,6 @@
 
 import argparse
 import json
-import logging
 
 import numpy
 import torch
@@ -25,8 +24,10 @@ import torch
 from transformers import CONFIG_NAME, WEIGHTS_NAME
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES
 
+from . import hf_logging
 
-logging.basicConfig(level=logging.INFO)
+
+hf_logging.set_verbosity_info()
 
 
 def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_path):

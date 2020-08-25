@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import inspect
-import logging
 import os
 import re
 from dataclasses import dataclass
@@ -26,6 +25,7 @@ from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
+from . import hf_logging
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
@@ -43,7 +43,7 @@ from .file_utils import (
 from .generation_utils import GenerationMixin
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 try:

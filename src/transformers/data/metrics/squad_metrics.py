@@ -10,15 +10,16 @@ that a question is unanswerable.
 
 import collections
 import json
-import logging
 import math
 import re
 import string
 
 from transformers.tokenization_bert import BasicTokenizer
 
+from ... import hf_logging
 
-logger = logging.getLogger(__name__)
+
+logger = hf_logging.get_logger(__name__)
 
 
 def normalize_answer(s):

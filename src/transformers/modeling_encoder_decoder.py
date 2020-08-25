@@ -15,15 +15,15 @@
 """ Classes to support Encoder-Decoder architectures """
 
 
-import logging
 from typing import Optional
 
+from . import hf_logging
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class EncoderDecoderModel(PreTrainedModel):

@@ -16,8 +16,7 @@
 """PyTorch XLM-RoBERTa model. """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
@@ -30,7 +29,7 @@ from .modeling_roberta import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-base",

@@ -14,13 +14,12 @@
 # limitations under the License.
 """ PEGASUS model configuration """
 
-import logging
-
+from . import hf_logging
 from .configuration_bart import BART_CONFIG_ARGS_DOC, BartConfig
 from .file_utils import add_start_docstrings_to_callable
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 # These config values do not vary between checkpoints
 DEFAULTS = dict(

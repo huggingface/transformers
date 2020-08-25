@@ -1,5 +1,4 @@
 import inspect
-import logging
 import math
 import os
 import re
@@ -19,6 +18,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
+from . import hf_logging
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import is_nlp_available, is_torch_tpu_available
 from .integrations import (
@@ -86,7 +86,7 @@ if is_optuna_available():
 if is_ray_available():
     from ray import tune
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 @contextmanager

@@ -16,12 +16,11 @@
 """ ELECTRA model configuration """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "google/electra-small-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small-generator/config.json",

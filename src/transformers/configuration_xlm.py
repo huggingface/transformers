@@ -15,12 +15,11 @@
 """ XLM configuration """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 XLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "xlm-mlm-en-2048": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-en-2048-config.json",

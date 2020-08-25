@@ -16,18 +16,17 @@
 """PyTorch MMBT model. """
 
 
-import logging
-
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from . import hf_logging
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
 from .modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from .modeling_utils import ModuleUtilsMixin
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MMBTConfig"
 

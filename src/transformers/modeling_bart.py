@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch BART model, ported from the fairseq repo."""
-import logging
 import math
 import random
 import warnings
@@ -25,6 +24,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
+from . import hf_logging
 from .activations import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import (
@@ -45,7 +45,7 @@ from .modeling_outputs import (
 from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"

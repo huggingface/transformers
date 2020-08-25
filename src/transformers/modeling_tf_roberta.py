@@ -16,10 +16,9 @@
 """ TF 2.0 RoBERTa model. """
 
 
-import logging
-
 import tensorflow as tf
 
+from . import hf_logging
 from .configuration_roberta import RobertaConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -50,7 +49,7 @@ from .modeling_tf_utils import (
 from .tokenization_utils_base import BatchEncoding
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"

@@ -16,10 +16,10 @@
 """ MMBT configuration """
 
 
-import logging
+from . import hf_logging
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class MMBTConfig(object):

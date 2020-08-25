@@ -16,13 +16,13 @@
 """PyTorch RoBERTa model. """
 
 
-import logging
 import warnings
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from . import hf_logging
 from .configuration_roberta import RobertaConfig
 from .file_utils import (
     add_code_sample_docstrings,
@@ -41,7 +41,7 @@ from .modeling_outputs import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"

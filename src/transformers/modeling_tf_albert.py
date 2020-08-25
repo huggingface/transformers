@@ -16,12 +16,12 @@
 """ TF 2.0 ALBERT model. """
 
 
-import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import tensorflow as tf
 
+from . import hf_logging
 from .configuration_albert import AlbertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -55,7 +55,7 @@ from .modeling_tf_utils import (
 from .tokenization_utils import BatchEncoding
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "AlbertConfig"
 _TOKENIZER_FOR_DOC = "AlbertTokenizer"

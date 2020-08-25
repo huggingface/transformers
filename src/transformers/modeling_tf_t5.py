@@ -18,7 +18,7 @@
 
 import copy
 import itertools
-import logging
+import hf_logging
 import math
 import warnings
 
@@ -44,7 +44,7 @@ from .modeling_tf_utils import (
 from .tokenization_utils import BatchEncoding
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"

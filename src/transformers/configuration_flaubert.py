@@ -15,12 +15,11 @@
 """ Flaubert configuration, based on XLM. """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_xlm import XLMConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "flaubert/flaubert_small_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_small_cased/config.json",

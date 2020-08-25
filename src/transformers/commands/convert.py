@@ -1,5 +1,5 @@
 from argparse import ArgumentParser, Namespace
-from logging import getLogger
+from .. import hf_logging
 
 from transformers.commands import BaseTransformersCLICommand
 
@@ -52,7 +52,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         finetuning_task_name: str,
         *args
     ):
-        self._logger = getLogger("transformers-cli/converting")
+        self._logger = hf_logging.get_logger("transformers-cli/converting")
 
         self._logger.info("Loading model {}".format(model_type))
         self._model_type = model_type

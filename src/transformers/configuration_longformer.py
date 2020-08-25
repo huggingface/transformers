@@ -14,13 +14,13 @@
 # limitations under the License.
 """ Longformer configuration """
 
-import logging
+import hf_logging
 from typing import List, Union
 
 from .configuration_roberta import RobertaConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "allenai/longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/config.json",

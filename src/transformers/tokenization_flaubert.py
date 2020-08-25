@@ -15,7 +15,7 @@
 """Tokenization classes for Flaubert, based on XLM."""
 
 
-import logging
+import hf_logging
 import unicodedata
 
 import six
@@ -23,7 +23,7 @@ import six
 from .tokenization_xlm import XLMTokenizer
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

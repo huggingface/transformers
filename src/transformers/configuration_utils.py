@@ -18,14 +18,14 @@
 
 import copy
 import json
-import logging
 import os
 from typing import Any, Dict, Tuple
 
+from . import hf_logging
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class PretrainedConfig(object):

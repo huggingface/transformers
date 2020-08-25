@@ -17,7 +17,6 @@
 
 
 import json
-import logging
 import math
 import os
 import warnings
@@ -28,6 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from . import hf_logging
 from .activations import gelu_new, swish
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import (
@@ -47,7 +47,7 @@ from .modeling_utils import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 _TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"

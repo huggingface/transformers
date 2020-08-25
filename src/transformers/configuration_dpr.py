@@ -15,12 +15,11 @@
 """ DPR model configuration """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_bert import BertConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 DPR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/dpr-ctx_encoder-single-nq-base/config.json",

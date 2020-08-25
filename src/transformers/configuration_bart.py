@@ -15,13 +15,12 @@
 """ BART configuration """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",

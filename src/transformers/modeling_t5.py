@@ -16,7 +16,6 @@
 
 
 import copy
-import logging
 import math
 import os
 import warnings
@@ -26,6 +25,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from . import hf_logging
 from .configuration_t5 import T5Config
 from .file_utils import (
     DUMMY_INPUTS,
@@ -38,7 +38,7 @@ from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqL
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"

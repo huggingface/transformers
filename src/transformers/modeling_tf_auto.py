@@ -15,10 +15,10 @@
 """ Auto Model class. """
 
 
-import logging
 import warnings
 from collections import OrderedDict
 
+from . import hf_logging
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -141,7 +141,7 @@ from .modeling_tf_xlnet import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 TF_MODEL_MAPPING = OrderedDict(

@@ -1,7 +1,6 @@
 """Tensorflow trainer class."""
 
 import datetime
-import logging
 import math
 import os
 import warnings
@@ -11,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 
+from . import hf_logging
 from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
@@ -24,7 +24,7 @@ if is_wandb_available():
 if is_comet_available():
     import comet_ml
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class TFTrainer:

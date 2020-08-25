@@ -15,13 +15,13 @@
 """ PyTorch DPR model for Open Domain Question Answering."""
 
 
-import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
 
+from . import hf_logging
 from .configuration_dpr import DPRConfig
 from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
 from .modeling_bert import BertModel
@@ -29,7 +29,7 @@ from .modeling_outputs import BaseModelOutputWithPooling
 from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
 

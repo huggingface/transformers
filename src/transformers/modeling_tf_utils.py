@@ -15,7 +15,7 @@
 # limitations under the License.
 """TF general model utils."""
 import functools
-import logging
+import hf_logging
 import os
 import warnings
 from typing import Dict, List, Optional, Union
@@ -31,7 +31,7 @@ from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class TFModelUtilsMixin:

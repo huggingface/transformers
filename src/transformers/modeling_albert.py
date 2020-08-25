@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch ALBERT model. """
 
-import logging
 import math
 import os
 import warnings
@@ -25,6 +24,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from . import hf_logging
 from .configuration_albert import AlbertConfig
 from .file_utils import (
     ModelOutput,
@@ -46,7 +46,7 @@ from .modeling_outputs import (
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward, find_pruneable_heads_and_indices
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "AlbertConfig"
 _TOKENIZER_FOR_DOC = "AlbertTokenizer"

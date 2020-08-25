@@ -17,7 +17,6 @@
 
 
 import itertools
-import logging
 import math
 import warnings
 from dataclasses import dataclass
@@ -29,6 +28,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from . import hf_logging
 from .activations import gelu
 from .configuration_xlm import XLMConfig
 from .file_utils import (
@@ -56,7 +56,7 @@ from .modeling_utils import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "XLMConfig"
 _TOKENIZER_FOR_DOC = "XLMTokenizer"

@@ -15,12 +15,11 @@
 """ Salesforce CTRL configuration """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-config.json"}
 

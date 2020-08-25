@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
-
 import numpy as np
 import tensorflow as tf
 
+from . import hf_logging
 
-logger = logging.getLogger(__name__)
+
+logger = hf_logging.get_logger(__name__)
 
 
 class TFGenerationMixin:

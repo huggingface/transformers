@@ -16,14 +16,15 @@
 
 
 import argparse
-import logging
 
 import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME, GPT2Config, GPT2Model, load_tf_weights_in_gpt2
 
+from . import hf_logging
 
-logging.basicConfig(level=logging.INFO)
+
+hf_logging.set_verbosity_info()
 
 
 def convert_gpt2_checkpoint_to_pytorch(gpt2_checkpoint_path, gpt2_config_file, pytorch_dump_folder_path):

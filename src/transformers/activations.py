@@ -1,11 +1,12 @@
-import logging
 import math
 
 import torch
 import torch.nn.functional as F
 
+from . import hf_logging
 
-logger = logging.getLogger(__name__)
+
+logger = hf_logging.get_logger(__name__)
 
 
 def swish(x):

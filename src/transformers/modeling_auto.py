@@ -15,7 +15,7 @@
 """ Auto Model class. """
 
 
-import logging
+from . import hf_logging
 import warnings
 from collections import OrderedDict
 
@@ -174,7 +174,7 @@ from .modeling_xlnet import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 MODEL_MAPPING = OrderedDict(

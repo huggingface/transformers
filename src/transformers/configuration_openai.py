@@ -16,12 +16,11 @@
 """ OpenAI GPT configuration """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-config.json"

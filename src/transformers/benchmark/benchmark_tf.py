@@ -18,12 +18,12 @@
 """
 
 
-import logging
 import random
 import timeit
 from functools import wraps
 from typing import Callable, Optional
 
+from .. import hf_logging
 from ..configuration_utils import PretrainedConfig
 from ..file_utils import is_py3nvml_available, is_tf_available
 from ..modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
@@ -46,7 +46,7 @@ if is_tf_available():
 if is_py3nvml_available():
     import py3nvml.py3nvml as nvml
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 def run_with_tf_optimizations(do_eager_mode: bool, use_xla: bool):

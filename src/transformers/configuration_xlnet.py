@@ -15,13 +15,13 @@
 # limitations under the License.
 """ XLNet configuration """
 
-import logging
 import warnings
 
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-config.json",

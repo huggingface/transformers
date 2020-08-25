@@ -15,12 +15,12 @@
 # limitations under the License.
 
 import copy
-import logging
 
+from . import hf_logging
 from .configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class EncoderDecoderConfig(PretrainedConfig):

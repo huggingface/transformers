@@ -15,16 +15,16 @@
 """Tokenization classes for RoBERTa."""
 
 
-import logging
 from typing import List, Optional
 
 from tokenizers.processors import RobertaProcessing
 
+from . import hf_logging
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_utils import AddedToken
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

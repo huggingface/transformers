@@ -15,9 +15,9 @@
 """ Auto Tokenizer class. """
 
 
-import logging
 from collections import OrderedDict
 
+from . import hf_logging
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -71,7 +71,7 @@ from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 TOKENIZER_MAPPING = OrderedDict(

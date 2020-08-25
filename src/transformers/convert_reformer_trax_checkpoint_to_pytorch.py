@@ -16,7 +16,7 @@
 
 
 import argparse
-import logging
+import hf_logging
 import pickle
 
 import numpy as np
@@ -25,7 +25,7 @@ import torch
 from transformers import ReformerConfig, ReformerModelWithLMHead
 
 
-logging.basicConfig(level=logging.INFO)
+hf_logging.set_verbosity_info()
 
 
 def set_param(torch_layer, weight, bias=None):

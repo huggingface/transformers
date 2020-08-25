@@ -16,7 +16,7 @@
 
 
 import json
-import logging
+import hf_logging
 import os
 import re
 import sys
@@ -28,7 +28,7 @@ import sacremoses as sm
 from .tokenization_utils import PreTrainedTokenizer
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

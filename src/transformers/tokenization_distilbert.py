@@ -15,12 +15,11 @@
 """Tokenization classes for DistilBERT."""
 
 
-import logging
-
+from . import hf_logging
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 

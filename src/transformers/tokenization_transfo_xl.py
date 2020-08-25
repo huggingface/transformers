@@ -19,7 +19,6 @@
 
 
 import glob
-import logging
 import os
 import pickle
 import re
@@ -35,6 +34,7 @@ from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalize
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
+from . import hf_logging
 from .file_utils import cached_path, is_torch_available
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -44,7 +44,7 @@ if is_torch_available():
     import torch
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"pretrained_vocab_file": "vocab.bin", "vocab_file": "vocab.txt"}
 VOCAB_FILES_NAMES_FAST = {"pretrained_vocab_file": "vocab.json", "vocab_file": "vocab.json"}

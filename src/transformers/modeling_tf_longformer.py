@@ -14,10 +14,9 @@
 # limitations under the License.
 """Tensorflow Longformer model. """
 
-import logging
-
 import tensorflow as tf
 
+from . import hf_logging
 from .configuration_longformer import LongformerConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import TFBertIntermediate, TFBertOutput, TFBertPooler, TFBertSelfOutput
@@ -39,7 +38,7 @@ from .modeling_tf_utils import (
 from .tokenization_utils import BatchEncoding
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"

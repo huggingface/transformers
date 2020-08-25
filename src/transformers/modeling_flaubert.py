@@ -15,12 +15,12 @@
 """ PyTorch Flaubert model, based on XLM. """
 
 
-import logging
 import random
 
 import torch
 from torch.nn import functional as F
 
+from . import hf_logging
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_outputs import BaseModelOutput
@@ -36,7 +36,7 @@ from .modeling_xlm import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FlaubertConfig"
 _TOKENIZER_FOR_DOC = "FlaubertTokenizer"

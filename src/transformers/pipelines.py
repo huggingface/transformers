@@ -16,7 +16,7 @@
 
 import csv
 import json
-import logging
+import hf_logging
 import os
 import pickle
 import sys
@@ -80,7 +80,7 @@ if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 def get_framework(model=None):

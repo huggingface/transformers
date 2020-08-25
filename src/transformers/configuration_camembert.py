@@ -16,12 +16,11 @@
 """ CamemBERT configuration """
 
 
-import logging
-
+from . import hf_logging
 from .configuration_roberta import RobertaConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-config.json",

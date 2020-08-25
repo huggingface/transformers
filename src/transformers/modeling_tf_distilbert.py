@@ -16,12 +16,12 @@
 """
 
 
-import logging
 import math
 
 import numpy as np
 import tensorflow as tf
 
+from . import hf_logging
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -52,7 +52,7 @@ from .modeling_tf_utils import (
 from .tokenization_utils import BatchEncoding
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DistilBertConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"

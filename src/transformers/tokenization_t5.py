@@ -15,16 +15,16 @@
 """ Tokenization class for model T5."""
 
 
-import logging
 import os
 import re
 from shutil import copyfile
 from typing import List, Optional
 
+from . import hf_logging
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 

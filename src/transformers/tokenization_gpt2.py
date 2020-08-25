@@ -16,7 +16,7 @@
 
 
 import json
-import logging
+import hf_logging
 import os
 from functools import lru_cache
 
@@ -28,7 +28,7 @@ from .tokenization_utils_base import BatchEncoding
 from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

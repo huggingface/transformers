@@ -1,4 +1,4 @@
-import logging
+from .. import hf_logging
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
@@ -24,7 +24,7 @@ except (ImportError, AttributeError):
     _serve_dependencies_installed = False
 
 
-logger = logging.getLogger("transformers-cli/serving")
+logger = hf_logging.getLogger("transformers-cli/serving")
 
 
 def serve_command_factory(args: Namespace):

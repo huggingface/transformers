@@ -16,14 +16,14 @@
 
 
 import argparse
-import logging
+import hf_logging
 
 import torch
 
 from transformers import CONFIG_NAME, WEIGHTS_NAME, OpenAIGPTConfig, OpenAIGPTModel, load_tf_weights_in_openai_gpt
 
 
-logging.basicConfig(level=logging.INFO)
+hf_logging.set_verbosity_info()
 
 
 def convert_openai_checkpoint_to_pytorch(openai_checkpoint_folder_path, openai_config_file, pytorch_dump_folder_path):

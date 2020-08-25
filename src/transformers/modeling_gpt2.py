@@ -16,7 +16,6 @@
 """PyTorch OpenAI GPT-2 model."""
 
 
-import logging
 import os
 import warnings
 from dataclasses import dataclass
@@ -26,6 +25,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from . import hf_logging
 from .activations import ACT2FN
 from .configuration_gpt2 import GPT2Config
 from .file_utils import (
@@ -45,7 +45,7 @@ from .modeling_utils import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"

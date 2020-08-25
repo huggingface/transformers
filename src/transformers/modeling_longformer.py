@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Longformer model. """
 
-import logging
 import math
 import warnings
 
@@ -23,6 +22,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from . import hf_logging
 from .configuration_longformer import LongformerConfig
 from .file_utils import (
     add_code_sample_docstrings,
@@ -49,7 +49,7 @@ from .modeling_utils import (
 )
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"

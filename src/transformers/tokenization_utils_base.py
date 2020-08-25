@@ -20,7 +20,6 @@
 
 import copy
 import json
-import logging
 import os
 import warnings
 from collections import OrderedDict, UserDict
@@ -32,6 +31,7 @@ import numpy as np
 from tokenizers import AddedToken
 from tokenizers import Encoding as EncodingFast
 
+from . import hf_logging
 from .file_utils import (
     add_end_docstrings,
     cached_path,
@@ -49,7 +49,7 @@ if is_torch_available():
     import torch
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 VERY_LARGE_INTEGER = int(1e30)  # This is used to set the max input length for a model with infinite size input
 LARGE_INTEGER = int(1e20)  # This is used when we need something big but slightly smaller than VERY_LARGE_INTEGER

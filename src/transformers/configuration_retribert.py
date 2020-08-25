@@ -15,12 +15,12 @@
 """ RetriBERT model configuration """
 
 
-import logging
+import hf_logging
 
 from .configuration_utils import PretrainedConfig
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 # TODO: uploadto AWS
 RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {

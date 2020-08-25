@@ -1,10 +1,10 @@
 import dataclasses
 import json
-import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
+from . import hf_logging
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
 
 
@@ -15,7 +15,7 @@ if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 def default_logdir() -> str:
@@ -247,7 +247,7 @@ class TrainingArguments:
 
     def __post_init__(self):
         if self.disable_tqdm is None:
-            self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
+            self.disable_tqdm = hf_logging.is_verbosity_at_least_info()
 
     remove_unused_columns: Optional[bool] = field(
         default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}

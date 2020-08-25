@@ -1,13 +1,13 @@
-import logging
 import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
+from . import hf_logging
 from .file_utils import cached_property, is_tf_available, tf_required
 from .training_args import TrainingArguments
 
 
-logger = logging.getLogger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 if is_tf_available():
     import tensorflow as tf
