@@ -5,6 +5,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 
+import torch
+
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -12,15 +14,55 @@ from transformers import (
     HfArgumentParser,
     MarianTokenizer,
     MBartTokenizer,
+    T5Tokenizer,
     Trainer,
     TrainingArguments,
     set_seed,
 )
 
-from .utils import Seq2SeqDataset, TranslationDataset, assert_all_frozen, freeze_params
+from .utils import Seq2SeqDataset, TranslationDataset, assert_all_frozen, freeze_params, trim_batch
 
 
 logger = logging.getLogger(__name__)
+
+
+class Seq2SeqDataCollator:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.pad_token_id = tokenizer.pad_token_id
+
+    def __call__(self, batch) -> Dict[str, torch.Tensor]:
+        input_ids = torch.stack([x["input_ids"] for x in batch])
+        attention_mask = torch.stack([x["attention_mask"] for x in batch])
+        target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
+
+        target_ids = trim_batch(target_ids, self.pad_token_id)
+        input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
+
+        if isinstance(self.tokenizer, T5Tokenizer):
+            labels = self._shift_right(target_ids)
+
+        batch = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": target_ids,
+            "labels": labels,
+        }
+        return batch
+
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.pad_token_id
+
+        assert (
+            decoder_start_token_id is not None
+        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
+
+        # shift inputs to the right
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
+
+        return shifted_input_ids
 
 
 @dataclass
