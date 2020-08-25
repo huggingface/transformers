@@ -840,7 +840,7 @@ class TFBartModel(TFPretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        decoder_input_ids=None,
+        decoder_input_ids=None,  # BAD DEFAULT LEFT FOR CONSISTENT SIGNATURE
         encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
@@ -850,6 +850,7 @@ class TFBartModel(TFPretrainedBartModel):
         return_dict=None,
         **unused
     ):
+        assert decoder_input_ids is not None, "TF Bart requires decoder_input_ids, got None"
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         if decoder_input_ids is None:  # GLUE MODE
             use_cache = False
@@ -1065,73 +1066,3 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
     def get_encoder(self):
         return self.model.encoder
-
-
-@add_start_docstrings(
-    """Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE tasks. """,
-    BART_START_DOCSTRING,
-)
-class TFBartForSequenceClassification(TFPretrainedBartModel):
-    def __init__(self, config: BartConfig, **kwargs):
-        super().__init__(config, **kwargs)
-        self.model = TFBartModel(config, name="model")
-        self.classification_head = BartClassificationHead(
-            config.d_model, config.d_model, config.num_labels, config.classif_dropout,
-        )
-
-    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
-    def call(self, inputs: dict, **kwargs):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
-            logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-                Classification (or regression if config.num_labels==1) scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-                Attentions weights after the attention softmax, used to compute the weighted average in the
-                self-attention
-                heads.
-
-    Examples::
-
-        from transformers import BartTokenizer, BartForSequenceClassification
-        import torch
-
-        tokenizer = BartTokenizer.from_pretrained('bart-large')
-        model = BartForSequenceClassification.from_pretrained('bart-large')
-        input_ids = tf.Tensor(tokenizer.encode("Hello, my dog is cute",
-        add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = tf.Tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
-        """
-        if isinstance(inputs, dict):
-            kwargs.update(**inputs)
-            input_ids = kwargs.pop("input_ids")  # KeyError possible
-        else:
-            assert isinstance(inputs, T)
-            input_ids = inputs
-
-        outputs = self.model(input_ids, **kwargs)
-        x = outputs[0]
-        assert isinstance(x, tf.Tensor), f"type (x) is {type(x)}, expected tf.Tensor"
-        eos_mask = tf.cast(tf.math.equal(input_ids, self.config.eos_token_id), tf.int32)
-        assert tf.reduce_all(
-            tf.math.equal(tf.reduce_sum(eos_mask, axis=1), 1)
-        ), "All examples must have 1 <eos> tokens."
-        sentence_representation = tf.reshape(x[eos_mask, :], (x.shape[0], -1, x.shape[-1]))[:, -1, :]
-        # TODO(SS): add new-style return_dict stuff
-        logits = self.classification_head(sentence_representation)
-        # Prepend logits
-        outputs = (logits,) + outputs[1:]  # Add hidden states and attention if they are here
-        return outputs

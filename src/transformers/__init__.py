@@ -496,7 +496,6 @@ if is_tf_available():
     from .modeling_tf_bart import (
         TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         TFBartForConditionalGeneration,
-        TFBartForSequenceClassification,
         TFBartModel,
     )
     from .modeling_tf_bert import (
