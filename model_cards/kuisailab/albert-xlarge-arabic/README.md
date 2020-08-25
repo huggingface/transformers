@@ -3,6 +3,10 @@ language: ar
 datasets:
 - oscar
 - wikipedia
+tags:
+- ar
+- masked-lm
+- lm-head
 ---
 
 
