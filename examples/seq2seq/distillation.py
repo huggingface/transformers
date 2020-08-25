@@ -20,7 +20,7 @@ try:
     from .utils import (
         any_requires_grad,
         assert_all_frozen,
-        calculate_bleu_score,
+        calculate_bleu,
         freeze_params,
         pickle_load,
         use_task_specific_params,
@@ -32,7 +32,7 @@ except ImportError:
     from utils import (
         any_requires_grad,
         assert_all_frozen,
-        calculate_bleu_score,
+        calculate_bleu,
         freeze_params,
         pickle_load,
         use_task_specific_params,
@@ -261,7 +261,7 @@ class BartTranslationDistiller(BartSummarizationDistiller):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
 
     def calc_generative_metrics(self, preds, target) -> dict:
-        return calculate_bleu_score(preds, target)
+        return calculate_bleu(preds, target)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
