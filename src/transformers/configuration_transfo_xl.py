@@ -148,10 +148,13 @@ class TransfoXLConfig(PretrainedConfig):
         **kwargs
     ):
         if "tie_weight" in kwargs:
-            warnings.warn("The config parameter `tie_weight` is depreciated. Please use `tie_word_embeddings` instead.", FutureWarning)
-            tie_word_embeddings = kwargs["tie_weight"]
+            warnings.warn(
+                "The config parameter `tie_weight` is depreciated. Please use `tie_word_embeddings` instead.",
+                FutureWarning,
+            )
+            kwargs["tie_word_embeddings"] = kwargs["tie_weight"]
 
-        super().__init__(eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.cutoffs = []
         self.cutoffs.extend(cutoffs)

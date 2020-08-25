@@ -152,7 +152,9 @@ class PretrainedConfig(object):
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
-        self.tie_word_embeddings = kwargs.pop("tie_word_embeddings", True)  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
+        self.tie_word_embeddings = kwargs.pop(
+            "tie_word_embeddings", True
+        )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
