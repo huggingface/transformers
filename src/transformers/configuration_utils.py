@@ -134,8 +134,7 @@ class PretrainedConfig(object):
         PyTorch specific parameters
             - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
               used with Torchscript.
-            - **tie_word_embeddings** (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the model has a output word embedding layer.
+            - **tie_word_embeddings** (:obj:`bool`, `optional`, defaults to :obj:`True`) -- Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the model has a output word embedding layer.
 
         TensorFlow specific parameters
             - **use_bfloat16** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should

@@ -81,7 +81,7 @@ class TransfoXLConfig(PretrainedConfig):
             adaptive (:obj:`boolean`, optional, defaults to :obj:`True`):
                 use adaptive softmax
             tie_weight (:obj:`boolean`, optional, defaults to :obj:`True`):
-                tie the word embedding and softmax weights. THIS PARAMETER IS DEPRECIATED.
+                tie the word embedding and softmax weights. THIS PARAMETER IS DEPRECATED.
             dropout (:obj:`float`, optional, defaults to 0.1):
                 The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
             dropatt (:obj:`float`, optional, defaults to 0):
