@@ -777,6 +777,17 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past,
+            "use_cache": kwargs.get("use_cache"),
+        }
+
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=GPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(

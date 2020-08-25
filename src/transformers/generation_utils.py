@@ -553,8 +553,8 @@ class GenerationMixin:
             )
 
             # if model has past, then set the past variable to speed up decoding
-            if self._use_cache(outputs, use_cache):
-                past = outputs[1]
+            if "past_key_values" in outputs and outputs["past_key_values"] is not None:
+                past = outputs["past_key_values"]
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
@@ -652,12 +652,15 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
-            outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
+            outputs = self(**model_inputs, return_dict=True)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
 
             # if model has past, then set the past variable to speed up decoding
-            if self._use_cache(outputs, use_cache):
-                past = outputs[1]
+            if "past_key_values" in outputs and outputs["past_key_values"] is not None:
+                past = outputs["past_key_values"]
+            elif "mems" in outputs and outputs["mems"] is not None:
+                past = outputs["mems"]
+
             if self.config.is_encoder_decoder and do_sample is False:
                 # TODO (PVP) still a bit hacky here - there might be a better solution
                 next_token_logits = self.adjust_logits_during_generation(
