@@ -1226,7 +1226,7 @@ class FillMaskPipeline(Pipeline):
                     values = tf.gather_nd(values, tf.reshape(sort_inds, (-1, 1))).numpy()
                     predictions = target_inds[sort_inds.numpy()]
             else:
-                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
+                masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
                 self.ensure_exactly_one_mask_token(masked_index.numpy())
