@@ -180,23 +180,11 @@ class T5DenseReluDense(nn.Module):
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states, debug=False):
-        if debug:
-            print('dense')
-            print(torch.max(hidden_states), torch.min(hidden_states))
-            print(torch.max(self.wi.weight), torch.min(self.wi.weight))
+    def forward(self, hidden_states):
         h = self.wi(hidden_states)
-        if debug:
-            print(torch.max(h), torch.min(h))
         h = F.relu(h)
-        if debug:
-            print(torch.max(h), torch.min(h))
         h = self.dropout(h)
         h = self.wo(h)
-        if debug:
-            print(torch.max(h), torch.min(h))
-            print(torch.max(self.wo.weight), torch.min(self.wo.weight))
-            print('-------------')
         return h
 
 
@@ -207,24 +195,10 @@ class T5LayerFF(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-        # Do we do self-attention in FP-16 because we can?
-        # NOTE: Should be applied to whole model; not used with FP16 optimizer, so not actually correct
-        self.hack_fp16 = False
-        self.scale_factor = 0.0001
-
     def forward(self, hidden_states):
-        with torch.cuda.amp.autocast(enabled=False):
-            norm_x = self.layer_norm(hidden_states)
-        # HACK -- can we just do auto-scaling to get numbers in range??
-        if self.hack_fp16:
-            norm_x *= self.scale_factor
-        with torch.cuda.amp.autocast(enabled=self.hack_fp16):
-            y = self.DenseReluDense(norm_x)
-        if self.hack_fp16:
-            y = y.to(torch.float32) / self.scale_factor
-        #print(y)
-        with torch.cuda.amp.autocast(enabled=False):
-            layer_output = hidden_states + self.dropout(y)
+        norm_x = self.layer_norm(hidden_states)
+        y = self.DenseReluDense(norm_x)
+        layer_output = hidden_states + self.dropout(y)
         return layer_output
 
 
@@ -252,7 +226,6 @@ class T5Attention(nn.Module):
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
-        print('Pruning heads! Did we want this?')
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, self.d_kv, self.pruned_heads)
@@ -340,7 +313,6 @@ class T5Attention(nn.Module):
         query_length=None,
         use_cache=False,
         output_attentions=False,
-        debug=False,
     ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -393,16 +365,9 @@ class T5Attention(nn.Module):
                 k, v = past_key_value_state
 
         if self.is_decoder and use_cache is True:
-            #present_key_value_state = ((k, v),)
-            # HACK -- need to flatted here -- grad checkpoint does not like tuple of tuples
-            if False:
-                print('K, V sizes:')
-                print(k.shape)
-                print(v.shape)
-            present_key_value_state = (torch.stack([k,v], dim=0), )
+            present_key_value_state = ((k, v),)
         else:
-            # HACK! If we pass "none" -- problems with grad checkpointing -- need dummy var but actual var
-            present_key_value_state = None
+            present_key_value_state = (None,)
 
         # (bs, n_heads, qlen, klen)
         scores = torch.matmul(
@@ -412,7 +377,6 @@ class T5Attention(nn.Module):
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 raise ValueError("No position_bias provided and no weights to compute position_bias")
-            #with torch.cuda.amp.autocast(enabled=False):
             position_bias = self.compute_bias(real_qlen, klen)
 
             # if key and values are already calculated
@@ -424,9 +388,8 @@ class T5Attention(nn.Module):
                 position_bias = position_bias + mask  # (bs, n_heads, qlen, klen)
 
         scores += position_bias
-        with torch.cuda.amp.autocast(enabled=False):
-            weights = F.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
-            weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        weights = F.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
+        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -437,23 +400,12 @@ class T5Attention(nn.Module):
 
         context = self.o(context)
 
-        if self.is_decoder and use_cache is True:
-            outputs = (context,) + present_key_value_state
-        else:
-            #print(context.shape)
-            # Hack -- just return something differentiable (var) in place or (K, V) we don't need
-            outputs = (context,) + (context[0][0][0],)
+        outputs = (context,) + present_key_value_state
 
         if output_attentions:
             outputs = outputs + (weights,)
         if self.has_relative_attention_bias:
             outputs = outputs + (position_bias,)
-
-        if debug:
-            print('T5Attention outputs')
-            #print(outputs)
-            print('Is this none:')
-            #print(outputs[1])
         return outputs
 
 
@@ -464,10 +416,6 @@ class T5LayerSelfAttention(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-        # Do we do self-attention in FP-16 because we can?
-        # NOTE: Should be applied to whole model; not used with FP16 optimizer, so not actually correct
-        self.hack_fp16 = False
-
     def forward(
         self,
         hidden_states,
@@ -477,32 +425,20 @@ class T5LayerSelfAttention(nn.Module):
         past_key_value_state=None,
         use_cache=False,
         output_attentions=False,
-        debug=False,
     ):
-        with torch.cuda.amp.autocast(enabled=False):
-            norm_x = self.layer_norm(hidden_states)
-
-        # HACK -- do FP16 in Attention Layer only...
-        with torch.cuda.amp.autocast(enabled=self.hack_fp16):
-            attention_output = self.SelfAttention(
-                norm_x,
-                mask=attention_mask,
-                position_bias=position_bias,
-                head_mask=head_mask,
-                past_key_value_state=past_key_value_state,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
-
-        with torch.cuda.amp.autocast(enabled=False):
-            y = attention_output[0]
-            layer_output = hidden_states + self.dropout(y)
-            outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
-
-        if debug:
-            print('T5LayerSelfAttention outputs')
-            print(len(outputs))
-            #print(outputs[5])
+        norm_x = self.layer_norm(hidden_states)
+        attention_output = self.SelfAttention(
+            norm_x,
+            mask=attention_mask,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=past_key_value_state,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+        )
+        y = attention_output[0]
+        layer_output = hidden_states + self.dropout(y)
+        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
 
@@ -513,10 +449,6 @@ class T5LayerCrossAttention(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-        # Do we do self-attention in FP-16 because we can?
-        # NOTE: Should be applied to whole model; not used with FP16 optimizer, so not actually correct
-        self.hack_fp16 = False
-
     def forward(
         self,
         hidden_states,
@@ -525,31 +457,25 @@ class T5LayerCrossAttention(nn.Module):
         position_bias=None,
         head_mask=None,
         past_key_value_state=None,
-        query_length=None,
         use_cache=False,
+        query_length=None,
         output_attentions=False,
     ):
-        with torch.cuda.amp.autocast(enabled=False):
-            norm_x = self.layer_norm(hidden_states)
-
-        # HACK -- do FP16 in Attention Layer only...
-        with torch.cuda.amp.autocast(enabled=self.hack_fp16):
-            attention_output = self.EncDecAttention(
-                norm_x,
-                mask=attention_mask,
-                kv=kv,
-                position_bias=position_bias,
-                head_mask=head_mask,
-                past_key_value_state=past_key_value_state,
-                use_cache=use_cache,
-                query_length=query_length,
-                output_attentions=output_attentions,
-            )
-
-        with torch.cuda.amp.autocast(enabled=False):
-            y = attention_output[0]
-            layer_output = hidden_states + self.dropout(y)
-            outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
+        norm_x = self.layer_norm(hidden_states)
+        attention_output = self.EncDecAttention(
+            norm_x,
+            mask=attention_mask,
+            kv=kv,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=past_key_value_state,
+            use_cache=use_cache,
+            query_length=query_length,
+            output_attentions=output_attentions,
+        )
+        y = attention_output[0]
+        layer_output = hidden_states + self.dropout(y)
+        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
 
@@ -564,9 +490,6 @@ class T5Block(nn.Module):
 
         self.layer.append(T5LayerFF(config))
 
-        # HACK -- checkpoint either at T5 Block... or at Attention block
-        self.grad_checkpoint = False #True # True # False #True
-
     def forward(
         self,
         hidden_states,
@@ -579,7 +502,6 @@ class T5Block(nn.Module):
         past_key_value_state=None,
         use_cache=False,
         output_attentions=False,
-        debug=False,
     ):
 
         if past_key_value_state is not None:
@@ -598,49 +520,16 @@ class T5Block(nn.Module):
         else:
             self_attn_past_key_value_state, cross_attn_past_key_value_state = None, None
 
-        if self.grad_checkpoint:# and (not self.is_decoder):
-            if True:
-                if debug:
-                    print('Grad checkpoint for attention layer -- is_decoder '+str(self.is_decoder))
-                    print(self.layer[0])
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, use_cache, output_attentions)
-                    return custom_forward
-
-                self_attention_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(self.layer[0]),
-                    hidden_states,
-                    attention_mask,
-                    position_bias,
-                    head_mask,
-                    self_attn_past_key_value_state,
-                    #use_cache,
-                    #output_attentions=output_attentions,
-                )
-
-        else:
-            self_attention_outputs = self.layer[0](
-                hidden_states,
-                attention_mask=attention_mask,
-                position_bias=position_bias,
-                head_mask=head_mask,
-                past_key_value_state=self_attn_past_key_value_state,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
-        #print('Attention outputs')
-        #print(self_attention_outputs)
-
+        self_attention_outputs = self.layer[0](
+            hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=self_attn_past_key_value_state,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+        )
         hidden_states, present_key_value_state = self_attention_outputs[:2]
-
-        if debug:
-            print('----------\nkey value state')
-            print(len(present_key_value_state))
-            print(present_key_value_state[0].shape)
-
-        # Remove items to save space...
-        #if output_attentions:
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         if self.is_decoder and encoder_hidden_states is not None:
@@ -651,104 +540,31 @@ class T5Block(nn.Module):
             else:
                 query_length = None
 
-
-            if self.grad_checkpoint:
-                #if True:
-                if debug:
-                    print('Grad checkpoint for attention layer -- cross attention')
-                    print(self.layer[1])
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, query_length, use_cache, output_attentions)
-                    return custom_forward
-
-                cross_attention_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(self.layer[1]),
-                    hidden_states,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    encoder_decoder_position_bias,
-                    head_mask,
-                    cross_attn_past_key_value_state,
-                    #query_length,
-                    #use_cache=use_cache,
-                    #output_attentions=output_attentions,
-                )
-
-            else:
-                cross_attention_outputs = self.layer[1](
-                    hidden_states,
-                    kv=encoder_hidden_states,
-                    attention_mask=encoder_attention_mask,
-                    position_bias=encoder_decoder_position_bias,
-                    head_mask=head_mask,
-                    past_key_value_state=cross_attn_past_key_value_state,
-                    query_length=query_length,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
+            cross_attention_outputs = self.layer[1](
+                hidden_states,
+                kv=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                position_bias=encoder_decoder_position_bias,
+                head_mask=head_mask,
+                past_key_value_state=cross_attn_past_key_value_state,
+                query_length=query_length,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
             hidden_states = cross_attention_outputs[0]
             # Combine self attn and cross attn key value states
             if present_key_value_state is not None:
-                #print('Adding cross_attention_outputs')
-
-                #present_key_value_state = present_key_value_state + cross_attention_outputs[1]
-
-                if debug:
-                    print('l00king at appending cross attention:')
-                    print(present_key_value_state[0].shape)
-                    print(len(cross_attention_outputs[1]))
-                    print(cross_attention_outputs[1][0].shape)
-                    #print(cross_attention_outputs.shape)
-                    print(cross_attention_outputs[1].shape)
-
-                #present_key_value_state = present_key_value_state + cross_attention_outputs[1]
-                present_key_value_state = torch.cat([present_key_value_state, cross_attention_outputs[1]], dim=0)
-
-                if debug:
-                    print('key value state')
-                    print(len(present_key_value_state))
-                    print(present_key_value_state[0].shape)
+                present_key_value_state = present_key_value_state + cross_attention_outputs[1]
 
             # Keep cross-attention outputs and relative position weights
-            #if output_attentions:
             attention_outputs = attention_outputs + cross_attention_outputs[2:]
 
         # Apply Feed Forward layer
-        if self.grad_checkpoint:
-            hidden_states = torch.utils.checkpoint.checkpoint(self.layer[-1],hidden_states)
-        else:
-            hidden_states = self.layer[-1](hidden_states)
+        hidden_states = self.layer[-1](hidden_states)
         outputs = (hidden_states,)
 
-        if debug:
-            # Add attentions if we output theM
-            print('Present key value')
-            print(len(present_key_value_state))
-            #print(present_key_value_state[0].shape)
-            #print(present_key_value_state[1].shape)
-            #print(present_key_value_state[2].shape)
-            #print(present_key_value_state[3].shape)
-            print(present_key_value_state.shape)
-
-        #if self.is_decoder:
-        #    pk = torch.stack(present_key_value_state, dim=0)
-        #else:
-        if True:
-            pk = present_key_value_state
-
-        if debug:
-            print(len(present_key_value_state))
-            print(present_key_value_state[0].shape)
-            #print(present_key_value_state[1].shape)
-            #print(present_key_value_state[2].shape)
-            #print(present_key_value_state[3].shape)
-
-        #outputs = outputs + (present_key_value_state,) + attention_outputs
-        if True:
-            outputs = outputs + (pk,) + attention_outputs
-        #print('outputs')
-        #print(outputs)
+        # Add attentions if we output them
+        outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
@@ -829,13 +645,9 @@ class T5PreTrainedModel(PreTrainedModel):
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
-        print('Initializing Encoder/Decoder T5Stack')
-        print(config)
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
-
-        print('is_decoder ' + str(self.is_decoder))
 
         self.block = nn.ModuleList(
             [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
@@ -843,18 +655,7 @@ class T5Stack(T5PreTrainedModel):
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-        # HACK -- should get from config...
-        # Question -- can we gradient check a gradient checkpointed layer?
-        self.fp16_embeddings = True
-        self.grad_checkpoint = True # False #True
-        self.grad_checkpoint_decoder = True # False # True
-
         self.init_weights()
-
-        # HACK -- freeze embeddings... see if this saves memory...
-        #print('Embeddings will have zero gradients...')
-        #assert False
-        #self.embed_tokens.weight.requires_grad=False
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -878,7 +679,6 @@ class T5Stack(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        debug=False,
     ):
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -887,10 +687,6 @@ class T5Stack(T5PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if debug:
-            print('T5Stack -- forward...')
-
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -907,13 +703,7 @@ class T5Stack(T5PreTrainedModel):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
-            # TODO: Disable gradients to vocab to save memory? 32k x 1k params... 
-            #print('computing embeddings')
-            #print(input_ids.shape)
-            #print(self.embed_tokens)
-            with torch.cuda.amp.autocast(enabled=self.fp16_embeddings):
-                inputs_embeds = self.embed_tokens(input_ids)
-
+            inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 
@@ -938,9 +728,6 @@ class T5Stack(T5PreTrainedModel):
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
             )
 
-        if debug:
-            print('Got attention masks')
-
         # initialize past_key_value_states with `None` if past does not exist
         if past_key_value_states is None:
             past_key_value_states = [None] * len(self.block)
@@ -961,73 +748,24 @@ class T5Stack(T5PreTrainedModel):
         position_bias = None
         encoder_decoder_position_bias = None
 
-        if debug:
-            print('Collecting original inputs -- first hidden states:')
-
         hidden_states = self.dropout(inputs_embeds)
-
-        #if debug:
-        #    print(hidden_states)
 
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            #if i > 6:
-            #    assert False
-
-            if debug:
-                print(hidden_states)
-                print('layer output layer %d' % i)
-
-                print(layer_module)
-
-            # Gradient checkpointing
-            check = self.grad_checkpoint_decoder if self.is_decoder else self.grad_checkpoint 
-            if check:
-                if debug:
-                    print('Grad checkpointing module with custom forward is_decoder '+str(self.is_decoder))
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, use_cache, output_attentions)
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),                     
-                    hidden_states,
-                    extended_attention_mask,
-                    position_bias,
-                    encoder_hidden_states,
-                    encoder_extended_attention_mask,
-                    encoder_decoder_position_bias,
-                    head_mask[i],
-                    past_key_value_state,
-                    #use_cache,
-                    #output_attentions=output_attentions,
-                )
-            else:
-                if debug:
-                    print('doing non-checkpointed layer module...')
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask=extended_attention_mask,
-                    position_bias=position_bias,
-                    encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_extended_attention_mask,
-                    encoder_decoder_position_bias=encoder_decoder_position_bias,
-                    head_mask=head_mask[i],
-                    past_key_value_state=past_key_value_state,
-                    use_cache=use_cache,
-                    output_attentions=output_attentions,
-                )
-
-            if debug:
-                print('layer outputs shape:')
-                print(layer_outputs)
-                print('---------------')
-            #assert False
-
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask=extended_attention_mask,
+                position_bias=position_bias,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_extended_attention_mask,
+                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                head_mask=head_mask[i],
+                past_key_value_state=past_key_value_state,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
@@ -1045,29 +783,19 @@ class T5Stack(T5PreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
 
-        if debug:
-            print('hidden states -- after layer loop')
-            print(hidden_states)
-
-        with torch.cuda.amp.autocast(enabled=False):
-            hidden_states = self.final_layer_norm(hidden_states)
-            hidden_states = self.dropout(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            if debug:
-                print('not return dict...')
             return tuple(
                 v
                 for v in [hidden_states, present_key_value_states, all_hidden_states, all_attentions]
                 if v is not None
             )
-        if debug:
-            print('hidden states')
-            print(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
@@ -1156,10 +884,6 @@ T5_INPUTS_DOCSTRING = r"""
 class T5Model(T5PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
-        print('Init T5 model from config ')
-        print(config)
-
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
@@ -1171,8 +895,6 @@ class T5Model(T5PreTrainedModel):
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         self.decoder = T5Stack(decoder_config, self.shared)
-
-        print('initializing weights...')
 
         self.init_weights()
 
@@ -1215,7 +937,6 @@ class T5Model(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        debug = True,
         **kwargs,
     ):
         r"""
@@ -1233,10 +954,6 @@ class T5Model(T5PreTrainedModel):
 
         >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
-
-        if debug:
-            print('T5 forward pass...')
-
         if "decoder_past_key_value_states" in kwargs:
             warnings.warn(
                 "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `decoder_past_key_values` instead.",
@@ -1248,13 +965,8 @@ class T5Model(T5PreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if debug:
-            print(list(zip(['use_cache', 'return_dict'], [use_cache, return_dict])))
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
-            if debug:
-                print('running encoder...')
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -1288,8 +1000,6 @@ class T5Model(T5PreTrainedModel):
                 decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
 
         # Decode
-        if debug:
-            print('running decoder')
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -1310,13 +1020,6 @@ class T5Model(T5PreTrainedModel):
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + encoder_outputs
 
-        if debug:
-            print('retunring Seq2SeqModelOutput with past?')
-            print(past)
-            print('And decoder outputs...')
-            print(decoder_outputs)
-            print('-----------------')
-
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             decoder_past_key_values=past,
@@ -1334,13 +1037,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-
-        print('Init T5ForConditionalGeneration model from config ')
-
-        # HACK -- manual override -- turn off dropout -- may be bad for FP16
-        #config["dropout_rate"] = 0.
-        print(config)
-
         self.model_dim = config.d_model
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1356,8 +1052,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-
-        print('initializing weights...')
 
         self.init_weights()
 
@@ -1396,7 +1090,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        debug = False,
         **kwargs,
     ):
         r"""
@@ -1441,19 +1134,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             decoder_past_key_values = kwargs.pop("decoder_past_key_value_states")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
-        if debug:
-            print('T54Gen forward passs...')
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if debug:
-            print(list(zip(['use_cache', 'return_dict'], [use_cache, return_dict])))
-
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
-            if debug:
-                print('collecting encoder -- enable_amp ' + str(enable_amp))
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1465,16 +1150,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 return_dict=return_dict,
             )
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            print('DANGER -- return dict confusions')
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-
-        if debug and enable_amp:
-            print('Encoder outputs')
-            print(encoder_outputs)
 
         hidden_states = encoder_outputs[0]
 
@@ -1491,9 +1171,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             if decoder_inputs_embeds is not None:
                 decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
 
-        if debug:
-            print('collecting decoder')
-
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -1509,51 +1186,24 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        if debug and False:
-            print('decoder outputs')
-            print(decoder_outputs)
-
-        with torch.cuda.amp.autocast(enabled=False):
-            sequence_output = decoder_outputs[0]
-            # Rescale output before projecting on vocab
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
-            lm_logits = self.lm_head(sequence_output)
+        sequence_output = decoder_outputs[0]
+        # Rescale output before projecting on vocab
+        # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+        sequence_output = sequence_output * (self.model_dim ** -0.5)
+        lm_logits = self.lm_head(sequence_output)
 
         loss = None
         if labels is not None:
-            if debug:
-                print('Computing CrossEntropyLoss!')
             loss_fct = CrossEntropyLoss(ignore_index=-100)
-            with torch.cuda.amp.autocast(enabled=False):
-                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            if debug:
-                print(loss)
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
         if not return_dict:
-            if debug and False:
-                print('*not* return dict... (past?)')
-                print(past)
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
-            if debug and False:
-                print('output')
-                print(output)
-            return_val = ((loss,) + output) if loss is not None else output
-            if debug and False:
-                print('return val')
-                print(return_val)
-
-            #assert False
-
-            return return_val
-
-        print('Loss and output...')
-        print(loss)
-        print(output)
+            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
