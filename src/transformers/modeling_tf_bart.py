@@ -54,11 +54,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
 logger = logging.getLogger(__name__)
 
 
-TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/pytorch_model.bin",
-    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
-    "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/pytorch_model.bin",
-}
 
 BART_START_DOCSTRING = r"""
 
@@ -112,7 +107,6 @@ def invert_mask(attention_mask: T):
 class TFPretrainedBartModel(TFPreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
-    pretrained_model_archive_map = TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP
 
     @property
     def dummy_inputs(self):

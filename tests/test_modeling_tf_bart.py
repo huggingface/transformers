@@ -93,21 +93,11 @@ def prepare_bart_inputs_dict(
 
 @require_tf
 class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
-
-    all_model_classes = (
-        (
-            TFBartForConditionalGeneration,
-            # TFBartModel,
-        )
-        if is_tf_available()
-        else ()
-    )
+    all_model_classes = ((TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ())
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
-    # TODO(SS): fix the below in a separate PR
     test_pruning = False
-    test_head_masking = False
-    test_resize_embeddings = False  # This requires inputs_dict['input_ids']
+    test_resize_embeddings = False  # FIXME(@sshleifer): try to turn this on
 
     def setUp(self):
         self.model_tester = ModelTester(self)

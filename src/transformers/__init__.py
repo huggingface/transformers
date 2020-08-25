@@ -493,7 +493,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
-    from .modeling_tf_bart import TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP, TFBartForConditionalGeneration, TFBartModel
+    from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
     from .modeling_tf_bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
