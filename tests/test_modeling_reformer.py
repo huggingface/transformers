@@ -23,18 +23,19 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
+        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerConfig,
         ReformerForMaskedLM,
+        ReformerForQuestionAnswering,
+        ReformerForSequenceClassification,
+        ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
-        ReformerForSequenceClassification,
         ReformerTokenizer,
-        ReformerLayer,
-        ReformerForQuestionAnswering,
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    import torch
 
 
 class ReformerModelTester:

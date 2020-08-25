@@ -25,18 +25,22 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, r
 
 if is_torch_available():
     import torch
+
     from transformers import (
         RobertaConfig,
-        RobertaModel,
         RobertaForCausalLM,
         RobertaForMaskedLM,
         RobertaForMultipleChoice,
         RobertaForQuestionAnswering,
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
+        RobertaModel,
     )
-    from transformers.modeling_roberta import RobertaEmbeddings, create_position_ids_from_input_ids
-    from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_roberta import (
+        ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        RobertaEmbeddings,
+        create_position_ids_from_input_ids,
+    )
 
 
 class RobertaModelTester:

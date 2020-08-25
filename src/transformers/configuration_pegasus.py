@@ -22,6 +22,7 @@ from .file_utils import add_start_docstrings_to_callable
 
 logger = logging.getLogger(__name__)
 
+# These config values do not vary between checkpoints
 DEFAULTS = dict(
     vocab_size=96103,
     max_position_embeddings=512,
@@ -46,6 +47,47 @@ DEFAULTS = dict(
     num_beams=8,
     activation_function="relu",
 )
+# Config values that vary between checkpoints: for testing and conversion
+max_gen_length = {
+    # See appendix C of paper
+    "xsum": 64,
+    "cnn_dailymail": 128,
+    "newsroom": 128,
+    "wikihow": 256,
+    "multi_news": 256,
+    "reddit_tifu": 128,
+    "big_patent": 256,
+    "arxiv": 256,
+    "pubmed": 256,
+    "gigaword": 32,
+    "aeslc": 32,
+    "billsum": 256,
+    "large": 256,  # @sshleifer chose arbitrarily
+}
+max_model_length = {
+    "xsum": 512,
+    "cnn_dailymail": 1024,
+    "newsroom": 512,
+    "wikihow": 512,
+    "multi_news": 1024,
+    "reddit_tifu": 512,
+    "big_patent": 1024,
+    "arxiv": 1024,
+    "pubmed": 1024,
+    "gigaword": 128,
+    "aeslc": 512,
+    "billsum": 1024,
+    "large": 1024,
+}
+expected_alpha = {
+    "multinews": 0.9,
+    "wikihow": 0.6,
+    "reddit_tifu": 0.6,
+    "big_patent": 0.7,
+    "gigaword": 0.6,
+    "aeslc": 0.6,
+    "billsum": 0.6,
+}  # otherwise 0.8
 
 
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
@@ -56,7 +98,3 @@ class PegasusConfig(BartConfig):
     """
     model_type = "pegasus"
     # The implementation of the config object is in BartConfig
-
-    @property
-    def default_config_parameters(self):
-        return DEFAULTS

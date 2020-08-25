@@ -27,17 +27,18 @@ from .test_modeling_roberta import RobertaModelTester
 
 
 if is_torch_available():
-    from transformers import (
-        BertModel,
-        BertLMHeadModel,
-        GPT2LMHeadModel,
-        RobertaModel,
-        RobertaForCausalLM,
-        EncoderDecoderModel,
-        EncoderDecoderConfig,
-    )
     import numpy as np
     import torch
+
+    from transformers import (
+        BertLMHeadModel,
+        BertModel,
+        EncoderDecoderConfig,
+        EncoderDecoderModel,
+        GPT2LMHeadModel,
+        RobertaForCausalLM,
+        RobertaModel,
+    )
 
 
 @require_torch

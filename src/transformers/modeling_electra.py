@@ -50,6 +50,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
     """
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
