@@ -153,7 +153,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = SelfAttention(
+        self.self_attn = Attention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         assert not config.normalize_before, "MBART Not Supported"
@@ -305,7 +305,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = SelfAttention(
+        self.self_attn = Attention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -316,7 +316,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim, name="self_attn_layer_norm")
-        self.encoder_attn = SelfAttention(
+        self.encoder_attn = Attention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -540,7 +540,7 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-class SelfAttention(tf.keras.layers.Layer):
+class Attention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
