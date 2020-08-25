@@ -818,14 +818,14 @@ class TFBartModel(TFPretrainedBartModel):
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
     def _prepare_bart_decoder_inputs(
-        self, config, input_ids: T, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
+        self, input_ids: T, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
     ):
         """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
         none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
         """
-        pad_token_id = config.pad_token_id
+        pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
-            decoder_input_ids = self._shift_right(input_ids, pad_token_id)
+            decoder_input_ids = self._shift_right(input_ids)
         bsz, tgt_len = decoder_input_ids.shape[:2]
         if decoder_attn_mask is None:
             decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
@@ -850,9 +850,6 @@ class TFBartModel(TFPretrainedBartModel):
         return_dict=None,
         **unused
     ):
-        # make masks if user doesn't supply
-        assert decoder_input_ids is not None
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         if decoder_input_ids is None:  # GLUE MODE
             use_cache = False
@@ -865,7 +862,6 @@ class TFBartModel(TFPretrainedBartModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         if not use_cache:
             decoder_input_ids, decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
-                self.config,
                 input_ids,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attn_mask=decoder_attention_mask,

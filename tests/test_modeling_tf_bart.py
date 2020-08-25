@@ -150,6 +150,7 @@ class TFBartHeadTests(unittest.TestCase):
             pad_token_id=1,
             bos_token_id=0,
             return_dict=True,
+            decoder_start_token_id=2,
         )
         return config, input_ids, batch_size
 
