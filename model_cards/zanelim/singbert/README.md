@@ -12,6 +12,9 @@ license: mit
 datasets:
 - reddit singapore, malaysia
 - hardwarezone
+widget:
+- text: "die [MASK] must try"
+- text: "kopi c siew [MASK]"
 ---
 
 # Model name
@@ -30,7 +33,30 @@ SingBert - Bert for Singlish (SG) and Manglish (MY).
 ```python
 >>> from transformers import pipeline
 >>> nlp = pipeline('fill-mask', model='zanelim/singbert')
->>> nlp(f"one teh c siew dai, and one kopi {nlp.tokenizer.mask_token}")
+>>> nlp("kopi c siew [MASK]")
+
+[{'sequence': '[CLS] kopi c siew dai [SEP]',
+  'score': 0.5092713236808777,
+  'token': 18765,
+  'token_str': 'dai'},
+ {'sequence': '[CLS] kopi c siew mai [SEP]',
+  'score': 0.3515934646129608,
+  'token': 14736,
+  'token_str': 'mai'},
+ {'sequence': '[CLS] kopi c siew bao [SEP]',
+  'score': 0.05576375499367714,
+  'token': 25945,
+  'token_str': 'bao'},
+ {'sequence': '[CLS] kopi c siew. [SEP]',
+  'score': 0.006019321270287037,
+  'token': 1012,
+  'token_str': '.'},
+ {'sequence': '[CLS] kopi c siew sai [SEP]',
+  'score': 0.0038361591286957264,
+  'token': 18952,
+  'token_str': 'sai'}]
+
+>>> nlp("one teh c siew dai, and one kopi [MASK].")
 
 [{'sequence': '[CLS] one teh c siew dai, and one kopi c [SEP]',
   'score': 0.6176503300666809,
@@ -53,7 +79,7 @@ SingBert - Bert for Singlish (SG) and Manglish (MY).
   'token': 1059,
   'token_str': 'w'}]
 
->>> nlp(f"dont play {nlp.tokenizer.mask_token} leh")
+>>> nlp("dont play [MASK] leh")
 
 [{'sequence': '[CLS] dont play play leh [SEP]',
   'score': 0.9281464219093323,
@@ -76,7 +102,7 @@ SingBert - Bert for Singlish (SG) and Manglish (MY).
   'token': 21910,
   'token_str': 'cheat'}]
 
->>> nlp(f"catch no {nlp.tokenizer.mask_token}")
+>>> nlp("catch no [MASK]")
 
 [{'sequence': '[CLS] catch no ball [SEP]',
   'score': 0.7922210693359375,
@@ -99,7 +125,7 @@ SingBert - Bert for Singlish (SG) and Manglish (MY).
   'token': 5895,
   'token_str': 'prisoners'}]
 
->>> nlp(f"confirm plus {nlp.tokenizer.mask_token}")
+>>> nlp("confirm plus [MASK]")
 
 [{'sequence': '[CLS] confirm plus chop [SEP]',
   'score': 0.992355227470398,
@@ -121,6 +147,29 @@ SingBert - Bert for Singlish (SG) and Manglish (MY).
   'score': 0.0003804611915256828,
   'token': 24881,
   'token_str': 'chopped'}]
+
+>>> nlp("die [MASK] must try")
+
+[{'sequence': '[CLS] die die must try [SEP]',
+  'score': 0.9552758932113647,
+  'token': 3280,
+  'token_str': 'die'},
+ {'sequence': '[CLS] die also must try [SEP]',
+  'score': 0.03644804656505585,
+  'token': 2036,
+  'token_str': 'also'},
+ {'sequence': '[CLS] die liao must try [SEP]',
+  'score': 0.003282855963334441,
+  'token': 727,
+  'token_str': 'liao'},
+ {'sequence': '[CLS] die already must try [SEP]',
+  'score': 0.0004937972989864647,
+  'token': 2525,
+  'token_str': 'already'},
+ {'sequence': '[CLS] die hard must try [SEP]',
+  'score': 0.0003659659414552152,
+  'token': 2524,
+  'token_str': 'hard'}]
 
 ```
 
