@@ -27,6 +27,7 @@ if is_torch_available():
 
     from transformers import (
         AdamW,
+        Adafactor,
         get_constant_schedule,
         get_constant_schedule_with_warmup,
         get_cosine_schedule_with_warmup,
