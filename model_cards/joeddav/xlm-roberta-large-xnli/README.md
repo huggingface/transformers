@@ -45,7 +45,7 @@ well.
 
 For English-only classification, it is recommended to use
 [bart-large-mnli](https://huggingface.co/facebook/bart-large-mnli) or
-[barge-large-mnli-yahoo-answers](https://huggingface.co/joeddav/bart-large-mnli-yahoo-answers).
+[bart-large-mnli-yahoo-answers](https://huggingface.co/joeddav/bart-large-mnli-yahoo-answers).
 
 #### With the zero-shot classification pipeline
 
