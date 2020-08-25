@@ -13,7 +13,11 @@ from packaging.version import parse
 from tensorflow.python import data
 
 from .configuration_utils import PretrainedConfig
+<<<<<<< HEAD
 from .modeling_tf_utils import TFPreTrainedModel
+=======
+
+>>>>>>> Create the model after preprocessing the data
 from .integrations import is_comet_available, is_wandb_available
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
@@ -328,6 +332,7 @@ class TFTrainer:
         if self.args.training_args.past_index >= 0:
             self._past = None
 
+<<<<<<< HEAD
         if not self.strategy:
             self.create_strategy()
 
@@ -340,6 +345,15 @@ class TFTrainer:
                     from_pt=bool(".bin" in self.args.training_args.model_name_or_path),
                     config=self.config,
                     cache_dir=self.args.training_args.cache_dir,
+=======
+        if not self.model:
+            with self.args.strategy.scope():
+                self.model = self.model_class.from_pretrained(
+                    self.args.model_name_or_path,
+                    from_pt=bool(".bin" in self.args.model_name_or_path),
+                    config=self.config,
+                    cache_dir=self.args.cache_dir,
+>>>>>>> Create the model after preprocessing the data
                 )
 
         for step, batch in enumerate(dataset):
@@ -516,6 +530,7 @@ class TFTrainer:
         """
         train_ds = self.get_train_tfdataset()
 
+<<<<<<< HEAD
         self.create_strategy()
 
         train_ds = self.strategy.experimental_distribute_dataset(train_ds)
@@ -529,6 +544,17 @@ class TFTrainer:
             )
 
         if self.args.training_args.debug:
+=======
+        with self.args.strategy.scope():
+            self.model = self.model_class.from_pretrained(
+                self.args.model_name_or_path,
+                from_pt=bool(".bin" in self.args.model_name_or_path),
+                config=self.config,
+                cache_dir=self.args.cache_dir,
+            )
+
+        if self.args.debug:
+>>>>>>> Create the model after preprocessing the data
             tf.summary.trace_on(graph=True, profiler=True)
 
         self.gradient_accumulator.reset()

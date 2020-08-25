@@ -155,14 +155,6 @@ def main():
         use_fast=model_args.use_fast,
     )
 
-    with training_args.strategy.scope():
-        model = TFAutoModelForTokenClassification.from_pretrained(
-            model_args.model_name_or_path,
-            from_pt=bool(".bin" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-        )
-
     # Get datasets
     train_dataset = (
         TFTokenClassificationDataset(
@@ -218,7 +210,8 @@ def main():
 
     # Initialize our Trainer
     trainer = TFTrainer(
-        model=model,
+        model_class=TFAutoModelForTokenClassification,
+        config=config,
         args=training_args,
         train_dataset=train_dataset.get_dataset() if train_dataset else None,
         eval_dataset=eval_dataset.get_dataset() if eval_dataset else None,
