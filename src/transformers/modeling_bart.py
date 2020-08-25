@@ -222,7 +222,7 @@ class EncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = SelfAttention(
+        self.self_attn = Attention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
         )
         self.normalize_before = config.normalize_before
@@ -369,7 +369,7 @@ class DecoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = SelfAttention(
+        self.self_attn = Attention(
             embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
@@ -378,7 +378,7 @@ class DecoderLayer(nn.Module):
         self.normalize_before = config.normalize_before
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.encoder_attn = SelfAttention(
+        self.encoder_attn = Attention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -603,7 +603,7 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-class SelfAttention(nn.Module):
+class Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
