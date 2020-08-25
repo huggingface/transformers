@@ -21,7 +21,7 @@ The training data was made up of question-answer pairs from the following datase
 - [SQuAD](https://rajpurkar.github.io/SQuAD-explorer/)
 - [RACE](http://www.cs.cmu.edu/~glai1/data/race/)
 - [CoQA](https://stanfordnlp.github.io/coqa/)
-- [MSMARCO](https://microsoft.github.io/msmarco/))
+- [MSMARCO](https://microsoft.github.io/msmarco/)
 
 ## Training procedure
 
