@@ -222,9 +222,7 @@ class EncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = Attention(
-            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
-        )
+        self.self_attn = Attention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,)
         self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
