@@ -133,17 +133,16 @@ class SummarizationModule(BaseTransformer):
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]#, batch["decoder_input_ids"]
 
         if "labels" in batch:
             lm_labels = batch["labels"]
-            decoder_input_ids = shift_tokens_right(lm_labels)
+            decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
         elif isinstance(self.model, T5ForConditionalGeneration):
-            decoder_input_ids = self.model._shift_right(target_ids)
-            lm_labels = target_ids
+            lm_labels = batch["decoder_input_ids"]
+            decoder_input_ids = self.model._shift_right(lm_labels)
         else:
-            decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
-            lm_labels = target_ids[:, 1:].clone()  # why clone?
+            raise ValueError()
 
         outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
 
@@ -169,7 +168,7 @@ class SummarizationModule(BaseTransformer):
 
         logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
-        logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["decoder_input_ids"].ne(self.pad).sum()
+        logs["tpb"] = batch["input_ids"].ne(self.pad).sum() + batch["labels"].ne(self.pad).sum()
         return {"loss": loss_tensors[0], "log": logs}
 
     def validation_step(self, batch, batch_idx) -> Dict:
@@ -206,7 +205,7 @@ class SummarizationModule(BaseTransformer):
         )
         gen_time = (time.time() - t0) / batch["input_ids"].shape[0]
         preds: List[str] = self.ids_to_clean_text(generated_ids)
-        target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
+        target: List[str] = self.ids_to_clean_text(batch["labels"])
         loss_tensors = self._step(batch)
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         rouge: Dict = self.calc_generative_metrics(preds, target)
