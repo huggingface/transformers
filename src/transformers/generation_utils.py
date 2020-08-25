@@ -656,10 +656,12 @@ class GenerationMixin:
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
 
             # if model has past, then set the past variable to speed up decoding
-            if "past_key_values" in outputs and outputs["past_key_values"] is not None:
+            if outputs.get("past_key_values", None) is not None:
                 past = outputs["past_key_values"]
-            elif "mems" in outputs and outputs["mems"] is not None:
+            elif outputs.get("mems", None) is not None:
                 past = outputs["mems"]
+            elif outputs.get("decoder_past_key_values", None) is not None:
+                past = outputs["decoder_past_key_values"]
 
             if self.config.is_encoder_decoder and do_sample is False:
                 # TODO (PVP) still a bit hacky here - there might be a better solution

@@ -1085,7 +1085,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
-
         encoder_outputs, decoder_past_key_values = past
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
