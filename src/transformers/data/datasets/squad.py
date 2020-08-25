@@ -129,13 +129,21 @@ class SquadDataset(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                cache_dict = torch.load(cached_features_file)
-                self.features = cache_dict["features"]
-                self.dataset = cache_dict["dataset"]
-                self.examples = cache_dict["examples"]
+                self.old_features = torch.load(cached_features_file)
+
+                # Legacy cache files have only features, while new cache files
+                # will have dataset and examples also.
+                self.features = self.old_features["features"]
+                self.dataset = self.old_features.get("dataset", None)
+                self.examples = self.old_features.get("examples", None)
                 logger.info(
                     f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
                 )
+
+                if self.dataset is None or self.examples is None:
+                    logger.warn(
+                        f"Deleting cached file {cached_features_file} will allow dataset and examples to be cached in future run"
+                    )
             else:
                 if mode == Split.dev:
                     self.examples = self.processor.get_dev_examples(args.data_dir)
