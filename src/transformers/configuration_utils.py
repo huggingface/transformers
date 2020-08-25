@@ -56,8 +56,6 @@ class PretrainedConfig(object):
                 Whether the model is used as an encoder/decoder or not.
             is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether the model is used as decoder or not (in which case it's used as an encoder).
-            tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the model has a output word embedding layer.
             add_cross_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether cross-attention layers should be added to the model. Note, this option is only relevant for models that can be used as decoder models within the `:class:~transformers.EncoderDecoderModel` class, which consists of all models in ``AUTO_MODELS_FOR_CAUSAL_LM``.
             tie_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`)
@@ -136,6 +134,8 @@ class PretrainedConfig(object):
         PyTorch specific parameters
             - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
               used with Torchscript.
+            - **tie_word_embeddings** (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the model has a output word embedding layer.
 
         TensorFlow specific parameters
             - **use_bfloat16** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should
