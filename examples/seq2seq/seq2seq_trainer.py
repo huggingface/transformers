@@ -79,7 +79,6 @@ class Seq2SeqTrainer(Trainer):
         model.train()
         inputs = self._prepare_inputs(inputs, model)
         labels = inputs.pop("labels")
-
         if self.args.fp16 and _use_native_amp:
             with autocast():
                 outputs = model(**inputs)
@@ -106,7 +105,6 @@ class Seq2SeqTrainer(Trainer):
             loss.backward()
 
         return loss.item()
-
     def _compute_loss(self, logits, labels, ignore_index):
         # assuming label_smoothing is in args
         if self.args.label_smoothing == 0:
@@ -119,7 +117,6 @@ class Seq2SeqTrainer(Trainer):
             loss, nll_loss = label_smoothed_nll_loss(
                 lprobs, labels, self.args.label_smoothing, ignore_index=ignore_index
             )
-
         return loss
 
     def prediction_step(
