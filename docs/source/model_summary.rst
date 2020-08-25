@@ -14,6 +14,7 @@ Each one of the models in the library falls into one of the following categories
   * :ref:`autoencoding-models`
   * :ref:`seq-to-seq-models`
   * :ref:`multimodal-models`
+  * :ref:`retrieval-based-models`
 
 Autoregressive models are pretrained on the classic language modeling task: guess the next token having read all the
 previous ones. They correspond to the decoder of the original transformer model, and a mask is used on top of the full
@@ -604,6 +605,40 @@ The pretrained model only works for classification.
 ..
     More information in this :doc:`model documentation </model_doc/mmbt.html>`.
     TODO: write this page
+
+.. _retrieval-based-models:
+
+Retrieval-based models
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some models use documents retrieval during (pre)training and inference for open-domain question answering, for example.
+
+
+DPR
+----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=dpr">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-dpr-blueviolet">
+   </a>
+   <a href="model_doc/ctrl.dpr">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-dpr-blueviolet">
+   </a>
+
+`Dense Passage Retrieval for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_,
+Vladimir Karpukhin et al.
+
+Dense Passage Retrieval (DPR) - is a set of tools and models for state-of-the-art open-domain question-answering research.
+
+
+DPR consists in three models:
+
+  * Question encoder: encode questions as vectors
+  * Context encoder: encode contexts as vectors
+  * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
+
+DPR's pipeline (not implemented yet) uses a retrieval step to find the top k contexts given a certain question, and then it calls the reader with the question and the retrieved documents to get the answer.
 
 More technical aspects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
