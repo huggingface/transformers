@@ -553,8 +553,12 @@ class GenerationMixin:
             )
 
             # if model has past, then set the past variable to speed up decoding
-            if "past_key_values" in outputs and outputs["past_key_values"] is not None:
+            if outputs.get("past_key_values", None) is not None:
                 past = outputs["past_key_values"]
+            elif outputs.get("mems", None) is not None:
+                past = outputs["mems"]
+            elif outputs.get("decoder_past_key_values", None) is not None:
+                past = outputs["decoder_past_key_values"]
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
