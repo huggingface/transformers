@@ -17,7 +17,7 @@
 
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, make_dataclass
 from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
@@ -33,7 +33,7 @@ from transformers import (
     TFTrainer,
     TFTrainingArguments,
 )
-from utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
+from .utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
 
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,8 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
+    FinalArguments = make_dataclass('FinalArguments', [('model_args', ModelArguments), ('data_args', DataTrainingArguments), ('training_args', TFTrainingArguments)])
+    final_args = FinalArguments(model_args, data_args, training_args)
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -212,7 +213,7 @@ def main():
     trainer = TFTrainer(
         model_class=TFAutoModelForTokenClassification,
         config=config,
-        args=training_args,
+        args=final_args,
         train_dataset=train_dataset.get_dataset() if train_dataset else None,
         eval_dataset=eval_dataset.get_dataset() if eval_dataset else None,
         compute_metrics=compute_metrics,
