@@ -166,7 +166,10 @@ def main():
     # Get datasets
     train_dataset = (
         TFTokenClassificationDataset(
+<<<<<<< HEAD
             token_classification_task=token_classification_task,
+=======
+>>>>>>> Align TF NER example over the PT one
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             labels=labels,
@@ -180,7 +183,10 @@ def main():
     )
     eval_dataset = (
         TFTokenClassificationDataset(
+<<<<<<< HEAD
             token_classification_task=token_classification_task,
+=======
+>>>>>>> Align TF NER example over the PT one
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             labels=labels,
@@ -251,7 +257,10 @@ def main():
     # Predict
     if training_args.do_predict:
         test_dataset = TFTokenClassificationDataset(
+<<<<<<< HEAD
             token_classification_task=token_classification_task,
+=======
+>>>>>>> Align TF NER example over the PT one
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             labels=labels,
