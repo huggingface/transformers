@@ -15,7 +15,7 @@
 
 """Convert Huggingface Pytorch checkpoint to Huggingface Tensorflow checkpoint."""
 
-iimport argparse
+import argparse
 import os
 
 import numpy as np
