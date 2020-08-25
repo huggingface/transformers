@@ -621,18 +621,18 @@ class TFTrainer:
         else:
             for _ in tf.range(self.args.gradient_accumulation_steps):
                 reduced_features = {
-                    ft: features[ft][: self.args.train_batch_size // self.args.n_replicas] for ft in features
+                    k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
                 }
                 reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
 
                 self.training_step(reduced_features, reduced_labels)
 
                 features = {
-                    ft: tf.concat(
-                        [features[ft][self.args.train_batch_size // self.args.n_replicas :], reduced_features[ft]],
+                    k: tf.concat(
+                        [ft[k][self.args.train_batch_size // self.args.n_replicas :], reduced_features[k]],
                         axis=0,
                     )
-                    for ft in features
+                    for k, ft in features.items()
                 }
 
                 labels = tf.concat(
