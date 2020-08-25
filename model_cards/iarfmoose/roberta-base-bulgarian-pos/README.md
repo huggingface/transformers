@@ -14,7 +14,7 @@ The pretraining data is unfiltered text from the internet and may contain all so
 
 ## Training data
 
-In addition to the pretraining data used in [RoBERTa-base-Bulgarian]([RoBERTa-base-Bulgarian](https://huggingface.co/iarfmoose/roberta-base-bulgarian)), the model was trained on the UPOS tags from (UD_Bulgarian-BTB)[https://github.com/UniversalDependencies/UD_Bulgarian-BTB].
+In addition to the pretraining data used in [RoBERTa-base-Bulgarian]([RoBERTa-base-Bulgarian](https://huggingface.co/iarfmoose/roberta-base-bulgarian)), the model was trained on the UPOS tags from [UD_Bulgarian-BTB](https://github.com/UniversalDependencies/UD_Bulgarian-BTB).
 
 ## Training procedure
 
