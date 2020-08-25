@@ -149,7 +149,7 @@ class TransfoXLConfig(PretrainedConfig):
     ):
         if "tie_weight" in kwargs:
             warnings.warn(
-                "The config parameter `tie_weight` is depreciated. Please use `tie_word_embeddings` instead.",
+                "The config parameter `tie_weight` is deprecated. Please use `tie_word_embeddings` instead.",
                 FutureWarning,
             )
             kwargs["tie_word_embeddings"] = kwargs["tie_weight"]
