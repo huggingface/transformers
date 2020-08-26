@@ -393,7 +393,7 @@ class T5SummarizationDistiller(BartSummarizationDistiller):
                 attention_mask=source_mask,
                 encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
-                lm_labels=labels,
+                labels=labels,
                 output_hidden_states=True,
                 use_cache=False,
             )
