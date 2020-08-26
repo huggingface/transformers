@@ -2159,14 +2159,6 @@ class Text2TextGenerationPipeline(Pipeline):
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
-            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-            if input_length > 0.9 * max_length:
-                logger.warning(
-                    "Your input_length: {} is bigger than 0.9 * max_length: {}. You might consider increasing your max_length manually, e.g. translator('...', max_length=400)".format(
-                        input_length, max_length
-                    )
-                )
-
             generations = self.model.generate(
                 inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
             )
@@ -2174,9 +2166,9 @@ class Text2TextGenerationPipeline(Pipeline):
             for translation in generations:
                 record = {}
                 if return_tensors:
-                    record["translation_token_ids"] = translation
+                    record["generated_token_ids"] = translation
                 if return_text:
-                    record["translation_text"] = self.tokenizer.decode(
+                    record["generated_text"] = self.tokenizer.decode(
                         translation,
                         skip_special_tokens=True,
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
