@@ -108,6 +108,14 @@ class SummarizationModule(BaseTransformer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
         self.dataset_class = TranslationDataset
+        self.already_saved_batch = False
+
+    def save_readable_batch(self, batch: Dict[str, torch.Tensor]) -> Dict[str, List[str]]:
+        """A debugging utility"""
+        readable_batch = {k: self.tokenizer.batch_decode(v) if 'mask' not in k else v.shape for k,v in batch.items()}
+        save_json(readable_batch,  Path(self.output_dir) / "batch.json")
+        self.already_saved_batch = True
+        return readable_batch
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
@@ -144,6 +152,10 @@ class SummarizationModule(BaseTransformer):
             raise ValueError()
 
         outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
+        if not self.already_saved_batch:
+            batch['passed_labels'] = lm_labels
+            batch['passed_decoder_input_ids'] = decoder_input_ids
+            self.save_readable_batch(batch)
 
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides pad_token_id

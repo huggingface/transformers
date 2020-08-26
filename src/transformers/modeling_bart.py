@@ -51,7 +51,15 @@ _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
-# See all BART models at https://huggingface.co/models?filter=bart
+BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/bart-base",
+    "facebook/bart-large",
+    "facebook/bart-large-mnli",
+    "facebook/bart-large-cnn",
+    "facebook/bart-large-xsum",
+    "facebook/mbart-large-en-ro",
+]
+# This list is incomplete. See all BART models at https://huggingface.co/models?filter=bart
 
 
 BART_START_DOCSTRING = r"""
