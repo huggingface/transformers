@@ -28,24 +28,25 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+
     from transformers import (
         AutoModel,
         AutoModelForSequenceClassification,
         AutoTokenizer,
-        BartModel,
-        BartForConditionalGeneration,
-        BartForSequenceClassification,
-        BartForQuestionAnswering,
         BartConfig,
+        BartForConditionalGeneration,
+        BartForQuestionAnswering,
+        BartForSequenceClassification,
+        BartModel,
         BartTokenizer,
         BartTokenizerFast,
         pipeline,
     )
     from transformers.modeling_bart import (
-        shift_tokens_right,
-        invert_mask,
-        _prepare_bart_decoder_inputs,
         SinusoidalPositionalEmbedding,
+        _prepare_bart_decoder_inputs,
+        invert_mask,
+        shift_tokens_right,
     )
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 

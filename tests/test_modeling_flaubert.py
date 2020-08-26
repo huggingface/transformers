@@ -26,13 +26,13 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     from transformers import (
         FlaubertConfig,
-        FlaubertModel,
-        FlaubertWithLMHeadModel,
+        FlaubertForMultipleChoice,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
         FlaubertForSequenceClassification,
         FlaubertForTokenClassification,
-        FlaubertForMultipleChoice,
+        FlaubertModel,
+        FlaubertWithLMHeadModel,
     )
     from transformers.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
