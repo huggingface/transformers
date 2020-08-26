@@ -275,7 +275,9 @@ class TrainerIntegrationTest(unittest.TestCase):
         MODEL_ID = "distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
-            tokenizer=tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=tokenizer.max_len_single_sentence,
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
         )
         self.assertEqual(len(dataset), 31)
 

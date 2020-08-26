@@ -1,13 +1,13 @@
-import logging
 import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
 from .file_utils import cached_property, is_tf_available, tf_required
 from .training_args import TrainingArguments
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 if is_tf_available():
     import tensorflow as tf
@@ -100,7 +100,8 @@ class TFTrainingArguments(TrainingArguments):
     """
 
     tpu_name: str = field(
-        default=None, metadata={"help": "Name of TPU"},
+        default=None,
+        metadata={"help": "Name of TPU"},
     )
 
     @cached_property

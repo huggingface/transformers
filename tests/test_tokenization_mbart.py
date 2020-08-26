@@ -125,7 +125,9 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     def test_enro_tokenizer_prepare_seq2seq_batch(self):
         batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens),
+            self.src_text,
+            tgt_texts=self.tgt_text,
+            max_length=len(self.expected_src_tokens),
         )
         self.assertIsInstance(batch, BatchEncoding)
 

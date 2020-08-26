@@ -882,8 +882,7 @@ class TokenizerTesterMixin:
                 assert encoded_sequence == padded_sequence_left
 
     def test_padding_to_max_length(self):
-        """ We keep this test for backward compatibility but it should be remove when `pad_to_max_length` will e deprecated
-        """
+        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` will e deprecated"""
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -972,7 +971,11 @@ class TokenizerTesterMixin:
                 # Test 'longest' and 'no_padding' don't do anything
                 tokenizer.padding_side = "right"
 
-                not_padded_sequence = tokenizer.encode_plus(sequence, padding=True, return_special_tokens_mask=True,)
+                not_padded_sequence = tokenizer.encode_plus(
+                    sequence,
+                    padding=True,
+                    return_special_tokens_mask=True,
+                )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
                 not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
@@ -982,7 +985,11 @@ class TokenizerTesterMixin:
                 assert input_ids == not_padded_input_ids
                 assert special_tokens_mask == not_padded_special_tokens_mask
 
-                not_padded_sequence = tokenizer.encode_plus(sequence, padding=False, return_special_tokens_mask=True,)
+                not_padded_sequence = tokenizer.encode_plus(
+                    sequence,
+                    padding=False,
+                    return_special_tokens_mask=True,
+                )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
                 not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
@@ -1148,7 +1155,8 @@ class TokenizerTesterMixin:
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
-                        encoded_sequences_batch_padded_1[key], encoded_sequences_batch_padded_2[key],
+                        encoded_sequences_batch_padded_1[key],
+                        encoded_sequences_batch_padded_2[key],
                     )
 
                 # check 'no_padding' is unsensitive to a max length
@@ -1158,7 +1166,8 @@ class TokenizerTesterMixin:
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
-                        encoded_sequences_batch_padded_1[key], encoded_sequences_batch_padded_2[key],
+                        encoded_sequences_batch_padded_1[key],
+                        encoded_sequences_batch_padded_2[key],
                     )
 
     def test_added_token_serializable(self):
@@ -1361,10 +1370,18 @@ class TokenizerTesterMixin:
 
                 if tokenizer.pad_token_id is None:
                     self.assertRaises(
-                        ValueError, tokenizer.batch_encode_plus, sequences, padding=True, return_tensors="pt",
+                        ValueError,
+                        tokenizer.batch_encode_plus,
+                        sequences,
+                        padding=True,
+                        return_tensors="pt",
                     )
                     self.assertRaises(
-                        ValueError, tokenizer.batch_encode_plus, sequences, padding="longest", return_tensors="tf",
+                        ValueError,
+                        tokenizer.batch_encode_plus,
+                        sequences,
+                        padding="longest",
+                        return_tensors="tf",
                     )
                 else:
                     pytorch_tensor = tokenizer.batch_encode_plus(sequences, padding=True, return_tensors="pt")
