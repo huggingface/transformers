@@ -868,14 +868,31 @@ class Trainer:
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        def _objective(trial):
+        def tune_save_checkpoint(trainer: Trainer):
+            with tune.checkpoint_dir(step=self.global_step) as checkpoint_dir:
+                trainer.args.output_dir = checkpoint_dir
+                output_dir = os.path.join(
+                    trainer.args.output_dir,
+                    f"{PREFIX_CHECKPOINT_DIR}-{trainer.global_step}")
+                trainer.save_model(output_dir)
+                if trainer.is_world_master():
+                    torch.save(self.optimizer.state_dict(),
+                               os.path.join(output_dir, "optimizer.pt"))
+                    torch.save(self.lr_scheduler.state_dict(),
+                               os.path.join(output_dir, "scheduler.pt"))
+
+        def _objective(trial, checkpoint_dir=None):
+            model_path = None
+            if checkpoint_dir:
+                model_path = checkpoint_dir
             self.objective = None
-            self.train(trial=trial)
+            self.train(model_path=model_path, trial=trial)
             # If there hasn't been any evaluation during the training loop.
             if getattr(self, "objective", None) is None:
                 metrics = self.evaluate()
                 self.objective = self.compute_objective(metrics)
                 if self.hp_search_backend == HPSearchBackend.RAY:
+                    tune_save_checkpoint(self)
                     tune.report(objective=self.objective)
             return self.objective
 
