@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch Longformer model. """
 
-import logging
 import math
 import warnings
 
@@ -47,9 +46,10 @@ from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"

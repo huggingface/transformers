@@ -15,7 +15,6 @@
 """ Auto Tokenizer class. """
 
 
-import logging
 from collections import OrderedDict
 
 from .configuration_auto import (
@@ -69,9 +68,10 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 TOKENIZER_MAPPING = OrderedDict(

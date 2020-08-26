@@ -14,15 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from typing import Iterable, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 from torch.nn import functional as F
 
+from .utils import logging
 
-logger = logging.getLogger(__name__)
+
+logger = logging.get_logger(__name__)
 
 
 class GenerationMixin:

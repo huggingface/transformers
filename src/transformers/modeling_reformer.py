@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch REFORMER model. """
 
-import logging
 import sys
 from collections import namedtuple
 from dataclasses import dataclass
@@ -41,9 +40,10 @@ from .file_utils import (
 )
 from .modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ReformerConfig"
 _TOKENIZER_FOR_DOC = "ReformerTokenizer"

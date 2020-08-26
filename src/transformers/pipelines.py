@@ -16,7 +16,6 @@
 
 import csv
 import json
-import logging
 import os
 import pickle
 import sys
@@ -39,6 +38,7 @@ from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import BatchEncoding, PaddingStrategy
+from .utils import logging
 
 
 if is_tf_available():
@@ -80,7 +80,7 @@ if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def get_framework(model=None):

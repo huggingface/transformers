@@ -15,7 +15,6 @@
 """ PyTorch Flaubert model, based on XLM. """
 
 
-import logging
 import random
 
 import torch
@@ -34,9 +33,10 @@ from .modeling_xlm import (
     XLMWithLMHeadModel,
     get_masks,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FlaubertConfig"
 _TOKENIZER_FOR_DOC = "FlaubertTokenizer"

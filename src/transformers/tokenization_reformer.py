@@ -15,14 +15,14 @@
 """ Tokenization class for model Reformer."""
 
 
-import logging
 import os
 from shutil import copyfile
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 

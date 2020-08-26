@@ -1,4 +1,3 @@
-import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -12,10 +11,11 @@ from filelock import FileLock
 
 from ...modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)

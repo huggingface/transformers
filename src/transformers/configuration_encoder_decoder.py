@@ -15,12 +15,12 @@
 # limitations under the License.
 
 import copy
-import logging
 
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class EncoderDecoderConfig(PretrainedConfig):

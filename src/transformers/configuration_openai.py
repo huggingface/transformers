@@ -15,13 +15,11 @@
 # limitations under the License.
 """ OpenAI GPT configuration """
 
-
-import logging
-
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-config.json"

@@ -16,7 +16,6 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-import logging
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -38,9 +37,10 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(

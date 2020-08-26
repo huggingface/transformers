@@ -15,7 +15,6 @@
 """ PyTorch DPR model for Open Domain Question Answering."""
 
 
-import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -27,9 +26,10 @@ from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_
 from .modeling_bert import BertModel
 from .modeling_outputs import BaseModelOutputWithPooling
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
 

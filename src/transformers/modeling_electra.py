@@ -1,4 +1,3 @@
-import logging
 import os
 import warnings
 from dataclasses import dataclass
@@ -27,9 +26,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import SequenceSummary
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ElectraConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"

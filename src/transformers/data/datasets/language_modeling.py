@@ -1,4 +1,3 @@
-import logging
 import os
 import pickle
 import time
@@ -9,9 +8,10 @@ from torch.utils.data.dataset import Dataset
 from filelock import FileLock
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TextDataset(Dataset):

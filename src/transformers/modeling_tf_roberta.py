@@ -16,8 +16,6 @@
 """ TF 2.0 RoBERTa model. """
 
 
-import logging
-
 import tensorflow as tf
 
 from .configuration_roberta import RobertaConfig
@@ -48,9 +46,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils_base import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"

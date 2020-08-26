@@ -12,12 +12,11 @@
 # limitations under the License.
 """ MobileBERT model configuration """
 
-import logging
-
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "mobilebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/google/mobilebert-uncased/config.json"

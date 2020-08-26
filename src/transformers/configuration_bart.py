@@ -14,14 +14,12 @@
 # limitations under the License.
 """ BART configuration """
 
-
-import logging
-
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",

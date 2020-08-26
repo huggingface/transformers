@@ -15,7 +15,6 @@
 # limitations under the License.
 
 import inspect
-import logging
 import os
 import re
 from dataclasses import dataclass
@@ -41,9 +40,10 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 try:
