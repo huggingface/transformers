@@ -94,7 +94,7 @@ def separate_process_wrapper_fn(func: Callable[[], None], do_multi_processing: b
         return result
 
     if do_multi_processing:
-        logger.info("fFunction {func} is executed in its own process...")
+        logger.info(f"Function {func} is executed in its own process...")
         return multi_process_func
     else:
         return func
