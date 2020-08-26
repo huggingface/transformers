@@ -1,5 +1,4 @@
 import inspect
-import logging
 import math
 import os
 import re
@@ -44,6 +43,7 @@ from .trainer_utils import (
     set_seed,
 )
 from .training_args import TrainingArguments
+from .utils import logging
 
 
 _use_native_amp = False
@@ -86,7 +86,7 @@ if is_optuna_available():
 if is_ray_available():
     from ray import tune
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @contextmanager

@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tensorflow Longformer model. """
 
-import logging
-
 import tensorflow as tf
 
 from .configuration_longformer import LongformerConfig
@@ -37,9 +35,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
@@ -56,9 +55,9 @@ TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_sep_token=True):
     """
-        Computes global attention mask by putting attention on all tokens
-        before `sep_token_id` if `before_sep_token is True` else after
-        `sep_token_id`.
+    Computes global attention mask by putting attention on all tokens
+    before `sep_token_id` if `before_sep_token is True` else after
+    `sep_token_id`.
     """
 
     assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
@@ -73,11 +72,14 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
         )
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
-        attention_mask = tf.cast(
-            tf.broadcast_to(attention_mask, input_ids_shape)
-            > tf.broadcast_to(question_end_index + 1, input_ids_shape),
-            tf.dtypes.int32,
-        ) * tf.cast(tf.broadcast_to(attention_mask, input_ids_shape) < input_ids_shape[-1], tf.dtypes.int32)
+        attention_mask = (
+            tf.cast(
+                tf.broadcast_to(attention_mask, input_ids_shape)
+                > tf.broadcast_to(question_end_index + 1, input_ids_shape),
+                tf.dtypes.int32,
+            )
+            * tf.cast(tf.broadcast_to(attention_mask, input_ids_shape) < input_ids_shape[-1], tf.dtypes.int32)
+        )
 
     return attention_mask
 
@@ -131,7 +133,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         self.one_sided_attn_window_size = attention_window // 2
 
     def call(
-        self, inputs, training=False,
+        self,
+        inputs,
+        training=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
@@ -434,7 +438,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
     def _sliding_chunks_matmul_attn_probs_value(self, attn_probs, value, window_overlap):
 
         """Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors.
-           Returned tensor will be of the same shape as `attn_probs`"""
+        Returned tensor will be of the same shape as `attn_probs`"""
 
         batch_size, seq_len, num_heads, head_dim = shape_list(value)
 
@@ -509,17 +513,17 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
     @staticmethod
     def _pad_and_diagonalize(chunked_hidden_states):
         """shift every row 1 step right, converting columns into diagonals.
-           Example:
-                 chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
-                                          -1.8348,  0.7672,  0.2986,  0.0285,
-                                          -0.7584,  0.4206, -0.0405,  0.1599,
-                                          2.0514, -1.1600,  0.5372,  0.2629 ]
-                 window_overlap = num_rows = 4
-                (pad & diagonilize) =>
-                [ 0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000
-                  0.0000,  -1.8348,  0.7672,  0.2986,  0.0285, 0.0000,  0.0000
-                  0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
-                  0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
+        Example:
+              chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
+                                       -1.8348,  0.7672,  0.2986,  0.0285,
+                                       -0.7584,  0.4206, -0.0405,  0.1599,
+                                       2.0514, -1.1600,  0.5372,  0.2629 ]
+              window_overlap = num_rows = 4
+             (pad & diagonilize) =>
+             [ 0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000
+               0.0000,  -1.8348,  0.7672,  0.2986,  0.0285, 0.0000,  0.0000
+               0.0000,  0.0000, -0.7584,  0.4206, -0.0405,  0.1599, 0.0000
+               0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
         """
         total_num_heads, num_chunks, window_overlap, hidden_dim = shape_list(chunked_hidden_states)
 
@@ -780,7 +784,8 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             tf.transpose(global_attn_output, (0, 2, 1, 3)), is_local_index_global_attn_nonzero
         )
         nonzero_global_attn_output = tf.reshape(
-            nonzero_global_attn_output, (shape_list(is_local_index_global_attn_nonzero)[0], -1),
+            nonzero_global_attn_output,
+            (shape_list(is_local_index_global_attn_nonzero)[0], -1),
         )
 
         # overwrite values with global attention
@@ -911,9 +916,9 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         raise NotImplementedError
 
@@ -1022,7 +1027,10 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             sequence_output = sequence_output[:, :-padding_len]
 
         if not return_dict:
-            return (sequence_output, pooled_output,) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -1032,7 +1040,13 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         )
 
     def _pad_to_window_size(
-        self, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds, pad_token_id,
+        self,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        position_ids,
+        inputs_embeds,
+        pad_token_id,
     ):
         """A helper function to pad tokens and mask to work with implementation of Longformer selfattention."""
         # padding
@@ -1084,8 +1098,8 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
 
 class TFLongformerPreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = LongformerConfig
@@ -1287,7 +1301,10 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

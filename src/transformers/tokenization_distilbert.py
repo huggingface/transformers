@@ -14,13 +14,11 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
-
-import logging
-
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
