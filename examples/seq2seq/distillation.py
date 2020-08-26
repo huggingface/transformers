@@ -167,9 +167,6 @@ class BartSummarizationDistiller(SummarizationModule):
         if "labels" in batch:
             lm_labels = batch["labels"]
             decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
-        elif isinstance(self.model, T5ForConditionalGeneration):
-            lm_labels = batch["decoder_input_ids"]
-            decoder_input_ids = self.model._shift_right(lm_labels)
         else:
             raise ValueError()
         # decoder_input_ids = y[:, :-1].contiguous()
@@ -189,8 +186,7 @@ class BartSummarizationDistiller(SummarizationModule):
         lm_logits, dec_hidden, enc_outputs, enc_hidden_state = outputs
 
         if not self.already_saved_batch:
-            batch['passed_labels'] = lm_labels
-            batch['passed_decoder_input_ids'] = decoder_input_ids
+            batch['decoder_input_ids'] = decoder_input_ids
             self.save_readable_batch(batch)
 
         if self.hparams.label_smoothing == 0:
@@ -278,7 +274,7 @@ def add_distill_args(parser):
 
 class BartTranslationDistiller(BartSummarizationDistiller):
     mode = "translation"
-    loss_names = ["loss"]
+    loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
     metric_names = ["bleu"]
     val_metric = "bleu"
 
