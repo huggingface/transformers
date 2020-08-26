@@ -233,7 +233,7 @@ class BartSummarizationDistiller(SummarizationModule):
 
 
 def add_distill_args(parser):
-    parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
+    parser.add_argument("--teacher", type=str)
     parser.add_argument("--alpha_ce", default=0.8, type=float)
     parser.add_argument("--alpha_mlm", default=0.2, type=float)
     parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
