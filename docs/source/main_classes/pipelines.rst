@@ -21,6 +21,7 @@ There are two categories of pipeline abstractions to be aware about:
     - :class:`~transformers.TokenClassificationPipeline`
     - :class:`~transformers.TranslationPipeline`
     - :class:`~transformers.ZeroShotClassificationPipeline`
+    - :class:`~transformers.Text2TextGenerationPipeline`
 
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -105,6 +106,12 @@ ZeroShotClassificationPipeline
     :special-members: __call__
     :members:
 
+Text2TextGenerationPipeline
+==========================================
+
+.. autoclass:: transformers.Text2TextGenerationPipeline
+    :special-members: __call__
+    :members:
 
 Parent class: :obj:`Pipeline`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

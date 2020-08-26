@@ -126,6 +126,7 @@ from .pipelines import (
     PipelineDataFormat,
     QuestionAnsweringPipeline,
     SummarizationPipeline,
+    Text2TextGenerationPipeline,
     TextClassificationPipeline,
     TextGenerationPipeline,
     TokenClassificationPipeline,
