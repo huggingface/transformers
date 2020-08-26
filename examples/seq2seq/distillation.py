@@ -1,6 +1,7 @@
 import argparse
 import gc
 import os
+import warnings
 from pathlib import Path
 from typing import List
 
@@ -23,9 +24,9 @@ try:
         assert_all_frozen,
         calculate_bleu,
         freeze_params,
+        label_smoothed_nll_loss,
         pickle_load,
         use_task_specific_params,
-    label_smoothed_nll_loss,
     )
 except ImportError:
     from finetune import SummarizationModule, TranslationModule
@@ -36,9 +37,9 @@ except ImportError:
         assert_all_frozen,
         calculate_bleu,
         freeze_params,
+        label_smoothed_nll_loss,
         pickle_load,
         use_task_specific_params,
-        label_smoothed_nll_loss,
     )
 
 
@@ -177,16 +178,16 @@ class BartSummarizationDistiller(SummarizationModule):
             input_ids,
             attention_mask=src_mask,
             decoder_input_ids=decoder_input_ids,
-            #labels=labels,
+            # labels=labels,
             output_hidden_states=True,
             output_attentions=False,
-            #return_dict=True,
+            # return_dict=True,
             use_cache=False,
         )
         lm_logits, dec_hidden, enc_outputs, enc_hidden_state = outputs
 
         if not self.already_saved_batch:
-            batch['decoder_input_ids'] = decoder_input_ids
+            batch["decoder_input_ids"] = decoder_input_ids
             self.save_readable_batch(batch)
 
         if self.hparams.label_smoothing == 0:
@@ -200,7 +201,6 @@ class BartSummarizationDistiller(SummarizationModule):
             sloss, _ = label_smoothed_nll_loss(
                 lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
-
 
         def zero_tensor():
             return torch.tensor(0.0).type_as(sloss)
@@ -472,17 +472,19 @@ LAYERS_TO_COPY = {
         6: [0, 3, 6, 9, 12, 15],
         8: [0, 2, 4, 6, 8, 10, 12, 15],
         9: [0, 1, 3, 5, 7, 9, 11, 13, 15],
-        16: list(range(16)), },
-    6: {1: [0], 2: [0, 5], 3: [0, 2, 5], 4: [0, 1, 3, 5], 6: list(range(6))}
+        16: list(range(16)),
+    },
+    6: {1: [0], 2: [0, 5], 3: [0, 2, 5], 4: [0, 1, 3, 5], 6: list(range(6))},
 }
 
-import warnings
 
 def get_layers_to_copy(n_student, n_teacher):
     try:
         return LAYERS_TO_COPY[n_teacher][n_student]
     except KeyError:
-        warnings.warn(f'no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}')
+        warnings.warn(
+            f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"
+        )
         return list(range(n_student))
 
 

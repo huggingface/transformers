@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import MarianTokenizer, MBartTokenizer, T5ForConditionalGeneration
+from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
 
 
@@ -107,14 +107,14 @@ class SummarizationModule(BaseTransformer):
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
-        self.dataset_class = TranslationDataset
+        self.dataset_class = TranslationDataset if hasattr(self.tokenizer, "prepare_seq2seq_batch") else Seq2SeqDataset
         self.already_saved_batch = False
 
     def save_readable_batch(self, batch: Dict[str, torch.Tensor]) -> Dict[str, List[str]]:
         """A debugging utility"""
-        readable_batch = {k: self.tokenizer.batch_decode(v) if 'mask' not in k else v.shape for k,v in batch.items()}
-        save_json(readable_batch,  Path(self.output_dir) / "text_batch.json")
-        save_json({k: v.tolist() for k,v in batch.items()}, Path(self.output_dir) / "tok_batch.json")
+        readable_batch = {k: self.tokenizer.batch_decode(v) if "mask" not in k else v.shape for k, v in batch.items()}
+        save_json(readable_batch, Path(self.output_dir) / "text_batch.json")
+        save_json({k: v.tolist() for k, v in batch.items()}, Path(self.output_dir) / "tok_batch.json")
 
         self.already_saved_batch = True
         return readable_batch
@@ -142,7 +142,7 @@ class SummarizationModule(BaseTransformer):
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]#, batch["decoder_input_ids"]
+        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]  # , batch["decoder_input_ids"]
 
         if "labels" in batch:
             lm_labels = batch["labels"]
@@ -155,8 +155,8 @@ class SummarizationModule(BaseTransformer):
 
         outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
         if not self.already_saved_batch:
-            batch['passed_labels'] = lm_labels
-            batch['passed_decoder_input_ids'] = decoder_input_ids
+            batch["passed_labels"] = lm_labels
+            batch["passed_decoder_input_ids"] = decoder_input_ids
             self.save_readable_batch(batch)
 
         if self.hparams.label_smoothing == 0:
@@ -232,7 +232,7 @@ class SummarizationModule(BaseTransformer):
     def test_epoch_end(self, outputs):
         return self.validation_epoch_end(outputs, prefix="test")
 
-    def get_dataset(self, type_path) -> Seq2SeqDataset:
+    def get_dataset(self, type_path) -> TranslationDataset:
         n_obs = self.n_obs[type_path]
         max_target_length = self.target_lens[type_path]
         dataset = self.dataset_class(

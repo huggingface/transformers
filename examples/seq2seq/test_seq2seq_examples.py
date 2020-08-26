@@ -196,7 +196,6 @@ class TestSummarizationDistiller(unittest.TestCase):
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
-
     @unittest.skip("T5 distillation is broken at the moment")
     def test_distill_t5(self):
         updates = dict(
@@ -311,7 +310,7 @@ def test_finetune(model):
         assert bart.decoder.embed_tokens == bart.encoder.embed_tokens
         assert bart.decoder.embed_tokens == bart.shared
 
-    example_batch = load_json(module.output_dir / 'batch.json')
+    example_batch = load_json(module.output_dir / "batch.json")
     assert isinstance(example_batch, dict)
     assert len(example_batch) >= 5
 

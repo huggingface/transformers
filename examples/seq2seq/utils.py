@@ -176,7 +176,7 @@ class TranslationDataset(Seq2SeqDataset):
             tgt_lang=self.tgt_lang,
             max_length=self.max_source_length,
             max_target_length=self.max_target_length,
-            return_tensors='pt',
+            return_tensors="pt",
         )
         return batch_encoding.data
 
