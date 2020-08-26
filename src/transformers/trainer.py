@@ -85,6 +85,7 @@ if is_optuna_available():
 
 if is_ray_available():
     from ray import tune
+    from ray.tune.integration.wandb import wandb_mixin
 
 logger = logging.getLogger(__name__)
 
@@ -870,6 +871,8 @@ class Trainer:
 
         def _objective(trial):
             self.objective = None
+            if self.hp_search_backend == HPSearchBackend.RAY:
+                trial.pop("wandb", None)
             self.train(trial=trial)
             # If there hasn't been any evaluation during the training loop.
             if getattr(self, "objective", None) is None:
@@ -898,7 +901,19 @@ class Trainer:
                 from ray.tune import CLIReporter
 
                 kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
-            analysis = tune.run(_objective, config=self.hp_space(None), num_samples=n_trials, **kwargs)
+            config = self.hp_space(None)
+
+            # Enable per-trial wandb logging
+            if is_wandb_available() and os.getenv("WANDB_DISABLED", "false") is not "true":
+                _objective = wandb_mixin(_objective)
+                wandb_config = config.get("wandb", {})
+                wandb_config.update({
+                    "project": os.getenv("WANDB_PROJECT", "huggingface"),
+                    "api_key_file": "~/.wandb_api_key"
+                })
+                config["wandb"] = wandb_config
+
+            analysis = tune.run(_objective, config=config, num_samples=n_trials, **kwargs)
             best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
             best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
             self.tb_writer = _tb_writer
