@@ -1021,7 +1021,7 @@ class T5Model(T5PreTrainedModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_past_key_values=past,
+            decoder_past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1197,17 +1197,17 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
-        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
+#        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
         if not return_dict:
-            if past is not None:
-                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
+#            if past is not None:
+#                decoder_outputs = decoder_outputs[:1] + (decoder_outputs,) + decoder_outputs[2:]
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
             logits=lm_logits,
-            decoder_past_key_values=past,
+            decoder_past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1215,14 +1215,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        encoder_outputs, decoder_past_key_values = past
-
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs):
         return {
             "decoder_input_ids": input_ids,
-            "decoder_past_key_values": decoder_past_key_values,
+            "decoder_past_key_values": past,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "use_cache": use_cache,
@@ -1231,14 +1227,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past[1] is None:
+        if past is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past
 
-        decoder_past = past[1]
-        past = (past[0],)
         reordered_decoder_past = ()
-        for layer_past_states in decoder_past:
+        for layer_past_states in past:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -1252,4 +1246,4 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             assert len(reordered_layer_past_states) == len(layer_past_states)
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return past + (reordered_decoder_past,)
+        return reordered_decoder_past

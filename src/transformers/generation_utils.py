@@ -439,11 +439,15 @@ class GenerationMixin:
                 .view(-1)
                 .to(input_ids.device)
             )
+
+            import ipdb; ipdb.set_trace()
             # expand encoder_outputs
             encoder_outputs.last_hidden_state = encoder_outputs.last_hidden_state.index_select(0, expanded_batch_idxs)
 
+            # save encoder_outputs in `model_specific_kwargs`
+            model_specific_kwargs["encoder_outputs"] = encoder_outputs
+
         else:
-            encoder_outputs = None
             cur_len = input_ids.shape[-1]
 
         assert (
@@ -471,7 +475,6 @@ class GenerationMixin:
                 length_penalty=length_penalty,
                 num_beams=num_beams,
                 vocab_size=vocab_size,
-                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
                 model_specific_kwargs=model_specific_kwargs,
@@ -492,7 +495,6 @@ class GenerationMixin:
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
-                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
                 model_specific_kwargs=model_specific_kwargs,
@@ -516,7 +518,6 @@ class GenerationMixin:
         pad_token_id,
         eos_token_id,
         batch_size,
-        encoder_outputs,
         attention_mask,
         use_cache,
         model_specific_kwargs,
@@ -528,9 +529,12 @@ class GenerationMixin:
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
-        past = (encoder_outputs, None) if encoder_outputs is not None else None
-
+        past = None
         while cur_len < max_length:
+            if past is None:
+                print("Enc", model_specific_kwargs["encoder_outputs"][0].shape)
+                import ipdb; ipdb.set_trace()
+
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
@@ -625,7 +629,6 @@ class GenerationMixin:
         length_penalty,
         num_beams,
         vocab_size,
-        encoder_outputs,
         attention_mask,
         use_cache,
         model_specific_kwargs,
@@ -647,7 +650,7 @@ class GenerationMixin:
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # cache compute states
-        past = (encoder_outputs, None) if encoder_outputs is not None else None
+        past = None
 
         # done sentences
         done = [False for _ in range(batch_size)]
