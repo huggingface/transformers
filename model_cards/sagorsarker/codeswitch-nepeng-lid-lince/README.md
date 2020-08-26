@@ -30,7 +30,7 @@ pip install codeswitch
 
 ```py
 
-from transformers import AutoTokenizer, AutoModelForTokenClassification, pipline
+from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
 tokenizer = AutoTokenizer.from_pretrained("sagorsarker/codeswitch-nepeng-lid-lince")
 
