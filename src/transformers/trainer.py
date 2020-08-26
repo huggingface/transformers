@@ -730,7 +730,7 @@ class Trainer:
             logs["epoch"] = self.epoch
         if self.non_embedding_flos is not None:
             if self.args.local_rank != -1:
-                gathered_flos = self.distributed_broadcast_scalar(self.non_embedding_flos)
+                gathered_flos = self.distributed_broadcast_scalars([self.non_embedding_flos])
                 logs["non_embedding_flos"] = gathered_flos.sum().item()
             else:
                 logs["non_embedding_flos"] = self.non_embedding_flos
@@ -760,7 +760,7 @@ class Trainer:
                 experiment = comet_ml.config.get_global_experiment()
                 if experiment is not None:
                     experiment._log_metrics(logs, step=self.global_step, epoch=self.epoch, framework="transformers")
-        output = {**logs, **{"step": self.global_step, "neFLOs": self.non_embedding_flos}}
+        output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
         else:
@@ -909,7 +909,7 @@ class Trainer:
         # Storing the number of floating-point operations that went into the model
         if self.non_embedding_flos is not None:
             if self.args.local_rank != -1:
-                gathered_flos = self.distributed_broadcast_scalar(self.non_embedding_flos)
+                gathered_flos = self.distributed_broadcast_scalars([self.non_embedding_flos])
                 self.model.config.non_embedding_flos = gathered_flos.sum().item()
             else:
                 self.model.config.non_embedding_flos = self.non_embedding_flos
@@ -1059,13 +1059,11 @@ class Trainer:
         if self.args.past_index >= 0:
             self._past = None
 
-        samples_count = 0
         for inputs in tqdm(dataloader, desc=description):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
             batch_size = inputs[list(inputs.keys())[0]].shape[0]
-            samples_count += batch_size
             if loss is not None:
-                eval_losses.append(loss * batch_size)
+                eval_losses.extend([loss] * batch_size)
             if logits is not None:
                 preds = logits if preds is None else torch.cat((preds, logits), dim=0)
             if labels is not None:
@@ -1099,7 +1097,11 @@ class Trainer:
         else:
             metrics = {}
         if len(eval_losses) > 0:
-            metrics["eval_loss"] = np.sum(eval_losses) / samples_count
+            if self.args.local_rank != -1:
+                metrics["eval_loss"] = self.distributed_broadcast_scalars(eval_losses).mean().item()
+            else:
+                metrics["eval_loss"] = np.mean(eval_losses)
+
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
@@ -1120,10 +1122,10 @@ class Trainer:
         output = concat[:num_total_examples]
         return output
 
-    def distributed_broadcast_scalar(self, scalar: Union[int, float]) -> torch.Tensor:
+    def distributed_broadcast_scalars(self, scalars: List[Union[int, float]]) -> torch.Tensor:
         assert self.args.local_rank != -1
 
-        tensorized_scalar = torch.Tensor([scalar]).cuda()
+        tensorized_scalar = torch.Tensor(scalars).cuda()
         output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
