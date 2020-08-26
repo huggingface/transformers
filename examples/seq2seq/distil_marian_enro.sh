@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 export PYTHONPATH="../":"${PYTHONPATH}"
-export BS=16
-export GAS=2
+# export MAX_LEN=128
 python distillation.py \
   --learning_rate=3e-4 \
   --do_train \
@@ -14,7 +13,7 @@ python distillation.py \
   --freeze_encoder --freeze_embeds \
   --model_name_or_path IGNORED \
   --alpha_hid=3. --length_penalty=0.5 \
-  --train_batch_size=$BS --eval_batch_size=$BS --gradient_accumulation_steps=$GAS --num_train_epochs=6 \
+  --train_batch_size=$BS --eval_batch_size=$BS --num_train_epochs=6 \
   --tokenizer_name Helsinki-NLP/opus-mt-en-ro \
-  --warmup_steps 500 \
+  --warmup_steps 500 --sortish_sampler --logger_name wandb
   "$@"
