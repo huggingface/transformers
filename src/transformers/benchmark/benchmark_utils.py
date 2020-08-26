@@ -7,7 +7,6 @@ Copyright by the AllenNLP authors.
 import copy
 import csv
 import linecache
-import logging
 import os
 import platform
 import sys
@@ -22,6 +21,7 @@ from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
 
 from ..file_utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available
+from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -43,7 +43,7 @@ else:
     from signal import SIGKILL
 
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 _is_memory_tracing_enabled = False
@@ -94,7 +94,7 @@ def separate_process_wrapper_fn(func: Callable[[], None], do_multi_processing: b
         return result
 
     if do_multi_processing:
-        logging.info("fFunction {func} is executed in its own process...")
+        logger.info(f"Function {func} is executed in its own process...")
         return multi_process_func
     else:
         return func

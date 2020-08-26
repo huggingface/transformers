@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch BART model, ported from the fairseq repo."""
-import logging
 import math
 import random
 import warnings
@@ -43,9 +42,10 @@ from .modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"

@@ -16,7 +16,6 @@
 
 
 import copy
-import logging
 import math
 import os
 import warnings
@@ -36,9 +35,10 @@ from .file_utils import (
 )
 from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"

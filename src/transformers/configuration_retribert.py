@@ -14,13 +14,11 @@
 # limitations under the License.
 """ RetriBERT model configuration """
 
-
-import logging
-
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 # TODO: uploadto AWS
 RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {

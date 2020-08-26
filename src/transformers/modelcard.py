@@ -17,7 +17,6 @@
 
 import copy
 import json
-import logging
 import os
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -30,9 +29,10 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class ModelCard:

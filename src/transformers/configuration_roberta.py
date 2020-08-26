@@ -15,13 +15,11 @@
 # limitations under the License.
 """ RoBERTa configuration """
 
-
-import logging
-
 from .configuration_bert import BertConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-config.json",

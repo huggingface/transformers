@@ -15,7 +15,6 @@
 """ Tokenization class for model T5."""
 
 
-import logging
 import os
 import re
 import warnings
@@ -23,9 +22,10 @@ from shutil import copyfile
 from typing import List, Optional
 
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 

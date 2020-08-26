@@ -17,7 +17,6 @@
 """
 
 
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -28,9 +27,10 @@ from .file_utils import ModelOutput, add_code_sample_docstrings, add_start_docst
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 _TOKENIZER_FOR_DOC = "TransfoXLTokenizer"

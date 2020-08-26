@@ -18,13 +18,13 @@
 """
 
 
-import logging
 import timeit
 from typing import Callable, Optional
 
 from ..configuration_utils import PretrainedConfig
 from ..file_utils import is_py3nvml_available, is_torch_available
 from ..modeling_auto import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING
+from ..utils import logging
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -45,7 +45,7 @@ if is_py3nvml_available():
     import py3nvml.py3nvml as nvml
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class PyTorchBenchmark(Benchmark):

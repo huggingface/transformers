@@ -16,7 +16,6 @@
 """PyTorch OpenAI GPT-2 model."""
 
 
-import logging
 import os
 import warnings
 from dataclasses import dataclass
@@ -43,9 +42,10 @@ from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_conv1d_layer,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"

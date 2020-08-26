@@ -16,7 +16,6 @@
 
 
 import argparse
-import logging
 import os
 
 from transformers import (
@@ -76,6 +75,8 @@ from transformers import (
 )
 from transformers.file_utils import hf_bucket_url
 
+from .utils import logging
+
 
 if is_torch_available():
     import numpy as np
@@ -104,7 +105,7 @@ if is_torch_available():
     )
 
 
-logging.basicConfig(level=logging.INFO)
+logging.set_verbosity_info()
 
 MODEL_CLASSES = {
     "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),

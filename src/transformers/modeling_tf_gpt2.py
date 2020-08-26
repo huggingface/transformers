@@ -16,7 +16,6 @@
 """ TF 2.0 OpenAI GPT-2 model. """
 
 
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -43,9 +42,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"

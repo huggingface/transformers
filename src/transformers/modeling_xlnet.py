@@ -17,7 +17,6 @@
 """
 
 
-import logging
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -43,9 +42,10 @@ from .modeling_utils import (
     SequenceSummary,
     apply_chunking_to_forward,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "XLNetConfig"
 _TOKENIZER_FOR_DOC = "XLNetTokenizer"

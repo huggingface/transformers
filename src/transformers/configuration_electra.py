@@ -15,13 +15,11 @@
 # limitations under the License.
 """ ELECTRA model configuration """
 
-
-import logging
-
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "google/electra-small-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small-generator/config.json",

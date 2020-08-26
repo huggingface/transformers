@@ -16,14 +16,15 @@
 """ PyTorch - TF 2.0 general utilities."""
 
 
-import logging
 import os
 import re
 
 import numpy
 
+from .utils import logging
 
-logger = logging.getLogger(__name__)
+
+logger = logging.get_logger(__name__)
 
 
 def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=""):
