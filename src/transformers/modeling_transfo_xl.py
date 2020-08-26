@@ -62,7 +62,7 @@ def build_tf_to_pytorch_map(model, config):
             zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
         ):
             layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
-            if config.tie_weight:
+            if config.tie_word_embeddings:
                 tf_to_pt_map.update({layer_str + "b": out_l.bias})
             else:
                 raise NotImplementedError
@@ -978,7 +978,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         Run this to be sure output and input (adaptive) softmax weights are tied
         """
 
-        if self.config.tie_weight:
+        if self.config.tie_word_embeddings:
             for i in range(len(self.crit.out_layers)):
                 self._tie_or_clone_weights(self.crit.out_layers[i], self.transformer.word_emb.emb_layers[i])
         if self.config.tie_projs:
