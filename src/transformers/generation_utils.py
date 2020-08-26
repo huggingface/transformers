@@ -666,6 +666,8 @@ class GenerationMixin:
                 past = outputs["mems"]
             elif outputs.get("decoder_past_key_values", None) is not None:
                 past = outputs["decoder_past_key_values"]
+            elif outputs.get("prediction_scores", None) is not None:
+                past = outputs["prediction_scores"]
 
             if self.config.is_encoder_decoder and do_sample is False:
                 # TODO (PVP) still a bit hacky here - there might be a better solution

@@ -661,6 +661,11 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
+    @property
+    def logits(self):
+        # to cope with generation
+        return self.prediction_scores
+
 
 TRANSFO_XL_START_DOCSTRING = r"""
 
