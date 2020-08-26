@@ -20,7 +20,6 @@
 
 import copy
 import json
-import logging
 import os
 import warnings
 from collections import OrderedDict, UserDict
@@ -28,6 +27,7 @@ from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
+
 from tokenizers import AddedToken
 from tokenizers import Encoding as EncodingFast
 
@@ -40,6 +40,7 @@ from .file_utils import (
     is_torch_available,
     torch_required,
 )
+from .utils import logging
 
 
 if is_tf_available():
@@ -48,7 +49,7 @@ if is_torch_available():
     import torch
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VERY_LARGE_INTEGER = int(1e30)  # This is used to set the max input length for a model with infinite size input
 LARGE_INTEGER = int(1e20)  # This is used when we need something big but slightly smaller than VERY_LARGE_INTEGER
@@ -1088,7 +1089,8 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 returned to provide some overlap between truncated and overflowing sequences. The value of this
                 argument defines the number of overlapping tokens.
             is_pretokenized (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the input is already tokenized.
+                Whether or not the input is already pre-tokenized (e.g., split into words), in which case the tokenizer
+                will skip the pre-tokenization step. This is useful for NER or token classification.
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).

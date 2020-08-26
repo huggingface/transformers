@@ -15,27 +15,27 @@ from transformers import BartConfig, BartForConditionalGeneration, MBartTokenize
 
 try:
     from .finetune import SummarizationModule, TranslationModule
-    from .initialization_utils import init_student, copy_layers
-    from .utils import (
-        use_task_specific_params,
-        pickle_load,
-        freeze_params,
-        assert_all_frozen,
-        any_requires_grad,
-        calculate_bleu_score,
-    )
     from .finetune import main as ft_main
+    from .initialization_utils import copy_layers, init_student
+    from .utils import (
+        any_requires_grad,
+        assert_all_frozen,
+        calculate_bleu,
+        freeze_params,
+        pickle_load,
+        use_task_specific_params,
+    )
 except ImportError:
     from finetune import SummarizationModule, TranslationModule
     from finetune import main as ft_main
-    from initialization_utils import init_student, copy_layers
+    from initialization_utils import copy_layers, init_student
     from utils import (
-        use_task_specific_params,
-        pickle_load,
-        freeze_params,
-        assert_all_frozen,
         any_requires_grad,
-        calculate_bleu_score,
+        assert_all_frozen,
+        calculate_bleu,
+        freeze_params,
+        pickle_load,
+        use_task_specific_params,
     )
 
 
@@ -261,7 +261,7 @@ class BartTranslationDistiller(BartSummarizationDistiller):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
 
     def calc_generative_metrics(self, preds, target) -> dict:
-        return calculate_bleu_score(preds, target)
+        return calculate_bleu(preds, target)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -348,7 +348,10 @@ class T5SummarizationDistiller(BartSummarizationDistiller):
         if self.different_encoder:
             with torch.no_grad():
                 teacher_enc_outputs, teacher_enc_hid = self.teacher.encoder(
-                    source_ids, attention_mask=source_mask, output_hidden_states=True, use_cache=False,
+                    source_ids,
+                    attention_mask=source_mask,
+                    output_hidden_states=True,
+                    use_cache=False,
                 )
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)

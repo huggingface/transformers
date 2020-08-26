@@ -15,11 +15,10 @@
 # limitations under the License.
 """ MMBT configuration """
 
+from .utils import logging
 
-import logging
 
-
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class MMBTConfig(object):

@@ -130,7 +130,7 @@ Then the base vocabulary is ['b', 'g', 'h', 'n', 'p', 's', 'u'] and all our word
 
 We then take each pair of symbols and look at the most frequent. For instance 'hu' is present `10 + 5 = 15` times (10
 times in the 10 occurrences of 'hug', 5 times in the 5 occurrences of 'hugs'). The most frequent here is 'ug', present
-`10 + 5 + 2 + 5 = 22` times in total. So the first merge rule the tokenizer learns is to group all 'u' and 'g' together
+`10 + 5 + 5 = 20` times in total. So the first merge rule the tokenizer learns is to group all 'u' and 'g' together
 then it adds 'ug' to the vocabulary. Our corpus then becomes
 
 ::

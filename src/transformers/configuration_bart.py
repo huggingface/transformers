@@ -14,14 +14,12 @@
 # limitations under the License.
 """ BART configuration """
 
-
-import logging
-
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings_to_callable
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",
@@ -95,6 +93,8 @@ BART_CONFIG_ARGS_DOC = r"""
             for SequenceClassification
         is_encoder_decoder (:obj:`int`, optional, defaults to True):
             True
+        force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
 
 """
 
@@ -102,7 +102,7 @@ BART_CONFIG_ARGS_DOC = r"""
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class BartConfig(PretrainedConfig):
     r"""
-        Configuration class for Bart. Parameters are renamed from the fairseq implementation
+    Configuration class for Bart. Parameters are renamed from the fairseq implementation
     """
     model_type = "bart"
 
@@ -137,17 +137,18 @@ class BartConfig(PretrainedConfig):
         normalize_embedding=True,
         static_position_embeddings=False,
         add_bias_logits=False,
+        force_bos_token_to_be_generated=False,
         **common_kwargs
     ):
         r"""
-            :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
+        :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
 
-            Examples::
+        Examples::
 
-                >>> from transformers import BartConfig, BartModel
+            >>> from transformers import BartConfig, BartModel
 
-                >>> config = BartConfig.from_pretrained('facebook/bart-large')
-                >>> model = BartModel(config)
+            >>> config = BartConfig.from_pretrained('facebook/bart-large')
+            >>> model = BartModel(config)
 
         """
         if "hidden_size" in common_kwargs:
@@ -194,6 +195,8 @@ class BartConfig(PretrainedConfig):
 
         # pos embedding offset
         self.extra_pos_embeddings = self.pad_token_id + 1
+
+        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
 
     @property
     def num_attention_heads(self) -> int:

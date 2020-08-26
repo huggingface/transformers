@@ -28,20 +28,20 @@ from transformers.testing_utils import _tf_gpu_memory_limit, require_tf, slow
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
 
     from transformers import (
-        tf_top_k_top_p_filtering,
-        TFAdaptiveEmbedding,
-        TFSharedEmbeddings,
-        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
+        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        TFAdaptiveEmbedding,
+        TFSharedEmbeddings,
+        tf_top_k_top_p_filtering,
     )
 
     if _tf_gpu_memory_limit is not None:
@@ -110,15 +110,6 @@ class TFModelTesterMixin:
 
     def test_initialization(self):
         pass
-        # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # configs_no_init = _config_zero_init(config)
-        # for model_class in self.all_model_classes:
-        #     model = model_class(config=configs_no_init)
-        #     for name, param in model.named_parameters():
-        #         if param.requires_grad:
-        #             self.assertIn(param.data.mean().item(), [0.0, 1.0],
-        #             msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -133,6 +124,19 @@ class TFModelTesterMixin:
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
                 self.assert_outputs_same(after_outputs, outputs)
+
+    def test_graph_mode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+
+            @tf.function
+            def run_in_graph_mode():
+                return model(inputs)
+
+            outputs = run_in_graph_mode()
+            self.assertIsNotNone(outputs)
 
     @slow
     def test_saved_model_with_hidden_states_output(self):
@@ -155,7 +159,8 @@ class TFModelTesterMixin:
                 self.assertEqual(len(outputs), num_out)
                 self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
                 )
 
     @slow
@@ -260,6 +265,7 @@ class TFModelTesterMixin:
             return
 
         import torch
+
         import transformers
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -306,13 +312,13 @@ class TFModelTesterMixin:
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
             # Debug info (remove when fixed)
-            if max_diff >= 2e-2:
+            if max_diff >= 4e-2:
                 print("===")
                 print(model_class)
                 print(config)
                 print(inputs_dict)
                 print(pt_inputs_dict)
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -348,7 +354,7 @@ class TFModelTesterMixin:
             tfo[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tfo - pto))
-            self.assertLessEqual(max_diff, 2e-2)
+            self.assertLessEqual(max_diff, 4e-2)
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -485,7 +491,8 @@ class TFModelTesterMixin:
             hidden_states = [t.numpy() for t in outputs[-1]]
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.seq_length, self.model_tester.hidden_size],
             )
 
         for model_class in self.all_model_classes:
@@ -590,9 +597,15 @@ class TFModelTesterMixin:
                     x = wte([input_ids, None, None, None], mode="embedding")
                 except Exception:
                     if hasattr(self.model_tester, "embedding_size"):
-                        x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32,)
+                        x = tf.ones(
+                            input_ids.shape + [self.model_tester.embedding_size],
+                            dtype=tf.dtypes.float32,
+                        )
                     else:
-                        x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32,)
+                        x = tf.ones(
+                            input_ids.shape + [self.model_tester.hidden_size],
+                            dtype=tf.dtypes.float32,
+                        )
         return x
 
     def test_inputs_embeds(self):
@@ -633,7 +646,7 @@ class TFModelTesterMixin:
                 emb_old.build(INPUT_SHAPE)
                 # reshape the embeddings
                 new_embeddings = model._get_resized_embeddings(emb_old, size)
-                # # check that the the resized embeddings size matches the desired size.
+                # # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
                 self.assertEqual(new_embeddings.shape[0], assert_size)
                 # check that weights remain the same after resizing
@@ -699,7 +712,14 @@ class TFModelTesterMixin:
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # num_return_sequences > 1, sample
-            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2, num_return_sequences=2,))
+            self._check_generated_ids(
+                model.generate(
+                    input_ids,
+                    do_sample=True,
+                    num_beams=2,
+                    num_return_sequences=2,
+                )
+            )
             # num_return_sequences > 1, greedy
             self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=2, num_return_sequences=2))
 
@@ -894,7 +914,8 @@ class UtilsFunctionsTest(unittest.TestCase):
         )
 
         non_inf_expected_idx = tf.convert_to_tensor(
-            [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]], dtype=tf.int32,
+            [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]],
+            dtype=tf.int32,
         )  # expected non filtered idx as noted above
 
         non_inf_expected_output = tf.convert_to_tensor(
@@ -906,7 +927,8 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         non_inf_output = output[output != -float("inf")]
         non_inf_idx = tf.cast(
-            tf.where(tf.not_equal(output, tf.constant(-float("inf"), dtype=tf.float32))), dtype=tf.int32,
+            tf.where(tf.not_equal(output, tf.constant(-float("inf"), dtype=tf.float32))),
+            dtype=tf.int32,
         )
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
