@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
+import warnings
 
 logger = getLogger(__name__)
 
@@ -104,6 +104,8 @@ def run_generate():
     if args.n_obs > 0:
         examples = examples[: args.n_obs]
     Path(args.save_path).parent.mkdir(exist_ok=True)
+    if args.reference_path is None and Path(args.score_path).exists():
+        warnings.warn(f'score_path {args.score_path} will be overwritten unless you type ctrl-c.')
     runtime_metrics = generate_summaries_or_translations(
         examples,
         args.save_path,
