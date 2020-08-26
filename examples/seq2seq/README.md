@@ -32,8 +32,18 @@ download with this command:
 wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
-this should make a directory called `wmt_en_ro/` with files like `test.source`.
 ```
+this should make a directory called `wmt_en_ro/` with 6 files.
+
+
+WMT English-German:
+```bash
+wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_de.tgz
+tar -xzvf wmt_en_de.tar.gz
+export DATA_DIR=${PWD}/wmt_en_de
+```
+
+Private Data:
 
 If you are using your own data, it must be formatted as one directory with 6 files: 
 ```
