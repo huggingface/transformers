@@ -332,6 +332,8 @@ class AdamW(Optimizer):
 # Alternatively, relative_step with warmup_init can also be used.
 # Training without LR warmup or clip threshold, is not recommended. Additional optimizer operations
 # like gradient clipping, should not be used.
+
+
 class Adafactor(Optimizer):
     """
     Implements Adafactor algorithm.
@@ -386,7 +388,7 @@ class Adafactor(Optimizer):
         rel_step_sz = param_group['lr']
         if param_group['relative_step']:
             min_step = 1e-6 * param_state['step'] if param_group['warmup_init'] else 1e-2
-            rel_step_sz = min(min_step, 1.0/math.sqrt(param_state['step']))
+            rel_step_sz = min(min_step, 1.0 / math.sqrt(param_state['step']))
         param_scale = 1.0
         if param_group['scale_parameter']:
             param_scale = max(param_group['eps'][1], param_state['RMS'])
