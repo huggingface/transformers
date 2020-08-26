@@ -14,7 +14,7 @@ python distillation.py \
   --freeze_encoder --freeze_embeds \
   --model_name_or_path IGNORED \
   --alpha_hid=3. \
-  --train_batch_size=$BS --eval_batch_size=$BS --num_train_epochs=6 \
+  --train_batch_size=$BS --eval_batch_size=$BS \
   --tokenizer_name Helsinki-NLP/opus-mt-en-ro \
   --warmup_steps 500 --sortish_sampler --logger_name wandb \
   --gpus 1 --fp16_opt_level O1 --task translation \
