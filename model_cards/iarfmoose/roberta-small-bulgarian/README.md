@@ -1,4 +1,9 @@
+---
+language: bg
+---
+
 # RoBERTa-small-bulgarian
+
 
 The RoBERTa model was originally introduced in [this paper](https://arxiv.org/abs/1907.11692). This is a smaller version of [RoBERTa-base-bulgarian](https://huggingface.co/iarfmoose/roberta-small-bulgarian) with only 6 hidden layers, but similar performance.
 

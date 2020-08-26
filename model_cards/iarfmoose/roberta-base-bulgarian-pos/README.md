@@ -1,4 +1,9 @@
+---
+language: bg
+---
+
 # RoBERTa-base-bulgarian-POS
+
 
 The RoBERTa model was originally introduced in [this paper](https://arxiv.org/abs/1907.11692). This model is a version of [RoBERTa-base-Bulgarian](https://huggingface.co/iarfmoose/roberta-base-bulgarian) fine-tuned for part-of-speech tagging.
 

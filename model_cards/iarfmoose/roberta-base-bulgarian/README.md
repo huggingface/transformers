@@ -1,4 +1,9 @@
+---
+language: bg
+---
+
 # RoBERTa-base-bulgarian
+
 
 The RoBERTa model was originally introduced in [this paper](https://arxiv.org/abs/1907.11692). This is a version of [RoBERTa-base](https://huggingface.co/roberta-base) pretrained on Bulgarian text.
 
