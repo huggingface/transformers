@@ -320,54 +320,37 @@ class AdamW(Optimizer):
 
 class Adafactor(Optimizer):
     """
-    AdaFactor pytorch implementation from FAIR-seq:
-    https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
-    
-    This implementation is based on:
-    `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost`
-    (see https://arxiv.org/abs/1804.04235)
-    Note that this optimizer internally adjusts the learning rate
-    depending on the *scale_parameter*, *relative_step* and
-    *warmup_init* options. To use a manual (external) learning rate
-    schedule you should set `scale_parameter=False` and
-    `relative_step=False`.
+    AdaFactor pytorch implementation can be used as a drop in replacement for Adam
+    original fairseq code: https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
+
+    Paper: `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost` https://arxiv.org/abs/1804.04235
+    Note that this optimizer internally adjusts the learning rate depending on the *scale_parameter*, *relative_step* and
+    *warmup_init* options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and `relative_step=False`.
 
     Arguments:
-        params (iterable): iterable of parameters to optimize or dicts defining
-            parameter groups
+        params (iterable): iterable of parameters to optimize or dicts defining parameter groups
         lr (float, optional): external learning rate (default: None)
-        eps (tuple[float, float]): regularization constans for square gradient
+        eps (tuple[float, float]): regularization constants for square gradient
             and parameter scale respectively (default: (1e-30, 1e-3))
-        clip_threshold (float): threshold of root mean square of
-            final gradient update (default: 1.0)
-        decay_rate (float): coefficient used to compute running averages of square
-            gradient (default: -0.8)
+        clip_threshold (float, default 1.0): threshold of root mean square of final gradient update
+        decay_rate (float, default: -0.8): coefficient used to compute running averages of square
         beta1 (float): coefficient used for computing running averages of gradient
-            (default: None)
-        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
-        scale_parameter (bool): if True, learning rate is scaled by root mean square of
-            parameter (default: True)
-        relative_step (bool): if True, time-dependent learning rate is computed
-            instead of external learning rate (default: True)
-        warmup_init (bool): time-dependent learning rate computation depends on
-            whether warm-up initialization is being used (default: False)
+        weight_decay (float, default=0): weight decay (L2 penalty)
+        scale_parameter (bool, default: True): if True, learning rate is scaled by root mean square of
+        relative_step (bool, default: True): if True, time-dependent learning rate is computed instead of external learning rate
+        warmup_init (bool, default: False): time-dependent learning rate computation depends on whether warm-up initialization is being used
 
     This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
 
-    AdaFactor was introduced by Shazeer at al as a more memory efficient drop-in replacement for Adam,
-    specifically for training large Transformer models.
-    https://arxiv.org/abs/1804.04235
-
-    For T5 finetuning, recommended settings:
-      * scheduled LR warm-up to fixed LR, disable relative updates, use clip threshold
-    https://arxiv.org/abs/2004.14546
-
-    Alternatively, relative_step with warmup_init can also be used.
-    Training without LR warmup or clip threshold, is not recommended. Additional optimizer operations
-    like gradient clipping, should not be used alongside Adafactor.
+    Recommended T5 finetuning settings:
+        scheduled LR warm-up to fixed LR, disable relative updates, use clip threshold: https://arxiv.org/abs/2004.14546
+        Adafactor(model.parameters(), lr=1e-3, relative_step=False, warmup_init=True)
+        Alternatively, relative_step with warmup_init can be used.
+        Training without LR warmup or clip threshold, is not recommended. Additional optimizer operations like gradient clipping, should not be used alongside Adafactor.
 
     Usage::
-        Adafactor(model.parameters(), lr=1e-3, eps=(1e-30, 1e-3), clip_threshold=1.0,
+        # replace AdamW with Adafactor
+        optimizer = Adafactor(model.parameters(), lr=1e-3, eps=(1e-30, 1e-3), clip_threshold=1.0,
             decay_rate=-0.8, beta1=None, weight_decay=0.0, relative_step=False,
             scale_parameter=False, warmup_init=False,)
     """
@@ -403,7 +386,8 @@ class Adafactor(Optimizer):
         )
         super().__init__(params, defaults)
 
-    def _get_lr(self, param_group, param_state):
+    @staticmethod
+    def _get_lr(param_group, param_state):
         rel_step_sz = param_group["lr"]
         if param_group["relative_step"]:
             min_step = 1e-6 * param_state["step"] if param_group["warmup_init"] else 1e-2
@@ -413,15 +397,18 @@ class Adafactor(Optimizer):
             param_scale = max(param_group["eps"][1], param_state["RMS"])
         return param_scale * rel_step_sz
 
-    def _get_options(self, param_group, param_shape):
+    @staticmethod
+    def _get_options(param_group, param_shape):
         factored = len(param_shape) >= 2
         use_first_moment = param_group["beta1"] is not None
         return factored, use_first_moment
 
-    def _rms(self, tensor):
+    @staticmethod
+    def _rms(tensor):
         return tensor.norm(2) / (tensor.numel() ** 0.5)
 
-    def _approx_sq_grad(self, exp_avg_sq_row, exp_avg_sq_col):
+    @staticmethod
+    def _approx_sq_grad(exp_avg_sq_row, exp_avg_sq_col):
         r_factor = (exp_avg_sq_row / exp_avg_sq_row.mean(dim=-1, keepdim=True)).rsqrt_()
         c_factor = exp_avg_sq_col.rsqrt()
         return torch.mm(r_factor.unsqueeze(-1), c_factor.unsqueeze(0))
