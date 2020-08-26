@@ -2,6 +2,13 @@
 language:
 - ne
 - en
+datasets:
+- LinCE
+license: "MIT"
+tags:
+- codeswitching
+- nepali-english
+- language-identification
 ---
 
 # codeswitch-nepeng-lid-lince
@@ -19,11 +26,11 @@ pip install codeswitch
 
 ## Identify Language
 
-* Method-1
+* **Method-1**
 
 ```py
 
-from transformers import AutoTokenizer, AutoModelForTokenClassification
+from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
 tokenizer = AutoTokenizer.from_pretrained("sagorsarker/codeswitch-nepeng-lid-lince")
 
@@ -34,7 +41,7 @@ lid_model("put any nepali english code-mixed sentence")
 
 ```
 
-* Method-2
+* **Method-2**
 
 ```py
 from codeswitch.codeswitch import LanguageIdentification
