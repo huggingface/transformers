@@ -28,7 +28,10 @@ else:
     _use_native_amp = True
     from torch.cuda.amp import autocast
 
-from .utils import SortishSampler, label_smoothed_nll_loss
+try:
+  from .utils import SortishSampler, label_smoothed_nll_loss
+except ImportError:
+  from utils import SortishSampler, label_smoothed_nll_loss
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +45,7 @@ class Seq2SeqTrainer(Trainer):
             return get_tpu_sampler(self.train_dataset)
         else:
             if self.args.sortish_sampler and self.args.n_gpu <= 1 and self.args.local_rank == -1:
-                return SortishSampler
+                return self.train_dataset.make_sortish_sampler(self.args.per_device_train_batch_size)
 
             return (
                 RandomSampler(self.train_dataset)
@@ -74,11 +77,11 @@ class Seq2SeqTrainer(Trainer):
         labels = inputs.pop("labels")
         if self.args.fp16 and _use_native_amp:
             with autocast():
-                outputs = model(**inputs)
+                outputs = model(**inputs, use_cache=False)
                 logits = outputs[0]
                 loss = self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
         else:
-            outputs = model(**inputs)
+            outputs = model(**inputs, use_cache=False)
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             logits = outputs[0]
             loss = self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
@@ -140,19 +143,17 @@ class Seq2SeqTrainer(Trainer):
 
         inputs = self._prepare_inputs(inputs)
 
+        max_length = model.config.max_length
         with torch.no_grad():
             if self.args.predict_from_generate:
-                max_length = model.config.max_length
-                logits_out = model.generate(inputs["input_ids"], attention_mask=inputs["attention_mask"])
+                logits_out = model.generate(inputs["input_ids"], attention_mask=inputs["attention_mask"], use_cache=True)
                 # in case the batch is shorter than max length, the output should be padded
-                logits = model.config.pad_token_id * torch.ones(
-                    (logits_out.shape[0], max_length), dtype=logits_out.dtype, device=logits_out.device
-                )
-                logits[:, : logits_out.shape[-1]] = logits_out
+                logits = self._pad_tensors_to_max_len(logits_out, max_length, model.config.pad_token_id)
 
                 if has_labels:
                     outputs = model(**inputs)
                     loss = outputs[0]
+                    loss = loss.mean().item()
                 else:
                     loss = None
             else:
@@ -167,7 +168,15 @@ class Seq2SeqTrainer(Trainer):
         if prediction_loss_only:
             return (loss, None, None)
 
-        labels = inputs.get("labels")
-        if labels is not None:
-            labels = labels.detach()
+        labels_out = inputs.get("labels")
+        if labels_out is not None:
+            labels_out = labels_out.detach()
+            labels = self._pad_tensors_to_max_len(labels_out, max_length, model.config.pad_token_id)
         return (loss, logits.detach(), labels)
+    
+    def _pad_tensors_to_max_len(self, tensor, max_length, pad_token_id):
+        padded_tensor = pad_token_id * torch.ones(
+            (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
+        )
+        padded_tensor[:, : tensor.shape[-1]] = tensor
+        return padded_tensor
