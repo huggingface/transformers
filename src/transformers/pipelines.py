@@ -2152,10 +2152,6 @@ class Text2TextGenerationPipeline(Pipeline):
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
-                input_length = inputs["input_ids"].shape[-1]
-
-            elif self.framework == "tf":
-                input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
             generations = self.model.generate(
                 inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
