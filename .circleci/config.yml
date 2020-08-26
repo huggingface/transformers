@@ -42,10 +42,9 @@ references:
                 # non-zero status code.
                 while [ $i -lt $max_checks ]; do ((i++)); if kubectl get jobs $job_name -o jsonpath='Failed:{.status.failed}' | grep "Failed:1"; then status_code=1 && break; elif kubectl get jobs $job_name -o jsonpath='Succeeded:{.status.succeeded}' | grep "Succeeded:1" ; then status_code=0 && break; else echo "Job not finished yet"; fi; sleep 30; done && \
                 echo "Done waiting. Job status code: $status_code" && \
-                # Allow time for logs to flush.
-                sleep 60 && \
-                echo "JOB_NAME: $job_name" && \
-                gcloud logging read "resource.type=k8s_container resource.labels.project_id=$GOOGLE_PROJECT_ID resource.labels.location=$GOOGLE_COMPUTE_ZONE resource.labels.cluster_name=$GKE_CLUSTER resource.labels.namespace_name=default resource.labels.pod_name:$job_name" --limit 10000000 --order asc --format 'value(textPayload)' --project=$GOOGLE_PROJECT_ID && \
+                pod_name=$(kubectl get po -l controller-uid=`kubectl get job $job_name -o "jsonpath={.metadata.labels.controller-uid}"` | awk 'match($0,!/NAME/) {print $1}') && \
+                echo "GKE pod name: $pod_name" && \
+                kubectl logs -f $pod_name --container=train
                 echo "Done with log retrieval attempt." && \
                 gcloud container images delete "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" --force-delete-tags && \
                 exit $status_code
@@ -78,6 +77,7 @@ jobs:
                       - v0.3-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
+            - run: pip install git+https://github.com/huggingface/nlp
             - run: pip install .[sklearn,tf-cpu,torch,testing]
             - run: pip install codecov pytest-cov
             - save_cache:
@@ -104,6 +104,7 @@ jobs:
                       - v0.3-torch-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
+            - run: pip install git+https://github.com/huggingface/nlp
             - run: pip install .[sklearn,torch,testing]
             - save_cache:
                   key: v0.3-torch-{{ checksum "setup.py" }}
@@ -128,6 +129,7 @@ jobs:
                       - v0.3-tf-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
+            - run: pip install git+https://github.com/huggingface/nlp
             - run: pip install .[sklearn,tf-cpu,testing]
             - save_cache:
                   key: v0.3-tf-{{ checksum "setup.py" }}
@@ -151,6 +153,7 @@ jobs:
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[ja,testing]
+            - run: python -m unidic download
             - save_cache:
                   key: v0.3-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
@@ -235,8 +238,7 @@ jobs:
                       - v0.3-code_quality-{{ checksum "setup.py" }}
                       - v0.3-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            # we need a version of isort with https://github.com/timothycrosley/isort/pull/1000
-            - run: pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+            - run: pip install isort
             - run: pip install .[tf,torch,quality]
             - save_cache:
                   key: v0.3-code_quality-{{ checksum "setup.py" }}
@@ -245,6 +247,7 @@ jobs:
             - run: black --check --line-length 119 --target-version py35 examples templates tests src utils
             - run: isort --check-only --recursive examples templates tests src utils
             - run: flake8 examples templates tests src utils
+            - run: python utils/check_repo.py
     check_repository_consistency:
         working_directory: ~/transformers
         docker:

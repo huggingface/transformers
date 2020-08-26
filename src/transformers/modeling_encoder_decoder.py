@@ -15,24 +15,24 @@
 """ Classes to support Encoder-Decoder architectures """
 
 
-import logging
 from typing import Optional
 
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class EncoderDecoderModel(PreTrainedModel):
     r"""
-        :class:`~transformers.EncoderDecoder` is a generic model class that will be
-        instantiated as a transformer architecture with one of the base model
-        classes of the library as encoder and another one as
-        decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
-        class method for the encoder and `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
+    :class:`~transformers.EncoderDecoder` is a generic model class that will be
+    instantiated as a transformer architecture with one of the base model
+    classes of the library as encoder and another one as
+    decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
+    class method for the encoder and `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
@@ -71,9 +71,17 @@ class EncoderDecoderModel(PreTrainedModel):
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
 
+        # tie encoder, decoder weights if config set accordingly
+        self.tie_weights()
+
     def tie_weights(self):
-        # for now no weights tying in encoder-decoder
-        pass
+        # tie encoder & decoder if needed
+        if self.config.tie_encoder_decoder:
+            # tie encoder and decoder base model
+            decoder_base_model_prefix = self.decoder.base_model_prefix
+            self._tie_encoder_decoder_weights(
+                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+            )
 
     def get_encoder(self):
         return self.encoder
@@ -95,7 +103,7 @@ class EncoderDecoderModel(PreTrainedModel):
         *model_args,
         **kwargs
     ) -> PreTrainedModel:
-        r""" Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
+        r"""Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
 
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated).
@@ -122,7 +130,11 @@ class EncoderDecoderModel(PreTrainedModel):
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``).
+                - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter
+                - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter
+                - To update the parent model configuration, do not use a prefix for each configuration parameter
+                Behave differently depending on whether a :obj:`config` is provided or automatically loaded.
 
         Examples::
 
@@ -143,6 +155,12 @@ class EncoderDecoderModel(PreTrainedModel):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+
+        # remove encoder, decoder kwargs from kwargs
+        for key in kwargs_encoder.keys():
+            del kwargs["encoder_" + key]
+        for key in kwargs_decoder.keys():
+            del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
@@ -184,18 +202,18 @@ class EncoderDecoderModel(PreTrainedModel):
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
-        return cls(encoder=encoder, decoder=decoder)
+        # instantiate config with corresponding kwargs
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        return cls(encoder=encoder, decoder=decoder, config=config)
 
     def forward(
         self,
         input_ids=None,
         inputs_embeds=None,
         attention_mask=None,
-        head_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        decoder_head_mask=None,
         decoder_inputs_embeds=None,
         labels=None,
         **kwargs,
@@ -216,10 +234,6 @@ class EncoderDecoderModel(PreTrainedModel):
                 Mask to avoid performing attention on padding token indices for the encoder.
                 Mask values selected in ``[0, 1]``:
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            head_mask: (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
-                Mask to nullify selected heads of the self-attention modules for the encoder.
-                Mask values selected in ``[0, 1]``:
-                ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
             encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
                 Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
                 `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
@@ -231,10 +245,6 @@ class EncoderDecoderModel(PreTrainedModel):
                 :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
             decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
                 Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
-            decoder_head_mask: (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
-                Mask to nullify selected heads of the self-attention modules for the decoder.
-                Mask values selected in ``[0, 1]``:
-                ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
             decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
                 Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
@@ -279,7 +289,6 @@ class EncoderDecoderModel(PreTrainedModel):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
                 return_dict=False,
                 **kwargs_encoder,
             )
@@ -293,12 +302,13 @@ class EncoderDecoderModel(PreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
             labels=labels,
             return_dict=False,
             **kwargs_decoder,
         )
 
+        # TODO(PVP): currently it is not possible to use `past`
+        # with the encoder/decoder framework -> should be implemented
         return decoder_outputs + encoder_outputs
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):
@@ -311,15 +321,24 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_outputs = (past,)
 
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids)
-
-        return {
+        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        input_dict = {
             "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_inputs["attention_mask"],
+            "decoder_attention_mask": decoder_attention_mask,
             "decoder_input_ids": decoder_inputs["input_ids"],
             "encoder_outputs": encoder_outputs,
         }
 
+        # Ideally all models should have a `use_cache`
+        # leave following to ifs until all have it implemented
+        if "use_cache" in decoder_inputs:
+            input_dict["decoder_use_cache"] = decoder_inputs["use_cache"]
+
+        if "past_key_values" in decoder_inputs:
+            input_dict["decoder_past_key_values"] = decoder_inputs["past_key_values"]
+
+        return input_dict
+
     def _reorder_cache(self, past, beam_idx):
-        # as a default encoder-decoder models do not re-order the past.
-        # TODO(PVP): might have to be updated, e.g. if GPT2 is to be used as a decoder
-        return past
+        # apply decoder cache reordering here
+        return self.decoder._reorder_cache(past, beam_idx)

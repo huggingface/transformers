@@ -44,8 +44,8 @@ class GLUETransformer(BaseTransformer):
         outputs = self(**inputs)
         loss = outputs[0]
 
-        # tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
-        tensorboard_logs = {"loss": loss}
+        lr_scheduler = self.trainer.lr_schedulers[0]["scheduler"]
+        tensorboard_logs = {"loss": loss, "rate": lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
 
     def prepare_data(self):
@@ -75,7 +75,7 @@ class GLUETransformer(BaseTransformer):
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-    def get_dataloader(self, mode: int, batch_size: int, shuffle: bool = False) -> DataLoader:
+    def get_dataloader(self, mode: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         "Load datasets. Called after prepare data."
 
         # We test on dev set to compare to benchmarks without having to submit to GLUE server
@@ -153,20 +153,17 @@ class GLUETransformer(BaseTransformer):
         )
 
         parser.add_argument(
-            "--task", default="", type=str, required=True, help="The GLUE task to run",
+            "--task",
+            default="",
+            type=str,
+            required=True,
+            help="The GLUE task to run",
         )
         parser.add_argument(
             "--gpus",
             default=0,
             type=int,
             help="The number of GPUs allocated for this, it is by default 0 meaning none",
-        )
-        parser.add_argument(
-            "--data_dir",
-            default=None,
-            type=str,
-            required=True,
-            help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
         )
 
         parser.add_argument(
@@ -184,7 +181,10 @@ def main():
 
     # If output_dir not provided, a folder will be generated in pwd
     if args.output_dir is None:
-        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        args.output_dir = os.path.join(
+            "./results",
+            f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",
+        )
         os.makedirs(args.output_dir)
 
     model = GLUETransformer(args)
