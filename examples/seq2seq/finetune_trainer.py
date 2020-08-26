@@ -20,28 +20,29 @@ from transformers import (
     set_seed,
 )
 
+
 try:
-  from .utils import (
-      Seq2SeqDataset,
-      TranslationDataset,
-      assert_all_frozen,
-      calculate_rouge,
-      freeze_params,
-      lmap,
-      trim_batch,
-  )
-  from .seq2seq_trainer import Seq2SeqTrainer
+    from .seq2seq_trainer import Seq2SeqTrainer
+    from .utils import (
+        Seq2SeqDataset,
+        TranslationDataset,
+        assert_all_frozen,
+        calculate_rouge,
+        freeze_params,
+        lmap,
+        trim_batch,
+    )
 except ImportError:
-  from utils import (
-      Seq2SeqDataset,
-      TranslationDataset,
-      assert_all_frozen,
-      calculate_rouge,
-      freeze_params,
-      lmap,
-      trim_batch,
-  )
-  from seq2seq_trainer import Seq2SeqTrainer
+    from seq2seq_trainer import Seq2SeqTrainer
+    from utils import (
+        Seq2SeqDataset,
+        TranslationDataset,
+        assert_all_frozen,
+        calculate_rouge,
+        freeze_params,
+        lmap,
+        trim_batch,
+    )
 
 
 logger = logging.getLogger(__name__)
@@ -346,8 +347,9 @@ def main():
                     writer.write("%s = %s\n" % (key, value))
 
             eval_results.update(result)
-    
+
     return eval_results
 
+
 if __name__ == "__main__":
-  main()
+    main()

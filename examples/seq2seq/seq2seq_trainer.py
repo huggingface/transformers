@@ -29,9 +29,9 @@ else:
     from torch.cuda.amp import autocast
 
 try:
-  from .utils import SortishSampler, label_smoothed_nll_loss
+    from .utils import SortishSampler, label_smoothed_nll_loss
 except ImportError:
-  from utils import SortishSampler, label_smoothed_nll_loss
+    from utils import SortishSampler, label_smoothed_nll_loss
 
 
 logger = logging.getLogger(__name__)
@@ -146,7 +146,9 @@ class Seq2SeqTrainer(Trainer):
         max_length = model.config.max_length
         with torch.no_grad():
             if self.args.predict_from_generate:
-                logits_out = model.generate(inputs["input_ids"], attention_mask=inputs["attention_mask"], use_cache=True)
+                logits_out = model.generate(
+                    inputs["input_ids"], attention_mask=inputs["attention_mask"], use_cache=True
+                )
                 # in case the batch is shorter than max length, the output should be padded
                 logits = self._pad_tensors_to_max_len(logits_out, max_length, model.config.pad_token_id)
 
@@ -173,7 +175,7 @@ class Seq2SeqTrainer(Trainer):
             labels_out = labels_out.detach()
             labels = self._pad_tensors_to_max_len(labels_out, max_length, model.config.pad_token_id)
         return (loss, logits.detach(), labels)
-    
+
     def _pad_tensors_to_max_len(self, tensor, max_length, pad_token_id):
         padded_tensor = pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
