@@ -252,7 +252,6 @@ class BartTranslationDistiller(BartSummarizationDistiller):
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, **kwargs)
-        assert isinstance(self.tokenizer, MBartTokenizer)
         assert hparams.src_lang is not None
         assert hparams.tgt_lang is not None
         self.dataset_kwargs["src_lang"] = hparams.src_lang
