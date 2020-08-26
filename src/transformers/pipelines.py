@@ -2093,7 +2093,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
     Usage::
         text2text_generator = pipeline("text2text-generation")
-        text2text_generator("How old are you?")
+        text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     """
 
     def __init__(self, *args, **kwargs):
@@ -2109,11 +2109,11 @@ class Text2TextGenerationPipeline(Pipeline):
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
-        Translate the text(s) given as inputs.
+        Generate the output text(s) using text(s) given as inputs.
 
         Args:
             args (:obj:`str` or :obj:`List[str]`):
-                Texts to be translated.
+                Input text for the encoder.
             return_tensors (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to include the tensors of predictions (as token indinces) in the outputs.
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -2128,9 +2128,9 @@ class Text2TextGenerationPipeline(Pipeline):
             A list or a list of list of :obj:`dict`: Each result comes as a dictionary with the
             following keys:
 
-            - **translation_text** (:obj:`str`, present when ``return_text=True``) -- The translation.
-            - **translation_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
-              -- The token ids of the translation.
+            - **generated_text** (:obj:`str`, present when ``return_text=True``) -- The generated text.
+            - **generated_token_ids** (:obj:`torch.Tensor` or :obj:`tf.Tensor`, present when ``return_tensors=True``)
+              -- The token ids of the generated text.
         """
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
 
