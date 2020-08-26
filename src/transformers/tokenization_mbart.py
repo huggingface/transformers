@@ -13,16 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from typing import List, Optional
 
 from .file_utils import add_start_docstrings_to_callable
 from .tokenization_utils import BatchEncoding
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"

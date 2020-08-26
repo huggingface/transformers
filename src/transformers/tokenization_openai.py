@@ -16,7 +16,6 @@
 
 
 import json
-import logging
 import os
 import re
 
@@ -25,9 +24,10 @@ from tokenizers import CharBPETokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

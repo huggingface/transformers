@@ -45,7 +45,8 @@ if is_torch_available():
 
 class RobertaModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -352,7 +353,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
-        """ Ensure that the default position ids only assign a sequential . This is a regression
+        """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
@@ -371,7 +372,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """ Ensure that the default position ids only assign a sequential . This is a regression
+        """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the

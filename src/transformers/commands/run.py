@@ -1,11 +1,12 @@
-import logging
 from argparse import ArgumentParser
 
 from transformers.commands import BaseTransformersCLICommand
 from transformers.pipelines import SUPPORTED_TASKS, Pipeline, PipelineDataFormat, pipeline
 
+from ..utils import logging
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 def try_infer_format_from_ext(path: str):
