@@ -247,7 +247,7 @@ class TrainingArguments:
 
     def __post_init__(self):
         if self.disable_tqdm is None:
-            self.disable_tqdm = logging.is_verbosity_at_least_info()
+            self.disable_tqdm = logging.get_verbosity() <= logging.INFO
 
     remove_unused_columns: Optional[bool] = field(
         default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}

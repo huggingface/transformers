@@ -101,22 +101,6 @@ def get_verbosity() -> int:
     return _get_library_root_logger().getEffectiveLevel()
 
 
-def is_verbosity_at_least_info():
-    return get_verbosity() <= INFO
-
-
-def is_verbosity_at_least_warning():
-    return get_verbosity() <= WARNING
-
-
-def is_verbosity_at_least_debug():
-    return get_verbosity() <= DEBUG
-
-
-def is_verbosity_at_least_error():
-    return get_verbosity() <= ERROR
-
-
 def set_verbosity(verbosity: int) -> None:
     """Set the level for the HuggingFace Transformers's root logger.
     Args:
