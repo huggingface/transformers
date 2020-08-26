@@ -61,8 +61,7 @@ GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
-    """ Load tf checkpoints in a pytorch model
-    """
+    """Load tf checkpoints in a pytorch model"""
     try:
         import re
 
@@ -324,8 +323,8 @@ class Block(nn.Module):
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = GPT2Config
@@ -336,8 +335,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
         super().__init__(*inputs, **kwargs)
 
     def _init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Embedding, Conv1D)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -483,8 +481,8 @@ class GPT2Model(GPT2PreTrainedModel):
         self.wte = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
@@ -800,47 +798,47 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         **kwargs,
     ):
         r"""
-        mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
-            Index of the classification token in each input sequence.
-            Selected in the range ``[0, input_ids.size(-1) - 1[``.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
-            Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
-            Indices are selected in ``[-1, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
-        mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`, defaults to :obj:`None`)
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
+            mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
+                Index of the classification token in each input sequence.
+                Selected in the range ``[0, input_ids.size(-1) - 1[``.
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
+                Labels for language modeling.
+                Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
+                Indices are selected in ``[-1, 0, ..., config.vocab_size]``
+                All labels set to ``-100`` are ignored (masked), the loss is only
+                computed for labels in ``[0, ..., config.vocab_size]``
+            mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`, defaults to :obj:`None`)
+                Labels for computing the multiple choice classification loss.
+                Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+                of the input tensors. (see `input_ids` above)
+            kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+                Used to hide legacy arguments that have been deprecated.
 
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        >>> import torch
-        >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
+            >>> import torch
+            >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2, return_dict=True)
+            >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2, return_dict=True)
 
-        >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+            >>> # Add a [CLS] to the vocabulary (we should train it also!)
+            >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
 
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+            >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
 
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        >>> encoded_choices = [tokenizer.encode(s) for s in choices]
-        >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
+            >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+            >>> encoded_choices = [tokenizer.encode(s) for s in choices]
+            >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
 
-        >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
-        >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+            >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
+            >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
 
-        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        >>> lm_logits = outputs.lm_logits
-        >>> mc_logits = outputs.mc_logits
+            >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+            >>> lm_logits = outputs.lm_logits
+            >>> mc_logits = outputs.mc_logits
 
         """
         if "lm_labels" in kwargs:

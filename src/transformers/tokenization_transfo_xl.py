@@ -163,7 +163,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def count_sents(self, sents, verbose=False):
         """
-            sents : a list of sentences, each a list of tokenized symbols
+        sents : a list of sentences, each a list of tokenized symbols
         """
         if verbose:
             logger.info("counting {} sents ...".format(len(sents)))
@@ -496,7 +496,7 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 class LMOrderedIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None):
         """
-            data -- LongTensor -- the LongTensor is strictly ordered
+        data -- LongTensor -- the LongTensor is strictly ordered
         """
         self.bsz = bsz
         self.bptt = bptt
@@ -555,7 +555,7 @@ class LMOrderedIterator(object):
 class LMShuffledIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
         """
-            data -- list[LongTensor] -- there is no order among the LongTensors
+        data -- list[LongTensor] -- there is no order among the LongTensors
         """
         self.data = data
 

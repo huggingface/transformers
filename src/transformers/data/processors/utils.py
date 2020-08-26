@@ -269,7 +269,9 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 logger.info("Tokenizing example %d", ex_index)
 
             input_ids = tokenizer.encode(
-                example.text_a, add_special_tokens=True, max_length=min(max_length, tokenizer.max_len),
+                example.text_a,
+                add_special_tokens=True,
+                max_length=min(max_length, tokenizer.max_len),
             )
             all_input_ids.append(input_ids)
 

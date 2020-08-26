@@ -83,7 +83,7 @@ class RobertaEmbeddings(BertEmbeddings):
         )
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """ We are provided embeddings directly. We cannot infer which are padded so just generate
+        """We are provided embeddings directly. We cannot infer which are padded so just generate
         sequential position ids.
 
         :param torch.Tensor inputs_embeds:
@@ -220,36 +220,36 @@ class RobertaForCausalLM(BertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the left-to-right language modeling loss (next word prediction).
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
+            encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                if the model is configured as a decoder.
+            encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Mask to avoid performing attention on the padding token indices of the encoder input. This mask
+                is used in the cross-attention if the model is configured as a decoder.
+                Mask values selected in ``[0, 1]``:
+                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the left-to-right language modeling loss (next word prediction).
+                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+                in ``[0, ..., config.vocab_size]``
 
-    Returns:
+        Returns:
 
-    Example::
+        Example::
 
-        >>> from transformers import RobertaTokenizer, RobertaLMHeadModel, RobertaConfig
-        >>> import torch
+            >>> from transformers import RobertaTokenizer, RobertaLMHeadModel, RobertaConfig
+            >>> import torch
 
-        >>> tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-        >>> config = RobertaConfig.from_pretrained("roberta-base")
-        >>> config.is_decoder = True
-        >>> model = RobertaLMHeadModel.from_pretrained('roberta-base', config=config, return_dict=True)
+            >>> tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+            >>> config = RobertaConfig.from_pretrained("roberta-base")
+            >>> config.is_decoder = True
+            >>> model = RobertaLMHeadModel.from_pretrained('roberta-base', config=config, return_dict=True)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+            >>> outputs = model(**inputs)
 
-        >>> prediction_logits = outputs.logits
+            >>> prediction_logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -283,7 +283,10 @@ class RobertaForCausalLM(BertPreTrainedModel):
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutput(
-            loss=lm_loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
@@ -493,7 +496,10 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -581,7 +587,10 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -667,7 +676,10 @@ class RobertaForTokenClassification(BertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -791,7 +803,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """ Replace non-padding symbols with their position numbers. Position numbers begin at
+    """Replace non-padding symbols with their position numbers. Position numbers begin at
     padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
     `utils.make_positions`.
 

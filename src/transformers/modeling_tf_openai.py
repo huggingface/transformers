@@ -243,8 +243,8 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.tokens_embed.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         raise NotImplementedError
 
@@ -373,13 +373,15 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
 class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = OpenAIGPTConfig
@@ -630,31 +632,31 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         training=False,
     ):
         r"""
-        mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
-            Index of the classification token in each input sequence.
-            Selected in the range ``[0, input_ids.size(-1) - 1]``.
+            mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
+                Index of the classification token in each input sequence.
+                Selected in the range ``[0, input_ids.size(-1) - 1]``.
 
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        >>> import tensorflow as tf
-        >>> from transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
+            >>> import tensorflow as tf
+            >>> from transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
 
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+            >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+            >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
 
-        >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})
-        >>> model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
-        >>> print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
+            >>> # Add a [CLS] to the vocabulary (we should train it also!)
+            >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+            >>> model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+            >>> print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
 
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        >>> encoding = tokenizer(choices, return_tensors="tf")
-        >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
-        >>> inputs["mc_token_ids"]= tf.constant([inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1])[None, :]  # Batch size 1
-        >>> outputs = model(inputs)
-        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
+            >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+            >>> encoding = tokenizer(choices, return_tensors="tf")
+            >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
+            >>> inputs["mc_token_ids"]= tf.constant([inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1])[None, :]  # Batch size 1
+            >>> outputs = model(inputs)
+            >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         """
 
         if isinstance(inputs, (tuple, list)):

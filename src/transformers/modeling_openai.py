@@ -59,8 +59,7 @@ OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
-    """ Load tf pre-trained weights in a pytorch model (from NumPy arrays here)
-    """
+    """Load tf pre-trained weights in a pytorch model (from NumPy arrays here)"""
     import re
 
     import numpy as np
@@ -257,7 +256,10 @@ class Block(nn.Module):
 
     def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
         attn_outputs = self.attn(
-            x, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions,
+            x,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         a = attn_outputs[0]
 
@@ -270,8 +272,8 @@ class Block(nn.Module):
 
 
 class OpenAIGPTPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = OpenAIGPTConfig
@@ -280,8 +282,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Embedding, Conv1D)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -408,8 +409,8 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.tokens_embed = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
@@ -506,7 +507,9 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
@@ -632,41 +635,41 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         **kwargs
     ):
         r"""
-        mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
-            Index of the classification token in each input sequence.
-            Selected in the range ``[0, input_ids.size(-1) - 1]``.
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
-            Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
-            Indices are selected in ``[-1, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
-        mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`, defaults to :obj:`None`)
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
+            mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
+                Index of the classification token in each input sequence.
+                Selected in the range ``[0, input_ids.size(-1) - 1]``.
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`)
+                Labels for language modeling.
+                Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
+                Indices are selected in ``[-1, 0, ..., config.vocab_size]``
+                All labels set to ``-100`` are ignored (masked), the loss is only
+                computed for labels in ``[0, ..., config.vocab_size]``
+            mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`, defaults to :obj:`None`)
+                Labels for computing the multiple choice classification loss.
+                Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+                of the input tensors. (see `input_ids` above)
+            kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+                Used to hide legacy arguments that have been deprecated.
 
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        from transformers import OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
-        import torch
+            from transformers import OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
+            import torch
 
-        tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-        model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt', return_dict=True)
-        tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
-        model.resize_token_embeddings(len(tokenizer))
+            tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+            model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt', return_dict=True)
+            tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
+            model.resize_token_embeddings(len(tokenizer))
 
-        choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
-        mc_token_ids = torch.tensor([input_ids.size(-1)-1, input_ids.size(-1)-1]).unsqueeze(0)  # Batch size 1
+            choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+            input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+            mc_token_ids = torch.tensor([input_ids.size(-1)-1, input_ids.size(-1)-1]).unsqueeze(0)  # Batch size 1
 
-        outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        lm_logits = outputs.lm_logits
-        mc_logits = outputs.mc_logits
+            outputs = model(input_ids, mc_token_ids=mc_token_ids)
+            lm_logits = outputs.lm_logits
+            mc_logits = outputs.mc_logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if "lm_labels" in kwargs:

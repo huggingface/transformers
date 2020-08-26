@@ -67,8 +67,8 @@ TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class TFT5LayerNorm(tf.keras.layers.Layer):
     def __init__(self, epsilon=1e-6, **kwargs):
-        """ Construct a layernorm module in the T5 style
-            No bias and no substraction of mean.
+        """Construct a layernorm module in the T5 style
+        No bias and no substraction of mean.
         """
         super().__init__(**kwargs)
         self.variance_epsilon = epsilon
@@ -140,7 +140,9 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = tf.keras.layers.Embedding(
-                self.relative_attention_num_buckets, self.n_heads, name="relative_attention_bias",
+                self.relative_attention_num_buckets,
+                self.n_heads,
+                name="relative_attention_bias",
             )
         self.pruned_heads = set()
 
@@ -199,7 +201,9 @@ class TFT5Attention(tf.keras.layers.Layer):
         memory_position = tf.range(klen)[None, :]
         relative_position = memory_position - context_position  # shape (qlen, klen)
         rp_bucket = self._relative_position_bucket(
-            relative_position, bidirectional=not self.is_decoder, num_buckets=self.relative_attention_num_buckets,
+            relative_position,
+            bidirectional=not self.is_decoder,
+            num_buckets=self.relative_attention_num_buckets,
         )
         values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
         values = tf.expand_dims(tf.transpose(values, [2, 0, 1]), axis=0)  # shape (1, num_heads, qlen, klen)
@@ -316,7 +320,9 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.SelfAttention = TFT5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, name="SelfAttention",
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            name="SelfAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
@@ -353,7 +359,9 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.EncDecAttention = TFT5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, name="EncDecAttention",
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            name="EncDecAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
@@ -396,12 +404,18 @@ class TFT5Block(tf.keras.layers.Layer):
         self.is_decoder = config.is_decoder
         self.layer = []
         self.layer.append(
-            TFT5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._0",)
+            TFT5LayerSelfAttention(
+                config,
+                has_relative_attention_bias=has_relative_attention_bias,
+                name="layer_._0",
+            )
         )
         if self.is_decoder:
             self.layer.append(
                 TFT5LayerCrossAttention(
-                    config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._1",
+                    config,
+                    has_relative_attention_bias=has_relative_attention_bias,
+                    name="layer_._1",
                 )
             )
 
@@ -490,9 +504,9 @@ class TFT5Block(tf.keras.layers.Layer):
 
 class _NoLayerEmbedTokens:
     """
-     this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
-     class to avoid problem with weight restoring. Also it makes sure that the layer is
-     called from the correct scope to avoid problem with saving/storing the correct weights
+    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
+    class to avoid problem with weight restoring. Also it makes sure that the layer is
+    called from the correct scope to avoid problem with saving/storing the correct weights
     """
 
     def __init__(self, layer, abs_scope_name=None):
@@ -539,7 +553,11 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         self.num_hidden_layers = config.num_layers
 
         self.block = [
-            TFT5Block(config, has_relative_attention_bias=bool(i == 0), name="block_._{}".format(i),)
+            TFT5Block(
+                config,
+                has_relative_attention_bias=bool(i == 0),
+                name="block_._{}".format(i),
+            )
             for i in range(config.num_layers)
         ]
         self.final_layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="final_layer_norm")
@@ -654,7 +672,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if self.is_decoder:
                 seq_ids = tf.range(mask_seq_length)
                 causal_mask = tf.less_equal(
-                    tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)), seq_ids[None, :, None],
+                    tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
+                    seq_ids[None, :, None],
                 )
                 causal_mask = tf.cast(causal_mask, dtype=tf.float32)
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
@@ -765,8 +784,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 # pointers for your model.
 ####################################################
 class TFT5PreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = T5Config
@@ -961,17 +980,17 @@ class TFT5Model(TFT5PreTrainedModel):
         training=False,
     ):
         r"""
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import T5Tokenizer, TFT5Model
+            >>> from transformers import T5Tokenizer, TFT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = TFT5Model.from_pretrained('t5-small')
-        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        >>> outputs = model(inputs, decoder_input_ids=inputs)
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = TFT5Model.from_pretrained('t5-small')
+            >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+            >>> outputs = model(inputs, decoder_input_ids=inputs)
+            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
         if isinstance(inputs, (tuple, list)):
@@ -1157,26 +1176,26 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the cross entropy classification loss.
-            Indices should be in ``[0, ..., config.vocab_size - 1]``.
+            labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the cross entropy classification loss.
+                Indices should be in ``[0, ..., config.vocab_size - 1]``.
 
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+            >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        >>> outputs = model(inputs, decoder_input_ids=inputs)
-        >>> prediction_scores = outputs[0]
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+            >>> inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+            >>> outputs = model(inputs, decoder_input_ids=inputs)
+            >>> prediction_scores = outputs[0]
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        >>> inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        >>> result = model.generate(inputs)
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
+            >>> inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+            >>> result = model.generate(inputs)
 
         """
         if isinstance(inputs, (tuple, list)):

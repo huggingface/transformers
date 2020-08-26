@@ -36,20 +36,20 @@ logger = logging.get_logger(__name__)
 
 
 class ModelCard:
-    r""" Structured Model Card class.
-        Store model card as well as methods for loading/downloading/saving model cards.
+    r"""Structured Model Card class.
+    Store model card as well as methods for loading/downloading/saving model cards.
 
-        Please read the following paper for details and explanation on the sections:
-            "Model Cards for Model Reporting"
-                by Margaret Mitchell, Simone Wu,
-                Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-                Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards.
-            Link: https://arxiv.org/abs/1810.03993
+    Please read the following paper for details and explanation on the sections:
+        "Model Cards for Model Reporting"
+            by Margaret Mitchell, Simone Wu,
+            Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
+            Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards.
+        Link: https://arxiv.org/abs/1810.03993
 
-        Note:
-            A model card can be loaded and saved to disk.
+    Note:
+        A model card can be loaded and saved to disk.
 
-        Parameters:
+    Parameters:
     """
 
     def __init__(self, **kwargs):
@@ -73,8 +73,7 @@ class ModelCard:
                 raise err
 
     def save_pretrained(self, save_directory_or_file):
-        """ Save a model card object to the directory or file `save_directory_or_file`.
-        """
+        """Save a model card object to the directory or file `save_directory_or_file`."""
         if os.path.isdir(save_directory_or_file):
             # If we save using the predefined names, we can load using `from_pretrained`
             output_model_card_file = os.path.join(save_directory_or_file, MODEL_CARD_NAME)
@@ -86,7 +85,7 @@ class ModelCard:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r""" Instantiate a :class:`~transformers.ModelCard` from a pre-trained model model card.
+        r"""Instantiate a :class:`~transformers.ModelCard` from a pre-trained model model card.
 
         Parameters:
             pretrained_model_name_or_path: either:

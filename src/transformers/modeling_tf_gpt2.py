@@ -252,8 +252,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.wte.vocab_size = self.wte.weight.shape[0]
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         raise NotImplementedError
 
@@ -417,8 +417,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
 
 class TFGPT2PreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = GPT2Config
@@ -698,34 +698,34 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         training=False,
     ):
         r"""
-        mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
-            Index of the classification token in each input sequence.
-            Selected in the range ``[0, input_ids.size(-1) - 1[``.
+            mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
+                Index of the classification token in each input sequence.
+                Selected in the range ``[0, input_ids.size(-1) - 1[``.
 
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        >>> import tensorflow as tf
-        >>> from transformers import GPT2Tokenizer, TFGPT2DoubleHeadsModel
+            >>> import tensorflow as tf
+            >>> from transformers import GPT2Tokenizer, TFGPT2DoubleHeadsModel
 
-        >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-        >>> model = TFGPT2DoubleHeadsModel.from_pretrained('gpt2')
+            >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            >>> model = TFGPT2DoubleHeadsModel.from_pretrained('gpt2')
 
-        >>> # Add a [CLS] to the vocabulary (we should train it also!)
-        >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+            >>> # Add a [CLS] to the vocabulary (we should train it also!)
+            >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
 
-        >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+            >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
 
-        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-        >>> encoded_choices = [tokenizer.encode(s) for s in choices]
-        >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
+            >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+            >>> encoded_choices = [tokenizer.encode(s) for s in choices]
+            >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
 
-        >>> input_ids = tf.constant(encoded_choices)[None, :]  # Batch size: 1, number of choices: 2
-        >>> mc_token_ids = tf.constant([cls_token_location])  # Batch size: 1
+            >>> input_ids = tf.constant(encoded_choices)[None, :]  # Batch size: 1, number of choices: 2
+            >>> mc_token_ids = tf.constant([cls_token_location])  # Batch size: 1
 
-        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
+            >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+            >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
 
         """
         if isinstance(inputs, (tuple, list)):

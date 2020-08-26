@@ -102,7 +102,7 @@ BART_CONFIG_ARGS_DOC = r"""
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class BartConfig(PretrainedConfig):
     r"""
-        Configuration class for Bart. Parameters are renamed from the fairseq implementation
+    Configuration class for Bart. Parameters are renamed from the fairseq implementation
     """
     model_type = "bart"
 
@@ -141,14 +141,14 @@ class BartConfig(PretrainedConfig):
         **common_kwargs
     ):
         r"""
-            :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
+        :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
 
-            Examples::
+        Examples::
 
-                >>> from transformers import BartConfig, BartModel
+            >>> from transformers import BartConfig, BartModel
 
-                >>> config = BartConfig.from_pretrained('facebook/bart-large')
-                >>> model = BartModel(config)
+            >>> config = BartConfig.from_pretrained('facebook/bart-large')
+            >>> model = BartModel(config)
 
         """
         if "hidden_size" in common_kwargs:

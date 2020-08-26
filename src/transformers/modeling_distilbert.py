@@ -261,7 +261,12 @@ class TransformerBlock(nn.Module):
         """
         # Self-Attention
         sa_output = self.attention(
-            query=x, key=x, value=x, mask=attn_mask, head_mask=head_mask, output_attentions=output_attentions,
+            query=x,
+            key=x,
+            value=x,
+            mask=attn_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
@@ -343,8 +348,8 @@ class Transformer(nn.Module):
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class DistilBertPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = DistilBertConfig
@@ -352,8 +357,7 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "distilbert"
 
     def _init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, nn.Embedding):
             if module.weight.requires_grad:
                 module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -432,9 +436,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.transformer.layer[layer].attention.prune_heads(heads)
@@ -493,7 +497,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top. """, DISTILBERT_START_DOCSTRING,
+    """DistilBert Model with a `masked language modeling` head on top. """,
+    DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     def __init__(self, config):
@@ -829,7 +834,10 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -863,32 +871,32 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
-            of the input tensors. (see `input_ids` above)
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the multiple choice classification loss.
+                Indices should be in ``[0, ..., num_choices-1]`` where `num_choices` is the size of the second dimension
+                of the input tensors. (see `input_ids` above)
 
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
-        >>> import torch
+            >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+            >>> import torch
 
-        >>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-        >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased', return_dict=True)
+            >>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+            >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased', return_dict=True)
 
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> choice0 = "It is eaten with a fork and a knife."
-        >>> choice1 = "It is eaten while held in the hand."
-        >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
+            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+            >>> choice0 = "It is eaten with a fork and a knife."
+            >>> choice1 = "It is eaten while held in the hand."
+            >>> labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
-        >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
-        >>> outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
+            >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors='pt', padding=True)
+            >>> outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
 
-        >>> # the linear classifier still needs to be trained
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+            >>> # the linear classifier still needs to be trained
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -930,5 +938,8 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

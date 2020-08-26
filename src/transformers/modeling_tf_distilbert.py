@@ -70,7 +70,7 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
 def gelu(x):
-    """ Gaussian Error Linear Unit.
+    """Gaussian Error Linear Unit.
     Original Implementation of the gelu activation function in Google Bert repo when initially created.
         For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
@@ -177,10 +177,10 @@ class TFEmbeddings(tf.keras.layers.Layer):
 
     def _linear(self, inputs):
         """Computes logits by running inputs through a linear layer.
-            Args:
-                inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-            Returns:
-                float32 tensor with shape [batch_size, length, vocab_size].
+        Args:
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+        Returns:
+            float32 tensor with shape [batch_size, length, vocab_size].
         """
         batch_size = shape_list(inputs)[0]
         length = shape_list(inputs)[1]
@@ -518,8 +518,8 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class TFDistilBertPreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = DistilBertConfig
@@ -634,7 +634,8 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top. """, DISTILBERT_START_DOCSTRING,
+    """DistilBert Model with a `masked language modeling` head on top. """,
+    DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -875,7 +876,10 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -902,7 +906,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
     @property
     def dummy_inputs(self):
-        """ Dummy inputs to build the network.
+        """Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs

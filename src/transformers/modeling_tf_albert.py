@@ -74,8 +74,7 @@ TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class TFAlbertEmbeddings(tf.keras.layers.Layer):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
+    """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -169,10 +168,10 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
 
     def _linear(self, inputs):
         """Computes logits by running inputs through a linear layer.
-            Args:
-                inputs: A float32 tensor with shape [batch_size, length, embedding_size]
-            Returns:
-                float32 tensor with shape [batch_size, length, vocab_size].
+        Args:
+            inputs: A float32 tensor with shape [batch_size, length, embedding_size]
+        Returns:
+            float32 tensor with shape [batch_size, length, vocab_size].
         """
         batch_size = shape_list(inputs)[0]
         length = shape_list(inputs)[1]
@@ -478,8 +477,8 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
 
 
 class TFAlbertPreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = AlbertConfig
@@ -551,9 +550,9 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         raise NotImplementedError
 
@@ -655,7 +654,10 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(sequence_output[:, 0])
 
         if not return_dict:
-            return (sequence_output, pooled_output,) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -821,16 +823,16 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
-    Return:
+        Return:
 
-    Examples::
-        import tensorflow as tf
-        from transformers import AlbertTokenizer, TFAlbertForPreTraining
-        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        model = TFAlbertForPreTraining.from_pretrained('albert-base-v2')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores, sop_scores = outputs[:2]
+        Examples::
+            import tensorflow as tf
+            from transformers import AlbertTokenizer, TFAlbertForPreTraining
+            tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+            model = TFAlbertForPreTraining.from_pretrained('albert-base-v2')
+            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+            outputs = model(input_ids)
+            prediction_scores, sop_scores = outputs[:2]
         """
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.albert.return_dict
@@ -856,7 +858,9 @@ class TFAlbertSOPHead(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier",
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
         )
 
     def call(self, pooled_output, training: bool):
@@ -935,7 +939,10 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1016,7 +1023,10 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1095,7 +1105,10 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1211,7 +1224,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
 
     @property
     def dummy_inputs(self):
-        """ Dummy inputs to build the network.
+        """Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -1316,5 +1329,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

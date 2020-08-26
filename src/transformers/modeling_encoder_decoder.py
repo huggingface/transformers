@@ -28,11 +28,11 @@ logger = logging.get_logger(__name__)
 
 class EncoderDecoderModel(PreTrainedModel):
     r"""
-        :class:`~transformers.EncoderDecoder` is a generic model class that will be
-        instantiated as a transformer architecture with one of the base model
-        classes of the library as encoder and another one as
-        decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
-        class method for the encoder and `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
+    :class:`~transformers.EncoderDecoder` is a generic model class that will be
+    instantiated as a transformer architecture with one of the base model
+    classes of the library as encoder and another one as
+    decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
+    class method for the encoder and `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
@@ -103,7 +103,7 @@ class EncoderDecoderModel(PreTrainedModel):
         *model_args,
         **kwargs
     ) -> PreTrainedModel:
-        r""" Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
+        r"""Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
 
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated).

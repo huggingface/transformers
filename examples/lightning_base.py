@@ -226,10 +226,14 @@ class BaseTransformer(pl.LightningModule):
             help="Decoder layer dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument(
-            "--dropout", type=float, help="Dropout probability (Optional). Goes into model.config",
+            "--dropout",
+            type=float,
+            help="Dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument(
-            "--attention_dropout", type=float, help="Attention dropout probability (Optional). Goes into model.config",
+            "--attention_dropout",
+            type=float,
+            help="Attention dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
         parser.add_argument(

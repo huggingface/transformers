@@ -141,10 +141,12 @@ class TrainingArguments:
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
-        default=False, metadata={"help": "Run evaluation during training at each logging step."},
+        default=False,
+        metadata={"help": "Run evaluation during training at each logging step."},
     )
     prediction_loss_only: bool = field(
-        default=False, metadata={"help": "When performing evaluation and predictions, only returns the loss."},
+        default=False,
+        metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
 
     per_device_train_batch_size: int = field(

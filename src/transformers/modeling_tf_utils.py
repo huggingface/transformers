@@ -207,13 +207,12 @@ class TFMultipleChoiceLoss(TFSequenceClassificationLoss):
 
 class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
     """
-   Loss function suitable for masked language modeling (MLM), that is, the task of guessing the masked tokens.
+    Loss function suitable for masked language modeling (MLM), that is, the task of guessing the masked tokens.
 
-   .. note::
+    .. note::
 
-        Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
-
-"""
+         Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+    """
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):

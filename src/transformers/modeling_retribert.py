@@ -40,8 +40,8 @@ RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class RetriBertPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = RetriBertConfig
@@ -73,7 +73,8 @@ RETRIBERT_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """Bert Based model to embed queries or document for document retreival. """, RETRIBERT_START_DOCSTRING,
+    """Bert Based model to embed queries or document for document retreival. """,
+    RETRIBERT_START_DOCSTRING,
 )
 class RetriBertModel(RetriBertPreTrainedModel):
     def __init__(self, config):
@@ -91,7 +92,11 @@ class RetriBertModel(RetriBertPreTrainedModel):
         self.init_weights()
 
     def embed_sentences_checkpointed(
-        self, input_ids, attention_mask, sent_encoder, checkpoint_batch_size=-1,
+        self,
+        input_ids,
+        attention_mask,
+        sent_encoder,
+        checkpoint_batch_size=-1,
     ):
         # reproduces BERT forward pass with checkpointing
         if checkpoint_batch_size < 0 or input_ids.shape[0] < checkpoint_batch_size:
@@ -108,7 +113,11 @@ class RetriBertModel(RetriBertPreTrainedModel):
 
             # define function for cehckpointing
             def partial_encode(*inputs):
-                encoder_outputs = sent_encoder.encoder(inputs[0], attention_mask=inputs[1], head_mask=head_mask,)
+                encoder_outputs = sent_encoder.encoder(
+                    inputs[0],
+                    attention_mask=inputs[1],
+                    head_mask=head_mask,
+                )
                 sequence_output = encoder_outputs[0]
                 pooled_output = sent_encoder.pooler(sequence_output)
                 return pooled_output
@@ -127,13 +136,24 @@ class RetriBertModel(RetriBertPreTrainedModel):
             return torch.cat(pooled_output_list, dim=0)
 
     def embed_questions(
-        self, input_ids, attention_mask=None, checkpoint_batch_size=-1,
+        self,
+        input_ids,
+        attention_mask=None,
+        checkpoint_batch_size=-1,
     ):
-        q_reps = self.embed_sentences_checkpointed(input_ids, attention_mask, self.bert_query, checkpoint_batch_size,)
+        q_reps = self.embed_sentences_checkpointed(
+            input_ids,
+            attention_mask,
+            self.bert_query,
+            checkpoint_batch_size,
+        )
         return self.project_query(q_reps)
 
     def embed_answers(
-        self, input_ids, attention_mask=None, checkpoint_batch_size=-1,
+        self,
+        input_ids,
+        attention_mask=None,
+        checkpoint_batch_size=-1,
     ):
         a_reps = self.embed_sentences_checkpointed(
             input_ids,
@@ -147,33 +167,33 @@ class RetriBertModel(RetriBertPreTrainedModel):
         self, input_ids_query, attention_mask_query, input_ids_doc, attention_mask_doc, checkpoint_batch_size=-1
     ):
         r"""
-    Args:
-        input_ids_query (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary for the queries in a batch.
+        Args:
+            input_ids_query (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary for the queries in a batch.
 
-            Indices can be obtained using :class:`transformers.RetriBertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+                Indices can be obtained using :class:`transformers.RetriBertTokenizer`.
+                See :func:`transformers.PreTrainedTokenizer.encode` and
+                :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask_query (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to avoid performing attention on queries padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask_query (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Mask to avoid performing attention on queries padding token indices.
+                Mask values selected in ``[0, 1]``:
+                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        input_ids_doc (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary for the documents in a batch.
-        attention_mask_doc (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to avoid performing attention on documents padding token indices.
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            input_ids_doc (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary for the documents in a batch.
+            attention_mask_doc (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Mask to avoid performing attention on documents padding token indices.
 
-        checkpoint_batch_size (:obj:`int`, `optional`, defaults to `:obj:`-1`):
-            If greater than 0, uses gradient checkpointing to only compute sequence representation on checkpoint_batch_size examples at a time
-            on the GPU. All query representations are still compared to all document representations in the batch.
+            checkpoint_batch_size (:obj:`int`, `optional`, defaults to `:obj:`-1`):
+                If greater than 0, uses gradient checkpointing to only compute sequence representation on checkpoint_batch_size examples at a time
+                on the GPU. All query representations are still compared to all document representations in the batch.
 
-    Return:
-        :obj:`torch.FloatTensor` the bi-directional cross-entropy loss obtained while trying to match each query to its corresponding document
-        and each cocument to its corresponding query in the batch
+        Return:
+            :obj:`torch.FloatTensor` the bi-directional cross-entropy loss obtained while trying to match each query to its corresponding document
+            and each cocument to its corresponding query in the batch
         """
         device = input_ids_query.device
         q_reps = self.embed_questions(input_ids_query, attention_mask_query, checkpoint_batch_size)

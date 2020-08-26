@@ -122,7 +122,9 @@ def create_optimizer(
     )
     if num_warmup_steps:
         lr_schedule = WarmUp(
-            initial_learning_rate=init_lr, decay_schedule_fn=lr_schedule, warmup_steps=num_warmup_steps,
+            initial_learning_rate=init_lr,
+            decay_schedule_fn=lr_schedule,
+            warmup_steps=num_warmup_steps,
         )
     if weight_decay_rate > 0.0:
         optimizer = AdamWeightDecay(

@@ -139,12 +139,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> Dict[str, Any]:
-        """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
+        """Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
 
-            Overflowing tokens are converted to additional examples (like batches) so the output values of
-            the dict are lists (overflows) of lists (tokens).
+        Overflowing tokens are converted to additional examples (like batches) so the output values of
+        the dict are lists (overflows) of lists (tokens).
 
-            Output shape: (overflows, sequence length)
+        Output shape: (overflows, sequence length)
         """
         if return_token_type_ids is None:
             return_token_type_ids = "token_type_ids" in self.model_input_names

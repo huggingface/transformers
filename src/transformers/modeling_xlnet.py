@@ -58,9 +58,9 @@ XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
-    """ A map of modules from TF to PyTorch.
-        I use a map to keep the PyTorch model as
-        identical to the original PyTorch model as possible.
+    """A map of modules from TF to PyTorch.
+    I use a map to keep the PyTorch model as
+    identical to the original PyTorch model as possible.
     """
 
     tf_to_pt_map = {}
@@ -141,8 +141,7 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
 
 
 def load_tf_weights_in_xlnet(model, config, tf_path):
-    """ Load tf checkpoints in a pytorch model
-    """
+    """Load tf checkpoints in a pytorch model"""
     try:
         import numpy as np
         import tensorflow as tf
@@ -548,8 +547,8 @@ class XLNetLayer(nn.Module):
 
 
 class XLNetPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = XLNetConfig
@@ -557,8 +556,7 @@ class XLNetPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -1350,46 +1348,46 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`, defaults to :obj:`None`):
-            Labels for masked language modeling.
-            `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict` corresponds to `sequence_length`.
-            The labels should correspond to the masked input words that should be predicted and depends on `target_mapping`. Note in order to perform standard auto-regressive language modeling a `<mask>` token has to be added to the `input_ids` (see `prepare_inputs_for_generation` fn and examples below)
-            Indices are selected in ``[-100, 0, ..., config.vocab_size]``
-            All labels set to ``-100`` are ignored, the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`, defaults to :obj:`None`):
+                Labels for masked language modeling.
+                `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict` corresponds to `sequence_length`.
+                The labels should correspond to the masked input words that should be predicted and depends on `target_mapping`. Note in order to perform standard auto-regressive language modeling a `<mask>` token has to be added to the `input_ids` (see `prepare_inputs_for_generation` fn and examples below)
+                Indices are selected in ``[-100, 0, ..., config.vocab_size]``
+                All labels set to ``-100`` are ignored, the loss is only
+                computed for labels in ``[0, ..., config.vocab_size]``
 
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        from transformers import XLNetTokenizer, XLNetLMHeadModel
-        import torch
+            from transformers import XLNetTokenizer, XLNetLMHeadModel
+            import torch
 
-        tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-        model = XLNetLMHeadModel.from_pretrained('xlnet-large-cased', return_dict=True)
+            tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
+            model = XLNetLMHeadModel.from_pretrained('xlnet-large-cased', return_dict=True)
 
-        # We show how to setup inputs to predict a next token using a bi-directional context.
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)).unsqueeze(0)  # We will predict the masked token
-        perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float)
-        perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
-        target_mapping = torch.zeros((1, 1, input_ids.shape[1]), dtype=torch.float)  # Shape [1, 1, seq_length] => let's predict one token
-        target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
+            # We show how to setup inputs to predict a next token using a bi-directional context.
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)).unsqueeze(0)  # We will predict the masked token
+            perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float)
+            perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
+            target_mapping = torch.zeros((1, 1, input_ids.shape[1]), dtype=torch.float)  # Shape [1, 1, seq_length] => let's predict one token
+            target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
-        outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping)
-        next_token_logits = outputs[0]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
+            outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping)
+            next_token_logits = outputs[0]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
 
-        # The same way can the XLNetLMHeadModel be used to be trained by standard auto-regressive language modeling.
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)).unsqueeze(0)  # We will predict the masked token
-        labels = torch.tensor(tokenizer.encode("cute", add_special_tokens=False)).unsqueeze(0)
-        assert labels.shape[0] == 1, 'only one word will be predicted'
-        perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float)
-        perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token as is done in standard auto-regressive lm training
-        target_mapping = torch.zeros((1, 1, input_ids.shape[1]), dtype=torch.float)  # Shape [1, 1, seq_length] => let's predict one token
-        target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
+            # The same way can the XLNetLMHeadModel be used to be trained by standard auto-regressive language modeling.
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)).unsqueeze(0)  # We will predict the masked token
+            labels = torch.tensor(tokenizer.encode("cute", add_special_tokens=False)).unsqueeze(0)
+            assert labels.shape[0] == 1, 'only one word will be predicted'
+            perm_mask = torch.zeros((1, input_ids.shape[1], input_ids.shape[1]), dtype=torch.float)
+            perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token as is done in standard auto-regressive lm training
+            target_mapping = torch.zeros((1, 1, input_ids.shape[1]), dtype=torch.float)  # Shape [1, 1, seq_length] => let's predict one token
+            target_mapping[0, 0, -1] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
-        outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping, labels=labels)
-        loss = outputs.loss
-        next_token_logits = outputs.logits  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
+            outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping, labels=labels)
+            loss = outputs.loss
+            next_token_logits = outputs.logits  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)
@@ -1867,38 +1865,38 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        is_impossible (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
-            Labels whether a question has an answer or no answer (SQuAD 2.0)
-        cls_index (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
-            Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
-        p_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
-            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
-            1.0 means token should be masked. 0.0 mean token is not masked.
+            start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for position (index) of the start of the labelled span for computing the token classification loss.
+                Positions are clamped to the length of the sequence (`sequence_length`).
+                Position outside of the sequence are not taken into account for computing the loss.
+            end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for position (index) of the end of the labelled span for computing the token classification loss.
+                Positions are clamped to the length of the sequence (`sequence_length`).
+                Position outside of the sequence are not taken into account for computing the loss.
+            is_impossible (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+                Labels whether a question has an answer or no answer (SQuAD 2.0)
+            cls_index (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+                Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
+            p_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+                Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
+                1.0 means token should be masked. 0.0 mean token is not masked.
 
-    Returns:
+        Returns:
 
-    Example::
+        Example::
 
-        >>> from transformers import XLNetTokenizer, XLNetForQuestionAnswering
-        >>> import torch
+            >>> from transformers import XLNetTokenizer, XLNetForQuestionAnswering
+            >>> import torch
 
-        >>> tokenizer =  XLNetTokenizer.from_pretrained('xlnet-base-cased')
-        >>> model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased', return_dict=True)
+            >>> tokenizer =  XLNetTokenizer.from_pretrained('xlnet-base-cased')
+            >>> model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased', return_dict=True)
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
-        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> start_positions = torch.tensor([1])
+            >>> end_positions = torch.tensor([3])
+            >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
 
-        >>> loss = outputs.loss
+            >>> loss = outputs.loss
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = self.training or (use_cache if use_cache is not None else self.config.use_cache)

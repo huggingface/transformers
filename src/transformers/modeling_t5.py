@@ -62,8 +62,7 @@ T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
 ####################################################
 def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
-    """ Load tf checkpoints in a pytorch model.
-    """
+    """Load tf checkpoints in a pytorch model."""
     try:
         import re
 
@@ -156,8 +155,8 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 
 class T5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
-        """ Construct a layernorm module in the T5 style
-            No bias and no substraction of mean.
+        """Construct a layernorm module in the T5 style
+        No bias and no substraction of mean.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -569,8 +568,8 @@ class T5Block(nn.Module):
 
 
 class T5PreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = T5Config
@@ -913,9 +912,9 @@ class T5Model(T5PreTrainedModel):
         return self.decoder
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -940,19 +939,19 @@ class T5Model(T5PreTrainedModel):
         **kwargs,
     ):
         r"""
-    Returns:
+        Returns:
 
-    Example::
+        Example::
 
-        >>> from transformers import T5Tokenizer, T5Model
+            >>> from transformers import T5Tokenizer, T5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = T5Model.from_pretrained('t5-small')
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5Model.from_pretrained('t5-small')
 
-        >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        >>> outputs = model(input_ids=input_ids)
+            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+            >>> outputs = model(input_ids=input_ids)
 
-        >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
+            >>> last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
         if "decoder_past_key_value_states" in kwargs:
             warnings.warn(
@@ -1093,31 +1092,31 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         **kwargs,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the sequence classification/regression loss.
+                Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
+                All labels set to ``-100`` are ignored (masked), the loss is only
+                computed for labels in ``[0, ..., config.vocab_size]``
+            kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+                Used to hide legacy arguments that have been deprecated.
 
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
+            >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
-        >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, labels=input_ids)
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
+            >>> input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, labels=input_ids)
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
 
-        >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
-        >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        >>> outputs = model.generate(input_ids)
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
+            >>> input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+            >>> outputs = model.generate(input_ids)
         """
 
         if "lm_labels" in kwargs:
