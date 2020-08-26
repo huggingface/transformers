@@ -2085,7 +2085,7 @@ class Text2TextGenerationPipeline(Pipeline):
     Pipeline for text to text generation using seq2seq models.
 
     This Text2TextGenerationPipeline pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
-    task identifier: :obj:`"text2text"`.
+    task identifier: :obj:`"text2text-generation"`.
 
     The models that this pipeline can use are models that have been fine-tuned on a translation task.
     See the up-to-date list of available models on
