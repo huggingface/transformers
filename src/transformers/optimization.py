@@ -317,27 +317,11 @@ class AdamW(Optimizer):
         return loss
 
 
-# AdaFactor pytorch implementation from FAIR-seq:
-# https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
-#
-# This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
-#
-# AdaFactor was introduced by Shazeer at al as a more memory efficient drop-in replacement for Adam,
-# specifically for training large Transformer models.
-# https://arxiv.org/abs/1804.04235
-#
-# For T5 finetuning, recommended settings:
-#   * scheduled LR warm-up to fixed LR, disable relative updates, use clip threshold
-# https://arxiv.org/abs/2004.14546
-#
-# Alternatively, relative_step with warmup_init can also be used.
-# Training without LR warmup or clip threshold, is not recommended. Additional optimizer operations
-# like gradient clipping, should not be used.
-
-
 class Adafactor(Optimizer):
     """
-    Implements Adafactor algorithm.
+    AdaFactor pytorch implementation from FAIR-seq:
+    https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
+    
     This implementation is based on:
     `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost`
     (see https://arxiv.org/abs/1804.04235)
@@ -346,6 +330,7 @@ class Adafactor(Optimizer):
     *warmup_init* options. To use a manual (external) learning rate
     schedule you should set `scale_parameter=False` and
     `relative_step=False`.
+
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
@@ -365,6 +350,20 @@ class Adafactor(Optimizer):
             instead of external learning rate (default: True)
         warmup_init (bool): time-dependent learning rate computation depends on
             whether warm-up initialization is being used (default: False)
+
+    This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
+
+    AdaFactor was introduced by Shazeer at al as a more memory efficient drop-in replacement for Adam,
+    specifically for training large Transformer models.
+    https://arxiv.org/abs/1804.04235
+
+    For T5 finetuning, recommended settings:
+      * scheduled LR warm-up to fixed LR, disable relative updates, use clip threshold
+    https://arxiv.org/abs/2004.14546
+
+    Alternatively, relative_step with warmup_init can also be used.
+    Training without LR warmup or clip threshold, is not recommended. Additional optimizer operations
+    like gradient clipping, should not be used alongside Adafactor.
 
     Usage::
         Adafactor(model.parameters(), lr=1e-3, eps=(1e-30, 1e-3), clip_threshold=1.0,
