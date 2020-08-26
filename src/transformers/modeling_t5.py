@@ -1216,6 +1216,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs):
+        print("ENC", encoder_outputs[0].shape)
         return {
             "decoder_input_ids": input_ids,
             "decoder_past_key_values": past,
