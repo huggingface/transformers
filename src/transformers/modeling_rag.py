@@ -10,13 +10,13 @@ import torch
 
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
-from .modeling_auto import AutoModel, AutoModelWithLMHead
+from .modeling_auto import AutoModelWithLMHead
 from .modeling_bart import BartForConditionalGeneration
 from .modeling_dpr import DPRContextEncoder, DPRQuestionEncoder
 from .modeling_outputs import Seq2SeqLMOutputWithDocs
 from .modeling_t5 import T5ForConditionalGeneration
 from .modeling_utils import PreTrainedModel
-from .retrieval_rag import HFRetriever, MPIRetriever
+from .retrieval_rag import RAGRetriever
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bart import BartTokenizer
 from .tokenization_dpr import DPRContextEncoderTokenizer
@@ -178,6 +178,7 @@ class RagModel(torch.nn.Module):
             input_strings, return_tensors="pt", padding=True, truncation=True,
         )
         retriever_input_embs = self.question_encoder(retriever_inputs["input_ids"].to(device))[0]
+
         doc_scores, docs = self.retriever.retrieve(
             retriever_input_embs, n_docs=self.n_docs, query_strings=input_strings
         )
@@ -241,38 +242,20 @@ class PreTrainedRagModel(PreTrainedModel):
         other then those encapsulated in the components. We specialize from_pretrained function to reflect this.
         """
         assert pretrained_model_name_or_path is not None or "config" in kwargs
-        print("pretrained", pretrained_model_name_or_path)
         config = (
             RagConfig.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
             if pretrained_model_name_or_path is not None
             else kwargs["config"]
         )
-        retriever_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_context_tokenizer_name_or_path)
+        retriever_tokenizer = DPRContextEncoderTokenizer.from_pretrained(
+            config.pretrained_context_tokenizer_name_or_path
+        )
         # TODO(piktus): To be replaced with AutoModel once it gets published (?)
         question_encoder = DPRQuestionEncoder.from_pretrained(config.pretrained_question_encoder_name_or_path)
-
-        # TODO(piktus): handle multi-node scenarios for Retriever loading
-        if config.retriever_type == "hf_retriever":
-            retriever = HFRetriever(
-                config.dataset,
-                dataset_name=config.dataset_name,
-                dataset_split=config.dataset_split,
-                index_name=config.index_name,
-                uncompressed=config.uncompressed,
-                uncompressed_index_path=config.uncompressed_index_path,
-            )
-        elif config.retriever_type == "mpi_retriever":
-            retriever = MPIRetriever(
-                passages_path=config.passages_path,
-                vector_size=config.retrieval_vector_size,
-                index_path=config.index_path,
-                n_docs=config.n_docs,
-                batch_size=config.retrieval_batch_size,
-                use_sampling=False,
-            )
-
         generator_tokenizer = AutoTokenizer.from_pretrained(config.pretrained_generator_tokenizer_name_or_path)
         generator = AutoModelWithLMHead.from_pretrained(config.pretrained_generator_name_or_path, return_dict=True)
+
+        retriever = RAGRetriever(config)
 
         model = cls(config, retriever, retriever_tokenizer, generator, generator_tokenizer, question_encoder)
         return model
@@ -374,7 +357,8 @@ class RagSequenceModel(PreTrainedRagModel):
         def _get_unique_rows(_input_ids):
             return torch.stack(list({str(k.tolist()): k for k in _input_ids}.values()))
 
-        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, print_docs=False)
+        ctxt_input_ids, _, _ = self.model.contextualize(input_ids, print_docs=True)
+        print("ctxt_input_ids", ctxt_input_ids.shape)
         nrs = kwargs.get("num_return_sequences", 1)
         kwargs["num_return_sequences"] = kwargs.get("num_beams", 1)
         hypos = []

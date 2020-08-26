@@ -41,25 +41,19 @@ questions = [
 
 if __name__ == "__main__":
 
-    rag_sequence_model_path = "/private/home/piktus/rag_huggingface/data/repro-rag-sequence-99"
-
     bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
     inputs = bart_tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
         "input_ids"
     ].to(device)
 
-    print(inputs)
-    print("\nSEQUENCE MODEL - HF retriever")
-    model_path = "/checkpoint/piktus/2020-08-14/rag_seq_hf.rag_sequence.batch_size8.ls0.1.dr0.1.atdr0.1.wd0.001.eps1e-08.clip0.1.lr3e-05.num_epochs100.warm500.ngpu8/checkpoint35/"
-    rag_model = RagSequenceModel.from_pretrained(
-        rag_sequence_model_path, retriever_type="hf_retriever", uncompressed=False
-    )
+    print("\nSEQUENCE MODEL - Legacy retriever")
+    rag_sequence_model_path = "/private/home/piktus/rag_huggingface/data/repro-rag-sequence-59"
+    rag_model = RagSequenceModel.from_pretrained(rag_sequence_model_path)
     generate_from_rag(rag_model, bart_tokenizer, questions, inputs, num_beams=4)
 
     print("\nTOKEN MODEL - HF retriever")
-    rag_model = RagTokenModel.from_pretrained(
-        rag_sequence_model_path, retriever_type="hf_retriever", uncompressed=False
-    )
+    rag_token_model_path = "/private/home/piktus/rag_huggingface/data/rag-tok-ola-60"
+    rag_model = RagTokenModel.from_pretrained(rag_sequence_model_path, retriever_type="hf_retriever", index_path=None)
     generate_from_rag(rag_model, bart_tokenizer, questions, inputs, num_beams=4)
 
     print("\SEQUENCE MODEL WITH T5 GENERATOR")
@@ -73,7 +67,9 @@ if __name__ == "__main__":
         "input_ids"
     ].to(device)
     rag_t5_model = RagSequenceModel.from_pretrained(
-        "/private/home/piktus/rag_huggingface/data/test_training_t5_large/", retriever_type="hf_retriever",
+        "/private/home/piktus/rag_huggingface/data/test_training_t5_large/",
+        retriever_type="hf_retriever",
+        index_path=None,
     )
 
     prefix = "generate answer: "

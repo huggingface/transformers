@@ -115,6 +115,7 @@ def main():
         type=str,
         help="RAG model retriever type",
     )
+    parser.add_argument("--n_docs", default=5, type=int, help="Number of retrieved docs")
     parser.add_argument(
         "--model_name_or_path",
         default=None,
@@ -164,9 +165,7 @@ def main():
     parser.add_argument(
         "--num_beams", default=4, type=int, help="Number of beams to be used when generating answers",
     )
-
     parser.add_argument("--min_length", default=1, type=int, help="Min length of the generated answers")
-
     parser.add_argument("--max_length", default=50, type=int, help="Max length of the generated answers")
 
     args = parser.parse_args()
@@ -179,12 +178,9 @@ def main():
     if args.model_type is None:
         args.model_type = infer_model_type(args.model_name_or_path)
         assert args.model_type is not None
-    if args.model_type == "rag_sequence":
-        model_class = RagSequenceModel
-        if args.retriever_type is not None:
-            model_kwargs["retriever_type"] = args.retriever_type
-    elif args.model_type == "rag_token":
-        model_class = RagTokenModel
+    if args.model_type.startswith("rag"):
+        model_class = RagTokenModel if args.model_type == "rag_token" else RagSequenceModel
+        model_kwargs["n_docs"] = args.n_docs
         if args.retriever_type is not None:
             model_kwargs["retriever_type"] = args.retriever_type
     else:

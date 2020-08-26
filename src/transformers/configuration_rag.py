@@ -35,7 +35,7 @@ class RagConfig(PretrainedConfig):
         Arguments:
             TBA
     """
-    model_type = "xxx"
+    model_type = "rag"
 
     def __init__(
         self,
@@ -49,19 +49,15 @@ class RagConfig(PretrainedConfig):
         doc_sep=" // ",
         n_docs=5,
         max_combined_length=300,  # max token length of input with context doc prepended
+        # retrieval params
+        retrieval_vector_size=768,
+        retrieval_batch_size=8,
         retriever_type="hf_retriever",
-        # hf_retriever default params
         dataset="wiki_dpr",
-        dataset_name="psgs_w100_no_embeddings",
         dataset_split="train",
         index_name="embeddings",
-        uncompressed=False,
-        uncompressed_index_path=None,
-        # mpi_retriever default params
-        retrieval_vector_size=786,
-        retrieval_batch_size=8,
-        passages_path=None,
         index_path=None,
+        passages_path=None,
         # pre-trained components
         pretrained_context_encoder_name_or_path="facebook/dpr-ctx_encoder-single-nq-base",
         pretrained_context_tokenizer_name_or_path="facebook/dpr-ctx_encoder-single-nq-base",
@@ -77,6 +73,7 @@ class RagConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+
         self.title_sep = title_sep
         self.doc_sep = doc_sep
         self.n_docs = n_docs
@@ -85,7 +82,6 @@ class RagConfig(PretrainedConfig):
         self.retriever_type = retriever_type
 
         self.dataset = dataset
-        self.dataset_name = dataset_name
         self.dataset_split = dataset_split
         self.index_name = index_name
 
@@ -93,8 +89,6 @@ class RagConfig(PretrainedConfig):
         self.retrieval_batch_size = retrieval_batch_size
         self.passages_path = passages_path
         self.index_path = index_path
-        self.uncompressed = uncompressed
-        self.uncompressed_index_path = uncompressed_index_path
 
         self.pretrained_context_encoder_name_or_path = pretrained_context_encoder_name_or_path
         self.pretrained_context_tokenizer_name_or_path = pretrained_context_tokenizer_name_or_path
