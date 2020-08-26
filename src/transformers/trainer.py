@@ -885,7 +885,9 @@ class Trainer:
         def _objective(trial, checkpoint_dir=None):
             model_path = None
             if checkpoint_dir:
-                model_path = checkpoint_dir
+                for subdir in os.listdir(checkpoint_dir):
+                    if subdir.startswith(PREFIX_CHECKPOINT_DIR):
+                        model_path = os.path.join(checkpoint_dir, subdir)
             self.objective = None
             self.train(model_path=model_path, trial=trial)
             # If there hasn't been any evaluation during the training loop.
