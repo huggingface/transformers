@@ -57,7 +57,7 @@ classifier = pipeline("zero-shot-classification",
                       model="joeddav/xlm-roberta-large-xnli")
 ```
 
-You can then classify in any of the above langauges. You can even pass the labels in one language and the sequence to
+You can then classify in any of the above languages. You can even pass the labels in one language and the sequence to
 classify in another:
 
 ```python
@@ -112,6 +112,6 @@ prob_label_is_true = probs[:,1]
 This model was pre-trained on set of 100 languages, as described in
 [the original paper](https://arxiv.org/abs/1911.02116). It was then fine-tuned on the task of NLI on the concatenated
 MNLI train set and the XNLI validation and test sets. Finally, it was trained for one additional epoch on only XNLI
-data where the the translations for the premise and hypothesis are shuffled such that the premise and hypothesis for
+data where the translations for the premise and hypothesis are shuffled such that the premise and hypothesis for
 each example come from the same original English example but the premise and hypothesis are of different languages.
 

@@ -646,7 +646,7 @@ class TFModelTesterMixin:
                 emb_old.build(INPUT_SHAPE)
                 # reshape the embeddings
                 new_embeddings = model._get_resized_embeddings(emb_old, size)
-                # # check that the the resized embeddings size matches the desired size.
+                # # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
                 self.assertEqual(new_embeddings.shape[0], assert_size)
                 # check that weights remain the same after resizing
