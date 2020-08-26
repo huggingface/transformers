@@ -545,6 +545,7 @@ class Trainer:
 
         self.global_step = 0
         self.epoch = 0
+        # Has to be a tensor to be
         self.non_embedding_flos = 0
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
@@ -728,7 +729,11 @@ class Trainer:
         if self.epoch is not None:
             logs["epoch"] = self.epoch
         if self.non_embedding_flos is not None:
-            logs["non_embedding_flos"] = self.non_embedding_flos
+            if self.args.local_rank != -1:
+                gathered_flos = self.distributed_broadcast_scalar(self.non_embedding_flos)
+                logs["non_embedding_flos"] = gathered_flos.sum().item()
+            else:
+                logs["non_embedding_flos"] = self.non_embedding_flos
         if self.global_step is None:
             # when logging evaluation metrics without training
             self.global_step = 0
@@ -902,7 +907,12 @@ class Trainer:
 
         xm.rendezvous("saving_checkpoint")
         # Storing the number of floating-point operations that went into the model
-        self.model.config.non_embedding_flos = self.non_embedding_flos
+        if self.non_embedding_flos is not None:
+            if self.args.local_rank != -1:
+                gathered_flos = self.distributed_broadcast_scalar(self.non_embedding_flos)
+                self.model.config.non_embedding_flos = gathered_flos.sum().item()
+            else:
+                self.model.config.non_embedding_flos = self.non_embedding_flos
         self.model.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
@@ -1109,6 +1119,16 @@ class Trainer:
         # truncate the dummy elements added by SequentialDistributedSampler
         output = concat[:num_total_examples]
         return output
+
+    def distributed_broadcast_scalar(self, scalar: Union[int, float]) -> torch.Tensor:
+        assert self.args.local_rank != -1
+
+        tensorized_scalar = torch.Tensor(scalar)
+        output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(output_tensors, tensorized_scalar)
+        concat = torch.cat(output_tensors, dim=0)
+
+        return concat
 
     def prediction_step(
         self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
