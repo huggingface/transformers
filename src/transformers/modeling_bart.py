@@ -51,7 +51,15 @@ _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
-# See all BART models at https://huggingface.co/models?filter=bart
+BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/bart-base",
+    "facebook/bart-large",
+    "facebook/bart-large-mnli",
+    "facebook/bart-large-cnn",
+    "facebook/bart-large-xsum",
+    "facebook/mbart-large-en-ro",
+    # See all BART models at https://huggingface.co/models?filter=bart
+]
 
 
 BART_START_DOCSTRING = r"""
@@ -1037,7 +1045,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
         if labels is not None:
             use_cache = False
-            decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
         outputs = self.model(
             input_ids,
