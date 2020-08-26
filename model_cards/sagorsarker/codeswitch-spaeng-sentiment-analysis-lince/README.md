@@ -30,7 +30,7 @@ pip install codeswitch
 
 ```py
 
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipline
+from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 
 tokenizer = AutoTokenizer.from_pretrained("sagorsarker/codeswitch-spaeng-sentiment-analysis-lince")
 
