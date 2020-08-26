@@ -2136,11 +2136,9 @@ class Text2TextGenerationPipeline(Pipeline):
             assert (
                 self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
-            # args = ([prefix + text for text in args[0]],)
             padding = True
 
         elif isinstance(args[0], str):
-            # args = (prefix + args[0],)
             padding = False
         else:
             raise ValueError(
