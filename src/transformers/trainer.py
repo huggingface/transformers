@@ -544,7 +544,21 @@ class Trainer:
             if trial.should_prune():
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
+            self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
+
+    def _tune_save_checkpoint(self):
+        with tune.checkpoint_dir(step=self.global_step) as checkpoint_dir:
+            self.args.output_dir = checkpoint_dir
+            output_dir = os.path.join(
+                self.args.output_dir,
+                f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
+            self.save_model(output_dir)
+            if self.is_world_master():
+                torch.save(self.optimizer.state_dict(),
+                           os.path.join(output_dir, "optimizer.pt"))
+                torch.save(self.lr_scheduler.state_dict(),
+                           os.path.join(output_dir, "scheduler.pt"))
 
     def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
         """
@@ -868,19 +882,6 @@ class Trainer:
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        def tune_save_checkpoint(trainer: Trainer):
-            with tune.checkpoint_dir(step=self.global_step) as checkpoint_dir:
-                trainer.args.output_dir = checkpoint_dir
-                output_dir = os.path.join(
-                    trainer.args.output_dir,
-                    f"{PREFIX_CHECKPOINT_DIR}-{trainer.global_step}")
-                trainer.save_model(output_dir)
-                if trainer.is_world_master():
-                    torch.save(self.optimizer.state_dict(),
-                               os.path.join(output_dir, "optimizer.pt"))
-                    torch.save(self.lr_scheduler.state_dict(),
-                               os.path.join(output_dir, "scheduler.pt"))
-
         def _objective(trial, checkpoint_dir=None):
             model_path = None
             if checkpoint_dir:
@@ -892,7 +893,7 @@ class Trainer:
                 metrics = self.evaluate()
                 self.objective = self.compute_objective(metrics)
                 if self.hp_search_backend == HPSearchBackend.RAY:
-                    tune_save_checkpoint(self)
+                    self._tune_save_checkpoint()
                     tune.report(objective=self.objective)
             return self.objective
 
