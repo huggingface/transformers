@@ -1123,7 +1123,7 @@ class Trainer:
     def distributed_broadcast_scalar(self, scalar: Union[int, float]) -> torch.Tensor:
         assert self.args.local_rank != -1
 
-        tensorized_scalar = torch.Tensor([scalar])
+        tensorized_scalar = torch.Tensor([scalar]).cuda()
         output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
