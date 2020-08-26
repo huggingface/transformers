@@ -135,20 +135,28 @@ class SummarizationModule(BaseTransformer):
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask = batch["input_ids"], batch["attention_mask"]  # , batch["decoder_input_ids"]
-
+        decoder_attention_mask = None  # bart will make it, we supply for t5
         if "labels" in batch:
             lm_labels = batch["labels"]
             decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
         elif isinstance(self.model, T5ForConditionalGeneration):
             lm_labels = batch["labels"]
             decoder_input_ids = self.model._shift_right(lm_labels)
+            decoder_attention_mask = decoder_input_ids.ne(pad_token_id)
+
         else:
             target_ids = batch["decoder_input_ids"]
             # This is a slightly worse way of shifting tokens right -- it deletes token 0 from target_id
             decoder_input_ids = target_ids[:, :-1].contiguous()
             lm_labels = target_ids[:, 1:].clone()
 
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
+        outputs = self(
+            source_ids,
+            attention_mask=source_mask,
+            decoder_input_ids=decoder_input_ids,
+            use_cache=False,
+            decoder_attention_mask=decoder_attention_mask,
+        )
 
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id

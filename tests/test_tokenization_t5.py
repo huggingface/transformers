@@ -153,7 +153,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_max_target_length(self):
         tokenizer = self.t5_base_tokenizer
-        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        src_text = ["A short paragraph for summrization.", "Another short paragraph for summrization."]
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
