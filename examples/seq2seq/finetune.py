@@ -165,7 +165,7 @@ class SummarizationModule(BaseTransformer):
             loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
-            loss, nll_loss = label_smoothed_nll_loss(
+            loss, _ = label_smoothed_nll_loss(
                 lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
         return (loss,)

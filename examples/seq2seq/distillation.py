@@ -11,6 +11,7 @@ from torch.nn import functional as F
 
 from lightning_base import generic_train
 from transformers import BartConfig, BartForConditionalGeneration, MBartTokenizer, T5Config, T5ForConditionalGeneration
+from transformers.modeling_bart import shift_tokens_right
 
 
 try:
@@ -24,6 +25,7 @@ try:
         freeze_params,
         pickle_load,
         use_task_specific_params,
+    label_smoothed_nll_loss,
     )
 except ImportError:
     from finetune import SummarizationModule, TranslationModule
@@ -36,6 +38,7 @@ except ImportError:
         freeze_params,
         pickle_load,
         use_task_specific_params,
+        label_smoothed_nll_loss,
     )
 
 
@@ -160,19 +163,48 @@ class BartSummarizationDistiller(SummarizationModule):
     def _step(self, batch):
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
-        input_ids, src_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        decoder_input_ids = y[:, :-1].contiguous()
-        labels = y[:, 1:].clone()
-        labels[y[:, 1:] == pad_token_id] = -100
+        input_ids, src_mask = batch["input_ids"], batch["attention_mask"]
+        if "labels" in batch:
+            lm_labels = batch["labels"]
+            decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
+        elif isinstance(self.model, T5ForConditionalGeneration):
+            lm_labels = batch["decoder_input_ids"]
+            decoder_input_ids = self.model._shift_right(lm_labels)
+        else:
+            raise ValueError()
+        # decoder_input_ids = y[:, :-1].contiguous()
+        # labels = y[:, 1:].clone()
+        # labels[y[:, 1:] == pad_token_id] = -100
         # noinspection PyCallingNonCallable
-        sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
+        outputs = self(
             input_ids,
             attention_mask=src_mask,
             decoder_input_ids=decoder_input_ids,
-            labels=labels,
+            #labels=labels,
             output_hidden_states=True,
             output_attentions=False,
+            #return_dict=True,
+            use_cache=False,
         )
+        lm_logits, dec_hidden, enc_outputs, enc_hidden_state = outputs
+
+        if not self.already_saved_batch:
+            batch['passed_labels'] = lm_labels
+            batch['passed_decoder_input_ids'] = decoder_input_ids
+            self.save_readable_batch(batch)
+
+        if self.hparams.label_smoothing == 0:
+            # Same behavior as modeling_bart.py, besides pad_token_id
+            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+
+            assert lm_logits.shape[-1] == self.model.config.vocab_size
+            sloss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
+        else:
+            lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
+            sloss, _ = label_smoothed_nll_loss(
+                lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
+            )
+
 
         def zero_tensor():
             return torch.tensor(0.0).type_as(sloss)
@@ -199,11 +231,11 @@ class BartSummarizationDistiller(SummarizationModule):
                 attention_mask=src_mask,
                 encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
-                lm_labels=labels,
+                lm_labels=lm_labels,
                 output_hidden_states=True,
             )
         dec_mask = decoder_input_ids.ne(pad_token_id)
-        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
+        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
 
