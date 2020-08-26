@@ -137,7 +137,7 @@ class TFCausalLanguageModelingLoss:
         )
         # make sure only labels that are not equal to -100
         # are taken into account as loss
-        active_loss = tf.reshape(labels, (-1,)) != -100
+        active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
         reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
         return loss_fn(labels, reduced_logits)
@@ -645,7 +645,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             logger.warning(
                 f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the ckeckpoint was trained on, "
+                f"If your task is similar to the task the model of the checkpoint was trained on, "
                 f"you can already use {model.__class__.__name__} for predictions without further training."
             )
         if len(error_msgs) > 0:

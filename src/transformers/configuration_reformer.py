@@ -64,11 +64,6 @@ class ReformerConfig(PretrainedConfig):
                 A chunk size of 0 means that the feed forward layer is not chunked.
                 A chunk size of n means that the feed forward layer processes n < sequence_length embeddings at a time.
                 For more information on feed forward chunking, see `How does Feed Forward Chunking work? <../glossary.html#feed-forward-chunking>`__ .
-            chunk_size_feed_forward (:obj:`int`, optional, defaults to 0):
-                The chunk size of all feed forward layers in the residual attention blocks.
-                A chunk size of 0 means that the feed forward layer is not chunked.
-                A chunk size of n means that the feed forward layer processes n < sequence_length embeddings at a time.
-                For more information on feed forward chunking, see `How does Feed Forward Chunking work? <../glossary.html#feed-forward-chunking>`__ .
             eos_token_id (:obj:`int`, optional, defaults to 2):
                 The token id for the <EOS> token.
             feed_forward_size (:obj:`int`, optional, defaults to 512):
@@ -147,7 +142,6 @@ class ReformerConfig(PretrainedConfig):
         axial_pos_shape=[64, 64],
         axial_pos_embds_dim=[64, 192],
         chunk_size_lm_head=0,
-        chunk_size_feed_forward=0,
         eos_token_id=2,
         feed_forward_size=512,
         hash_seed=None,
@@ -171,9 +165,16 @@ class ReformerConfig(PretrainedConfig):
         num_hashes=1,
         pad_token_id=0,
         vocab_size=320,
+        tie_word_embeddings=False,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_decoder=is_decoder, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_decoder=is_decoder,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
         self.hash_seed = hash_seed
         self.vocab_size = vocab_size
@@ -202,5 +203,4 @@ class ReformerConfig(PretrainedConfig):
         self.axial_pos_embds_dim = tuple(axial_pos_embds_dim)
         self.axial_norm_std = axial_norm_std
         self.chunk_size_lm_head = chunk_size_lm_head
-        self.chunk_size_feed_forward = chunk_size_feed_forward
         self.attn_layers = attn_layers

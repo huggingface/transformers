@@ -6,8 +6,9 @@ import time
 from typing import Dict
 
 import torch
-from filelock import FileLock
 from torch.utils.data.dataset import Dataset
+
+from filelock import FileLock
 
 from ...tokenization_utils import PreTrainedTokenizer
 

@@ -52,6 +52,8 @@ class TrainingArguments:
             Whether to run predictions on the test set or not.
         evaluate_during_training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run evaluation during training at each logging step or not.
+        prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
+            When performing evaluation and predictions, only returns the loss.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
@@ -67,7 +69,8 @@ class TrainingArguments:
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
-            Total number of training epochs to perform.
+            Total number of training epochs to perform (if not an integer, will perform the decimal part percents of
+            the last epoch before stopping training).
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
@@ -111,6 +114,14 @@ class TrainingArguments:
             at the next training step under the keyword argument ``mems``.
         run_name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
+        disable_tqdm (:obj:`bool`, `optional`):
+            Whether or not to disable the tqdm progress bars. Will default to :obj:`True` if the logging level is set
+            to warn or lower (default), :obj:`False` otherwise.
+        remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
+            forward method.
+
+            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
     """
 
     output_dir: str = field(
@@ -131,6 +142,9 @@ class TrainingArguments:
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
         default=False, metadata={"help": "Run evaluation during training at each logging step."},
+    )
+    prediction_loss_only: bool = field(
+        default=False, metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
 
     per_device_train_batch_size: int = field(
@@ -226,6 +240,17 @@ class TrainingArguments:
 
     run_name: Optional[str] = field(
         default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
+    )
+    disable_tqdm: Optional[bool] = field(
+        default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
+    )
+
+    def __post_init__(self):
+        if self.disable_tqdm is None:
+            self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
+
+    remove_unused_columns: Optional[bool] = field(
+        default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
     )
 
     @property

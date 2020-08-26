@@ -26,11 +26,8 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import (
-        TFTransfoXLModel,
-        TFTransfoXLLMHeadModel,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+
+    from transformers import TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST, TFTransfoXLLMHeadModel, TFTransfoXLModel
 
 
 class TFTransfoXLModelTester:
@@ -97,26 +94,15 @@ class TFTransfoXLModelTester:
 
         hidden_states_2, mems_2 = model(inputs).to_tuple()
 
-        result = {
-            "hidden_states_1": hidden_states_1.numpy(),
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "hidden_states_2": hidden_states_2.numpy(),
-            "mems_2": [mem.numpy() for mem in mems_2],
-        }
-
+        self.parent.assertEqual(hidden_states_1.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(hidden_states_2.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertListEqual(
-            list(result["hidden_states_1"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+            [mem.shape for mem in mems_1],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
         self.parent.assertListEqual(
-            list(result["hidden_states_2"].shape), [self.batch_size, self.seq_length, self.hidden_size]
-        )
-        self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
-        )
-        self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_2"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in mems_2],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def create_and_check_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
@@ -133,27 +119,16 @@ class TFTransfoXLModelTester:
 
         _, mems_2 = model(inputs).to_tuple()
 
-        result = {
-            "mems_1": [mem.numpy() for mem in mems_1],
-            "lm_logits_1": lm_logits_1.numpy(),
-            "mems_2": [mem.numpy() for mem in mems_2],
-            "lm_logits_2": lm_logits_2.numpy(),
-        }
-
+        self.parent.assertEqual(lm_logits_1.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["lm_logits_1"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
-        self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_1"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in mems_1],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
+        self.parent.assertEqual(lm_logits_2.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertListEqual(
-            list(result["lm_logits_2"].shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
-        self.parent.assertListEqual(
-            list(list(mem.shape) for mem in result["mems_2"]),
-            [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
+            [mem.shape for mem in mems_2],
+            [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
     def prepare_config_and_inputs_for_common(self):

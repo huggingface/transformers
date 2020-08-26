@@ -274,6 +274,8 @@ class TFAlbertSelfOutput(tf.keras.layers.Layer):
 
 
 class TFAlbertAttention(TFBertSelfAttention):
+    """ Contains the complete attention sublayer, including both dropouts and layer norm. """
+
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -284,6 +286,9 @@ class TFAlbertAttention(TFBertSelfAttention):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.pruned_heads = set()
+        # Two different dropout probabilities; see https://github.com/google-research/albert/blob/master/modeling.py#L971-L993
+        self.attention_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -314,7 +319,7 @@ class TFAlbertAttention(TFBertSelfAttention):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs, training=training)
+        attention_probs = self.attention_dropout(attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -332,7 +337,7 @@ class TFAlbertAttention(TFBertSelfAttention):
         hidden_states = self_outputs[0]
 
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.output_dropout(hidden_states, training=training)
         attention_output = self.LayerNorm(hidden_states + input_tensor)
 
         # add attentions if we output them
@@ -369,8 +374,8 @@ class TFAlbertLayer(tf.keras.layers.Layer):
         ffn_output = self.ffn(attention_outputs[0])
         ffn_output = self.activation(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
+        ffn_output = self.dropout(ffn_output, training=training)
 
-        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_outputs[0])
 
         # add attentions if we output them
@@ -1260,7 +1265,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
             labels = inputs.get("labels", labels)
             assert len(inputs) <= 10, "Too many inputs."
@@ -1279,6 +1284,11 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        flat_inputs_embeds = (
+            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            if inputs_embeds is not None
+            else None
+        )
 
         outputs = self.albert(
             flat_input_ids,
@@ -1286,7 +1296,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             flat_token_type_ids,
             flat_position_ids,
             head_mask,
-            inputs_embeds,
+            flat_inputs_embeds,
             output_attentions,
             output_hidden_states,
             return_dict=return_dict,

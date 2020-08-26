@@ -44,8 +44,9 @@ def evaluate(args):
         reference_summaries = []
         generated_summaries = []
 
-        import rouge
         import nltk
+
+        import rouge
 
         nltk.download("punkt")
         rouge_evaluator = rouge.Rouge(

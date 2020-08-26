@@ -20,20 +20,21 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
+
     from transformers import (
         XLMConfig,
+        XLMForMultipleChoice,
+        XLMForQuestionAnswering,
+        XLMForQuestionAnsweringSimple,
+        XLMForSequenceClassification,
+        XLMForTokenClassification,
         XLMModel,
         XLMWithLMHeadModel,
-        XLMForTokenClassification,
-        XLMForQuestionAnswering,
-        XLMForSequenceClassification,
-        XLMForQuestionAnsweringSimple,
-        XLMForMultipleChoice,
     )
     from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -73,7 +74,7 @@ class XLMModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
+        input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         input_lengths = None
         if self.use_input_lengths:

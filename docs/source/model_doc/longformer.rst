@@ -102,3 +102,25 @@ LongformerForQuestionAnswering
 
 .. autoclass:: transformers.LongformerForQuestionAnswering
     :members:
+
+
+TFLongformerModel
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFLongformerModel
+    :members:
+
+
+TFLongformerForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFLongformerForMaskedLM
+    :members:
+
+
+TFLongformerForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFLongformerForQuestionAnswering
+    :members:
+

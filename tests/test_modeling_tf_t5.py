@@ -26,7 +26,8 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import TFT5Model, TFT5ForConditionalGeneration, T5Tokenizer
+
+    from transformers import T5Tokenizer, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:
@@ -93,9 +94,9 @@ class TFT5ModelTester:
         result = model(inputs)
 
         result = model(input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids)
-        decoder_output = result["last_hidden_state"]
-        decoder_past = result["decoder_past_key_values"]
-        encoder_output = result["encoder_last_hidden_state"]
+        decoder_output = result.last_hidden_state
+        decoder_past = result.decoder_past_key_values
+        encoder_output = result.encoder_last_hidden_state
         self.parent.assertListEqual(list(encoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
         self.parent.assertListEqual(list(decoder_output.shape), [self.batch_size, self.seq_length, self.hidden_size])
         self.parent.assertEqual(len(decoder_past), 2)
@@ -116,7 +117,7 @@ class TFT5ModelTester:
 
         result = model(inputs_dict)
 
-        self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.seq_length, self.vocab_size])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_t5_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):
         model = TFT5Model(config=config).get_decoder()

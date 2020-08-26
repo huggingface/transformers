@@ -19,22 +19,23 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
+        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerConfig,
         ReformerForMaskedLM,
+        ReformerForQuestionAnswering,
+        ReformerForSequenceClassification,
+        ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
-        ReformerForSequenceClassification,
         ReformerTokenizer,
-        ReformerLayer,
-        ReformerForQuestionAnswering,
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    import torch
 
 
 class ReformerModelTester:
@@ -133,7 +134,7 @@ class ReformerModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         choice_labels = None
         if self.use_labels:
@@ -290,24 +291,6 @@ class ReformerModelTester:
         self.parent.assertTrue(
             torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3,)
         )
-
-    def create_and_check_reformer_feed_forward_chunking(self, config, input_ids, input_mask, choice_labels):
-        torch.manual_seed(0)
-        model = ReformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        hidden_states_no_chunk = model(input_ids, attention_mask=input_mask)[0]
-
-        config.chunk_size_lm_head = 1
-        config.chunk_size_feed_forward = 1
-
-        torch.manual_seed(0)
-        model = ReformerModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        hidden_states_with_chunk = model(input_ids, attention_mask=input_mask)["last_hidden_state"]
-        self.parent.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
     def create_and_check_reformer_feed_backward_chunking(self, config, input_ids, input_mask, choice_labels):
         if not self.is_training:
@@ -516,10 +499,6 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=True)
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=False)
-
-    def test_reformer_chunking_forward_equality(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_feed_forward_chunking(*config_and_inputs)
 
     def test_reformer_chunking_backward_equality(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

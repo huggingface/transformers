@@ -1369,7 +1369,7 @@ class ChunkReformerFeedForward(nn.Module):
 
     def forward(self, attention_output):
         return apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.forward_chunk, attention_output,
+            self.forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output,
         )
 
     def forward_chunk(self, hidden_states):
@@ -1730,7 +1730,7 @@ class ReformerOnlyLMHead(nn.Module):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
-        return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
+        return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
 
     def forward_chunk(self, hidden_states):
         hidden_states = self.decoder(hidden_states)
@@ -2155,10 +2155,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    def tie_weights(self):
-        # word embeddings are not tied in Reformer
-        pass
-
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -2274,10 +2270,6 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    def tie_weights(self):
-        # word embeddings are not tied in Reformer
-        pass
-
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -2355,10 +2347,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             logger.warning("You might want to disable causal masking for sequence classification")
 
         self.init_weights()
-
-    def tie_weights(self):
-        # word embeddings are not tied in Reformer
-        pass
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -2458,10 +2446,6 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         self.qa_outputs = nn.Linear(2 * config.hidden_size, config.num_labels)
 
         self.init_weights()
-
-    def tie_weights(self):
-        # word embeddings are not tied in Reformer
-        pass
 
     @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
