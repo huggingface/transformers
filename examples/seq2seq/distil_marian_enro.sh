@@ -15,5 +15,5 @@ python distillation.py \
   --alpha_hid=3. --length_penalty=0.5 \
   --train_batch_size=$BS --eval_batch_size=$BS --num_train_epochs=6 \
   --tokenizer_name Helsinki-NLP/opus-mt-en-ro \
-  --warmup_steps 500 --sortish_sampler --logger_name wandb
+  --warmup_steps 500 --sortish_sampler --logger_name wandb \
   "$@"
