@@ -1013,10 +1013,7 @@ class T5Model(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
         if not return_dict:
-            if past is not None:
-                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
@@ -1197,10 +1194,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
-#        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
         if not return_dict:
-#            if past is not None:
-#                decoder_outputs = decoder_outputs[:1] + (decoder_outputs,) + decoder_outputs[2:]
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
@@ -1216,7 +1210,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs):
-        print("ENC", encoder_outputs[0].shape)
         return {
             "decoder_input_ids": input_ids,
             "decoder_past_key_values": past,

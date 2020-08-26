@@ -440,9 +440,10 @@ class GenerationMixin:
                 .to(input_ids.device)
             )
 
-            import ipdb; ipdb.set_trace()
             # expand encoder_outputs
-            encoder_outputs.last_hidden_state = encoder_outputs.last_hidden_state.index_select(0, expanded_batch_idxs)
+            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
+                0, expanded_batch_idxs
+            )
 
             # save encoder_outputs in `model_specific_kwargs`
             model_specific_kwargs["encoder_outputs"] = encoder_outputs
@@ -531,10 +532,6 @@ class GenerationMixin:
 
         past = None
         while cur_len < max_length:
-            if past is None:
-                print("Enc", model_specific_kwargs["encoder_outputs"][0].shape)
-                import ipdb; ipdb.set_trace()
-
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )

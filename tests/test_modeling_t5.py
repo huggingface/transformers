@@ -164,12 +164,10 @@ class T5ModelTester:
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
-        self.parent.assertEqual(len(decoder_past), 2)
-        self.parent.assertTrue(torch.all(decoder_past[0][0] == encoder_output))
-        # There should be `num_layers` key value embeddings stored in decoder_past[1]
-        self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
-        self.parent.assertEqual(len(decoder_past[1][0]), 4)
+        # There should be `num_layers` key value embeddings stored in decoder_past
+        self.parent.assertEqual(len(decoder_past), config.num_layers)
+        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
+        self.parent.assertEqual(len(decoder_past[0]), 4)
 
     def create_and_check_with_lm_head(
         self,
