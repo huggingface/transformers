@@ -595,7 +595,7 @@ class BartDecoder(nn.Module):
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         if use_cache:
-            next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
+            next_cache = next_decoder_cache
         else:
             next_cache = None
 
@@ -1083,13 +1083,13 @@ class BartForConditionalGeneration(PretrainedBartModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-        encoder_outputs, decoder_past_key_values = past
+    def prepare_inputs_for_generation(
+        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+    ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "decoder_past_key_values": decoder_past_key_values,
+            "decoder_past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
@@ -1108,20 +1108,14 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        ((enc_out, enc_mask), decoder_past_key_values) = past
         reordered_past = []
-        for layer_past in decoder_past_key_values:
+        for layer_past in past:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
             reordered_past.append(layer_past_new)
-
-        new_enc_out = enc_out if enc_out is None else enc_out.index_select(0, beam_idx)
-        new_enc_mask = enc_mask if enc_mask is None else enc_mask.index_select(0, beam_idx)
-
-        past = ((new_enc_out, new_enc_mask), reordered_past)
-        return past
+        return reordered_past
 
     def get_encoder(self):
         return self.model.encoder

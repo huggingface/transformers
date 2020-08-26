@@ -330,15 +330,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         return decoder_outputs + encoder_outputs
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        # first step
-        if type(past) is tuple:
-            encoder_outputs, _ = past
-        else:
-            encoder_outputs = (past,)
-
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, encoder_outputs, **kwargs):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
         input_dict = {
