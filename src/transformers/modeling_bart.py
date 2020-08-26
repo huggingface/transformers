@@ -223,7 +223,9 @@ class EncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = SelfAttention(
-            self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
+            self.embed_dim,
+            config.encoder_attention_heads,
+            dropout=config.attention_dropout,
         )
         self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
@@ -297,7 +299,10 @@ class BartEncoder(nn.Module):
             )
         else:
             self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings, embed_dim, self.padding_idx, config.extra_pos_embeddings,
+                config.max_position_embeddings,
+                embed_dim,
+                self.padding_idx,
+                config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
@@ -370,7 +375,9 @@ class DecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = SelfAttention(
-            embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -477,7 +484,10 @@ class BartDecoder(nn.Module):
             )
         else:
             self.embed_positions = LearnedPositionalEmbedding(
-                config.max_position_embeddings, config.d_model, self.padding_idx, config.extra_pos_embeddings,
+                config.max_position_embeddings,
+                config.d_model,
+                self.padding_idx,
+                config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
@@ -695,7 +705,10 @@ class SelfAttention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len,)
+        assert key_padding_mask is None or key_padding_mask.size()[:2] == (
+            bsz,
+            src_len,
+        )
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -703,7 +716,11 @@ class SelfAttention(nn.Module):
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
         attn_weights = F.softmax(attn_weights, dim=-1)
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training,)
+        attn_probs = F.dropout(
+            attn_weights,
+            p=self.dropout,
+            training=self.training,
+        )
 
         assert v is not None
         attn_output = torch.bmm(attn_probs, v)
@@ -754,7 +771,11 @@ class BartClassificationHead(nn.Module):
     # This can trivially be shared with RobertaClassificationHead
 
     def __init__(
-        self, input_dim, inner_dim, num_classes, pooler_dropout,
+        self,
+        input_dim,
+        inner_dim,
+        num_classes,
+        pooler_dropout,
     ):
         super().__init__()
         self.dense = nn.Linear(input_dim, inner_dim)
@@ -819,7 +840,8 @@ def _get_shape(t):
 
 
 @add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
+    "The bare BART Model outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
 )
 class BartModel(PretrainedBartModel):
     def __init__(self, config: BartConfig):
@@ -981,31 +1003,31 @@ class BartForConditionalGeneration(PretrainedBartModel):
         **unused,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
-            with labels in ``[0, ..., config.vocab_size]``.
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the masked language modeling loss.
+                Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
+                with labels in ``[0, ..., config.vocab_size]``.
 
-    Returns:
+        Returns:
 
-    Conditional generation example::
+        Conditional generation example::
 
-            # Mask filling only works for bart-large
-            from transformers import BartTokenizer, BartForConditionalGeneration
-            tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-            TXT = "My friends are <mask> but they eat too many carbs."
+                # Mask filling only works for bart-large
+                from transformers import BartTokenizer, BartForConditionalGeneration
+                tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+                TXT = "My friends are <mask> but they eat too many carbs."
 
-            model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-            input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            logits = model(input_ids).logits
+                model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
+                input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
+                logits = model(input_ids).logits
 
-            masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            probs = logits[0, masked_index].softmax(dim=0)
-            values, predictions = probs.topk(5)
+                masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+                probs = logits[0, masked_index].softmax(dim=0)
+                values, predictions = probs.topk(5)
 
-            tokenizer.decode(predictions).split()
-            # ['good', 'great', 'all', 'really', 'very']
+                tokenizer.decode(predictions).split()
+                # ['good', 'great', 'all', 'really', 'very']
         """
         if "lm_labels" in unused:
             warnings.warn(
@@ -1116,7 +1138,10 @@ class BartForSequenceClassification(PretrainedBartModel):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
         self.classification_head = BartClassificationHead(
-            config.d_model, config.d_model, config.num_labels, config.classif_dropout,
+            config.d_model,
+            config.d_model,
+            config.num_labels,
+            config.classif_dropout,
         )
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)
@@ -1279,7 +1304,10 @@ class BartForQuestionAnswering(PretrainedBartModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits,) + outputs[1:]
+            output = (
+                start_logits,
+                end_logits,
+            ) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return Seq2SeqQuestionAnsweringModelOutput(
@@ -1307,7 +1335,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     @staticmethod
     def _init_weight(out: nn.Parameter):
         """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
-            The cos features are in the 2nd half of the vector. [dim // 2:]
+        The cos features are in the 2nd half of the vector. [dim // 2:]
         """
         n_pos, dim = out.shape
         position_enc = np.array(

@@ -45,8 +45,8 @@ TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def build_tf_to_pytorch_map(model, config):
-    """ A map of modules from TF to PyTorch.
-        This time I use a map to keep the PyTorch model as identical to the original PyTorch model as possible.
+    """A map of modules from TF to PyTorch.
+    This time I use a map to keep the PyTorch model as identical to the original PyTorch model as possible.
     """
     tf_to_pt_map = {}
 
@@ -112,8 +112,7 @@ def build_tf_to_pytorch_map(model, config):
 
 
 def load_tf_weights_in_transfo_xl(model, config, tf_path):
-    """ Load tf checkpoints in a pytorch model
-    """
+    """Load tf checkpoints in a pytorch model"""
     try:
         import numpy as np
         import tensorflow as tf
@@ -386,7 +385,12 @@ class RelPartialLearnableDecoderLayer(nn.Module):
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None, output_attentions=False):
 
         attn_outputs = self.dec_attn(
-            dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask, output_attentions=output_attentions,
+            dec_inp,
+            r,
+            attn_mask=dec_attn_mask,
+            mems=mems,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         ff_output = self.pos_ff(attn_outputs[0])
 
@@ -456,8 +460,8 @@ class AdaptiveEmbedding(nn.Module):
 
 
 class TransfoXLPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = TransfoXLConfig
@@ -474,8 +478,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
         nn.init.constant_(bias, 0.0)
 
     def _init_weights(self, m):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         classname = m.__class__.__name__
         if classname.find("Linear") != -1:
             if hasattr(m, "weight") and m.weight is not None:
@@ -515,7 +518,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
                 self._init_bias(m.r_bias)
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, layer: Optional[int] = -1):
-        """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
+        """Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
 
         Arguments:
@@ -948,7 +951,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
 
         return TransfoXLModelOutput(
-            last_hidden_state=core_out, mems=new_mems, hidden_states=hids, attentions=attentions,
+            last_hidden_state=core_out,
+            mems=new_mems,
+            hidden_states=hids,
+            attentions=attentions,
         )
 
 
@@ -1064,8 +1070,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         )
 
     def get_output_embeddings(self):
-        """ Double-check if you are using adaptive softmax.
-        """
+        """Double-check if you are using adaptive softmax."""
         if self.sample_softmax > 0:
             return self.out_layer
         else:

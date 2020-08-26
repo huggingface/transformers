@@ -68,7 +68,8 @@ class CamembertModel(RobertaModel):
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a `language modeling` head on top. """, CAMEMBERT_START_DOCSTRING,
+    """CamemBERT Model with a `language modeling` head on top. """,
+    CAMEMBERT_START_DOCSTRING,
 )
 class CamembertForMaskedLM(RobertaForMaskedLM):
     """

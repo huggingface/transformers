@@ -29,16 +29,16 @@ DPR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class DPRConfig(BertConfig):
     r"""
-        :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a
-        `DPRModel`.
+    :class:`~transformers.DPRConfig` is the configuration class to store the configuration of a
+    `DPRModel`.
 
-        This is the configuration class to store the configuration of a `DPRContextEncoder`, `DPRQuestionEncoder`, or a `DPRReader`.
-        It is used to instantiate the components of the DPR model.
+    This is the configuration class to store the configuration of a `DPRContextEncoder`, `DPRQuestionEncoder`, or a `DPRReader`.
+    It is used to instantiate the components of the DPR model.
 
-        Args:
-            projection_dim (:obj:`int`, optional, defaults to 0):
-                Dimension of the projection for the context and question encoders.
-                If it is set to zero (default), then no projection is done.
+    Args:
+        projection_dim (:obj:`int`, optional, defaults to 0):
+            Dimension of the projection for the context and question encoders.
+            If it is set to zero (default), then no projection is done.
     """
     model_type = "dpr"
 

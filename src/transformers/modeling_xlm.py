@@ -228,8 +228,8 @@ class TransformerFFN(nn.Module):
 
 
 class XLMPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = XLMConfig
@@ -462,9 +462,9 @@ class XLMModel(XLMPreTrainedModel):
         self.embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
@@ -572,7 +572,11 @@ class XLMModel(XLMPreTrainedModel):
 
             # self attention
             attn_outputs = self.attentions[i](
-                tensor, attn_mask, cache=cache, head_mask=head_mask[i], output_attentions=output_attentions,
+                tensor,
+                attn_mask,
+                cache=cache,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
             )
             attn = attn_outputs[0]
             if output_attentions:
@@ -633,8 +637,7 @@ class XLMPredLayer(nn.Module):
             )
 
     def forward(self, x, y=None):
-        """ Compute the loss, and optionally the scores.
-        """
+        """Compute the loss, and optionally the scores."""
         outputs = ()
         if self.asm is False:
             scores = self.proj(x)
@@ -969,38 +972,38 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        is_impossible (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
-            Labels whether a question has an answer or no answer (SQuAD 2.0)
-        cls_index (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
-            Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
-        p_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
-            Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
-            1.0 means token should be masked. 0.0 mean token is not masked.
+            start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for position (index) of the start of the labelled span for computing the token classification loss.
+                Positions are clamped to the length of the sequence (`sequence_length`).
+                Position outside of the sequence are not taken into account for computing the loss.
+            end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for position (index) of the end of the labelled span for computing the token classification loss.
+                Positions are clamped to the length of the sequence (`sequence_length`).
+                Position outside of the sequence are not taken into account for computing the loss.
+            is_impossible (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+                Labels whether a question has an answer or no answer (SQuAD 2.0)
+            cls_index (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+                Labels for position (index) of the classification token to use as input for computing plausibility of the answer.
+            p_mask (``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+                Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...).
+                1.0 means token should be masked. 0.0 mean token is not masked.
 
-    Returns:
+        Returns:
 
-    Example::
+        Example::
 
-        >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
-        >>> import torch
+            >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
+            >>> import torch
 
-        >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-        >>> model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048', return_dict=True)
+            >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
+            >>> model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048', return_dict=True)
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> start_positions = torch.tensor([1])
+            >>> end_positions = torch.tensor([3])
 
-        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
-        >>> loss = outputs.loss
+            >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+            >>> loss = outputs.loss
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1131,7 +1134,10 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

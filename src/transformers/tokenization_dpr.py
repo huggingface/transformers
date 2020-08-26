@@ -330,7 +330,11 @@ class CustomDPRReaderTokenizerMixin:
         return nbest_spans_predictions[:num_spans]
 
     def _get_best_spans(
-        self, start_logits: List[int], end_logits: List[int], max_answer_length: int, top_spans: int,
+        self,
+        start_logits: List[int],
+        end_logits: List[int],
+        max_answer_length: int,
+        top_spans: int,
     ) -> List[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage.

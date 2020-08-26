@@ -32,10 +32,12 @@ logger = logging.get_logger(__name__)
 @dataclass
 class TensorFlowBenchmarkArguments(BenchmarkArguments):
     tpu_name: str = field(
-        default=None, metadata={"help": "Name of TPU"},
+        default=None,
+        metadata={"help": "Name of TPU"},
     )
     device_idx: int = field(
-        default=0, metadata={"help": "CPU / GPU device index. Defaults to 0."},
+        default=0,
+        metadata={"help": "CPU / GPU device index. Defaults to 0."},
     )
     eager_mode: bool = field(default=False, metadata={"help": "Benchmark models in eager model."})
     use_xla: bool = field(

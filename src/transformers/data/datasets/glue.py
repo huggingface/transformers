@@ -86,7 +86,10 @@ class GlueDataset(Dataset):
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else args.data_dir,
             "cached_{}_{}_{}_{}".format(
-                mode.value, tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
+                mode.value,
+                tokenizer.__class__.__name__,
+                str(args.max_seq_length),
+                args.task_name,
             ),
         )
         label_list = self.processor.get_labels()

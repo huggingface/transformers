@@ -90,11 +90,11 @@ class TokenClassificationTask:
         sequence_a_segment_id=0,
         mask_padding_with_zero=True,
     ) -> List[InputFeatures]:
-        """ Loads a data file into a list of `InputFeatures`
-            `cls_token_at_end` define the location of the CLS token:
-                - False (Default, BERT/XLM pattern): [CLS] + A + [SEP] + B + [SEP]
-                - True (XLNet/GPT pattern): A + [SEP] + B + [SEP] + [CLS]
-            `cls_token_segment_id` define the segment id associated to the CLS token (0 for BERT, 2 for XLNet)
+        """Loads a data file into a list of `InputFeatures`
+        `cls_token_at_end` define the location of the CLS token:
+            - False (Default, BERT/XLM pattern): [CLS] + A + [SEP] + B + [SEP]
+            - True (XLNet/GPT pattern): A + [SEP] + B + [SEP] + [CLS]
+        `cls_token_segment_id` define the segment id associated to the CLS token (0 for BERT, 2 for XLNet)
         """
         # TODO clean up all this to leverage built-in features of tokenizers
 
@@ -230,7 +230,8 @@ if is_torch_available():
         ):
             # Load data features from cache or dataset file
             cached_features_file = os.path.join(
-                data_dir, "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
+                data_dir,
+                "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
             )
 
             # Make sure only the first process in distributed training processes the dataset,

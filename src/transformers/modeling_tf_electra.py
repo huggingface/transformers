@@ -54,8 +54,7 @@ TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class TFElectraEmbeddings(tf.keras.layers.Layer):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
+    """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -94,7 +93,13 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(
-        self, input_ids, position_ids=None, token_type_ids=None, inputs_embeds=None, mode="embedding", training=False,
+        self,
+        input_ids,
+        position_ids=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        mode="embedding",
+        training=False,
     ):
         """Get token embeddings of inputs.
         Args:
@@ -144,10 +149,10 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
 
     def _linear(self, inputs):
         """Computes logits by running inputs through a linear layer.
-            Args:
-                inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-            Returns:
-                float32 tensor with shape [batch_size, length, vocab_size].
+        Args:
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+        Returns:
+            float32 tensor with shape [batch_size, length, vocab_size].
         """
         batch_size = shape_list(inputs)[0]
         length = shape_list(inputs)[1]
@@ -250,9 +255,9 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         raise NotImplementedError
 
@@ -491,18 +496,18 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         training=False,
     ):
         r"""
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        import tensorflow as tf
-        from transformers import ElectraTokenizer, TFElectraForPreTraining
+            import tensorflow as tf
+            from transformers import ElectraTokenizer, TFElectraForPreTraining
 
-        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        scores = outputs[0]
+            tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+            model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+            outputs = model(input_ids)
+            scores = outputs[0]
         """
         return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
 
@@ -729,7 +734,10 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -752,7 +760,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
 
     @property
     def dummy_inputs(self):
-        """ Dummy inputs to build the network.
+        """Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -853,7 +861,10 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1020,7 +1031,10 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:
-            output = (start_logits, end_logits,) + discriminator_hidden_states[1:]
+            output = (
+                start_logits,
+                end_logits,
+            ) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(

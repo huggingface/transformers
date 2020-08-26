@@ -63,34 +63,34 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class T5Tokenizer(PreTrainedTokenizer):
     """
-        Constructs a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+    Constructs a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
 
-        This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-        should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
 
-        Args:
-            vocab_file (:obj:`string`):
-                `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
-                contains the vocabulary necessary to instantiate a tokenizer.
-            eos_token (:obj:`string`, `optional`, defaults to "</s>"):
-                The end of sequence token.
+    Args:
+        vocab_file (:obj:`string`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        eos_token (:obj:`string`, `optional`, defaults to "</s>"):
+            The end of sequence token.
 
-                .. note::
+            .. note::
 
-                    When building a sequence using special tokens, this is not the token that is used for the end
-                    of sequence. The token used is the :obj:`sep_token`.
-            unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
-                The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-                token instead.
-            pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
-                The token used for padding, for example when batching sequences of different lengths.
-            extra_ids (:obj:`List[str]`, `optional`, defaults to :obj:`100`):
-                Add a number of extra ids added to the end of the vocabulary for use as sentinels.
-                These tokens are accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1.
-                Extra tokens are indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token in the vocabulary like in T5 preprocessing
-                see: https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)
-            additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
-                Additional special tokens used by the tokenizer.
+                When building a sequence using special tokens, this is not the token that is used for the end
+                of sequence. The token used is the :obj:`sep_token`.
+        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
+            The token used for padding, for example when batching sequences of different lengths.
+        extra_ids (:obj:`List[str]`, `optional`, defaults to :obj:`100`):
+            Add a number of extra ids added to the end of the vocabulary for use as sentinels.
+            These tokens are accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1.
+            Extra tokens are indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token in the vocabulary like in T5 preprocessing
+            see: https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)
+        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
+            Additional special tokens used by the tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -236,8 +236,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     def _tokenize(self, text, sample=False):
-        """ Take as input a string and return a list of strings (tokens) for words/sub-words
-        """
+        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         if not sample:
             pieces = self.sp_model.EncodeAsPieces(text)
         else:
@@ -266,8 +265,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         return out_string
 
     def save_vocabulary(self, save_directory):
-        """ Save the sentencepiece vocabulary (copy original file) and special tokens file
-            to a directory.
+        """Save the sentencepiece vocabulary (copy original file) and special tokens file
+        to a directory.
         """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))

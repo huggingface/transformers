@@ -302,7 +302,10 @@ class AlbertLayer(nn.Module):
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
 
         ffn_output = apply_chunking_to_forward(
-            self.ff_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output[0],
+            self.ff_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output[0],
         )
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_output[0])
 
@@ -397,8 +400,8 @@ class AlbertTransformer(nn.Module):
 
 
 class AlbertPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = AlbertConfig
@@ -406,8 +409,7 @@ class AlbertPreTrainedModel(PreTrainedModel):
     authorized_missing_keys = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights.
-        """
+        """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -543,17 +545,17 @@ class AlbertModel(AlbertPreTrainedModel):
         return self.embeddings.word_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            ALBERT has a different architecture in that its layers are shared across groups, which then has inner groups.
-            If an ALBERT model has 12 hidden layers and 2 hidden groups, with two inner groups, there
-            is a total of 4 different layers.
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        ALBERT has a different architecture in that its layers are shared across groups, which then has inner groups.
+        If an ALBERT model has 12 hidden layers and 2 hidden groups, with two inner groups, there
+        is a total of 4 different layers.
 
-            These layers are flattened: the indices [0,1] correspond to the two inner groups of the first hidden layer,
-            while [2,3] correspond to the two inner groups of the second hidden layer.
+        These layers are flattened: the indices [0,1] correspond to the two inner groups of the first hidden layer,
+        while [2,3] correspond to the two inner groups of the second hidden layer.
 
-            Any layer with in index other than [0,1,2,3] will result in an error.
-            See base class PreTrainedModel for more information about head pruning
+        Any layer with in index other than [0,1,2,3] will result in an error.
+        See base class PreTrainedModel for more information about head pruning
         """
         for layer, heads in heads_to_prune.items():
             group_idx = int(layer / self.config.inner_group_num)
@@ -672,34 +674,34 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         **kwargs,
     ):
         r"""
-        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
-        sentence_order_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
-            Indices should be in ``[0, 1]``.
-            ``0`` indicates original order (sequence A, then sequence B),
-            ``1`` indicates switched order (sequence B, then sequence A).
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
+            labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+                Labels for computing the masked language modeling loss.
+                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+                in ``[0, ..., config.vocab_size]``
+            sentence_order_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`, defaults to :obj:`None`):
+                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see :obj:`input_ids` docstring)
+                Indices should be in ``[0, 1]``.
+                ``0`` indicates original order (sequence A, then sequence B),
+                ``1`` indicates switched order (sequence B, then sequence A).
+            kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+                Used to hide legacy arguments that have been deprecated.
 
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import AlbertTokenizer, AlbertForPreTraining
-        >>> import torch
+            >>> from transformers import AlbertTokenizer, AlbertForPreTraining
+            >>> import torch
 
-        >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-        >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2', return_dict=True)
+            >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+            >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2', return_dict=True)
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids)
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> outputs = model(input_ids)
 
-        >>> prediction_logits = outputs.prediction_logits
-        >>> sop_logits = outputs.sop_logits
+            >>> prediction_logits = outputs.prediction_logits
+            >>> sop_logits = outputs.sop_logits
 
         """
 
@@ -787,7 +789,8 @@ class AlbertSOPHead(nn.Module):
 
 
 @add_start_docstrings(
-    "Albert Model with a `language modeling` head on top.", ALBERT_START_DOCSTRING,
+    "Albert Model with a `language modeling` head on top.",
+    ALBERT_START_DOCSTRING,
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
     def __init__(self, config):
@@ -952,7 +955,10 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1033,7 +1039,10 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1215,5 +1224,8 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

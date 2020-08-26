@@ -73,43 +73,112 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
-        ("retribert", RetriBertConfig,),
-        ("t5", T5Config,),
-        ("mobilebert", MobileBertConfig,),
-        ("distilbert", DistilBertConfig,),
-        ("albert", AlbertConfig,),
-        ("camembert", CamembertConfig,),
-        ("xlm-roberta", XLMRobertaConfig,),
+        (
+            "retribert",
+            RetriBertConfig,
+        ),
+        (
+            "t5",
+            T5Config,
+        ),
+        (
+            "mobilebert",
+            MobileBertConfig,
+        ),
+        (
+            "distilbert",
+            DistilBertConfig,
+        ),
+        (
+            "albert",
+            AlbertConfig,
+        ),
+        (
+            "camembert",
+            CamembertConfig,
+        ),
+        (
+            "xlm-roberta",
+            XLMRobertaConfig,
+        ),
         ("pegasus", PegasusConfig),
-        ("marian", MarianConfig,),
-        ("mbart", MBartConfig,),
-        ("bart", BartConfig,),
-        ("reformer", ReformerConfig,),
-        ("longformer", LongformerConfig,),
-        ("roberta", RobertaConfig,),
-        ("flaubert", FlaubertConfig,),
-        ("bert", BertConfig,),
-        ("openai-gpt", OpenAIGPTConfig,),
-        ("gpt2", GPT2Config,),
-        ("transfo-xl", TransfoXLConfig,),
-        ("xlnet", XLNetConfig,),
-        ("xlm", XLMConfig,),
-        ("ctrl", CTRLConfig,),
-        ("electra", ElectraConfig,),
-        ("encoder-decoder", EncoderDecoderConfig,),
+        (
+            "marian",
+            MarianConfig,
+        ),
+        (
+            "mbart",
+            MBartConfig,
+        ),
+        (
+            "bart",
+            BartConfig,
+        ),
+        (
+            "reformer",
+            ReformerConfig,
+        ),
+        (
+            "longformer",
+            LongformerConfig,
+        ),
+        (
+            "roberta",
+            RobertaConfig,
+        ),
+        (
+            "flaubert",
+            FlaubertConfig,
+        ),
+        (
+            "bert",
+            BertConfig,
+        ),
+        (
+            "openai-gpt",
+            OpenAIGPTConfig,
+        ),
+        (
+            "gpt2",
+            GPT2Config,
+        ),
+        (
+            "transfo-xl",
+            TransfoXLConfig,
+        ),
+        (
+            "xlnet",
+            XLNetConfig,
+        ),
+        (
+            "xlm",
+            XLMConfig,
+        ),
+        (
+            "ctrl",
+            CTRLConfig,
+        ),
+        (
+            "electra",
+            ElectraConfig,
+        ),
+        (
+            "encoder-decoder",
+            EncoderDecoderConfig,
+        ),
     ]
 )
 
 
 class AutoConfig:
     r"""
-        :class:`~transformers.AutoConfig` is a generic configuration class
-        that will be instantiated as one of the configuration classes of the library
-        when created with the :func:`~transformers.AutoConfig.from_pretrained` class method.
+    :class:`~transformers.AutoConfig` is a generic configuration class
+    that will be instantiated as one of the configuration classes of the library
+    when created with the :func:`~transformers.AutoConfig.from_pretrained` class method.
 
-        The :func:`~transformers.AutoConfig.from_pretrained` method takes care of returning the correct model class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+    The :func:`~transformers.AutoConfig.from_pretrained` method takes care of returning the correct model class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string.
     """
 
     def __init__(self):

@@ -89,7 +89,7 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def gelu(x):
-    """ Gaussian Error Linear Unit.
+    """Gaussian Error Linear Unit.
     Original Implementation of the gelu activation function in Google Bert repo when initially created.
         For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
@@ -127,8 +127,7 @@ ACT2FN = {
 
 
 class TFBertEmbeddings(tf.keras.layers.Layer):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
+    """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -225,10 +224,10 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
     def _linear(self, inputs):
         """Computes logits by running inputs through a linear layer.
-            Args:
-                inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-            Returns:
-                float32 tensor with shape [batch_size, length, vocab_size].
+        Args:
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+        Returns:
+            float32 tensor with shape [batch_size, length, vocab_size].
         """
         batch_size = shape_list(inputs)[0]
         length = shape_list(inputs)[1]
@@ -551,9 +550,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         raise NotImplementedError
 
@@ -656,7 +655,10 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
-            return (sequence_output, pooled_output,) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -667,8 +669,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
 
 class TFBertPreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = BertConfig
@@ -824,18 +826,18 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForPreTraining
+            import tensorflow as tf
+            from transformers import BertTokenizer, TFBertForPreTraining
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        prediction_scores, seq_relationship_scores = outputs[:2]
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
+            input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+            outputs = model(input_ids)
+            prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
         return_dict = kwargs.get("return_dict")
@@ -933,7 +935,10 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1011,12 +1016,16 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             return ((loss,) + output) if loss is not None else output
 
         return TFCausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top. """, BERT_START_DOCSTRING,
+    """Bert Model with a `next sentence prediction (classification)` head on top. """,
+    BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
@@ -1029,22 +1038,22 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
-    Return:
+        Return:
 
-    Examples::
+        Examples::
 
-        import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForNextSentencePrediction
+            import tensorflow as tf
+            from transformers import BertTokenizer, TFBertForNextSentencePrediction
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
-        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
+            prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+            next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+            encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
 
-        logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-        assert logits[0][0] < logits[0][1] # the next sentence was random
+            logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
+            assert logits[0][0] < logits[0][1] # the next sentence was random
         """
         return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
@@ -1057,7 +1066,9 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
             return (seq_relationship_score,) + outputs[2:]
 
         return TFNextSentencePredictorOutput(
-            logits=seq_relationship_score, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=seq_relationship_score,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1138,7 +1149,10 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1159,7 +1173,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
 
     @property
     def dummy_inputs(self):
-        """ Dummy inputs to build the network.
+        """Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -1261,7 +1275,10 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1340,7 +1357,10 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
