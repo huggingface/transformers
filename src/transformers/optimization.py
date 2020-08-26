@@ -401,7 +401,7 @@ class Adafactor(Optimizer):
             relative_step=relative_step,
             warmup_init=warmup_init,
         )
-        super(Adafactor, self).__init__(params, defaults)
+        super().__init__(params, defaults)
 
     def _get_lr(self, param_group, param_state):
         rel_step_sz = param_group["lr"]
