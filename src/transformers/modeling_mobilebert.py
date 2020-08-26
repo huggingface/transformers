@@ -31,7 +31,6 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from . import hf_logging
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig
 from .file_utils import (
@@ -53,9 +52,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"

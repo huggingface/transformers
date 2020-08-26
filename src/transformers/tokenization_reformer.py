@@ -18,11 +18,11 @@
 import os
 from shutil import copyfile
 
-from . import hf_logging
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 

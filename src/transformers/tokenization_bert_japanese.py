@@ -20,11 +20,11 @@ import os
 import unicodedata
 from typing import Optional
 
-from . import hf_logging
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 

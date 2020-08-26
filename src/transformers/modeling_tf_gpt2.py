@@ -22,7 +22,6 @@ from typing import List, Optional, Tuple
 import numpy as np
 import tensorflow as tf
 
-from . import hf_logging
 from .configuration_gpt2 import GPT2Config
 from .file_utils import (
     ModelOutput,
@@ -43,9 +42,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"

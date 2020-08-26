@@ -75,7 +75,7 @@ from transformers import (
 )
 from transformers.file_utils import hf_bucket_url
 
-from . import hf_logging
+from .utils import logging
 
 
 if is_torch_available():
@@ -105,7 +105,7 @@ if is_torch_available():
     )
 
 
-hf_logging.set_verbosity_info()
+logging.set_verbosity_info()
 
 MODEL_CLASSES = {
     "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),

@@ -21,10 +21,10 @@ import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
-from . import hf_logging
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):

@@ -24,11 +24,11 @@ from typing import List, Optional
 
 import sacremoses as sm
 
-from . import hf_logging
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

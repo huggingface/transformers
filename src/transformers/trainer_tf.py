@@ -10,12 +10,12 @@ import numpy as np
 import tensorflow as tf
 from packaging.version import parse
 
-from . import hf_logging
 from .integrations import is_comet_available, is_wandb_available
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
+from .utils import logging
 
 
 if is_wandb_available():
@@ -24,7 +24,7 @@ if is_wandb_available():
 if is_comet_available():
     import comet_ml
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFTrainer:

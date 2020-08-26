@@ -24,7 +24,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
-from . import hf_logging
 from .activations import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import (
@@ -43,9 +42,10 @@ from .modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"

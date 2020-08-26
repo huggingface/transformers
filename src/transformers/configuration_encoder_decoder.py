@@ -16,11 +16,11 @@
 
 import copy
 
-from . import hf_logging
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class EncoderDecoderConfig(PretrainedConfig):

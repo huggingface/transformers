@@ -20,10 +20,10 @@ from dataclasses import dataclass, field
 from time import time
 from typing import List
 
-from .. import hf_logging
+from ..utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def list_field(default=None, metadata=None):

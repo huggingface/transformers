@@ -20,16 +20,16 @@ from dataclasses import asdict
 from enum import Enum
 from typing import List, Optional, Union
 
-from ... import hf_logging
 from ...file_utils import is_tf_available
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
 
 if is_tf_available():
     import tensorflow as tf
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def glue_convert_examples_to_features(

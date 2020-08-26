@@ -14,11 +14,11 @@
 # limitations under the License.
 """ MBART configuration """
 
-from . import hf_logging
 from .configuration_bart import BartConfig
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 MBART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",

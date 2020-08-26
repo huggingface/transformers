@@ -23,14 +23,14 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 
-from . import hf_logging
 from .configuration_retribert import RetriBertConfig
 from .file_utils import add_start_docstrings
 from .modeling_bert import BertLayerNorm, BertModel
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "yjernite/retribert-base-uncased",

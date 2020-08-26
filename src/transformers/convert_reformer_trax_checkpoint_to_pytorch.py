@@ -21,11 +21,12 @@ import pickle
 import numpy as np
 import torch
 
-import hf_logging
 from transformers import ReformerConfig, ReformerModelWithLMHead
 
+from .utils import logging
 
-hf_logging.set_verbosity_info()
+
+logging.set_verbosity_info()
 
 
 def set_param(torch_layer, weight, bias=None):

@@ -21,10 +21,10 @@ import torch
 
 from transformers import BertConfig, BertForPreTraining, load_tf_weights_in_bert
 
-from . import hf_logging
+from .utils import logging
 
 
-hf_logging.set_verbosity_info()
+logging.set_verbosity_info()
 
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):

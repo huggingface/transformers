@@ -17,10 +17,10 @@
 import numpy as np
 import tensorflow as tf
 
-from . import hf_logging
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFGenerationMixin:

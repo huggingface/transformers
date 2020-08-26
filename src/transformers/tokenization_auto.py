@@ -17,7 +17,6 @@
 
 from collections import OrderedDict
 
-from . import hf_logging
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -69,9 +68,10 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 TOKENIZER_MAPPING = OrderedDict(

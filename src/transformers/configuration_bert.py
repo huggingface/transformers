@@ -15,12 +15,11 @@
 # limitations under the License.
 """ BERT model configuration """
 
-
-from . import hf_logging
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-config.json",

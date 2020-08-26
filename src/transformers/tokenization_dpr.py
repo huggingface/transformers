@@ -18,13 +18,13 @@
 import collections
 from typing import List, Optional, Union
 
-from . import hf_logging
 from .file_utils import add_end_docstrings, add_start_docstrings
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_utils_base import BatchEncoding, TensorType
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 

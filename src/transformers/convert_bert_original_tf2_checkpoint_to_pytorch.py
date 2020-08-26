@@ -16,11 +16,11 @@ import torch
 
 from transformers import BertConfig, BertModel
 
-from . import hf_logging
+from .utils import logging
 
 
-hf_logging.set_verbosity_info()
-logger = hf_logging.get_logger(__name__)
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 
 def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):

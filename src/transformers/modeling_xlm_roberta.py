@@ -15,8 +15,6 @@
 # limitations under the License.
 """PyTorch XLM-RoBERTa model. """
 
-
-from . import hf_logging
 from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
@@ -27,9 +25,10 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-base",

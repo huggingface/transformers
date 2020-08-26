@@ -28,7 +28,6 @@ from torch import nn
 from torch.autograd.function import Function
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from . import hf_logging
 from .activations import gelu, gelu_fast, gelu_new, swish
 from .configuration_reformer import ReformerConfig
 from .file_utils import (
@@ -41,9 +40,10 @@ from .file_utils import (
 )
 from .modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ReformerConfig"
 _TOKENIZER_FOR_DOC = "ReformerTokenizer"

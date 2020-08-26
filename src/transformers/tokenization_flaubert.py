@@ -19,11 +19,11 @@ import unicodedata
 
 import six
 
-from . import hf_logging
 from .tokenization_xlm import XLMTokenizer
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

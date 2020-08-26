@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch CamemBERT model. """
 
-from . import hf_logging
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_roberta import (
@@ -27,9 +26,10 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _TOKENIZER_FOR_DOC = "CamembertTokenizer"
 

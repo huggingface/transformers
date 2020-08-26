@@ -24,14 +24,14 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.saving import hdf5_format
 
-from . import hf_logging
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFModelUtilsMixin:

@@ -30,7 +30,7 @@ from transformers import (
     load_tf_weights_in_xlnet,
 )
 
-from . import hf_logging
+from .utils import logging
 
 
 GLUE_TASKS_NUM_LABELS = {
@@ -46,7 +46,7 @@ GLUE_TASKS_NUM_LABELS = {
 }
 
 
-hf_logging.set_verbosity_info()
+logging.set_verbosity_info()
 
 
 def convert_xlnet_checkpoint_to_pytorch(

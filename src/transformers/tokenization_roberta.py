@@ -19,12 +19,12 @@ from typing import List, Optional
 
 from tokenizers.processors import RobertaProcessing
 
-from . import hf_logging
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_utils import AddedToken
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",

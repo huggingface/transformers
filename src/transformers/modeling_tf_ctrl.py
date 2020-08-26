@@ -19,7 +19,6 @@
 import numpy as np
 import tensorflow as tf
 
-from . import hf_logging
 from .configuration_ctrl import CTRLConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
@@ -31,9 +30,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CTRLConfig"
 _TOKENIZER_FOR_DOC = "CTRLTokenizer"

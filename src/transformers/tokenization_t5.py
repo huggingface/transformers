@@ -20,11 +20,11 @@ import re
 from shutil import copyfile
 from typing import List, Optional
 
-from . import hf_logging
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 

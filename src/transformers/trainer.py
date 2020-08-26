@@ -18,7 +18,6 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
-from . import hf_logging
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import is_nlp_available, is_torch_tpu_available
 from .integrations import (
@@ -44,6 +43,7 @@ from .trainer_utils import (
     set_seed,
 )
 from .training_args import TrainingArguments
+from .utils import logging
 
 
 _use_native_amp = False
@@ -86,7 +86,7 @@ if is_optuna_available():
 if is_ray_available():
     from ray import tune
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @contextmanager

@@ -15,12 +15,12 @@
 
 from typing import List, Optional
 
-from . import hf_logging
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_utils_base import BatchEncoding
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 # vocab and merges same as roberta

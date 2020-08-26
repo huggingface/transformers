@@ -19,7 +19,6 @@ import random
 
 import tensorflow as tf
 
-from . import hf_logging
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_outputs import TFBaseModelOutput
@@ -36,9 +35,10 @@ from .modeling_tf_xlm import (
     get_masks,
 )
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Flaubert models at https://huggingface.co/models?filter=flaubert

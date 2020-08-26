@@ -7,11 +7,11 @@ from torch.utils.data.dataset import Dataset
 
 from filelock import FileLock
 
-from ... import hf_logging
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TextDataset(Dataset):

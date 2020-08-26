@@ -32,10 +32,10 @@ from transformers import (
 )
 from transformers.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
 
-from . import hf_logging
+from .utils import logging
 
 
-hf_logging.set_verbosity_info()
+logging.set_verbosity_info()
 
 # We do this to be able to load python 2 datasets pickles
 # See e.g. https://stackoverflow.com/questions/2121874/python-pickling-after-changing-a-modules-directory/2121918#2121918

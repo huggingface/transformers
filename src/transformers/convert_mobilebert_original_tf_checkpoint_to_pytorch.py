@@ -4,10 +4,10 @@ import torch
 
 from transformers import MobileBertConfig, MobileBertForPreTraining, load_tf_weights_in_mobilebert
 
-from . import hf_logging
+from .utils import logging
 
 
-hf_logging.set_verbosity_info()
+logging.set_verbosity_info()
 
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, mobilebert_config_file, pytorch_dump_path):

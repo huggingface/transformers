@@ -16,11 +16,11 @@
 
 from typing import List, Union
 
-from . import hf_logging
 from .configuration_roberta import RobertaConfig
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "allenai/longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/config.json",

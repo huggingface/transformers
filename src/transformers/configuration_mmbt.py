@@ -15,11 +15,10 @@
 # limitations under the License.
 """ MMBT configuration """
 
+from .utils import logging
 
-from . import hf_logging
 
-
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class MMBTConfig(object):

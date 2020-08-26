@@ -17,8 +17,8 @@
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from .. import hf_logging
 from ..file_utils import cached_property, is_tf_available, tf_required
+from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -26,7 +26,7 @@ if is_tf_available():
     import tensorflow as tf
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass

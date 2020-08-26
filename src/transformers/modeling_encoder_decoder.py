@@ -17,13 +17,13 @@
 
 from typing import Optional
 
-from . import hf_logging
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_utils import PreTrainedModel
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class EncoderDecoderModel(PreTrainedModel):

@@ -16,10 +16,10 @@ import string
 
 from transformers.tokenization_bert import BasicTokenizer
 
-from ... import hf_logging
+from ...utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def normalize_answer(s):

@@ -32,7 +32,7 @@ from transformers import (
 )
 from transformers.modeling_bart import _make_linear_from_emb
 
-from . import hf_logging
+from .utils import logging
 
 
 FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn", "bart_xsum/model.pt"]
@@ -41,8 +41,8 @@ if version.parse(fairseq.__version__) < version.parse("0.9.0"):
     raise Exception("requires fairseq >= 0.9.0")
 
 
-hf_logging.set_verbosity_info()
-logger = hf_logging.get_logger(__name__)
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 SAMPLE_TEXT = " Hello world! cécé herlolip"
 

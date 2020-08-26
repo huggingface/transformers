@@ -31,7 +31,6 @@ import numpy as np
 from tokenizers import AddedToken
 from tokenizers import Encoding as EncodingFast
 
-from . import hf_logging
 from .file_utils import (
     add_end_docstrings,
     cached_path,
@@ -41,6 +40,7 @@ from .file_utils import (
     is_torch_available,
     torch_required,
 )
+from .utils import logging
 
 
 if is_tf_available():
@@ -49,7 +49,7 @@ if is_torch_available():
     import torch
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 VERY_LARGE_INTEGER = int(1e30)  # This is used to set the max input length for a model with infinite size input
 LARGE_INTEGER = int(1e20)  # This is used when we need something big but slightly smaller than VERY_LARGE_INTEGER

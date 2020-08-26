@@ -29,7 +29,6 @@ from uuid import UUID
 
 import numpy as np
 
-from . import hf_logging
 from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
 from .data import SquadExample, squad_convert_examples_to_features
@@ -39,6 +38,7 @@ from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import BatchEncoding, PaddingStrategy
+from .utils import logging
 
 
 if is_tf_available():
@@ -80,7 +80,7 @@ if TYPE_CHECKING:
     from .modeling_utils import PreTrainedModel
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def get_framework(model=None):

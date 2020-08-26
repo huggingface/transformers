@@ -25,7 +25,6 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from . import hf_logging
 from .activations import ACT2FN
 from .configuration_gpt2 import GPT2Config
 from .file_utils import (
@@ -43,9 +42,10 @@ from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_conv1d_layer,
 )
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"

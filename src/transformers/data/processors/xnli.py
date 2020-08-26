@@ -18,11 +18,11 @@
 
 import os
 
-from ... import hf_logging
+from ...utils import logging
 from .utils import DataProcessor, InputExample
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class XnliProcessor(DataProcessor):

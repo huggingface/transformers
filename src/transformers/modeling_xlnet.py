@@ -25,7 +25,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
-from . import hf_logging
 from .activations import gelu_new, swish
 from .configuration_xlnet import XLNetConfig
 from .file_utils import (
@@ -43,9 +42,10 @@ from .modeling_utils import (
     SequenceSummary,
     apply_chunking_to_forward,
 )
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "XLNetConfig"
 _TOKENIZER_FOR_DOC = "XLNetTokenizer"

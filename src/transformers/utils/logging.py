@@ -87,14 +87,14 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 def get_verbosity() -> int:
     """Return the current level for the HuggingFace Transformers's root logger.
     Returns:
-        Logging level, e.g., ``transformers.hf_logging.DEBUG`` and ``transformers.hf_logging.INFO``.
+        Logging level, e.g., ``transformers.logging.DEBUG`` and ``transformers.logging.INFO``.
     .. note::
         HuggingFace Transformers has following logging levels:
-        - ``transformers.hf_logging.CRITICAL``, ``transformers.hf_logging.FATAL``
-        - ``transformers.hf_logging.ERROR``
-        - ``transformers.hf_logging.WARNING``, ``transformers.hf_logging.WARN``
-        - ``transformers.hf_logging.INFO``
-        - ``transformers.hf_logging.DEBUG``
+        - ``transformers.logging.CRITICAL``, ``transformers.logging.FATAL``
+        - ``transformers.logging.ERROR``
+        - ``transformers.logging.WARNING``, ``transformers.logging.WARN``
+        - ``transformers.logging.INFO``
+        - ``transformers.logging.DEBUG``
     """
 
     _configure_library_root_logger()
@@ -121,7 +121,7 @@ def set_verbosity(verbosity: int) -> None:
     """Set the level for the HuggingFace Transformers's root logger.
     Args:
         verbosity:
-            Logging level, e.g., ``transformers.hf_logging.DEBUG`` and ``transformers.hf_logging.INFO``.
+            Logging level, e.g., ``transformers.logging.DEBUG`` and ``transformers.logging.INFO``.
     """
 
     _configure_library_root_logger()

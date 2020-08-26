@@ -24,7 +24,6 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
-from . import hf_logging
 from .file_utils import add_end_docstrings
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -38,9 +37,10 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(

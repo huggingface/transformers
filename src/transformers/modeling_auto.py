@@ -18,7 +18,6 @@
 import warnings
 from collections import OrderedDict
 
-from . import hf_logging
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -172,9 +171,10 @@ from .modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 MODEL_MAPPING = OrderedDict(

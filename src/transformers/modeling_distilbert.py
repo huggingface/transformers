@@ -27,7 +27,6 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from . import hf_logging
 from .activations import gelu
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import (
@@ -50,9 +49,10 @@ from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DistilBertConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"

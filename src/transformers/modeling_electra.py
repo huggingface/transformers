@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from . import hf_logging
 from .activations import get_activation
 from .configuration_electra import ElectraConfig
 from .file_utils import (
@@ -27,9 +26,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import SequenceSummary
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ElectraConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"

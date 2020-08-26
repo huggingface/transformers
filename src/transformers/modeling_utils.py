@@ -25,7 +25,6 @@ from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
-from . import hf_logging
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
@@ -41,9 +40,10 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 try:

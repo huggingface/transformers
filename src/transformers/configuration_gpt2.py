@@ -15,12 +15,11 @@
 # limitations under the License.
 """ OpenAI GPT-2 configuration """
 
-
-from . import hf_logging
 from .configuration_utils import PretrainedConfig
+from .utils import logging
 
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",

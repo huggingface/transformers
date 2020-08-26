@@ -27,15 +27,15 @@ from packaging import version
 from transformers.modeling_bert import BertIntermediate, BertLayer, BertOutput, BertSelfAttention, BertSelfOutput
 from transformers.modeling_roberta import RobertaConfig, RobertaForMaskedLM, RobertaForSequenceClassification
 
-from . import hf_logging
+from .utils import logging
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
     raise Exception("requires fairseq >= 0.9.0")
 
 
-hf_logging.set_verbosity_info()
-logger = hf_logging.get_logger(__name__)
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 SAMPLE_TEXT = "Hello world! cécé herlolip"
 
