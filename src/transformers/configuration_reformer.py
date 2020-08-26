@@ -165,9 +165,16 @@ class ReformerConfig(PretrainedConfig):
         num_hashes=1,
         pad_token_id=0,
         vocab_size=320,
+        tie_word_embeddings=False,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_decoder=is_decoder, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_decoder=is_decoder,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
         self.hash_seed = hash_seed
         self.vocab_size = vocab_size

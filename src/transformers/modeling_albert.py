@@ -647,13 +647,12 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         self.sop_classifier = AlbertSOPHead(config)
 
         self.init_weights()
-        self.tie_weights()
-
-    def tie_weights(self):
-        self._tie_or_clone_weights(self.predictions.decoder, self.albert.embeddings.word_embeddings)
 
     def get_output_embeddings(self):
         return self.predictions.decoder
+
+    def get_input_embeddings(self):
+        return self.albert.embeddings.word_embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -798,13 +797,12 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         self.predictions = AlbertMLMHead(config)
 
         self.init_weights()
-        self.tie_weights()
-
-    def tie_weights(self):
-        self._tie_or_clone_weights(self.predictions.decoder, self.albert.embeddings.word_embeddings)
 
     def get_output_embeddings(self):
         return self.predictions.decoder
+
+    def get_input_embeddings(self):
+        return self.albert.embeddings.word_embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
