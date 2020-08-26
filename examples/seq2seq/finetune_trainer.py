@@ -20,15 +20,28 @@ from transformers import (
     set_seed,
 )
 
-from .utils import (
-    Seq2SeqDataset,
-    TranslationDataset,
-    assert_all_frozen,
-    calculate_rouge,
-    freeze_params,
-    lmap,
-    trim_batch,
-)
+try:
+  from .utils import (
+      Seq2SeqDataset,
+      TranslationDataset,
+      assert_all_frozen,
+      calculate_rouge,
+      freeze_params,
+      lmap,
+      trim_batch,
+  )
+  from .seq2seq_trainer import Seq2SeqTrainer
+except ImportError:
+  from utils import (
+      Seq2SeqDataset,
+      TranslationDataset,
+      assert_all_frozen,
+      calculate_rouge,
+      freeze_params,
+      lmap,
+      trim_batch,
+  )
+  from seq2seq_trainer import Seq2SeqTrainer
 
 
 logger = logging.getLogger(__name__)
@@ -143,7 +156,6 @@ class DataTrainingArguments:
             "than this will be truncated, sequences shorter will be padded."
         },
     )
-    sortish_sampler: bool = field(default=False, metadata={"help": "use sortish sampler"})
     n_train: Optional[int] = field(default=-1, metadata={"help": "# examples. -1 means use all."})
     n_val: Optional[int] = field(default=-1, metadata={"help": "# examples. -1 means use all."})
     n_test: Optional[int] = field(default=-1, metadata={"help": "# examples. -1 means use all."})
@@ -227,8 +239,7 @@ def main():
             pred_str = lmap(str.strip, pred_str)
             label_str = lmap(str.strip, label_str)
 
-            rouge: Dict = calculate_rouge(pred_str, pred_str)
-
+            rouge: Dict = calculate_rouge(pred_str, label_str)
             return rouge
 
         return compute_metrics
@@ -298,11 +309,12 @@ def main():
     )
 
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
+        data_collator=Seq2SeqDataCollator(tokenizer),
         compute_metrics=get_compute_metrics_fn() if training_args.predict_from_generate else None,
         prediction_loss_only=training_args.predict_from_generate == False,
     )
@@ -318,4 +330,24 @@ def main():
         if trainer.is_world_master():
             tokenizer.save_pretrained(training_args.output_dir)
 
-    # TODO: compute_metrics
+    # Evaluation
+    eval_results = {}
+    if training_args.do_eval:
+        logger.info("*** Evaluate ***")
+
+        result = trainer.evaluate()
+
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
+        if trainer.is_world_master():
+            with open(output_eval_file, "w") as writer:
+                logger.info("***** Eval results *****")
+                for key, value in result.items():
+                    logger.info("  %s = %s", key, value)
+                    writer.write("%s = %s\n" % (key, value))
+
+            eval_results.update(result)
+    
+    return eval_results
+
+if __name__ == "__main__":
+  main()
