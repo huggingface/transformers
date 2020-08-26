@@ -128,10 +128,11 @@ class EncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
+        return_dict,
         **kwargs
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
+        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
         enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
@@ -361,7 +362,11 @@ class EncoderDecoderMixin:
 
     def test_encoder_decoder_model_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict)
+        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=False)
+
+    def test_encoder_decoder_model_from_pretrained_return_dict(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=True)
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()

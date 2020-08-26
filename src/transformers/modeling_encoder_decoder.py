@@ -19,6 +19,7 @@ from typing import Optional
 
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_utils import PretrainedConfig
+from .modeling_outputs import Seq2SeqLMOutput
 from .modeling_utils import PreTrainedModel
 from .utils import logging
 
@@ -216,6 +217,7 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_attention_mask=None,
         decoder_inputs_embeds=None,
         labels=None,
+        return_dict=None,
         **kwargs,
     ):
 
@@ -254,6 +256,9 @@ class EncoderDecoderModel(PreTrainedModel):
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
                 in ``[0, ..., config.vocab_size]``
+            return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+                If set to ``True``, the model will return a :class:`~transformers.file_utils.Seq2SeqLMOutput` instead of a
+                plain tuple.
             kwargs: (`optional`) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
                 - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
                 - With a `decoder_` prefix which will be input as `**decoder_kwargs` for the decoder forward function.
@@ -277,6 +282,7 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
 
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
@@ -289,7 +295,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
-                return_dict=False,
+                return_dict=return_dict,
                 **kwargs_encoder,
             )
 
@@ -303,12 +309,25 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             labels=labels,
-            return_dict=False,
+            return_dict=return_dict,
             **kwargs_decoder,
         )
 
         # TODO(PVP): currently it is not possible to use `past`
-        # with the encoder/decoder framework -> should be implemented
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
+        return Seq2SeqLMOutput(
+            loss=decoder_outputs.loss,
+            logits=decoder_outputs.logits,
+            decoder_past_key_values=None,  # TODO(PVP) - need to implement cache for BERT, etc... before this works
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
         return decoder_outputs + encoder_outputs
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):

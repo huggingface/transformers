@@ -380,13 +380,25 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             heads.
     """
 
-    lm_loss: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
     mc_loss: Optional[torch.FloatTensor] = None
-    lm_logits: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
     mc_logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+    @property
+    def lm_logits(self):
+        warnings.warn(
+            "`lm_logits` is deprecated. Please use `logits` instead for the language model logits", FutureWarning
+        )
+        return self.logits
+
+    @property
+    def lm_loss(self):
+        warnings.warn("`lm_loss` is deprecated. Please use `loss` instead for the language model loss", FutureWarning)
+        return self.loss
 
 
 GPT2_START_DOCSTRING = r"""
@@ -904,9 +916,9 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return GPT2DoubleHeadsModelOutput(
-            lm_loss=lm_loss,
+            loss=lm_loss,
             mc_loss=mc_loss,
-            lm_logits=lm_logits,
+            logits=lm_logits,
             mc_logits=mc_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,

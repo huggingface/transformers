@@ -400,7 +400,7 @@ class GenerationMixin:
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
-            encoder_outputs: tuple = encoder(input_ids, attention_mask=attention_mask)
+            encoder_outputs = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
@@ -428,8 +428,8 @@ class GenerationMixin:
             cur_len = 1
 
             assert (
-                batch_size == encoder_outputs[0].shape[0]
-            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
+                batch_size == encoder_outputs.last_hidden_state.shape[0]
+            ), f"expected encoder_outputs.last_hidden_state to have 1st dimension bs={batch_size}, got {encoder_outputs.last_hidden_state.shape[0]} "
 
             # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
             expanded_batch_idxs = (
@@ -440,7 +440,7 @@ class GenerationMixin:
                 .to(input_ids.device)
             )
             # expand encoder_outputs
-            encoder_outputs = (encoder_outputs[0].index_select(0, expanded_batch_idxs), *encoder_outputs[1:])
+            encoder_outputs.last_hidden_state = encoder_outputs.last_hidden_state.index_select(0, expanded_batch_idxs)
 
         else:
             encoder_outputs = None
@@ -536,7 +536,7 @@ class GenerationMixin:
             )
 
             outputs = self(**model_inputs, return_dict=True)
-            next_token_logits = outputs[0][:, -1, :]
+            next_token_logits = outputs.logits[:, -1, :]
 
             scores = self.postprocess_next_token_scores(
                 scores=next_token_logits,
@@ -657,7 +657,7 @@ class GenerationMixin:
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
             outputs = self(**model_inputs, return_dict=True)  # (batch_size * num_beams, cur_len, vocab_size)
-            next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
+            next_token_logits = outputs.logits[:, -1, :]  # (batch_size * num_beams, vocab_size)
 
             # if model has past, then set the past variable to speed up decoding
             if outputs.get("past_key_values", None) is not None:
