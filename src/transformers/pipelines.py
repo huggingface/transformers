@@ -2157,13 +2157,13 @@ class Text2TextGenerationPipeline(Pipeline):
                 inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
             )
             results = []
-            for translation in generations:
+            for generation in generations:
                 record = {}
                 if return_tensors:
-                    record["generated_token_ids"] = translation
+                    record["generated_token_ids"] = generation
                 if return_text:
                     record["generated_text"] = self.tokenizer.decode(
-                        translation,
+                        generation,
                         skip_special_tokens=True,
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
