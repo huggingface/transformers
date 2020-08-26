@@ -20,7 +20,6 @@ import os
 
 import numpy as np
 import tensorflow as tf
-import torch
 
 from transformers import BertForQuestionAnswering, TFBertForQuestionAnswering
 
@@ -33,7 +32,7 @@ def convert_BertForQuestionAnswering_pytorch_checkpoint_to_tf(
     :param model:BertModel Pytorch model instance to be converted
     :param ckpt_dir: Tensorflow model directory
     :param model_name: model name
-    :return: 
+    :return:
     Currently supported HF models:
         N BertModel
         N BertForMaskedLM
