@@ -13,7 +13,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import MarianTokenizer, MBartTokenizer, T5ForConditionalGeneration
+from transformers import MBartTokenizer, T5ForConditionalGeneration
 from transformers.modeling_bart import shift_tokens_right
 
 
@@ -21,8 +21,8 @@ try:
     from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
     from .utils import (
         ROUGE_KEYS,
+        LegacySeq2SeqDataset,
         Seq2SeqDataset,
-        TranslationDataset,
         assert_all_frozen,
         calculate_bleu,
         calculate_rouge,
@@ -40,8 +40,8 @@ except ImportError:
     from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
     from utils import (
         ROUGE_KEYS,
+        LegacySeq2SeqDataset,
         Seq2SeqDataset,
-        TranslationDataset,
         assert_all_frozen,
         calculate_bleu,
         calculate_rouge,
@@ -103,11 +103,13 @@ class SummarizationModule(BaseTransformer):
 
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
-        self.decoder_start_token_id = None
+        self.decoder_start_token_id = None  # default to config
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
-        self.dataset_class = TranslationDataset
+        self.dataset_class = (
+            Seq2SeqDataset if hasattr(self.tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
+        )
 
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
@@ -132,21 +134,24 @@ class SummarizationModule(BaseTransformer):
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]#, batch["decoder_input_ids"]
+        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]  # , batch["decoder_input_ids"]
 
         if "labels" in batch:
             lm_labels = batch["labels"]
             decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
         elif isinstance(self.model, T5ForConditionalGeneration):
-            lm_labels = batch["decoder_input_ids"]
+            lm_labels = batch["labels"]
             decoder_input_ids = self.model._shift_right(lm_labels)
         else:
-            raise ValueError()
+            target_ids = batch["decoder_input_ids"]
+            # This is a slightly worse way of shifting tokens right -- it deletes token 0 from target_id
+            decoder_input_ids = target_ids[:, :-1].contiguous()
+            lm_labels = target_ids[:, 1:].clone()
 
         outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
 
         if self.hparams.label_smoothing == 0:
-            # Same behavior as modeling_bart.py, besides pad_token_id
+            # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
             lm_logits = outputs[0]
             assert lm_logits.shape[-1] == self.model.config.vocab_size

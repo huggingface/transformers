@@ -118,8 +118,8 @@ class BartTokenizer(RobertaTokenizer):
             The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
             will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
         """
-        kwargs.pop('src_lang', None)
-        kwargs.pop('tgt_lang', None)
+        kwargs.pop("src_lang", None)
+        kwargs.pop("tgt_lang", None)
         if max_length is None:
             max_length = self.model_max_length
         model_inputs: BatchEncoding = self(

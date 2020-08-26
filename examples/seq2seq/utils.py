@@ -75,7 +75,7 @@ def trim_batch(
         return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
 
 
-class Seq2SeqDataset(Dataset):
+class LegacySeq2SeqDataset(Dataset):
     def __init__(
         self,
         tokenizer,
@@ -146,7 +146,7 @@ class Seq2SeqDataset(Dataset):
         return SortishSampler(self.src_lens, batch_size)
 
 
-class TranslationDataset(Seq2SeqDataset):
+class Seq2SeqDataset(LegacySeq2SeqDataset):
     """A dataset that calls prepare_seq2seq_batch."""
 
     def __init__(self, *args, **kwargs):
@@ -176,7 +176,7 @@ class TranslationDataset(Seq2SeqDataset):
             tgt_lang=self.tgt_lang,
             max_length=self.max_source_length,
             max_target_length=self.max_target_length,
-            return_tensors='pt',
+            return_tensors="pt",
         )
         return batch_encoding.data
 
