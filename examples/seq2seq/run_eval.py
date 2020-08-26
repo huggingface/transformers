@@ -93,7 +93,7 @@ def run_generate():
         type=int,
         default=None,
         required=False,
-        help="decoder_start_token_id (otherwise will look at config)",
+        help="Defaults to using config",
     )
     parser.add_argument(
         "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
