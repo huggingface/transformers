@@ -364,32 +364,29 @@ def quantize(onnx_model_path: Path) -> Path:
 
     Returns: The Path generated for the quantized
     """
-    try:
-        import onnx
-        from onnxruntime.quantization import QuantizationMode, quantize
+    import onnx
+    from onnxruntime.quantization import QuantizationMode, quantize
 
-        onnx_model = onnx.load(onnx_model_path.as_posix())
+    onnx_model = onnx.load(onnx_model_path.as_posix())
 
-        # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
-        print(
-            "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
-            "This limitation will be removed in the next release of onnxruntime."
-        )
+    # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
+    print(
+        "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
+        "This limitation will be removed in the next release of onnxruntime."
+    )
 
-        quantized_model = quantize(
-            model=onnx_model, quantization_mode=QuantizationMode.IntegerOps, force_fusions=True, symmetric_weight=True,
-        )
+    quantized_model = quantize(
+        model=onnx_model, quantization_mode=QuantizationMode.IntegerOps, force_fusions=True, symmetric_weight=True,
+    )
 
-        # Append "-quantized" at the end of the model's name
-        quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
+    # Append "-quantized" at the end of the model's name
+    quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
-        # Save model
-        print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
-        onnx.save_model(quantized_model, quantized_model_path.as_posix())
+    # Save model
+    print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
+    onnx.save_model(quantized_model, quantized_model_path.as_posix())
 
-        return quantized_model_path
-    except Exception as ie:
-        print(f"Error while quantizing the model:\n{str(ie)}")
+    return quantized_model_path
 
 
 def verify(path: Path):

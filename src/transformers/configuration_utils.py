@@ -134,6 +134,7 @@ class PretrainedConfig(object):
         PyTorch specific parameters
             - **torchscript** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should be
               used with Torchscript.
+            - **tie_word_embeddings** (:obj:`bool`, `optional`, defaults to :obj:`True`) -- Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the model has a output word embedding layer.
 
         TensorFlow specific parameters
             - **use_bfloat16** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether or not the model should
@@ -150,6 +151,9 @@ class PretrainedConfig(object):
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
+        self.tie_word_embeddings = kwargs.pop(
+            "tie_word_embeddings", True
+        )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)

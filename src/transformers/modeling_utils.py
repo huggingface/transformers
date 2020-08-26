@@ -413,7 +413,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         the weights instead.
         """
         output_embeddings = self.get_output_embeddings()
-        if output_embeddings is not None:
+        if output_embeddings is not None and self.config.tie_word_embeddings:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
         if self.config.is_encoder_decoder and self.config.tie_encoder_decoder:
