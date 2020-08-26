@@ -1,6 +1,6 @@
 import unittest
 
-from .utils import logging
+from transformers import logging
 
 
 class HfArgumentParserTest(unittest.TestCase):
