@@ -19,7 +19,6 @@
 """
 
 import copy
-import logging
 import os
 import warnings
 from collections import OrderedDict, UserDict
