@@ -46,12 +46,14 @@ if is_tf_available():
 
     from .modeling_tf_auto import (
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
         TFAutoModel,
         TFAutoModelForCausalLM,
         TFAutoModelForQuestionAnswering,
+        TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
@@ -2098,7 +2100,9 @@ class Text2TextGenerationPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         self.check_model_type(
-            TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            if self.framework == "tf"
+            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
         )
 
     def __call__(
@@ -2555,7 +2559,7 @@ SUPPORTED_TASKS = {
     },
     "text2text-generation": {
         "impl": Text2TextGenerationPipeline,
-        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "tf": TFAutoModelForSeq2SeqLM if is_tf_available() else None,
         "pt": AutoModelForSeq2SeqLM if is_torch_available() else None,
         "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
