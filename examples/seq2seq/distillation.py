@@ -233,7 +233,7 @@ class BartSummarizationDistiller(SummarizationModule):
 
 
 def add_distill_args(parser):
-    parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
+    parser.add_argument("--teacher", type=str)
     parser.add_argument("--alpha_ce", default=0.8, type=float)
     parser.add_argument("--alpha_mlm", default=0.2, type=float)
     parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
@@ -252,7 +252,6 @@ class BartTranslationDistiller(BartSummarizationDistiller):
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, **kwargs)
-        assert isinstance(self.tokenizer, MBartTokenizer)
         assert hparams.src_lang is not None
         assert hparams.tgt_lang is not None
         self.dataset_kwargs["src_lang"] = hparams.src_lang
@@ -422,33 +421,38 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
     trainer.test(model)
 
 
-def get_layers_to_copy(n_to_get, tot):
-    all_layers = list(range(tot))
-    if tot == 12:  # Alternating for special cases
-        layers_to_copy = {  # maps  num layers in student -> which teacher layers to copy
-            1: [0],
-            2: [0, 6],
-            3: [0, 6, 11],
-            4: [0, 4, 8, 11],
-            6: [0, 2, 4, 7, 9, 11],
-            9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
-            12: all_layers,
-        }
-        return layers_to_copy[n_to_get]
-    elif tot == 16:
-        layers_to_copy = {  # maps  num layers in student -> which teacher layers to copy
-            1: [0],
-            2: [0, 8],
-            3: [0, 8, 15],
-            4: [0, 5, 10, 15],
-            6: [0, 3, 6, 9, 12, 15],
-            8: [0, 2, 4, 6, 8, 10, 12, 15],
-            9: [0, 1, 3, 5, 7, 9, 11, 13, 15],
-            16: all_layers,
-        }
-        return layers_to_copy[n_to_get]
-    else:
-        return all_layers[:n_to_get]  # TODO: better version on theseus-bart branch
+LAYERS_TO_COPY = {
+    # maps  num layers in student -> which teacher layers to copy.
+    # 12:bart, 16: pegasus, 6: marian/Helsinki-NLP
+    12: {
+        1: [0],
+        2: [0, 6],
+        3: [0, 6, 11],
+        4: [0, 4, 8, 11],
+        6: [0, 2, 4, 7, 9, 11],
+        9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
+        12: list(range(12)),
+    },
+    16: {  # maps  num layers in student -> which teacher layers to copy
+        1: [0],
+        2: [0, 8],
+        3: [0, 8, 15],
+        4: [0, 5, 10, 15],
+        6: [0, 3, 6, 9, 12, 15],
+        8: [0, 2, 4, 6, 8, 10, 12, 15],
+        9: [0, 1, 3, 5, 7, 9, 11, 13, 15],
+        16: list(range(16)), },
+    6: {1: [0], 2: [0, 5], 3: [0, 2, 5], 4: [0, 1, 3, 5], 6: list(range(6))}
+}
+
+import warnings
+
+def get_layers_to_copy(n_student, n_teacher):
+    try:
+        return LAYERS_TO_COPY[n_teacher][n_student]
+    except KeyError:
+        warnings.warn(f'no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}')
+        return list(range(n_student))
 
 
 def distill_main(args):
