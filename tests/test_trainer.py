@@ -4,7 +4,7 @@ import nlp
 import numpy as np
 
 from transformers import AutoTokenizer, TrainingArguments, is_torch_available
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import get_tests_dir, require_torch
 
 
 if is_torch_available():
@@ -20,7 +20,7 @@ if is_torch_available():
     )
 
 
-PATH_SAMPLE_TEXT = "./tests/fixtures/sample_text.txt"
+PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
 
 class RegressionDataset:
@@ -262,7 +262,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
         data_args = GlueDataTrainingArguments(
-            task_name="mrpc", data_dir="./tests/fixtures/tests_samples/MRPC", overwrite_cache=True
+            task_name="mrpc", data_dir=f"{get_tests_dir()}/fixtures/tests_samples/MRPC", overwrite_cache=True
         )
         eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
 
