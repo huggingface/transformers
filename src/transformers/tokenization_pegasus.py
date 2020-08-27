@@ -114,6 +114,7 @@ class PegasusTokenizer(ReformerTokenizer):
         return_tensors: str = "pt",
         truncation=True,
         padding="longest",
+        **unused,
     ) -> BatchEncoding:
         """
         Prepare model inputs for summarization or translation.
