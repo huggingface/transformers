@@ -6,10 +6,10 @@ from multiprocessing import Pool, cpu_count
 import numpy as np
 from tqdm import tqdm
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import TruncationStrategy, PaddingStrategy
+from ...tokenization_utils_base import PaddingStrategy, TruncationStrategy
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .utils import DataProcessor
 
@@ -109,11 +109,13 @@ def squad_convert_example_to_features(
     orig_to_tok_index = []
     all_doc_tokens = []
     if isinstance(tokenizer, PreTrainedTokenizerFast):
-        tokenizer.set_truncation_and_padding(padding_strategy=PaddingStrategy.DO_NOT_PAD,
-                                             truncation_strategy=TruncationStrategy.LONGEST_FIRST,
-                                             max_length=64,
-                                             stride=0,
-                                             pad_to_multiple_of=None)
+        tokenizer.set_truncation_and_padding(
+            padding_strategy=PaddingStrategy.DO_NOT_PAD,
+            truncation_strategy=TruncationStrategy.LONGEST_FIRST,
+            max_length=64,
+            stride=0,
+            pad_to_multiple_of=None,
+        )
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
         sub_tokens = tokenizer.tokenize(token)
