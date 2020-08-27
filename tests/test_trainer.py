@@ -19,138 +19,32 @@ if is_torch_available():
         Trainer,
     )
 
+
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
 
-@require_torch
-class DataCollatorIntegrationTest(unittest.TestCase):
-    def test_default_with_dict(self):
-        features = [{"label": i, "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
-        batch = default_data_collator(features)
-        self.assertTrue(batch["labels"].equal(torch.tensor(list(range(8)))))
-        self.assertEqual(batch["labels"].dtype, torch.long)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 6]))
+class RegressionDataset:
+    def __init__(self, a=2, b=3, length=64, seed=42):
+        np.random.seed(seed)
+        self.length = length
+        self.x = np.random.normal(size=(length,)).astype(np.float32)
+        self.y = a * self.x + b + np.random.normal(scale=0.1, size=(length,))
 
-        # With label_ids
-        features = [{"label_ids": [0, 1, 2], "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
-        batch = default_data_collator(features)
-        self.assertTrue(batch["labels"].equal(torch.tensor([[0, 1, 2]] * 8)))
-        self.assertEqual(batch["labels"].dtype, torch.long)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 6]))
+    def __len__(self):
+        return self.length
 
-        # Features can already be tensors
-        features = [{"label": i, "inputs": torch.randint(10, [10])} for i in range(8)]
-        batch = default_data_collator(features)
-        self.assertTrue(batch["labels"].equal(torch.tensor(list(range(8)))))
-        self.assertEqual(batch["labels"].dtype, torch.long)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 10]))
+    def __getitem__(self, i):
+        return {"input_x": self.x[i], "label": self.y[i]}
 
-        # Labels can already be tensors
-        features = [{"label": torch.tensor(i), "inputs": torch.randint(10, [10])} for i in range(8)]
-        batch = default_data_collator(features)
-        self.assertEqual(batch["labels"].dtype, torch.long)
-        self.assertTrue(batch["labels"].equal(torch.tensor(list(range(8)))))
-        self.assertEqual(batch["labels"].dtype, torch.long)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 10]))
 
-    def test_default_with_no_labels(self):
-        features = [{"label": None, "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
-        batch = default_data_collator(features)
-        self.assertTrue("labels" not in batch)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 6]))
+class AlmostAccuracy:
+    def __init__(self, thresh=0.25):
+        self.thresh = thresh
 
-        # With label_ids
-        features = [{"label_ids": None, "inputs": [0, 1, 2, 3, 4, 5]} for i in range(8)]
-        batch = default_data_collator(features)
-        self.assertTrue("labels" not in batch)
-        self.assertEqual(batch["inputs"].shape, torch.Size([8, 6]))
-
-    def test_default_classification(self):
-        MODEL_ID = "bert-base-cased-finetuned-mrpc"
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        data_args = GlueDataTrainingArguments(
-            task_name="mrpc", data_dir=f"{get_tests_dir()}/fixtures/tests_samples/MRPC", overwrite_cache=True
-        )
-        dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
-        data_collator = default_data_collator
-        batch = data_collator(dataset.features)
-        self.assertEqual(batch["labels"].dtype, torch.long)
-
-    def test_default_regression(self):
-        MODEL_ID = "distilroberta-base"
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        data_args = GlueDataTrainingArguments(
-            task_name="sts-b", data_dir=f"{get_tests_dir()}/fixtures/tests_samples/STS-B", overwrite_cache=True
-        )
-        dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
-        data_collator = default_data_collator
-        batch = data_collator(dataset.features)
-        self.assertEqual(batch["labels"].dtype, torch.float)
-
-    def test_lm_tokenizer_without_padding(self):
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
-        # ^ causal lm
-
-        dataset = LineByLineTextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512)
-        examples = [dataset[i] for i in range(len(dataset))]
-        with self.assertRaises(ValueError):
-            # Expect error due to padding token missing on gpt2:
-            data_collator(examples)
-
-        dataset = TextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512, overwrite_cache=True)
-        examples = [dataset[i] for i in range(len(dataset))]
-        batch = data_collator(examples)
-        self.assertIsInstance(batch, dict)
-        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 512)))
-        self.assertEqual(batch["labels"].shape, torch.Size((2, 512)))
-
-    def test_lm_tokenizer_with_padding(self):
-        tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
-        data_collator = DataCollatorForLanguageModeling(tokenizer)
-        # ^ masked lm
-
-        dataset = LineByLineTextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512)
-        examples = [dataset[i] for i in range(len(dataset))]
-        batch = data_collator(examples)
-        self.assertIsInstance(batch, dict)
-        self.assertEqual(batch["input_ids"].shape, torch.Size((31, 107)))
-        self.assertEqual(batch["labels"].shape, torch.Size((31, 107)))
-
-        dataset = TextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512, overwrite_cache=True)
-        examples = [dataset[i] for i in range(len(dataset))]
-        batch = data_collator(examples)
-        self.assertIsInstance(batch, dict)
-        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 512)))
-        self.assertEqual(batch["labels"].shape, torch.Size((2, 512)))
-
-    def test_plm(self):
-        tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
-        data_collator = DataCollatorForPermutationLanguageModeling(tokenizer)
-        # ^ permutation lm
-
-        dataset = LineByLineTextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512)
-        examples = [dataset[i] for i in range(len(dataset))]
-        batch = data_collator(examples)
-        self.assertIsInstance(batch, dict)
-        self.assertEqual(batch["input_ids"].shape, torch.Size((31, 112)))
-        self.assertEqual(batch["perm_mask"].shape, torch.Size((31, 112, 112)))
-        self.assertEqual(batch["target_mapping"].shape, torch.Size((31, 112, 112)))
-        self.assertEqual(batch["labels"].shape, torch.Size((31, 112)))
-
-        dataset = TextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512, overwrite_cache=True)
-        examples = [dataset[i] for i in range(len(dataset))]
-        batch = data_collator(examples)
-        self.assertIsInstance(batch, dict)
-        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 512)))
-        self.assertEqual(batch["perm_mask"].shape, torch.Size((2, 512, 512)))
-        self.assertEqual(batch["target_mapping"].shape, torch.Size((2, 512, 512)))
-        self.assertEqual(batch["labels"].shape, torch.Size((2, 512)))
-
-        example = [torch.randint(5, [5])]
-        with self.assertRaises(ValueError):
-            # Expect error due to odd sequence length
-            data_collator(example)
+    def __call__(self, eval_pred):
+        predictions, labels = eval_pred
+        true = np.abs(predictions - labels) <= self.thresh
+        return {"accuracy": true.astype(np.float32).mean().item()}
 
 
 if is_torch_available():
