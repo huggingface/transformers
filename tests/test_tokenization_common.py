@@ -1555,7 +1555,12 @@ class TokenizerTesterMixin:
             "vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
         ]
         batch = tokenizer.prepare_seq2seq_batch(
-            src_texts=src_text, tgt_texts=tgt_text, max_length=3, max_target_length=10, return_tensors="pt"
+            src_texts=src_text,
+            tgt_texts=tgt_text,
+            max_length=3,
+            max_target_length=10,
+            return_tensors="pt",
+            src_lang="en_XX",  # this should be ignored (for all but mbart) but not cause an error
         )
         self.assertEqual(batch.input_ids.shape[1], 3)
         self.assertEqual(batch.labels.shape[1], 10)
