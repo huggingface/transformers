@@ -839,24 +839,24 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
-                prefix = generate_kwargs.get("prefix", getattr(self.model.config, "prefix", ""))
-                if self.model.__class__.__name__ in [
+                prefix = generate_kwargs.get("prefix", self.model.config.prefix) or ""
+                if not prefix and self.model.__class__.__name__ in [
                     "XLNetLMHeadModel",
                     "TransfoXLLMHeadModel",
                     "TFXLNetLMHeadModel",
                     "TFTransfoXLLMHeadModel",
                 ]:
-                    if prefix == "":
-                        # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
-                        prefix = self.PREFIX
+                    # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
+                    prefix = self.PREFIX
 
-                prefix_inputs = self._parse_and_tokenize(prefix, padding=False, add_special_tokens=False)
-                # This impacts max_length and min_length argument that need adjusting.
-                prefix_length = prefix_inputs["input_ids"].shape[-1]
-                if generate_kwargs.get("max_length", None) is not None:
-                    generate_kwargs["max_length"] += prefix_length
-                if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
-                    generate_kwargs["min_length"] += prefix_length
+                if prefix:
+                    prefix_inputs = self._parse_and_tokenize(prefix, padding=False, add_special_tokens=False)
+                    # This impacts max_length and min_length argument that need adjusting.
+                    prefix_length = prefix_inputs["input_ids"].shape[-1]
+                    if generate_kwargs.get("max_length", None) is not None:
+                        generate_kwargs["max_length"] += prefix_length
+                    if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
+                        generate_kwargs["min_length"] += prefix_length
 
                 inputs = self._parse_and_tokenize(prefix + prompt_text, padding=False, add_special_tokens=False)
 
