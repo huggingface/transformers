@@ -15,7 +15,7 @@ from transformers import (
     TransfoXLTokenizer,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import get_tests_dir, require_torch
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
@@ -42,7 +42,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
     TOKENIZERS_CLASSES = frozenset([])
 
     def setUp(self) -> None:
-        with open("tests/fixtures/sample_text.txt", encoding="utf-8") as f_data:
+        with open(f"{get_tests_dir()}/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
     def test_all_tokenizers(self):
