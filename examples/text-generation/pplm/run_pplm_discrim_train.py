@@ -242,7 +242,12 @@ def train_discriminator(
 
         text = torchtext_data.Field()
         label = torchtext_data.Field(sequential=False)
-        train_data, val_data, test_data = datasets.SST.splits(text, label, fine_grained=True, train_subtrees=True,)
+        train_data, val_data, test_data = datasets.SST.splits(
+            text,
+            label,
+            fine_grained=True,
+            train_subtrees=True,
+        )
 
         x = []
         y = []

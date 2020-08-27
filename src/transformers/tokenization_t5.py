@@ -15,16 +15,17 @@
 """ Tokenization class for model T5."""
 
 
-import logging
 import os
 import re
+import warnings
 from shutil import copyfile
 from typing import List, Optional
 
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
@@ -62,34 +63,34 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class T5Tokenizer(PreTrainedTokenizer):
     """
-        Constructs a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
+    Constructs a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
 
-        This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
-        should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
 
-        Args:
-            vocab_file (:obj:`string`):
-                `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
-                contains the vocabulary necessary to instantiate a tokenizer.
-            eos_token (:obj:`string`, `optional`, defaults to "</s>"):
-                The end of sequence token.
+    Args:
+        vocab_file (:obj:`string`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        eos_token (:obj:`string`, `optional`, defaults to "</s>"):
+            The end of sequence token.
 
-                .. note::
+            .. note::
 
-                    When building a sequence using special tokens, this is not the token that is used for the end
-                    of sequence. The token used is the :obj:`sep_token`.
-            unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
-                The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-                token instead.
-            pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
-                The token used for padding, for example when batching sequences of different lengths.
-            extra_ids (:obj:`List[str]`, `optional`, defaults to :obj:`100`):
-                Add a number of extra ids added to the end of the vocabulary for use as sentinels.
-                These tokens are accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1.
-                Extra tokens are indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token in the vocabulary like in T5 preprocessing
-                see: https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)
-            additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
-                Additional special tokens used by the tokenizer.
+                When building a sequence using special tokens, this is not the token that is used for the end
+                of sequence. The token used is the :obj:`sep_token`.
+        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
+            The token used for padding, for example when batching sequences of different lengths.
+        extra_ids (:obj:`List[str]`, `optional`, defaults to :obj:`100`):
+            Add a number of extra ids added to the end of the vocabulary for use as sentinels.
+            These tokens are accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1.
+            Extra tokens are indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token in the vocabulary like in T5 preprocessing
+            see: https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)
+        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
+            Additional special tokens used by the tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -148,6 +149,74 @@ class T5Tokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` method.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Set to True if the token list is already formatted with special tokens for the model
+
+        Returns:
+            :obj:`List[int]`: A list of integers in the range [0, 1], 1 for a special token, 0 for a sequence token.
+        """
+        if already_has_special_tokens:
+            if token_ids_1 is not None:
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formatted with special tokens for the model."
+                )
+            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+        # normal case: some special tokens
+        if token_ids_1 is None:
+            return ([0] * len(token_ids_0)) + [1]
+        return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
+
+    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
+        """Do not add eos again if user already added it."""
+        if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
+            warnings.warn(
+                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated eos tokens being added."
+            )
+            return token_ids
+        else:
+            return token_ids + [self.eos_token_id]
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        For some t5 tasks, model.config.prefix is specified. This must be used before tokenization.
+        A sequence has the following format:
+
+        - single sequence: ``X </s>``
+        - pair of sequences: ``A </s> B </s>``
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        token_ids_0 = self._add_eos_if_not_present(token_ids_0)
+        if token_ids_1 is None:
+            return self.prefix_tokens + token_ids_0
+        else:
+            token_ids_1 = self._add_eos_if_not_present(token_ids_1)
+            return self.prefix_tokens + token_ids_0 + token_ids_1
+
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
@@ -167,8 +236,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model.Load(self.vocab_file)
 
     def _tokenize(self, text, sample=False):
-        """ Take as input a string and return a list of strings (tokens) for words/sub-words
-        """
+        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         if not sample:
             pieces = self.sp_model.EncodeAsPieces(text)
         else:
@@ -197,8 +265,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         return out_string
 
     def save_vocabulary(self, save_directory):
-        """ Save the sentencepiece vocabulary (copy original file) and special tokens file
-            to a directory.
+        """Save the sentencepiece vocabulary (copy original file) and special tokens file
+        to a directory.
         """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
@@ -209,31 +277,6 @@ class T5Tokenizer(PreTrainedTokenizer):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens. The special tokens depend on calling source text or target text.
-        A T5 sequence has the following format, where ``X`` represents the sequence:
-        - ``input_ids`` (for encoder) ``X [eos]``
-        - ``decoder_input_ids``: (for decoder) ``[pad] X [eos]``
-        Pairs of sequences are not the expected use case, but they will be handled without a separator.
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1
 
     def prepare_seq2seq_batch(
         self,

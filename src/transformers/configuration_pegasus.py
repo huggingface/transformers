@@ -14,13 +14,12 @@
 # limitations under the License.
 """ PEGASUS model configuration """
 
-import logging
-
 from .configuration_bart import BART_CONFIG_ARGS_DOC, BartConfig
 from .file_utils import add_start_docstrings_to_callable
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 # These config values do not vary between checkpoints
 DEFAULTS = dict(
@@ -93,8 +92,8 @@ expected_alpha = {
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class PegasusConfig(BartConfig):
     r"""
-        :class:`~transformers.PegasusConfig` is the configuration class to store the configuration of a
-        `PegasusModel`.
+    :class:`~transformers.PegasusConfig` is the configuration class to store the configuration of a
+    `PegasusModel`.
     """
     model_type = "pegasus"
     # The implementation of the config object is in BartConfig

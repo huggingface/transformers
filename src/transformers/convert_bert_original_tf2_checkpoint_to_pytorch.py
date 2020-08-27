@@ -8,7 +8,6 @@ The script re-maps the TF2.x Bert weight names to the original names, so the mod
 You may adapt this script to include classification/MLM/NSP/etc. heads.
 """
 import argparse
-import logging
 import os
 import re
 
@@ -17,9 +16,11 @@ import torch
 
 from transformers import BertConfig, BertModel
 
+from .utils import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+logging.set_verbosity_info()
+logger = logging.get_logger(__name__)
 
 
 def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):

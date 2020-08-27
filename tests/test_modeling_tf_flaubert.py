@@ -23,24 +23,25 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
-    import tensorflow as tf
     import numpy as np
+    import tensorflow as tf
 
     from transformers import (
+        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         FlaubertConfig,
+        TFFlaubertForMultipleChoice,
+        TFFlaubertForQuestionAnsweringSimple,
+        TFFlaubertForSequenceClassification,
+        TFFlaubertForTokenClassification,
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
-        TFFlaubertForSequenceClassification,
-        TFFlaubertForQuestionAnsweringSimple,
-        TFFlaubertForTokenClassification,
-        TFFlaubertForMultipleChoice,
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
 class TFFlaubertModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -337,7 +338,8 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
         model = TFFlaubertModel.from_pretrained("jplu/tf-flaubert-small-cased")
 
         input_ids = tf.convert_to_tensor(
-            [[0, 158, 735, 2592, 1424, 6727, 82, 1]], dtype=tf.int32,
+            [[0, 158, 735, 2592, 1424, 6727, 82, 1]],
+            dtype=tf.int32,
         )  # "J'aime flaubert !"
 
         output = model(input_ids)[0]

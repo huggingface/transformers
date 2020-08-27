@@ -122,7 +122,9 @@ def create_optimizer(
     )
     if num_warmup_steps:
         lr_schedule = WarmUp(
-            initial_learning_rate=init_lr, decay_schedule_fn=lr_schedule, warmup_steps=num_warmup_steps,
+            initial_learning_rate=init_lr,
+            decay_schedule_fn=lr_schedule,
+            warmup_steps=num_warmup_steps,
         )
     if weight_decay_rate > 0.0:
         optimizer = AdamWeightDecay(
@@ -221,9 +223,9 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
             )
         return tf.no_op()
 
-    def apply_gradients(self, grads_and_vars, name=None):
+    def apply_gradients(self, grads_and_vars, name=None, **kwargs):
         grads, tvars = list(zip(*grads_and_vars))
-        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name,)
+        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name, **kwargs)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""

@@ -16,15 +16,15 @@
 
 
 import json
-import logging
 import os
 
 import regex as re
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -202,8 +202,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
         return word
 
     def _tokenize(self, text):
-        """ Tokenize a string.
-        """
+        """Tokenize a string."""
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
