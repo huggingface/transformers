@@ -186,6 +186,7 @@ class TestSummarizationDistiller(unittest.TestCase):
             tgt_lang="ro_RO",
         )
         model = self._test_distiller_cli(updates, check_contents=False)
+        assert model.model.config.model_type == "mbart"
 
         ckpts = list(Path(model.output_dir).glob("*.ckpt"))
         self.assertEqual(1, len(ckpts))
