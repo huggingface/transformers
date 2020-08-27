@@ -2092,6 +2092,7 @@ class Text2TextGenerationPipeline(Pipeline):
     `huggingface.co/models <https://huggingface.co/models?filter=seq2seq>`__.
 
     Usage::
+
         text2text_generator = pipeline("text2text-generation")
         text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     """
