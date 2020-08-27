@@ -126,7 +126,11 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, tokenizer.eos_token_id]
-        batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK,)
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text,
+            tgt_texts=tgt_text,
+            return_tensors=FRAMEWORK,
+        )
         self.assertIsInstance(batch, BatchEncoding)
         result = list(batch.input_ids.numpy()[0])
         self.assertListEqual(expected_src_tokens, result)

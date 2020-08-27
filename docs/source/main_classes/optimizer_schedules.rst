@@ -13,6 +13,11 @@ The ``.optimization`` module provides:
 .. autoclass:: transformers.AdamW
     :members:
 
+``AdaFactor`` (PyTorch)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Adafactor
+
 ``AdamWeightDecay`` (TensorFlow)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

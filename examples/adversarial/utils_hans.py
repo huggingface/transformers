@@ -112,7 +112,10 @@ if is_torch_available():
             cached_features_file = os.path.join(
                 data_dir,
                 "cached_{}_{}_{}_{}".format(
-                    "dev" if evaluate else "train", tokenizer.__class__.__name__, str(max_seq_length), task,
+                    "dev" if evaluate else "train",
+                    tokenizer.__class__.__name__,
+                    str(max_seq_length),
+                    task,
                 ),
             )
             label_list = processor.get_labels()
@@ -278,7 +281,10 @@ class HansProcessor(DataProcessor):
 
 
 def hans_convert_examples_to_features(
-    examples: List[InputExample], label_list: List[str], max_length: int, tokenizer: PreTrainedTokenizer,
+    examples: List[InputExample],
+    label_list: List[str],
+    max_length: int,
+    tokenizer: PreTrainedTokenizer,
 ):
     """
     Loads a data file into a list of ``InputFeatures``

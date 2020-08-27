@@ -41,7 +41,9 @@ from transformers import (
 
 
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+    datefmt="%m/%d/%Y %H:%M:%S",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
@@ -197,7 +199,10 @@ def main():
     args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
 
     logger.warning(
-        "device: %s, n_gpu: %s, 16-bits training: %s", args.device, args.n_gpu, args.fp16,
+        "device: %s, n_gpu: %s, 16-bits training: %s",
+        args.device,
+        args.n_gpu,
+        args.fp16,
     )
 
     set_seed(args)
