@@ -139,10 +139,14 @@ class BaseTransformer(pl.LightningModule):
             },
         ]
         if self.hparams.adafactor:
-            optimizer = Adafactor(optimizer_grouped_parameters, lr=self.hparams.learning_rate, scale_parameter=False, relative_step=False)
+            optimizer = Adafactor(
+                optimizer_grouped_parameters, lr=self.hparams.learning_rate, scale_parameter=False, relative_step=False
+            )
 
         else:
-            optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
+            optimizer = AdamW(
+                optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon
+            )
         self.opt = optimizer
 
         scheduler = self.get_lr_scheduler()
@@ -256,7 +260,7 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--num_train_epochs", dest="max_epochs", default=3, type=int)
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
-        parser.add_argument('--adafactor', action='store_true')
+        parser.add_argument("--adafactor", action="store_true")
 
 
 class LoggingCallback(pl.Callback):
