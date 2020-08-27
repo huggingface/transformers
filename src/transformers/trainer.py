@@ -912,7 +912,12 @@ class Trainer:
             self.tb_writer = None
             # Setup default `resources_per_trial` and `reporter`.
             if "resources_per_trial" not in kwargs and self.args.n_gpu > 0:
-                kwargs["resources_per_trial"] = {"gpu": self.args.n_gpu}
+                n_jobs = int(kwargs.pop("n_jobs", 1))
+                num_gpus_per_trial = self.args.n_gpu
+                if num_gpus_per_trial / n_jobs >= 1:
+                    num_gpus_per_trial = int(np.ceil(num_gpus_per_trial / n_jobs))
+                kwargs["resources_per_trial"] = {"gpu": num_gpus_per_trial}
+
             if "reporter" not in kwargs:
                 from ray.tune import CLIReporter
 
