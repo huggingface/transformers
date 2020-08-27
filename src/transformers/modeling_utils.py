@@ -324,7 +324,8 @@ class ModuleUtilsMixin:
         """
         Get number of (optionally, non-embeddings) floating-point operations. Default approximation neglects the
         quadratic dependency on the number of tokens (valid if 12 * d_model << sequence_length) as laid out in
-        https://arxiv.org/pdf/2001.08361.pdf section 2.1. Can be overriden for long-form transformers.
+        https://arxiv.org/pdf/2001.08361.pdf section 2.1. Should be overriden for transformers with parameter re-use
+        e.g. Albert or Universal Transformers.
         """
 
         return 6 * batch_size * sequence_length * self.num_parameters(no_embeddings=no_embeddings)
