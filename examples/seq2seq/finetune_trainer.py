@@ -74,8 +74,8 @@ class Seq2SeqDataCollator:
         input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
 
         if isinstance(self.tokenizer, T5Tokenizer):
-            decoder_input_ids = target_ids
-            labels = self._shift_right(target_ids)
+            decoder_input_ids = self._shift_right(target_ids)
+            labels = target_ids
         else:
             decoder_input_ids = target_ids[:, :-1].contiguous()
             labels = target_ids[:, 1:].clone()
