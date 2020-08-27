@@ -27,6 +27,7 @@ from collections import Counter, OrderedDict
 from typing import List, Optional
 
 import numpy as np
+
 import sacremoses as sm
 from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
