@@ -1,4 +1,3 @@
-import dataclasses
 import logging
 import os
 import sys
@@ -16,7 +15,6 @@ from transformers import (
     MarianTokenizer,
     MBartTokenizer,
     T5Tokenizer,
-    Trainer,
     TrainingArguments,
     set_seed,
 )
@@ -361,7 +359,7 @@ def main():
         eval_dataset=eval_dataset,
         data_collator=Seq2SeqDataCollator(tokenizer, data_args),
         compute_metrics=build_compute_metrics_fn(data_args.task) if training_args.predict_from_generate else None,
-        prediction_loss_only=training_args.predict_from_generate == False,
+        prediction_loss_only=training_args.prediction_loss_only,
     )
 
     # Training
