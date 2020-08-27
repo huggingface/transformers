@@ -25,14 +25,14 @@ from .utils import require_torch, require_torch_and_cuda, slow, torch_device
 
 if is_torch_available():
     from transformers import (
+        AutoModelForMaskedLM,
+        AutoTokenizer,
         XxxConfig,
-        XxxModel,
         XxxForMaskedLM,
         XxxForQuestionAnswering,
         XxxForSequenceClassification,
         XxxForTokenClassification,
-        AutoModelForMaskedLM,
-        AutoTokenizer,
+        XxxModel,
     )
     from transformers.file_utils import cached_property
 

@@ -97,4 +97,9 @@ def get_checkpoint_callback(output_dir, metric):
 
 
 def get_early_stopping_callback(metric, patience):
-    return EarlyStopping(monitor=f"val_{metric}", mode="max", patience=patience, verbose=True,)
+    return EarlyStopping(
+        monitor=f"val_{metric}",
+        mode="max",
+        patience=patience,
+        verbose=True,
+    )

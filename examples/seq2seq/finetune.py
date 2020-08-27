@@ -3,7 +3,6 @@ import glob
 import logging
 import os
 import time
-import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -14,48 +13,47 @@ import torch
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import MBartTokenizer, T5ForConditionalGeneration, get_linear_schedule_with_warmup
+from transformers import MarianTokenizer, MBartTokenizer, T5ForConditionalGeneration
 
 
 try:
-    from .utils import (
-        assert_all_frozen,
-        use_task_specific_params,
-        lmap,
-        flatten_list,
-        pickle_save,
-        save_git_info,
-        save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        Seq2SeqDataset,
-        MBartDataset,
-        label_smoothed_nll_loss,
-    )
-
     from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-except ImportError:
-    from utils import (
+    from .utils import (
+        ROUGE_KEYS,
         Seq2SeqDataset,
-        MBartDataset,
+        TranslationDataset,
         assert_all_frozen,
-        use_task_specific_params,
-        lmap,
+        calculate_bleu,
+        calculate_rouge,
         flatten_list,
+        freeze_params,
+        get_git_info,
+        label_smoothed_nll_loss,
+        lmap,
         pickle_save,
         save_git_info,
         save_json,
-        freeze_params,
-        calculate_rouge,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        label_smoothed_nll_loss,
+        use_task_specific_params,
     )
+except ImportError:
     from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
+    from utils import (
+        ROUGE_KEYS,
+        Seq2SeqDataset,
+        TranslationDataset,
+        assert_all_frozen,
+        calculate_bleu,
+        calculate_rouge,
+        flatten_list,
+        freeze_params,
+        get_git_info,
+        label_smoothed_nll_loss,
+        lmap,
+        pickle_save,
+        save_git_info,
+        save_json,
+        use_task_specific_params,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +106,8 @@ class SummarizationModule(BaseTransformer):
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
             self.model.config.decoder_start_token_id = self.decoder_start_token_id
-        if isinstance(self.tokenizer, MBartTokenizer):
-            self.dataset_class = MBartDataset
+        if isinstance(self.tokenizer, MBartTokenizer) or isinstance(self.tokenizer, MarianTokenizer):
+            self.dataset_class = TranslationDataset
         else:
             self.dataset_class = Seq2SeqDataset
 
@@ -252,17 +250,6 @@ class SummarizationModule(BaseTransformer):
 
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
-        t_total = (
-            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.gpus)))
-            // self.hparams.accumulate_grad_batches
-            * float(self.hparams.max_epochs)
-        )
-        scheduler = get_linear_schedule_with_warmup(
-            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
-        )
-        if max(scheduler.get_last_lr()) > 0:
-            warnings.warn("All learning rates are 0")
-        self.lr_scheduler = scheduler
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
@@ -303,12 +290,6 @@ class SummarizationModule(BaseTransformer):
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
-        parser.add_argument(
-            "--data_dir",
-            type=str,
-            required=True,
-            help="The input data dir. Should contain train.source, train.target, val.source, val.target, test.source, test.target",
-        )
         parser.add_argument("--freeze_encoder", action="store_true")
         parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
@@ -344,7 +325,7 @@ class TranslationModule(SummarizationModule):
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
 
     def calc_generative_metrics(self, preds, target) -> dict:
-        return calculate_bleu_score(preds, target)
+        return calculate_bleu(preds, target)
 
 
 def main(args, model=None) -> SummarizationModule:

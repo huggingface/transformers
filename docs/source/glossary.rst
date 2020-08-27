@@ -7,7 +7,7 @@ General terms
 - autoencoding models: see MLM
 - autoregressive models: see CLM
 - CLM: causal language modeling, a pretraining task where the model reads the texts in order and has to predict the
-  next word. It's usually done by reading the whole sentence but using a mask inside the model to hide the future 
+  next word. It's usually done by reading the whole sentence but using a mask inside the model to hide the future
   tokens at a certain timestep.
 - MLM: masked language modeling, a pretraining task where the model sees a corrupted version of the texts, usually done
   by masking some tokens randomly, and has to predict the original text.
@@ -18,7 +18,7 @@ General terms
 - NLU: natural language understanding, all tasks related to understanding what is in a text (for instance classifying
   the whole text, individual words)
 - pretrained model: a model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods
-  involve a self-supervised objective, which can be reading the text and trying to predict the next word (see CLM) or 
+  involve a self-supervised objective, which can be reading the text and trying to predict the next word (see CLM) or
   masking some words and trying to predict them (see MLM).
 - RNN: recurrent neural network, a type of model that uses a loop over a layer to process texts.
 - seq2seq or sequence-to-sequence: models that generate a new sequence from an input, like translation models, or
@@ -57,7 +57,7 @@ The tokenizer takes care of splitting the sequence into tokens available in the 
     >>> tokenized_sequence = tokenizer.tokenize(sequence)
 
 The tokens are either words or subwords. Here for instance, "VRAM" wasn't in the model vocabulary, so it's been split
-in "V", "RA" and "M". To indicate those tokens are not separate words but parts of the same word, a double-dash is
+in "V", "RA" and "M". To indicate those tokens are not separate words but parts of the same word, a double-hash prefix is
 added for "RA" and "M":
 
 ::
@@ -71,24 +71,27 @@ the sentence to the tokenizer, which leverages the Rust implementation of
 
 ::
 
-    >>> encoded_sequence = tokenizer(sequence)["input_ids"]
+    >>> inputs = tokenizer(sequence)
 
 The tokenizer returns a dictionary with all the arguments necessary for its corresponding model to work properly. The
 token indices are under the key "input_ids":
 
 ::
 
+    >>> encoded_sequence = inputs["input_ids"]
     >>> print(encoded_sequence)
     [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 
-Note that the tokenizer automatically adds "special tokens" (if the associated model rely on them) which are special
-IDs the model sometimes uses. If we decode the previous sequence of ids,
+Note that the tokenizer automatically adds "special tokens" (if the associated model relies on them) which are special
+IDs the model sometimes uses.
+
+If we decode the previous sequence of ids,
 
 ::
 
     >>> decoded_sequence = tokenizer.decode(encoded_sequence)
 
-we will see 
+we will see
 
 ::
 
@@ -144,7 +147,7 @@ We can see that 0s have been added on the right of the first sentence to make it
 
 This can then be converted into a tensor in PyTorch or TensorFlow. The attention mask is a binary tensor indicating
 the position of the padded indices so that the model does not attend to them. For the
-:class:`~transformers.BertTokenizer`, :obj:`1` indicate a value that should be attended to while :obj:`0` indicate
+:class:`~transformers.BertTokenizer`, :obj:`1` indicates a value that should be attended to, while :obj:`0` indicates
 a padded value. This attention mask is in the dictionary returned by the tokenizer under the key "attention_mask":
 
 ::
@@ -158,15 +161,15 @@ Token Type IDs
 ~~~~~~~~~~~~~~
 
 Some models' purpose is to do sequence classification or question answering. These require two different sequences to
-be encoded in the same input IDs. They are usually separated by special tokens, such as the classifier and separator
+be joined in a single "input_ids" entry, which usually is performed with the help of special tokens, such as the classifier (``[CLS]``) and separator (``[SEP]``)
 tokens. For example, the BERT model builds its two sequence input as such:
 
 ::
 
    >>> # [CLS] SEQUENCE_A [SEP] SEQUENCE_B [SEP]
 
-We can use our tokenizer to automatically generate such a sentence by passing the two sequences as two arguments (and
-not a list like before) like this:
+We can use our tokenizer to automatically generate such a sentence by passing the two sequences to ``tokenizer`` as two arguments (and
+not a list, like before) like this:
 
 ::
 
@@ -185,31 +188,31 @@ which will return:
     >>> print(decoded)
     [CLS] HuggingFace is based in NYC [SEP] Where is HuggingFace based? [SEP]
 
-This is enough for some models to understand where one sequence ends and where another begins. However, other models
-such as BERT have an additional mechanism, which are the token type IDs (also called segment IDs). They are a binary
-mask identifying the different sequences in the model.
+This is enough for some models to understand where one sequence ends and where another begins. However, other models,
+such as BERT, also deploy token type IDs (also called segment IDs). They are represented as a binary
+mask identifying the two types of sequence in the model.
 
-The tokenizer returns in the dictionary under the key "token_type_ids":
+The tokenizer returns this mask as the "token_type_ids" entry:
 
 ::
 
     >>> encoded_dict['token_type_ids']
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 
-The first sequence, the "context" used for the question, has all its tokens represented by :obj:`0`, whereas the
-question has all its tokens represented by :obj:`1`. Some models, like :class:`~transformers.XLNetModel` use an
-additional token represented by a :obj:`2`.
+The first sequence, the "context" used for the question, has all its tokens represented by a :obj:`0`, whereas the
+second sequence, corresponding to the "question", has all its tokens represented by a :obj:`1`.
+
+Some models, like :class:`~transformers.XLNetModel` use an additional token represented by a :obj:`2`.
 
 .. _position-ids:
 
 Position IDs
 ~~~~~~~~~~~~
 
-The position IDs are used by the model to identify which token is at which position. Contrary to RNNs that have the
-position of each token embedded within them, transformers are unaware of the position of each token. The position
-IDs are created for this purpose.
+Contrary to RNNs that have the position of each token embedded within them,
+transformers are unaware of the position of each token. Therefore, the position IDs (``position_ids``) are used by the model to identify each token's position in the list of tokens.
 
-They are an optional parameter. If no position IDs are passed to the model, they are automatically created as absolute
+They are an optional parameter. If no ``position_ids`` is passed to the model, the IDs are automatically created as absolute
 positional embeddings.
 
 Absolute positional embeddings are selected in the range ``[0, config.max_position_embeddings - 1]``. Some models
@@ -220,15 +223,15 @@ use other types of positional embeddings, such as sinusoidal position embeddings
 Feed Forward Chunking
 ~~~~~~~~~~~~~~~~~~~~~
 
-In transformers two feed forward layers usually follows the self attention layer in each residual attention block.
+In each residual attention block in transformers the self-attention layer is usually followed by 2 feed forward layers.
 The intermediate embedding size of the feed forward layers is often bigger than the hidden size of the model (e.g.,
-for ``bert-base-uncased``). 
+for ``bert-base-uncased``).
 
 For an input of size ``[batch_size, sequence_length]``, the memory required to store the intermediate feed forward
 embeddings ``[batch_size, sequence_length, config.intermediate_size]`` can account for a large fraction of the memory
 use. The authors of `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`_ noticed that since the
 computation is independent of the ``sequence_length`` dimension, it is mathematically equivalent to compute the output
-embeddings of both feed forward layers ``[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n`` 
+embeddings of both feed forward layers ``[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n``
 individually and concat them afterward to ``[batch_size, sequence_length, config.hidden_size]`` with
 ``n = sequence_length``, which trades increased computation time against reduced memory use, but yields a
 mathematically **equivalent** result.

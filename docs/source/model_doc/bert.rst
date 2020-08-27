@@ -78,6 +78,13 @@ BertForPreTraining
     :members:
 
 
+BertModelLMHeadModel
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BertLMHeadModel
+    :members:
+
+
 BertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -131,6 +138,13 @@ TFBertForPreTraining
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFBertForPreTraining
+    :members:
+
+
+TFBertModelLMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFBertLMHeadModel
     :members:
 
 
