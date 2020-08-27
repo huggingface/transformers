@@ -16,7 +16,6 @@
 
 
 import argparse
-import logging
 import os
 
 from transformers import (
@@ -76,37 +75,45 @@ from transformers import (
 )
 from transformers.file_utils import hf_bucket_url
 
+from .utils import logging
+
 
 if is_torch_available():
-    import torch
     import numpy as np
+    import torch
+
     from transformers import (
+        AlbertForPreTraining,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
+        CamembertForMaskedLM,
+        CTRLLMHeadModel,
+        DistilBertForMaskedLM,
+        DistilBertForQuestionAnswering,
+        ElectraForPreTraining,
+        FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
-        XLNetLMHeadModel,
-        XLMWithLMHeadModel,
-        XLMRobertaForMaskedLM,
-        TransfoXLLMHeadModel,
         OpenAIGPTLMHeadModel,
         RobertaForMaskedLM,
         RobertaForSequenceClassification,
-        CamembertForMaskedLM,
-        FlaubertWithLMHeadModel,
-        DistilBertForMaskedLM,
-        DistilBertForQuestionAnswering,
-        CTRLLMHeadModel,
-        AlbertForPreTraining,
         T5ForConditionalGeneration,
-        ElectraForPreTraining,
+        TransfoXLLMHeadModel,
+        XLMRobertaForMaskedLM,
+        XLMWithLMHeadModel,
+        XLNetLMHeadModel,
     )
 
 
-logging.basicConfig(level=logging.INFO)
+logging.set_verbosity_info()
 
 MODEL_CLASSES = {
-    "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "bert": (
+        BertConfig,
+        TFBertForPreTraining,
+        BertForPreTraining,
+        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
@@ -125,9 +132,24 @@ MODEL_CLASSES = {
         BertForSequenceClassification,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "gpt2": (GPT2Config, TFGPT2LMHeadModel, GPT2LMHeadModel, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "xlnet": (XLNetConfig, TFXLNetLMHeadModel, XLNetLMHeadModel, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "xlm": (XLMConfig, TFXLMWithLMHeadModel, XLMWithLMHeadModel, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "gpt2": (
+        GPT2Config,
+        TFGPT2LMHeadModel,
+        GPT2LMHeadModel,
+        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "xlnet": (
+        XLNetConfig,
+        TFXLNetLMHeadModel,
+        XLNetLMHeadModel,
+        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "xlm": (
+        XLMConfig,
+        TFXLMWithLMHeadModel,
+        XLMWithLMHeadModel,
+        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "xlm-roberta": (
         XLMRobertaConfig,
         TFXLMRobertaForMaskedLM,
@@ -146,7 +168,12 @@ MODEL_CLASSES = {
         OpenAIGPTLMHeadModel,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "roberta": (RobertaConfig, TFRobertaForMaskedLM, RobertaForMaskedLM, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "roberta": (
+        RobertaConfig,
+        TFRobertaForMaskedLM,
+        RobertaForMaskedLM,
+        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
     "roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
@@ -177,10 +204,30 @@ MODEL_CLASSES = {
         DistilBertForQuestionAnswering,
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "ctrl": (CTRLConfig, TFCTRLLMHeadModel, CTRLLMHeadModel, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "albert": (AlbertConfig, TFAlbertForPreTraining, AlbertForPreTraining, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "t5": (T5Config, TFT5ForConditionalGeneration, T5ForConditionalGeneration, T5_PRETRAINED_CONFIG_ARCHIVE_MAP,),
-    "electra": (ElectraConfig, TFElectraForPreTraining, ElectraForPreTraining, ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "ctrl": (
+        CTRLConfig,
+        TFCTRLLMHeadModel,
+        CTRLLMHeadModel,
+        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "albert": (
+        AlbertConfig,
+        TFAlbertForPreTraining,
+        AlbertForPreTraining,
+        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "t5": (
+        T5Config,
+        TFT5ForConditionalGeneration,
+        T5ForConditionalGeneration,
+        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "electra": (
+        ElectraConfig,
+        TFElectraForPreTraining,
+        ElectraForPreTraining,
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
 }
 
 

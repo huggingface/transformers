@@ -14,3 +14,5 @@ elasticsearch
 pandas
 nlp
 fire
+pytest
+conllu
