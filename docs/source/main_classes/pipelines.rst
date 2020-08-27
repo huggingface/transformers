@@ -92,6 +92,13 @@ TextGenerationPipeline
     :special-members: __call__
     :members:
 
+Text2TextGenerationPipeline
+==========================================
+
+.. autoclass:: transformers.Text2TextGenerationPipeline
+    :special-members: __call__
+    :members:
+
 TokenClassificationPipeline
 ==========================================
 
@@ -103,13 +110,6 @@ ZeroShotClassificationPipeline
 ==========================================
 
 .. autoclass:: transformers.ZeroShotClassificationPipeline
-    :special-members: __call__
-    :members:
-
-Text2TextGenerationPipeline
-==========================================
-
-.. autoclass:: transformers.Text2TextGenerationPipeline
     :special-members: __call__
     :members:
 
