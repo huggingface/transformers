@@ -16,13 +16,14 @@
 
 import dataclasses
 import json
-import logging
 from dataclasses import dataclass, field
 from time import time
 from typing import List
 
+from ..utils import logging
 
-logger = logging.getLogger(__name__)
+
+logger = logging.get_logger(__name__)
 
 
 def list_field(default=None, metadata=None):

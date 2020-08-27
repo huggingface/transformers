@@ -1,10 +1,11 @@
 import os
 from argparse import ArgumentParser, Namespace
-from logging import getLogger
 
 from transformers import SingleSentenceClassificationProcessor as Processor
 from transformers import TextClassificationPipeline, is_tf_available, is_torch_available
 from transformers.commands import BaseTransformersCLICommand
+
+from ..utils import logging
 
 
 if not is_tf_available() and not is_torch_available():
@@ -76,7 +77,7 @@ class TrainCommand(BaseTransformersCLICommand):
         train_parser.set_defaults(func=train_command_factory)
 
     def __init__(self, args: Namespace):
-        self.logger = getLogger("transformers-cli/training")
+        self.logger = logging.get_logger("transformers-cli/training")
 
         self.framework = "tf" if is_tf_available() else "torch"
 

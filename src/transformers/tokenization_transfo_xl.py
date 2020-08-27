@@ -19,7 +19,6 @@
 
 
 import glob
-import logging
 import os
 import pickle
 import re
@@ -27,6 +26,7 @@ from collections import Counter, OrderedDict
 from typing import Optional
 
 import numpy as np
+
 from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
@@ -37,13 +37,14 @@ from tokenizers.processors import BertProcessing
 from .file_utils import cached_path, is_torch_available
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .utils import logging
 
 
 if is_torch_available():
     import torch
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"pretrained_vocab_file": "vocab.bin", "vocab_file": "vocab.txt"}
 VOCAB_FILES_NAMES_FAST = {"pretrained_vocab_file": "vocab.json", "vocab_file": "vocab.json"}
@@ -162,7 +163,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def count_sents(self, sents, verbose=False):
         """
-            sents : a list of sentences, each a list of tokenized symbols
+        sents : a list of sentences, each a list of tokenized symbols
         """
         if verbose:
             logger.info("counting {} sents ...".format(len(sents)))
@@ -495,7 +496,7 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 class LMOrderedIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None):
         """
-            data -- LongTensor -- the LongTensor is strictly ordered
+        data -- LongTensor -- the LongTensor is strictly ordered
         """
         self.bsz = bsz
         self.bptt = bptt
@@ -554,7 +555,7 @@ class LMOrderedIterator(object):
 class LMShuffledIterator(object):
     def __init__(self, data, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
         """
-            data -- list[LongTensor] -- there is no order among the LongTensors
+        data -- list[LongTensor] -- there is no order among the LongTensors
         """
         self.data = data
 

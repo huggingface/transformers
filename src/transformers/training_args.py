@@ -1,11 +1,11 @@
 import dataclasses
 import json
-import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from .utils import logging
 
 
 if is_torch_available():
@@ -15,7 +15,7 @@ if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def default_logdir() -> str:
@@ -114,6 +114,14 @@ class TrainingArguments:
             at the next training step under the keyword argument ``mems``.
         run_name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
+        disable_tqdm (:obj:`bool`, `optional`):
+            Whether or not to disable the tqdm progress bars. Will default to :obj:`True` if the logging level is set
+            to warn or lower (default), :obj:`False` otherwise.
+        remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
+            forward method.
+
+            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
     """
 
     output_dir: str = field(
@@ -133,10 +141,12 @@ class TrainingArguments:
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
-        default=False, metadata={"help": "Run evaluation during training at each logging step."},
+        default=False,
+        metadata={"help": "Run evaluation during training at each logging step."},
     )
     prediction_loss_only: bool = field(
-        default=False, metadata={"help": "When performing evaluation and predictions, only returns the loss."},
+        default=False,
+        metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
 
     per_device_train_batch_size: int = field(
@@ -232,6 +242,17 @@ class TrainingArguments:
 
     run_name: Optional[str] = field(
         default=None, metadata={"help": "An optional descriptor for the run. Notably used for wandb logging."}
+    )
+    disable_tqdm: Optional[bool] = field(
+        default=None, metadata={"help": "Whether or not to disable the tqdm progress bars."}
+    )
+
+    def __post_init__(self):
+        if self.disable_tqdm is None:
+            self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
+
+    remove_unused_columns: Optional[bool] = field(
+        default=True, metadata={"help": "Remove columns not required by the model when using an nlp.Dataset."}
     )
 
     @property

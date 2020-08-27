@@ -1,7 +1,6 @@
 """Tensorflow trainer class."""
 
 import datetime
-import logging
 import math
 import os
 import warnings
@@ -16,6 +15,7 @@ from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
+from .utils import logging
 
 
 if is_wandb_available():
@@ -24,7 +24,7 @@ if is_wandb_available():
 if is_comet_available():
     import comet_ml
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFTrainer:

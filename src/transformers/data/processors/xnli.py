@@ -16,13 +16,13 @@
 """ XNLI utils (dataset loading and evaluation) """
 
 
-import logging
 import os
 
+from ...utils import logging
 from .utils import DataProcessor, InputExample
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class XnliProcessor(DataProcessor):
