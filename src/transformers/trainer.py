@@ -1,4 +1,5 @@
 import inspect
+import json
 import logging
 import math
 import os
@@ -193,6 +194,7 @@ class Trainer:
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
         self.tb_writer = tb_writer
+        self.log_history = []
         if "prediction_loss_only" in kwargs:
             warnings.warn(
                 "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a future version. Use `args.prediction_loss_only` instead.",
@@ -761,6 +763,8 @@ class Trainer:
                 if experiment is not None:
                     experiment._log_metrics(logs, step=self.global_step, epoch=self.epoch, framework="transformers")
         output = {**logs, **{"step": self.global_step}}
+        if self.is_world_process_zero():
+            self.log_history.append(output)
         if iterator is not None:
             iterator.write(output)
         else:
@@ -899,6 +903,11 @@ class Trainer:
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
+            json.dump(
+                self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"),
+                indent=2,
+                ensure_ascii=False
+            )
 
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
@@ -929,6 +938,11 @@ class Trainer:
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
+        json.dump(
+            self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"),
+            indent=2,
+            ensure_ascii=False
+        )
 
     def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
         ordering_and_checkpoint_path = []
@@ -1098,10 +1112,11 @@ class Trainer:
             metrics = {}
         if len(eval_losses) > 0:
             if self.args.local_rank != -1:
-                metrics["eval_loss"] = self.distributed_broadcast_scalars(eval_losses).mean().item()
+                metrics["eval_loss"] = self.distributed_broadcast_scalars(
+                    eval_losses, num_total_examples=self.num_examples(dataloader)
+                ).mean().item()
             else:
                 metrics["eval_loss"] = np.mean(eval_losses)
-
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
@@ -1110,19 +1125,20 @@ class Trainer:
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
-    def distributed_concat(self, tensor: torch.Tensor, num_total_examples: int) -> torch.Tensor:
+    def distributed_concat(self, tensor: torch.Tensor, num_total_examples: Optional[int] = None) -> torch.Tensor:
         assert self.args.local_rank != -1
 
         output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(output_tensors, tensor)
-
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
-        output = concat[:num_total_examples]
-        return output
+        if num_total_examples is not None:
+            concat = concat[:num_total_examples]
+        return concat
 
-    def distributed_broadcast_scalars(self, scalars: List[Union[int, float]]) -> torch.Tensor:
+    def distributed_broadcast_scalars(self, scalars: List[Union[int, float]], num_total_examples: Optional[int] = None)\
+            -> torch.Tensor:
         assert self.args.local_rank != -1
 
         tensorized_scalar = torch.Tensor(scalars).cuda()
@@ -1130,6 +1146,9 @@ class Trainer:
         torch.distributed.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
 
+        # truncate the dummy elements added by SequentialDistributedSampler
+        if num_total_examples is not None:
+            concat = concat[:num_total_examples]
         return concat
 
     def prediction_step(
