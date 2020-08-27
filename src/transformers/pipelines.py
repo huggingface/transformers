@@ -2159,7 +2159,9 @@ class Text2TextGenerationPipeline(Pipeline):
                 inputs = self.ensure_tensor_on_device(**inputs)
 
             generations = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
             results = []
             for generation in generations:

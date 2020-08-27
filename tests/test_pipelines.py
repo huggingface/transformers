@@ -404,7 +404,10 @@ class MonoColumnInputTestCase(unittest.TestCase):
         for model_name in TEXT2TEXT_FINETUNED_MODELS:
             nlp = pipeline(task="text2text-generation", model=model_name, tokenizer=model_name)
             self._test_mono_column_pipeline(
-                nlp, VALID_INPUTS, mandatory_keys, invalid_inputs,
+                nlp,
+                VALID_INPUTS,
+                mandatory_keys,
+                invalid_inputs,
             )
 
     @require_tf
