@@ -2,6 +2,7 @@ import unittest
 
 from transformers import BartTokenizer, BartTokenizerFast, BatchEncoding
 from transformers.file_utils import cached_property
+from transformers.testing_utils import require_torch
 
 
 class TestTokenizationBart(unittest.TestCase):
@@ -13,6 +14,7 @@ class TestTokenizationBart(unittest.TestCase):
     def default_tokenizer_fast(self):
         return BartTokenizerFast.from_pretrained("facebook/bart-large")
 
+    @require_torch
     def test_prepare_seq2seq_batch(self):
         tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
         src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
@@ -34,6 +36,7 @@ class TestTokenizationBart(unittest.TestCase):
             self.assertListEqual(expected_src_tokens, result)
             # Test that special tokens are reset
 
+    @require_torch
     def test_empty_target_text(self):
         tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
         src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
@@ -45,6 +48,7 @@ class TestTokenizationBart(unittest.TestCase):
             self.assertNotIn("labels", batch)
             self.assertNotIn("decoder_attention_mask", batch)
 
+    @require_torch
     def test_max_target_length(self):
         tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
         src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
@@ -64,6 +68,7 @@ class TestTokenizationBart(unittest.TestCase):
             )
             self.assertEqual(32, batch["labels"].shape[1])
 
+    @require_torch
     def test_outputs_not_longer_than_maxlen(self):
         tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
 
@@ -74,6 +79,7 @@ class TestTokenizationBart(unittest.TestCase):
             self.assertIsInstance(batch, BatchEncoding)
             self.assertEqual(batch.input_ids.shape, (2, 1024))
 
+    @require_torch
     def test_special_tokens(self):
         tokenizers = [self.default_tokenizer, self.default_tokenizer_fast]
         src_text = ["A long paragraph for summrization."]
