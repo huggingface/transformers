@@ -750,11 +750,11 @@ class TextGenerationPipeline(Pipeline):
     `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
     """
 
-    # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
+    # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
     # in https://github.com/rusiaaman/XLNet-gen#methodology
     # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
 
-    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    PREFIX = """In 1991, the remains of Russian Tsar Nicholas II and his family
     (except for Alexei and Maria) are discovered.
     The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
     remainder of the story. 1883 Western Siberia,
@@ -839,26 +839,26 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
-                padding_text = generate_kwargs.get("padding_text", getattr(self.model.config, "padding_text", ""))
+                prefix = generate_kwargs.get("prefix", getattr(self.model.config, "prefix", ""))
                 if self.model.__class__.__name__ in [
                     "XLNetLMHeadModel",
                     "TransfoXLLMHeadModel",
                     "TFXLNetLMHeadModel",
                     "TFTransfoXLLMHeadModel",
                 ]:
-                    if padding_text == "":
+                    if prefix == "":
                         # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
-                        padding_text = self.PADDING_TEXT
+                        prefix = self.PREFIX
 
-                padding = self._parse_and_tokenize(padding_text, padding=False, add_special_tokens=False)
+                prefix_inputs = self._parse_and_tokenize(prefix, padding=False, add_special_tokens=False)
                 # This impacts max_length and min_length argument that need adjusting.
-                padding_length = padding["input_ids"].shape[-1]
+                prefix_length = prefix_inputs["input_ids"].shape[-1]
                 if generate_kwargs.get("max_length", None) is not None:
-                    generate_kwargs["max_length"] += padding_length
+                    generate_kwargs["max_length"] += prefix_length
                 if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
-                    generate_kwargs["min_length"] += padding_length
+                    generate_kwargs["min_length"] += prefix_length
 
-                inputs = self._parse_and_tokenize(padding_text + prompt_text, padding=False, add_special_tokens=False)
+                inputs = self._parse_and_tokenize(prefix + prompt_text, padding=False, add_special_tokens=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
