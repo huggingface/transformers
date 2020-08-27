@@ -14,6 +14,7 @@ from transformers import BartForConditionalGeneration, MarianMTModel
 from transformers.testing_utils import slow
 
 from .finetune import SummarizationModule, main
+from .distillation import distill_main, BartSummarizationDistiller
 from .test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
 from .utils import load_json
 
@@ -46,21 +47,19 @@ def test_train_mbart_cc25_enro_script():
     }
 
     # Clean up bash script
-    bash_script = Path("examples/seq2seq/distil_marian_no_teacher.sh").open().read().split("finetune.py")[1].strip()
-    bash_script = bash_script.replace("\\\n", "").strip().replace("$@", "")
+    bash_script = Path("examples/seq2seq/train_mbart_cc25_enro.sh").open().read().split("finetune.py")[1].strip()
+    bash_script = bash_script.replace("\\\n", "").strip().replace("\"$@\"", "")
     for k, v in env_vars_to_replace.items():
         bash_script = bash_script.replace(k, str(v))
     output_dir = tempfile.mkdtemp(prefix="output_mar")
 
-    gpus = 1
-
-    bash_script = bash_script.replace("--fp16", "")
+    bash_script = bash_script.replace("--fp16 ", " ")
     testargs = (
         ["finetune.py"]
         + bash_script.split()
         + [
             f"--output_dir={output_dir}",
-            f"--gpus={gpus}",
+            "--gpus=1",
             "--learning_rate=3e-1",
             "--warmup_steps=0",
             "--val_check_interval=1.0",
@@ -112,6 +111,7 @@ def test_train_mbart_cc25_enro_script():
 def test_opus_mt_distill_script():
     data_dir = "examples/seq2seq/test_data/wmt_en_ro"
     env_vars_to_replace = {
+        "--fp16_opt_level=O1": "",
         "$MAX_LEN": 128,
         "$BS": 16,
         "$GAS": 1,
@@ -121,38 +121,41 @@ def test_opus_mt_distill_script():
     }
 
     # Clean up bash script
-    bash_script = Path("examples/seq2seq/train_mbart_cc25_enro.sh").open().read().split("finetune.py")[1].strip()
-    bash_script = bash_script.replace("\\\n", "").strip().replace("$@", "")
+    bash_script = Path("examples/seq2seq/distil_marian_no_teacher.sh").open().read().split("distillation.py")[1].strip()
+    bash_script = bash_script.replace("\\\n", "").strip().replace("\"$@\"", "")
+    bash_script = bash_script.replace("--fp16 ", " ")
+
     for k, v in env_vars_to_replace.items():
         bash_script = bash_script.replace(k, str(v))
     output_dir = tempfile.mkdtemp(prefix="marian_output")
-    gpus = 1
     bash_script = bash_script.replace("--fp16", "")
+    epochs = 6
     testargs = (
-        ["finetune.py"]
+        ["distillation.py"]
         + bash_script.split()
         + [
             f"--output_dir={output_dir}",
-            f"--gpus={gpus}",
+            f"--gpus=1",
             "--learning_rate=1e-3",
-            "--num_train_epochs=1" "--warmup_steps=10",
+            f"--num_train_epochs={epochs}", "--warmup_steps=10",
             "--val_check_interval=1.0",
         ]
     )
     with patch.object(sys, "argv", testargs):
         parser = argparse.ArgumentParser()
         parser = pl.Trainer.add_argparse_args(parser)
-        parser = SummarizationModule.add_model_specific_args(parser, os.getcwd())
+        parser = BartSummarizationDistiller.add_model_specific_args(parser, os.getcwd())
         args = parser.parse_args()
         args.do_predict = False
         # assert args.gpus == gpus THIS BREAKS for multigpu
-        model = main(args)
+
+        model = distill_main(args)
 
     # Check metrics
     metrics = load_json(model.metrics_save_path)
     first_step_stats = metrics["val"][0]
     last_step_stats = metrics["val"][-1]
-    assert len(metrics["val"]) == (args.max_epochs / args.val_check_interval)  # +1 accounts for val_sanity_check
+    assert len(metrics["val"]) == (args.max_epochs / args.val_check_interval) +1   # +1 accounts for val_sanity_check
 
     assert last_step_stats["val_avg_gen_time"] >= 0.01
 
