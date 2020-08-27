@@ -1,13 +1,15 @@
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, BatchEncoding, MBartTokenizer
-from transformers.modeling_bart import shift_tokens_right
+from transformers import AutoTokenizer, BatchEncoding, MBartTokenizer, is_torch_available
 from transformers.testing_utils import require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 from .test_tokenization_xlm_roberta import SAMPLE_VOCAB, SPIECE_UNDERLINE
 
+
+if is_torch_available():
+    from transformers.modeling_bart import shift_tokens_right
 
 EN_CODE = 250004
 RO_CODE = 250020
