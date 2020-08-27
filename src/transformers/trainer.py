@@ -42,8 +42,8 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    estimate_tokens,
     set_seed,
-    estimate_tokens
 )
 from .training_args import TrainingArguments
 from .utils import logging
@@ -1121,9 +1121,7 @@ class Trainer:
             os.makedirs(output_dir, exist_ok=True)
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
             json.dump(
-                self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"),
-                indent=2,
-                ensure_ascii=False
+                self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"), indent=2, ensure_ascii=False
             )
 
         # Save a trained model and configuration using `save_pretrained()`.
@@ -1160,9 +1158,7 @@ class Trainer:
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
         json.dump(
-            self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"),
-            indent=2,
-            ensure_ascii=False
+            self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"), indent=2, ensure_ascii=False
         )
 
     def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
@@ -1334,9 +1330,11 @@ class Trainer:
             metrics = {}
         if len(eval_losses) > 0:
             if self.args.local_rank != -1:
-                metrics["eval_loss"] = self.distributed_broadcast_scalars(
-                    eval_losses, num_total_examples=self.num_examples(dataloader)
-                ).mean().item()
+                metrics["eval_loss"] = (
+                    self.distributed_broadcast_scalars(eval_losses, num_total_examples=self.num_examples(dataloader))
+                    .mean()
+                    .item()
+                )
             else:
                 metrics["eval_loss"] = np.mean(eval_losses)
 
@@ -1359,8 +1357,9 @@ class Trainer:
             concat = concat[:num_total_examples]
         return concat
 
-    def distributed_broadcast_scalars(self, scalars: List[Union[int, float]], num_total_examples: Optional[int] = None)\
-            -> torch.Tensor:
+    def distributed_broadcast_scalars(
+        self, scalars: List[Union[int, float]], num_total_examples: Optional[int] = None
+    ) -> torch.Tensor:
         assert self.args.local_rank != -1
 
         tensorized_scalar = torch.Tensor(scalars).cuda()
