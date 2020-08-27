@@ -56,15 +56,6 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-def shift_tokens_right(input_ids, pad_token_id):
-    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
-    prev_output_tokens = input_ids.clone()
-    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = input_ids[:, :-1]
-    return prev_output_tokens
-
-
 class MBartTokenizer(XLMRobertaTokenizer):
     """
     This inherits from XLMRobertaTokenizer. ``prepare_seq2seq_batch`` should be used to encode inputs.
@@ -270,7 +261,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
             truncation=True,
             **kwargs,
         )["input_ids"]
-        model_inputs["decoder_input_ids"] = shift_tokens_right(labels, self.pad_token_id)
         model_inputs["labels"] = labels
         self.set_src_lang_special_tokens(src_lang)  # sets to src_lang
         return model_inputs
