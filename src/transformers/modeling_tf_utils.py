@@ -15,7 +15,6 @@
 # limitations under the License.
 """TF general model utils."""
 import functools
-import logging
 import os
 import warnings
 from typing import Dict, List, Optional, Union
@@ -29,9 +28,10 @@ from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .generation_tf_utils import TFGenerationMixin
 from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFModelUtilsMixin:
@@ -137,7 +137,7 @@ class TFCausalLanguageModelingLoss:
         )
         # make sure only labels that are not equal to -100
         # are taken into account as loss
-        active_loss = tf.reshape(labels, (-1,)) != -100
+        active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
         reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
         return loss_fn(labels, reduced_logits)
@@ -207,13 +207,12 @@ class TFMultipleChoiceLoss(TFSequenceClassificationLoss):
 
 class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
     """
-   Loss function suitable for masked language modeling (MLM), that is, the task of guessing the masked tokens.
+    Loss function suitable for masked language modeling (MLM), that is, the task of guessing the masked tokens.
 
-   .. note::
+    .. note::
 
-        Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
-
-"""
+         Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+    """
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):

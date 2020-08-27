@@ -16,7 +16,6 @@
 
 
 import json
-import logging
 import os
 import re
 import sys
@@ -26,9 +25,10 @@ from typing import List, Optional
 import sacremoses as sm
 
 from .tokenization_utils import PreTrainedTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -902,7 +902,12 @@ class XLMTokenizer(PreTrainedTokenizer):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formated with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0,))
+            return list(
+                map(
+                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
+                    token_ids_0,
+                )
+            )
 
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]

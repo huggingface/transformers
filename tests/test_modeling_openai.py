@@ -25,18 +25,20 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        OpenAIGPTConfig,
-        OpenAIGPTModel,
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        OpenAIGPTLMHeadModel,
+        OpenAIGPTConfig,
         OpenAIGPTDoubleHeadsModel,
+        OpenAIGPTLMHeadModel,
+        OpenAIGPTModel,
     )
 
 
 class OpenAIGPTModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13

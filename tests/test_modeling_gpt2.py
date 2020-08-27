@@ -20,17 +20,18 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        GPT2Config,
-        GPT2Model,
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-        GPT2LMHeadModel,
+        GPT2Config,
         GPT2DoubleHeadsModel,
+        GPT2LMHeadModel,
+        GPT2Model,
     )
 
 
@@ -92,7 +93,7 @@ class GPT2ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -243,7 +244,8 @@ class GPT2ModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
         )
 
         # get two different outputs

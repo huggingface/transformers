@@ -4,7 +4,7 @@
 
 quality:
 	black --check --line-length 119 --target-version py35 examples templates tests src utils
-	isort --check-only --recursive examples templates tests src utils
+	isort --check-only examples templates tests src utils
 	flake8 examples templates tests src utils
 	python utils/check_repo.py
 
@@ -12,7 +12,7 @@ quality:
 
 style:
 	black --line-length 119 --target-version py35 examples templates tests src utils
-	isort --recursive examples templates tests src utils
+	isort examples templates tests src utils
 
 # Run tests for the library
 

@@ -108,30 +108,30 @@ class BertModelWithPabee(BertModel):
         regression=False,
     ):
         r"""
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (:obj:`torch.FloatTensor`: of shape :obj:`(batch_size, hidden_size)`):
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer and a Tanh activation function. The Linear
-            layer weights are trained from the next sentence prediction (classification)
-            objective during pre-training.
+        Return:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+            last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+                Sequence of hidden-states at the output of the last layer of the model.
+            pooler_output (:obj:`torch.FloatTensor`: of shape :obj:`(batch_size, hidden_size)`):
+                Last layer hidden-state of the first token of the sequence (classification token)
+                further processed by a Linear layer and a Tanh activation function. The Linear
+                layer weights are trained from the next sentence prediction (classification)
+                objective during pre-training.
 
-            This output is usually *not* a good summary
-            of the semantic content of the input, you're often better with averaging or pooling
-            the sequence of hidden-states for the whole input sequence.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+                This output is usually *not* a good summary
+                of the semantic content of the input, you're often better with averaging or pooling
+                the sequence of hidden-states for the whole input sequence.
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+                heads.
         """
 
         if input_ids is not None and inputs_embeds is not None:
@@ -266,44 +266,44 @@ class BertForSequenceClassificationWithPabee(BertPreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the sequence classification/regression loss.
+                Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+                If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+                If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        Returns:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
+                Classification (or regression if config.num_labels==1) loss.
+            logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+                Classification (or regression if config.num_labels==1) scores (before SoftMax).
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+                heads.
 
-    Examples::
+        Examples::
 
-        from transformers import BertTokenizer, BertForSequenceClassification
-        from pabee import BertForSequenceClassificationWithPabee
-        import torch
+            from transformers import BertTokenizer, BertForSequenceClassification
+            from pabee import BertForSequenceClassificationWithPabee
+            import torch
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForSequenceClassificationWithPabee.from_pretrained('bert-base-uncased')
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = BertForSequenceClassificationWithPabee.from_pretrained('bert-base-uncased')
 
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids, labels=labels)
 
-        loss, logits = outputs[:2]
+            loss, logits = outputs[:2]
 
         """
 

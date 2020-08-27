@@ -26,16 +26,14 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import (
-        TFTransfoXLModel,
-        TFTransfoXLLMHeadModel,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+
+    from transformers import TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST, TFTransfoXLLMHeadModel, TFTransfoXLModel
 
 
 class TFTransfoXLModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
