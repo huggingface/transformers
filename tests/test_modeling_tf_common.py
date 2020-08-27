@@ -110,15 +110,6 @@ class TFModelTesterMixin:
 
     def test_initialization(self):
         pass
-        # config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # configs_no_init = _config_zero_init(config)
-        # for model_class in self.all_model_classes:
-        #     model = model_class(config=configs_no_init)
-        #     for name, param in model.named_parameters():
-        #         if param.requires_grad:
-        #             self.assertIn(param.data.mean().item(), [0.0, 1.0],
-        #             msg="Parameter {} of model {} seems not properly initialized".format(name, model_class))
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -133,6 +124,19 @@ class TFModelTesterMixin:
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
                 self.assert_outputs_same(after_outputs, outputs)
+
+    def test_graph_mode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+
+            @tf.function
+            def run_in_graph_mode():
+                return model(inputs)
+
+            outputs = run_in_graph_mode()
+            self.assertIsNotNone(outputs)
 
     @slow
     def test_saved_model_with_hidden_states_output(self):
@@ -642,7 +646,7 @@ class TFModelTesterMixin:
                 emb_old.build(INPUT_SHAPE)
                 # reshape the embeddings
                 new_embeddings = model._get_resized_embeddings(emb_old, size)
-                # # check that the the resized embeddings size matches the desired size.
+                # # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size
                 self.assertEqual(new_embeddings.shape[0], assert_size)
                 # check that weights remain the same after resizing
