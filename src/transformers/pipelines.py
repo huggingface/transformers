@@ -847,9 +847,7 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
-                prefix = (
-                    prefix if prefix is not None else self.model.config.prefix
-                )
+                prefix = prefix if prefix is not None else self.model.config.prefix
                 if prefix is None and self.model.__class__.__name__ in [
                     "XLNetLMHeadModel",
                     "TransfoXLLMHeadModel",
