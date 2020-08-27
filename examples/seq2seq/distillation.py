@@ -164,32 +164,22 @@ class BartSummarizationDistiller(SummarizationModule):
     def _step(self, batch):
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
-        input_ids, src_mask = batch["input_ids"], batch["attention_mask"]
-        if "labels" in batch:
-            lm_labels = batch["labels"]
-            decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
-        else:
-            raise ValueError()
-        # decoder_input_ids = y[:, :-1].contiguous()
-        # labels = y[:, 1:].clone()
-        # labels[y[:, 1:] == pad_token_id] = -100
+        input_ids, src_mask, lm_labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
+        decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
         # noinspection PyCallingNonCallable
-        outputs = self(
+        lm_logits, dec_hidden, enc_outputs, enc_hidden_state = self(
             input_ids,
             attention_mask=src_mask,
             decoder_input_ids=decoder_input_ids,
-            # labels=labels,
             output_hidden_states=True,
             output_attentions=False,
-            # return_dict=True,
             use_cache=False,
-        )
-        lm_logits, dec_hidden, enc_outputs, enc_hidden_state = outputs
+        )  # TODO(@sshleifer): return_dict=True cleanup
 
+        # Same cross entropy vs. label smoothing logic as finetune.py
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides pad_token_id
             loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
-
             assert lm_logits.shape[-1] == self.model.config.vocab_size
             student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
         else:
@@ -426,6 +416,7 @@ def create_module(args):
 
 
 def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
+    # TODO(SS): DELETE?
     exp_dir = ckpt_path.parent
     if dest_dir is None:
         dest_dir = exp_dir
@@ -450,7 +441,7 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
 
 LAYERS_TO_COPY = {
     # maps  num layers in student -> which teacher layers to copy.
-    # 12:bart, 16: pegasus, 6: marian/Helsinki-NLP
+    # 12: bart, 16: pegasus, 6: marian/Helsinki-NLP
     12: {
         1: [0],
         2: [0, 6],

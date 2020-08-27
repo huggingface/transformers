@@ -121,7 +121,7 @@ class LegacySeq2SeqDataset(Dataset):
         return {
             "input_ids": source_ids,
             "attention_mask": src_mask,
-            "decoder_input_ids": target_ids,
+            "labels": target_ids,
         }
 
     @staticmethod
@@ -131,14 +131,14 @@ class LegacySeq2SeqDataset(Dataset):
     def collate_fn(self, batch) -> Dict[str, torch.Tensor]:
         input_ids = torch.stack([x["input_ids"] for x in batch])
         masks = torch.stack([x["attention_mask"] for x in batch])
-        target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
+        target_ids = torch.stack([x["labels"] for x in batch])
         pad_token_id = self.pad_token_id
         y = trim_batch(target_ids, pad_token_id)
         source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
         batch = {
             "input_ids": source_ids,
             "attention_mask": source_mask,
-            "decoder_input_ids": y,
+            "labels": y,
         }
         return batch
 

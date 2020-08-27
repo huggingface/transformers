@@ -503,6 +503,6 @@ def test_legacy_dataset_truncation(tok):
         assert batch["input_ids"].shape[1] == max_len_source
         assert 20 >= batch["input_ids"].shape[1]  # trimmed significantly
         # show that targets were truncated
-        assert batch["decoder_input_ids"].shape[1] == trunc_target  # Truncated
+        assert batch["labels"].shape[1] == trunc_target  # Truncated
         assert max_len_target > trunc_target  # Truncated
         break  # No need to test every batch

@@ -134,19 +134,20 @@ class SummarizationModule(BaseTransformer):
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]  # , batch["decoder_input_ids"]
-        decoder_attention_mask = None  # bart will make it, we supply for t5
-        if "labels" in batch:
-            lm_labels = batch["labels"]
-            decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
-        elif isinstance(self.model, T5ForConditionalGeneration):
+        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]
+        decoder_attention_mask = None  # bart will make this, we supply for t5
+
+        if isinstance(self.model, T5ForConditionalGeneration):
             lm_labels = batch["labels"]
             decoder_input_ids = self.model._shift_right(lm_labels)
             decoder_attention_mask = decoder_input_ids.ne(pad_token_id)
-
+        elif "labels" in batch:
+            lm_labels = batch["labels"]
+            decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
         else:
+            # TODO: fix inside LegacyDataset
             target_ids = batch["decoder_input_ids"]
-            # This is a slightly worse way of shifting tokens right -- it deletes token 0 from target_id
+            # This is a slightly worse way of shifting tokens right cause it deletes token 0 from target_id
             decoder_input_ids = target_ids[:, :-1].contiguous()
             lm_labels = target_ids[:, 1:].clone()
 

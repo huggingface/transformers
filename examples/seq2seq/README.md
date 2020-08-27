@@ -71,8 +71,8 @@ Summarization Tips:
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
 
 **Update 2018-07-18**
-Datasets: `LegacySeq2SeqDataset` should be used for all tokenizers without a `prepare_seq2seq_batch` method. For those who do (like Marian, MBart), `Seq2SeqDataset` should be used.**
-A new dataset is needed to support multilingual tasks.
+Datasets: `LegacySeq2SeqDataset` will be used for all tokenizers without a `prepare_seq2seq_batch` method. Otherwise, `Seq2SeqDataset` will be used.
+Future work/help wanted: A new dataset to support multilingual tasks.
 
 
 ### Command Line Options
