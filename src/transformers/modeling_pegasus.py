@@ -23,6 +23,13 @@ from .modeling_bart import BART_START_DOCSTRING, BartForConditionalGeneration
 @add_start_docstrings("The Pegasus Model for summarization ", BART_START_DOCSTRING)
 class PegasusForConditionalGeneration(BartForConditionalGeneration):
     config_class = PegasusConfig
+    authorized_missing_keys = [
+        r"final_logits_bias",
+        r"encoder\.version",
+        r"decoder\.version",
+        r"model.encoder.embed_positions",
+        "model.decoder.embed_positions",
+    ]
     r"""
     Pytorch version of google's pegasus model for summarization.
     Model API is identical to BartForConditionalGeneration.

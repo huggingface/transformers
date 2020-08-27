@@ -25,23 +25,23 @@ from transformers.testing_utils import require_multigpu, require_torch, slow, to
 
 
 if is_torch_available():
-    import torch
     import numpy as np
+    import torch
 
     from transformers import (
-        AdaptiveEmbedding,
-        PretrainedConfig,
-        PreTrainedModel,
-        BertModel,
-        BertConfig,
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        AdaptiveEmbedding,
+        BertConfig,
+        BertModel,
+        PretrainedConfig,
+        PreTrainedModel,
         top_k_top_p_filtering,
     )
 
@@ -65,7 +65,6 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     test_missing_keys = True
-    test_chunking = False
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -331,7 +330,9 @@ class ModelTesterMixin:
             # Prepare head_mask
             # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
             head_mask = torch.ones(
-                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device,
+                self.model_tester.num_hidden_layers,
+                self.model_tester.num_attention_heads,
+                device=torch_device,
             )
             head_mask[0, 0] = 0
             head_mask[-1, :-1] = 0
@@ -371,7 +372,10 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+            (
+                config,
+                inputs_dict,
+            ) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -400,7 +404,10 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+            (
+                config,
+                inputs_dict,
+            ) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -433,7 +440,10 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+            (
+                config,
+                inputs_dict,
+            ) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -464,7 +474,10 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+            (
+                config,
+                inputs_dict,
+            ) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -535,7 +548,8 @@ class ModelTesterMixin:
                 seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -551,10 +565,10 @@ class ModelTesterMixin:
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_feed_forward_chunking(self):
-        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_chunking:
-            return
-
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
@@ -574,7 +588,10 @@ class ModelTesterMixin:
             self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
     def test_resize_tokens_embeddings(self):
-        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -711,7 +728,7 @@ class ModelTesterMixin:
                     else:
                         self.assertTrue(
                             torch.allclose(tuple_object, dict_object, atol=1e-5),
-                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}",
+                            msg=f"Tuple and dict output are not equal. Difference: {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`: {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}.",
                         )
 
                 recursive_check(tuple_output, dict_output)
@@ -848,7 +865,14 @@ class ModelTesterMixin:
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # num_return_sequences > 1, sample
-            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2, num_return_sequences=2,))
+            self._check_generated_ids(
+                model.generate(
+                    input_ids,
+                    do_sample=True,
+                    num_beams=2,
+                    num_return_sequences=2,
+                )
+            )
             # num_return_sequences > 1, greedy
             self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=2, num_return_sequences=2))
 
@@ -936,6 +960,13 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
         values.append(rng.randint(0, vocab_size - 1))
 
     return torch.tensor(data=values, dtype=torch.long, device=torch_device).view(shape).contiguous()
+
+
+def random_attention_mask(shape, rng=None, name=None):
+    attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None)
+    # make sure that at least one token is attended to for each batch
+    attn_mask[:, -1] = 1
+    return attn_mask
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):

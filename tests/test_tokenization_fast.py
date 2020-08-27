@@ -228,7 +228,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
     def assert_special_tokens_map_equal(self, tokenizer_r, tokenizer_p):
         # Assert the set of special tokens match.
         self.assertSequenceEqual(
-            tokenizer_p.special_tokens_map.items(), tokenizer_r.special_tokens_map.items(),
+            tokenizer_p.special_tokens_map.items(),
+            tokenizer_r.special_tokens_map.items(),
         )
 
     def assert_add_tokens(self, tokenizer_r):
@@ -544,18 +545,26 @@ class CommonFastTokenizerTest(unittest.TestCase):
         assert_batch_padded_input_match(input_r, input_p, max_length)
 
         input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="max_length",
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding="max_length",
         )
         input_p = tokenizer_p.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="max_length",
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding="max_length",
         )
         assert_batch_padded_input_match(input_r, input_p, max_length)
 
         input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="longest",
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding="longest",
         )
         input_p = tokenizer_p.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding=True,
+            ["This is a simple input 1", "This is a simple input 2"],
+            max_length=max_length,
+            padding=True,
         )
         assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
@@ -865,7 +874,11 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
 
         # Simple input
         self.assertRaises(
-            ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, padding="max_length",
+            ValueError,
+            tokenizer_r.batch_encode_plus,
+            s2,
+            max_length=max_length,
+            padding="max_length",
         )
 
         # Pair input
@@ -876,7 +889,11 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
 
         # Pair input
         self.assertRaises(
-            ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, padding="max_length",
+            ValueError,
+            tokenizer_r.batch_encode_plus,
+            p2,
+            max_length=max_length,
+            padding="max_length",
         )
 
 

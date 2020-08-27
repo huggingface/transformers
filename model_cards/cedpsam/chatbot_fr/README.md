@@ -4,9 +4,7 @@ tags:
 - conversational
 widget:
 - text: "bonjour."
-widget:
 - text: "mais encore"
-widget:
 - text: "est ce que l'argent achete le bonheur?"
 ---
 
