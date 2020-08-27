@@ -11,6 +11,7 @@ from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
+    EvalPrediction,
     HfArgumentParser,
     MarianTokenizer,
     MBartTokenizer,
@@ -27,6 +28,7 @@ try:
         Seq2SeqDataset,
         TranslationDataset,
         assert_all_frozen,
+        calculate_bleu,
         calculate_rouge,
         freeze_params,
         lmap,
@@ -38,6 +40,7 @@ except ImportError:
         Seq2SeqDataset,
         TranslationDataset,
         assert_all_frozen,
+        calculate_bleu,
         calculate_rouge,
         freeze_params,
         lmap,
@@ -49,14 +52,23 @@ logger = logging.getLogger(__name__)
 
 
 class Seq2SeqDataCollator:
-    def __init__(self, tokenizer):
+    def __init__(self, tokenizer, data_args):
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
+        self.data_args = data_args
 
     def __call__(self, batch) -> Dict[str, torch.Tensor]:
-        input_ids = torch.stack([x["input_ids"] for x in batch])
-        attention_mask = torch.stack([x["attention_mask"] for x in batch])
-        target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
+        if self.data_args.task == "summarization":
+            input_ids = torch.stack([x["input_ids"] for x in batch])
+            attention_mask = torch.stack([x["attention_mask"] for x in batch])
+            target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
+        else:
+            batch = self._make_translation_batch(batch)
+            input_ids, attention_mask, target_ids = (
+                batch["input_ids"],
+                batch["attention_mask"],
+                batch["decoder_input_ids"],
+            )
 
         target_ids = trim_batch(target_ids, self.pad_token_id)
         input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
@@ -89,6 +101,17 @@ class Seq2SeqDataCollator:
         shifted_input_ids[..., 0] = decoder_start_token_id
 
         return shifted_input_ids
+
+    def _make_translation_batch(self, batch) -> Dict[str, torch.Tensor]:
+        batch_encoding = self.tokenizer.prepare_seq2seq_batch(
+            [x["src_texts"] for x in batch],
+            src_lang=self.data_args.src_lang,
+            tgt_texts=[x["tgt_texts"] for x in batch],
+            tgt_lang=self.data_args.tgt_lang,
+            max_length=self.data_args.max_source_length,
+            max_target_length=self.data_args.max_target_length,
+        )
+        return batch_encoding.data
 
 
 @dataclass
@@ -129,6 +152,7 @@ class DataTrainingArguments:
     data_dir: str = field(
         metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
     )
+    task: Optional[str] = field(default="summarization", metadata={"help": "summarization or translation"})
     max_source_length: Optional[int] = field(
         default=1024,
         metadata={
@@ -228,8 +252,13 @@ def main():
         cache_dir=model_args.cache_dir,
     )
 
-    def get_compute_metrics_fn():
-        def compute_metrics(pred):
+    # set decoder_start_token_id for MBart
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
+        decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
+        model.config.decoder_start_token_id = decoder_start_token_id
+
+    def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
+        def summarization_metrics(pred: EvalPrediction) -> Dict:
             labels_ids = pred.label_ids
             pred_ids = pred.predictions
 
@@ -243,9 +272,24 @@ def main():
             rouge: Dict = calculate_rouge(pred_str, label_str)
             return rouge
 
-        return compute_metrics
+        def translation_metrics(pred: EvalPrediction) -> Dict:
+            labels_ids = pred.label_ids
+            pred_ids = pred.predictions
 
-    def freeze_embeds(model):
+            # all unnecessary tokens are removed
+            pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+            label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
+
+            pred_str = lmap(str.strip, pred_str)
+            label_str = lmap(str.strip, label_str)
+
+            bleu: Dict = calculate_bleu(pred_str, label_str)
+            return bleu
+
+        compute_metrics_fn = summarization_metrics if task_name == "summarization" else translation_metrics
+        return compute_metrics_fn
+
+    def freeze_embeds(model: torch.nn.Module):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
         try:
             freeze_params(model.model.shared)
@@ -315,8 +359,8 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=Seq2SeqDataCollator(tokenizer),
-        compute_metrics=get_compute_metrics_fn() if training_args.predict_from_generate else None,
+        data_collator=Seq2SeqDataCollator(tokenizer, data_args),
+        compute_metrics=build_compute_metrics_fn(data_args.task) if training_args.predict_from_generate else None,
         prediction_loss_only=training_args.predict_from_generate == False,
     )
 
