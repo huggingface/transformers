@@ -44,6 +44,8 @@ except ImportError:
 
 
 class BartSummarizationDistiller(SummarizationModule):
+    """Supports Bart, Pegasus and other models that inherit from Bart."""
+
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
     def __init__(self, hparams):
@@ -164,8 +166,8 @@ class BartSummarizationDistiller(SummarizationModule):
     def _step(self, batch):
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
-        input_ids, src_mask, lm_labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
-        decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
+        input_ids, src_mask, tgt_ids = batch["input_ids"], batch["attention_mask"], batch["labels"]
+        decoder_input_ids = shift_tokens_right(tgt_ids, pad_token_id)
         # noinspection PyCallingNonCallable
         lm_logits, dec_hidden, enc_outputs, enc_hidden_state = self(
             input_ids,
@@ -177,15 +179,15 @@ class BartSummarizationDistiller(SummarizationModule):
         )  # TODO(@sshleifer): return_dict=True cleanup
 
         # Same cross entropy vs. label smoothing logic as finetune.py
+        assert lm_logits.shape[-1] == self.model.config.vocab_size
         if self.hparams.label_smoothing == 0:
-            # Same behavior as modeling_bart.py, besides pad_token_id
+            # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
-            assert lm_logits.shape[-1] == self.model.config.vocab_size
-            student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
+            student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
             student_lm_loss, _ = label_smoothed_nll_loss(
-                lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
+                lprobs, tgt_ids, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
 
         def zero_tensor():
@@ -213,7 +215,7 @@ class BartSummarizationDistiller(SummarizationModule):
                 attention_mask=src_mask,
                 encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
-                lm_labels=lm_labels,
+                lm_labels=tgt_ids,
                 output_hidden_states=True,
             )
         dec_mask = decoder_input_ids.ne(pad_token_id)
@@ -230,12 +232,9 @@ class BartSummarizationDistiller(SummarizationModule):
         return blended_loss, loss_ce, student_lm_loss, loss_encoder, hid_loss_enc, hid_loss_dec
 
     def calc_hidden_loss(self, attention_mask, hidden_states, hidden_states_T, matches):
-        assert not isinstance(
-            hidden_states, torch.Tensor
-        ), f"expected list or tuple for hidden_states, got tensor of shape {hidden_states.shape}"
-        assert not isinstance(
-            hidden_states_T, torch.Tensor
-        ), f"expected list or tuple for hidden_states_T, got tensor of shape {hidden_states_T.shape}"
+        msg = "expected list or tuple for hidden_states, got tensor of shape: "
+        assert not isinstance(hidden_states, torch.Tensor), f"{msg}{hidden_states.shape}"
+        assert not isinstance(hidden_states_T, torch.Tensor), f"{msg}{hidden_states_T.shape}"
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
         hidden_losses = [
@@ -259,8 +258,9 @@ def add_distill_args(parser):
 
 
 class BartTranslationDistiller(BartSummarizationDistiller):
+    """Supports Mbart, Marian, other models that inherit from Bart."""
+
     mode = "translation"
-    loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
     metric_names = ["bleu"]
     val_metric = "bleu"
 

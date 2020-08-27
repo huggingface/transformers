@@ -134,41 +134,25 @@ class SummarizationModule(BaseTransformer):
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask = batch["input_ids"], batch["attention_mask"]
-        decoder_attention_mask = None  # bart will make this, we supply for t5
-
+        src_ids, src_mask = batch["input_ids"], batch["attention_mask"]
+        tgt_ids = batch["labels"]
         if isinstance(self.model, T5ForConditionalGeneration):
-            lm_labels = batch["labels"]
-            decoder_input_ids = self.model._shift_right(lm_labels)
-            decoder_attention_mask = decoder_input_ids.ne(pad_token_id)
-        elif "labels" in batch:
-            lm_labels = batch["labels"]
-            decoder_input_ids = shift_tokens_right(lm_labels, pad_token_id)
+            decoder_input_ids = self.model._shift_right(tgt_ids)
         else:
-            # TODO: fix inside LegacyDataset
-            target_ids = batch["decoder_input_ids"]
-            # This is a slightly worse way of shifting tokens right cause it deletes token 0 from target_id
-            decoder_input_ids = target_ids[:, :-1].contiguous()
-            lm_labels = target_ids[:, 1:].clone()
+            decoder_input_ids = shift_tokens_right(tgt_ids, pad_token_id)
 
-        outputs = self(
-            source_ids,
-            attention_mask=source_mask,
-            decoder_input_ids=decoder_input_ids,
-            use_cache=False,
-            decoder_attention_mask=decoder_attention_mask,
-        )
-
+        outputs = self(src_ids, attention_mask=src_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
+        lm_logits = outputs[0]
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
-            lm_logits = outputs[0]
+
             assert lm_logits.shape[-1] == self.model.config.vocab_size
-            loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), lm_labels.view(-1))
+            loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
-            lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
+            lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
             loss, nll_loss = label_smoothed_nll_loss(
-                lprobs, lm_labels, self.hparams.label_smoothing, ignore_index=pad_token_id
+                lprobs, tgt_ids, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
         return (loss,)
 
