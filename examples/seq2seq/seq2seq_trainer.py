@@ -1,13 +1,10 @@
 import logging
-import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, DistributedSampler, RandomSampler
-from tqdm.auto import tqdm, trange
+from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import Trainer
 from transformers.file_utils import is_apex_available, is_torch_tpu_available
@@ -19,8 +16,6 @@ _use_apex = False
 
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
-    from transformers.file_utils import is_apex_available
-
     if is_apex_available():
         from apex import amp
     _use_apex = True
@@ -29,9 +24,9 @@ else:
     from torch.cuda.amp import autocast
 
 try:
-    from .utils import SortishSampler, label_smoothed_nll_loss
+    from .utils import label_smoothed_nll_loss
 except ImportError:
-    from utils import SortishSampler, label_smoothed_nll_loss
+    from utils import label_smoothed_nll_loss
 
 
 logger = logging.getLogger(__name__)
