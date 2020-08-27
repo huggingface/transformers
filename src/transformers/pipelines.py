@@ -807,7 +807,13 @@ class TextGenerationPipeline(Pipeline):
         return inputs
 
     def __call__(
-        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self,
+        *args,
+        return_tensors=False,
+        return_text=True,
+        clean_up_tokenization_spaces=False,
+        prefix=None,
+        **generate_kwargs
     ):
         """
         Complete the prompt(s) given as inputs.
@@ -821,6 +827,8 @@ class TextGenerationPipeline(Pipeline):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
+            prefix (:obj:`str`, defaults to :obj:`None`):
+                Prefix added to prompt.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate
                 method corresponding to your framework `here <./model.html#generative-models>`__).
@@ -839,8 +847,10 @@ class TextGenerationPipeline(Pipeline):
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
-                prefix = generate_kwargs.get("prefix", self.model.config.prefix) or ""
-                if not prefix and self.model.__class__.__name__ in [
+                prefix = (
+                    prefix if prefix is not None else self.model.config.prefix
+                )
+                if prefix is None and self.model.__class__.__name__ in [
                     "XLNetLMHeadModel",
                     "TransfoXLLMHeadModel",
                     "TFXLNetLMHeadModel",
@@ -858,6 +868,7 @@ class TextGenerationPipeline(Pipeline):
                     if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
                         generate_kwargs["min_length"] += prefix_length
 
+                prefix = prefix or ""
                 inputs = self._parse_and_tokenize(prefix + prompt_text, padding=False, add_special_tokens=False)
 
                 # set input_ids to None to allow empty prompt
