@@ -92,38 +92,6 @@ class ModuleUtilsMixin:
     A few utilities for :obj:`torch.nn.Modules`, to be used as a mixin.
     """
 
-    def num_parameters(self, only_trainable: bool = False, no_embeddings: bool = False) -> int:
-        """
-        Get number of (optionally, trainable or non-embeddings) parameters in the module.
-
-        Args:
-            only_trainable (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return only the number of trainable parameters
-
-            no_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return only the number of non-embeddings parameters
-
-        Returns:
-            :obj:`int`: The number of parameters.
-        """
-
-        def parameter_filter(x):
-            return (x.requires_grad or not only_trainable) and not (
-                isinstance(x, torch.nn.Embedding) and no_embeddings
-            )
-
-        params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
-        return sum(p.numel() for p in params)
-
-    def floating_point_ops(self, batch_size: int, sequence_length: int, no_embeddings: bool = False) -> int:
-        """
-        Get number of (optionally, non-embeddings) floating-point operations. Default approximation neglects the
-        quadratic dependency on the number of tokens (valid if 12 * d_model << sequence_length) as laid out in
-        https://arxiv.org/pdf/2001.08361.pdf section 2.1. Can be overriden for long-form transformers.
-        """
-
-        return 6 * batch_size * sequence_length * self.num_parameters(no_embeddings=no_embeddings)
-
     @staticmethod
     def _hook_rss_memory_pre_forward(module, *args, **kwargs):
         try:
@@ -328,6 +296,38 @@ class ModuleUtilsMixin:
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
         head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
         return head_mask
+
+    def num_parameters(self, only_trainable: bool = False, no_embeddings: bool = False) -> int:
+        """
+        Get number of (optionally, trainable or non-embeddings) parameters in the module.
+
+        Args:
+            only_trainable (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return only the number of trainable parameters
+
+            no_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to return only the number of non-embeddings parameters
+
+        Returns:
+            :obj:`int`: The number of parameters.
+        """
+
+        def parameter_filter(x):
+            return (x.requires_grad or not only_trainable) and not (
+                isinstance(x, torch.nn.Embedding) and no_embeddings
+            )
+
+        params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
+        return sum(p.numel() for p in params)
+
+    def floating_point_ops(self, batch_size: int, sequence_length: int, no_embeddings: bool = False) -> int:
+        """
+        Get number of (optionally, non-embeddings) floating-point operations. Default approximation neglects the
+        quadratic dependency on the number of tokens (valid if 12 * d_model << sequence_length) as laid out in
+        https://arxiv.org/pdf/2001.08361.pdf section 2.1. Can be overriden for long-form transformers.
+        """
+
+        return 6 * batch_size * sequence_length * self.num_parameters(no_embeddings=no_embeddings)
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
