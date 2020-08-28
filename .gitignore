@@ -155,6 +155,3 @@ debug.env
 
 #ctags
 tags
-
-#temp RAG dev gitignore
-rag_configs

@@ -1,3 +1,5 @@
+"""Finetuning script for RAG models. Adapted from examples.seq2seq.finetune.py"""
+
 import argparse
 import glob
 import logging
@@ -32,10 +34,9 @@ from transformers import (  # isort:skip
     AutoConfig,
     AutoTokenizer,
     BartForConditionalGeneration,
-    BartTokenizer,
     RagConfig,
-    RagSequenceModel,
-    RagTokenModel,
+    RagSequence,
+    RagToken,
     T5ForConditionalGeneration,
     get_linear_schedule_with_warmup,
 )
@@ -56,9 +57,9 @@ class GenerativeQAModule(BaseTransformer):
     def __init__(self, hparams, **kwargs):
 
         if hparams.model_type == "rag_sequence":
-            self.model_class = RagSequenceModel
+            self.model_class = RagSequence
         elif hparams.model_type == "rag_token":
-            self.model_class = RagTokenModel
+            self.model_class = RagToken
         elif hparams.model_type == "bart":
             self.model_class = BartForConditionalGeneration
         else:
@@ -71,7 +72,9 @@ class GenerativeQAModule(BaseTransformer):
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
         if self.is_rag_model:
-            generator_config = AutoConfig.from_pretrained(config.pretrained_generator_name_or_path, prefix=config.prefix)
+            generator_config = AutoConfig.from_pretrained(
+                config.pretrained_generator_name_or_path, prefix=config.prefix
+            )
             hparams, generator_config = set_extra_model_params(extra_model_params, hparams, generator_config)
             model = self.model_class.from_pretrained(
                 hparams.model_name_or_path, config=config, generator_config=generator_config
@@ -142,7 +145,6 @@ class GenerativeQAModule(BaseTransformer):
     def _step(self, batch: dict) -> Tuple:
         source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
 
-        kwargs = {}
         if isinstance(self.model, T5ForConditionalGeneration):
             decoder_input_ids = self.model._shift_right(target_ids)
             lm_labels = target_ids
@@ -153,7 +155,7 @@ class GenerativeQAModule(BaseTransformer):
             assert self.is_rag_model
             generator = self.model.model.generator
             if isinstance(generator, T5ForConditionalGeneration):
-                if isinstance(self.model, RagTokenModel):
+                if isinstance(self.model, RagToken):
                     raise NotImplementedError("Currently T5 support is not implemented for RAGToken.")
                 decoder_start_token_id = generator.config.decoder_start_token_id
                 decoder_input_ids = (
@@ -368,7 +370,12 @@ class GenerativeQAModule(BaseTransformer):
         parser.add_argument("--n_val", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
-        parser.add_argument("--prefix", type=str, default=None, help="Prefix added at the beginning of each text, typically used with T5-based models.")
+        parser.add_argument(
+            "--prefix",
+            type=str,
+            default=None,
+            help="Prefix added at the beginning of each text, typically used with T5-based models.",
+        )
         parser.add_argument(
             "--early_stopping_patience",
             type=int,

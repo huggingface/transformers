@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""RAG Retriever model implementation."""
+
 import logging
 import os
 import pickle
@@ -15,18 +31,48 @@ logger = logging.getLogger(__name__)
 
 
 class Index(object):
+    """
+    A base class for the Indices encapsulated by the :class:`~transformers.RagRetriever`.
+    """
+
     def __init__(self, *args, **kwargs):
         pass
 
-    def get_top_docs(self, query_vectors: np.array, n_docs: int = 5):
+    def get_top_docs(self, query_vectors, n_docs):
+        """
+        An index which can be deserialized from the files built using https://github.com/facebookresearch/DPR.
+        We use default faiss index parameters as specified in that repository.
+        Args:
+            query_vectors (:obj:`np.array`):
+                An array of query vectors.
+            n_docs (:obj:`int`):
+                The number of docs retrieved per query.
+        """
         raise NotImplementedError
 
     def init_index(self):
+        """
+        A function responsible for loading the index to memory. Should be called only once per training run of a RAG model.
+        E.g. if the model is trained on multiple GPUs in a distributed setup, only one of the workers will load the index.
+        """
         raise NotImplementedError
 
 
 class LegacyIndex(Index):
-    def __init__(self, vector_size, index_path, passages_path, *args, **kwargs):
+    """
+    An index which can be deserialized from the files built using https://github.com/facebookresearch/DPR.
+    We use default faiss index parameters as specified in that repository.
+
+    Args:
+        vector_size (:obj:`int`):
+            The dimension of indexed vectors.
+        index_path (:obj:`str`):
+            The path to the serialized faiss index on disk.
+        passages_path: (:obj:`str`):
+            A path to text passages on disk, compatible with the faiss index.
+    """
+
+    def __init__(self, vector_size, index_path, passages_path):
         self.index_id_to_db_id = []
         with open(passages_path, "rb") as passages_file:
             self.passages = pickle.load(passages_file)
@@ -74,8 +120,27 @@ class LegacyIndex(Index):
 
 
 class HFIndex(Index):
+    """
+    An and index build for an instance of :class:`~nlp.Datasets`. If ``index_path`` is set to ``None``,
+    we load the pre-computed index available with the :class:`~nlp.arrow_dataset.Dataset`, otherwise, we load the index from the indicated path on disk.
+
+    Args:
+        dataset (:obj:`str`, optional, defaults to ``wiki_dpr``):
+            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``nlp.list_datasets()``).
+        dataset_split (:obj:`str`, optional, defaults to ``train``)
+            Which split of the ``dataset`` to load.
+        index_name (:obj:`str`, optional, defaults to ``train``)
+            The index_name of the index associated with the ``dataset``. The index loaded from ``index_path`` will be saved under this name.
+        index_path (:obj:`str`, optional, defaults to ``None``)
+            The path to the serialized faiss index on disk.
+    """
+
     def __init__(
-        self, dataset, dataset_split, index_name, index_path,
+        self,
+        dataset,
+        dataset_split,
+        index_name,
+        index_path,
     ):
         super().__init__()
         self.dataset = dataset
@@ -102,10 +167,20 @@ class HFIndex(Index):
 
 
 class RagRetriever(object):
+    """
+    A distributed retriever built on top of the ``torch.distributed`` communication package. During training all workers
+    initalize their own instance of the retriever, however, only the main worker loads the index into memory. The index is stored
+    in cpu memory. The index will also work well in a non-distributed setup.
+
+    Args:
+        config (:class:`~transformers.RagConfig`):
+            The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
+    """
+
     def __init__(self, config):
         super().__init__()
         assert (
-            config.retriever_type == "hf_retriever" or config.retriever_type == "mpi_retriever"
+            config.retriever_type == "hf_retriever" or config.retriever_type == "legacy_retriever"
         ), "invalid retirever type"
 
         self.retriever = (
@@ -118,6 +193,19 @@ class RagRetriever(object):
         self.batch_size = config.retrieval_batch_size * torch.cuda.device_count()
 
     def init_retrieval(self, distributed_port):
+        """
+        Retrirever initalization function, needs to be called from the training process. The function sets some common parameters
+        and environment variables. On top of that, (only) the main process in the process group loads the index into memory.
+
+        If this functin doesn't get called, we assume we're operating in a non-distributed environment and the index gets loaded
+        at first query.
+
+        Args:
+            distributed_port (:obj:`int`):
+                The port on which the main communication of the training run is carried out. We set the port for retrieval-related
+                communication as ``distributed_port + 1``.
+        """
+
         logger.info("initializing retrieval")
 
         # initializing a separate process group for retrievel as the default
@@ -131,12 +219,12 @@ class RagRetriever(object):
             os.environ["MASTER_PORT"] = str(distributed_port + 1)
             self.process_group = dist.new_group(ranks=None, backend="gloo")
 
-        # initialize retriever only on the master worker
-        if not dist.is_initialized() or self._is_master():
-            logger.info("dist not initialized / master")
+        # initialize retriever only on the main worker
+        if not dist.is_initialized() or self._is_main():
+            logger.info("dist not initialized / main")
             self.retriever.init_index()
 
-    def _is_master(self):
+    def _is_main(self):
         return dist.get_rank(group=self.process_group) == 0
 
     def _chunk_tensor(self, t, chunk_size):
@@ -154,7 +242,7 @@ class RagRetriever(object):
         ifname = next((addr for addr in addrs if addr.startswith("e")), None)
         return ifname
 
-    def _master_retrieve(self, query_vectors):
+    def _main_retrieve(self, query_vectors):
         query_vectors_batched = self._chunk_tensor(query_vectors, self.batch_size)
         ids_batched = []
         vectors_batched = []
@@ -175,7 +263,24 @@ class RagRetriever(object):
         doc_dicts = self.retriever.get_doc_dicts(doc_ids)
         return doc_scores, doc_dicts
 
-    def retrieve(self, query_vectors, **kwargs):
+    def retrieve(self, query_vectors, n_docs):
+        """
+        Retrieves documents for specified ``query_vectors``. The main process, which has the access to the index stored in memory, gathers queries
+        from all the processes in the main training process group, performs the retrieval and scatters back the results.
+
+        Args:
+            query_vectors (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`:
+                A batch of query vectors to retrieve with.
+            n_docs (:obj:`int`):
+                The number of docs retrieved per query.
+
+        Ouput:
+            total_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`
+                The retrieval scores of the retrieved examples per query.
+            total_examples (:obj:`List[dict]`):
+                The retrieved examples per query.
+        """
+
         # non-ddp initialization (init_retiever() is called at ddp initialization, if no ddp, then it's never called,
         # so it has to be initalized separately.
         if not dist.is_initialized() and self.retriever.index is None:
@@ -186,7 +291,7 @@ class RagRetriever(object):
 
         # single GPU training
         if not dist.is_initialized():
-            doc_ids, doc_vectors = self._master_retrieve(query_vectors_detached)
+            doc_ids, doc_vectors = self._main_retrieve(query_vectors_detached)
             return self._finalize_retrieval(query_vectors, doc_ids, doc_vectors)
 
         # distributed training
@@ -194,7 +299,7 @@ class RagRetriever(object):
 
         # gather logic
         gather_list = None
-        if self._is_master():
+        if self._is_main():
             gather_list = [torch.empty(query_vectors.shape, dtype=torch.float32) for _ in range(world_size)]
         dist.gather(query_vectors_detached, dst=0, gather_list=gather_list, group=self.process_group)
 
@@ -202,9 +307,9 @@ class RagRetriever(object):
         n_queries = query_vectors.shape[0]
         scatter_ids = []
         scatter_vectors = []
-        if self._is_master():
+        if self._is_main():
             assert len(gather_list) == world_size
-            ids, vectors = self._master_retrieve(torch.cat(gather_list))
+            ids, vectors = self._main_retrieve(torch.cat(gather_list))
             scatter_ids = self._chunk_tensor(ids, n_queries)
             scatter_vectors = self._chunk_tensor(vectors, n_queries)
         doc_ids = self._scattered(scatter_ids, [n_queries, self.n_docs], target_type=torch.int64)

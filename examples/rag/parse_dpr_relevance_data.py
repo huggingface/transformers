@@ -15,10 +15,15 @@ def main():
 
     # Required parameters
     parser.add_argument(
-        "--src_path", type=str, default="biencoder-nq-dev.json", help="Path to raw DPR training data",
+        "--src_path",
+        type=str,
+        default="biencoder-nq-dev.json",
+        help="Path to raw DPR training data",
     )
     parser.add_argument(
-        "--dst_path", type=str, help="where to store parsed file",
+        "--dst_path",
+        type=str,
+        help="where to store parsed file",
     )
     args = parser.parse_args()
 

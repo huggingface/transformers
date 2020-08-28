@@ -1,35 +1,16 @@
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
-
+""" Evaluation script for RAG models."""
 
 import argparse
 import ast
-import glob
 import logging
 import os
-import re
-import string
 import sys
 
 import pandas as pd
 import torch
 from tqdm import tqdm
 
-from transformers import WEIGHTS_NAME, BartForConditionalGeneration, BartTokenizer, RagSequenceModel, RagTokenModel
+from transformers import BartForConditionalGeneration, BartTokenizer, RagSequence, RagToken
 
 
 sys.path.append(os.path.join(os.getcwd()))  # isort:skip
@@ -108,7 +89,12 @@ def evaluate_batch_retrieval(args, rag_model, tokenizer, questions):
             title = title[:-1]
         return title
 
-    retriever_inputs = tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True,)
+    retriever_inputs = tokenizer.batch_encode_plus(
+        questions,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+    )
     retriever_input_embs = rag_model.model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0]
 
     _, all_docs = rag_model.model.retriever.retrieve(retriever_input_embs)
@@ -156,7 +142,7 @@ def get_args():
     parser.add_argument(
         "--retriever_type",
         default=None,
-        choices=["hf_retriever", "mpi_retriever"],
+        choices=["hf_retriever", "legacy_retriever"],
         type=str,
         help="RAG model retriever type",
     )
@@ -183,7 +169,11 @@ def get_args():
     )
     parser.add_argument("--k", default=1, type=int, help="k for the precision@k calculation")
     parser.add_argument(
-        "--evaluation_set", default=None, type=str, required=True, help="Path to a file containing evaluation samples",
+        "--evaluation_set",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to a file containing evaluation samples",
     )
     parser.add_argument(
         "--gold_data_path",
@@ -213,22 +203,34 @@ def get_args():
         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
     parser.add_argument(
-        "--eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.",
+        "--eval_batch_size",
+        default=8,
+        type=int,
+        help="Batch size per GPU/CPU for evaluation.",
     )
     parser.add_argument(
-        "--recalculate", help="Recalculate predictions even if the prediction file exists", action="store_true",
+        "--recalculate",
+        help="Recalculate predictions even if the prediction file exists",
+        action="store_true",
     )
     parser.add_argument(
-        "--num_beams", default=4, type=int, help="Number of beams to be used when generating answers",
+        "--num_beams",
+        default=4,
+        type=int,
+        help="Number of beams to be used when generating answers",
     )
     parser.add_argument("--min_length", default=1, type=int, help="Min length of the generated answers")
     parser.add_argument("--max_length", default=50, type=int, help="Max length of the generated answers")
 
     parser.add_argument(
-        "--print_predictions", action="store_true", help="If True, prints predictions while evaluating.",
+        "--print_predictions",
+        action="store_true",
+        help="If True, prints predictions while evaluating.",
     )
     parser.add_argument(
-        "--print_docs", action="store_true", help="If True, prints docs retried while generating.",
+        "--print_docs",
+        action="store_true",
+        help="If True, prints docs retried while generating.",
     )
     args = parser.parse_args()
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -241,7 +243,7 @@ def main(args):
         args.model_type = infer_model_type(args.model_name_or_path)
         assert args.model_type is not None
     if args.model_type.startswith("rag"):
-        model_class = RagTokenModel if args.model_type == "rag_token" else RagSequenceModel
+        model_class = RagToken if args.model_type == "rag_token" else RagSequence
         model_kwargs["n_docs"] = args.n_docs
         if args.retriever_type is not None:
             model_kwargs["retriever_type"] = args.retriever_type

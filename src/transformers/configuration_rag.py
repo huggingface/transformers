@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2010, XXX authors
+# Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,45 +12,73 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XXX model configuration """
+""" RAG model configuration """
 
-
-import logging
 
 from .configuration_utils import PretrainedConfig
+from .file_utils import add_start_docstrings_to_callable
 
-
-logger = logging.getLogger(__name__)
 
 RAG_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # "rag-sequence-default": "/private/home/piktus/rag_huggingface/data/rag-sequence-nq/",
-    # "rag-token-default": "/private/home/piktus/rag_huggingface/data/rag-token-nq/",
+    "facebook/rag-sequence-nq": "TBA",
+    "facebook/rag-token-nq": "TBA",
 }
 
+RAG_CONFIG_DOC = r"""
+    :class:`~transformers.RagConfig` is the configuration class to store the configuration of a `RagModel`.
 
+    Args:
+        title_sep (:obj:`str`, optional, defaults to  ``" / "``):
+            Separator inserted between the title and the text of the retrieved document when running
+            `:func:`~transformers.RagModel.contextualize``.
+        doc_sep (:obj:`str`, optional, defaults to  ``" // "``):
+            Separator inserted between the the text of the retrieved document and the original input when running
+            `:func:`~transformers.RagModel.contextualize``.
+        n_docs (:obj:`int`, optional, defaults to ``5``):
+            Number of retrieved docs.
+        max_combined_length (:int:`bool`, optional, defaults to ``300``):
+            Max length of contextualized input returned by `:func:`~transformers.RagModel.contextualize``.
+        retrieval_vector_size (:obj:`int`, optional, defaults to ``768``):
+            Dimensionality of the document embeddings indexed by the ``retriever``.
+        retrieval_batch_size (:obj:`int`, optional, defaults to ``8``):
+            Retrieval batch size - the number of queries issues concurrently to the faiss index excapsulated
+            by the ``retriever``.
+        retriever_type (:obj:`str`, optional, defaults to ``hf_retriever``):
+            A type of index encapsulated by the ``retriever``. Possible options include:
+
+                - ``hf_retriever`` - and index build for an instance of :class:`~nlp.Datasets`
+                - ``legacy_retriever`` - an index build with the native DPR implementation (see https://github.com/facebookresearch/DPR for details).
+        dataset (:obj:`str`, optional, defaults to ``wiki_dpr``):
+            A datatset identifier of the indexed dataset on HuggingFace AWS bucket (list all available datasets and ids with ``nlp.list_datasets()``).
+        dataset_split (:obj:`str`, optional, defaults to ``train``)
+            Which split of the ``dataset`` to load.
+        index_name (:obj:`str`, optional, defaults to ``train``)
+            The index_name of the index associated with the ``dataset``.
+        index_path (:obj:`str`, optional, defaults to ``None``)
+            The path to the serialized faiss index on disk.
+        passages_path: (:obj:`str`, optional, defaults to ``None``):
+            A path to text passages compatible with the faiss index. Required if using :class:`~transformers.retrieval_rag.LegacyIndex`
+        pretrained_question_encoder_tokenizer_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
+            A string specifying the ``question_encoder`` tokenizer to be loaded.
+        pretrained_question_encoder_name_or_path: (:obj:`str`, optional, defaults to ``facebook/dpr-question_encoder-single-nq-base``):
+            A string specifying the ``question_encoder`` model to be loaded.
+        pretrained_generator_tokenizer_name_or_path: (:obj:`str`, optional, defaults to ``facebook/bart-large``):
+            A string specifying the ``generator`` tokenizer to be loaded.
+        pretrained_generator_name_or_path: (:obj:`str`, optional, defaults to ``facebook/bart-large``):
+            A string specifying the ``generator`` model to be loaded.
+"""
+
+
+@add_start_docstrings_to_callable(RAG_CONFIG_DOC)
 class RagConfig(PretrainedConfig):
-    r"""
-        :class:`~transformers.RagConfig` is the configuration class to store the configuration of a
-        `RagModel`.
-        Arguments:
-            TBA
-    """
     model_type = "rag"
 
     def __init__(
         self,
-        vocab_size=None,
-        is_encoder_decoder=True,
-        pad_token_id=None,
-        bos_token_id=None,
-        eos_token_id=None,
-        decoder_start_token_id=None,
-        prefix=None,
         title_sep=" / ",
         doc_sep=" // ",
         n_docs=5,
-        max_combined_length=300,  # max token length of input with context doc prepended
-        # retrieval params
+        max_combined_length=300,
         retrieval_vector_size=768,
         retrieval_batch_size=8,
         retriever_type="hf_retriever",
@@ -59,22 +87,13 @@ class RagConfig(PretrainedConfig):
         index_name="embeddings",
         index_path=None,
         passages_path=None,
-        # pre-trained components
-        pretrained_context_encoder_name_or_path="facebook/dpr-ctx_encoder-single-nq-base",
-        pretrained_context_tokenizer_name_or_path="facebook/dpr-ctx_encoder-single-nq-base",
+        pretrained_question_encoder_tokenizer_name_or_path="facebook/dpr-question_encoder-single-nq-base",
         pretrained_question_encoder_name_or_path="facebook/dpr-question_encoder-single-nq-base",
         pretrained_generator_tokenizer_name_or_path="facebook/bart-large",
-        pretrained_generator_name_or_path="/private/home/piktus/rag_hugginface/data/rag-sequence-nq",
+        pretrained_generator_name_or_path="facebook/bart-large",
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.vocab_size = vocab_size
-        self.is_encoder_decoder = is_encoder_decoder
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.prefix = prefix
 
         self.title_sep = title_sep
         self.doc_sep = doc_sep
@@ -92,8 +111,7 @@ class RagConfig(PretrainedConfig):
         self.passages_path = passages_path
         self.index_path = index_path
 
-        self.pretrained_context_encoder_name_or_path = pretrained_context_encoder_name_or_path
-        self.pretrained_context_tokenizer_name_or_path = pretrained_context_tokenizer_name_or_path
+        self.pretrained_question_encoder_tokenizer_name_or_path = pretrained_question_encoder_tokenizer_name_or_path
         self.pretrained_question_encoder_name_or_path = pretrained_question_encoder_name_or_path
         self.pretrained_generator_tokenizer_name_or_path = pretrained_generator_tokenizer_name_or_path
         self.pretrained_generator_name_or_path = pretrained_generator_name_or_path

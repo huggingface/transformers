@@ -20,7 +20,6 @@ from transformers import (
     AutoTokenizer,
     PretrainedConfig,
     PreTrainedTokenizer,
-    RagTokenModel,
 )
 from transformers.optimization import (
     Adafactor,
