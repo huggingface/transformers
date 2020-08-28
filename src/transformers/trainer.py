@@ -85,7 +85,6 @@ if is_optuna_available():
 
 if is_ray_available():
     from ray import tune
-    from ray.tune.integration.wandb import wandb_mixin
 
 logger = logging.get_logger(__name__)
 
@@ -905,6 +904,8 @@ class Trainer:
 
             # Enable per-trial wandb logging
             if is_wandb_available() and os.getenv("WANDB_DISABLED", "false") != "true":
+                from ray.tune.integration.wandb import wandb_mixin
+
                 _objective = wandb_mixin(_objective)
                 wandb_config = config.get("wandb", {})
                 wandb_config.update({"project": os.getenv("WANDB_PROJECT", "huggingface")})
