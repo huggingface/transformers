@@ -904,13 +904,10 @@ class Trainer:
             config = self.hp_space(None)
 
             # Enable per-trial wandb logging
-            if is_wandb_available() and os.getenv("WANDB_DISABLED", "false") is not "true":
+            if is_wandb_available() and os.getenv("WANDB_DISABLED", "false") != "true":
                 _objective = wandb_mixin(_objective)
                 wandb_config = config.get("wandb", {})
-                wandb_config.update({
-                    "project": os.getenv("WANDB_PROJECT", "huggingface"),
-                    "api_key_file": "~/.wandb_api_key"
-                })
+                wandb_config.update({"project": os.getenv("WANDB_PROJECT", "huggingface")})
                 config["wandb"] = wandb_config
 
             analysis = tune.run(_objective, config=config, num_samples=n_trials, **kwargs)
