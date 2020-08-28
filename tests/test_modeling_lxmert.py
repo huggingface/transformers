@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import MODEL_FOR_QUESTION_ANSWERING_MAPPING, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -25,15 +25,9 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 if is_torch_available():
     import torch
-    from transformers import (
-        LxmertConfig,
-        LxmertModel,
-        LxmertForPreTraining,
-        LxmertForQuestionAnswering,
-    )
-    from transformers.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
-    #
+    from transformers import LxmertConfig, LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
+    from transformers.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class LxmertModelTester:
@@ -370,7 +364,12 @@ class LxmertModelTester:
             matched_label=matched_label,
         )
         result = model(
-            input_ids, visual_feats, bounding_boxes, token_type_ids=token_type_ids, attention_mask=input_mask, ans=ans,
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            ans=ans,
         )
         result = model(
             input_ids,
@@ -567,7 +566,6 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         seq_len = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
@@ -666,10 +664,12 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
             num_visual_features = self.model_tester.num_visual_features
 
             self.assertListEqual(
-                list(language_hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
+                list(language_hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
             )
             self.assertListEqual(
-                list(vision_hidden_states[0].shape[-2:]), [num_visual_features, self.model_tester.hidden_size],
+                list(vision_hidden_states[0].shape[-2:]),
+                [num_visual_features, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

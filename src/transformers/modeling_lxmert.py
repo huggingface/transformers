@@ -197,10 +197,10 @@ class LxmertForPreTrainingOutput(ModelOutput):
 
 
 def load_tf_weights_in_lxmert(model, config, tf_checkpoint_path):
-    """ Load tf checkpoints in a pytorch model.
-    """
+    """Load tf checkpoints in a pytorch model."""
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
@@ -274,8 +274,7 @@ LxmertLayerNorm = torch.nn.LayerNorm
 
 
 class LxmertEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings.
-    """
+    """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
@@ -520,7 +519,13 @@ class LxmertXLayer(nn.Module):
 
         lang_output, visual_output = self.output_fc(lang_att_output, visual_att_output)
         return (
-            (lang_output, visual_output, attention_probs[0],) if output_attentions else (lang_output, visual_output)
+            (
+                lang_output,
+                visual_output,
+                attention_probs[0],
+            )
+            if output_attentions
+            else (lang_output, visual_output)
         )
 
 
@@ -727,8 +732,8 @@ class LxmertPreTrainingHeads(nn.Module):
 
 
 class LxmertPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = LxmertConfig
@@ -1135,7 +1140,11 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         else:
             answer_score = pooled_output[0][0]
 
-        total_loss = torch.tensor(0.0, device=device)
+        total_loss = (
+            None
+            if (masked_lm_labels is None and matched_label is None and obj_labels is None and ans is None)
+            else torch.tensor(0.0, device=device)
+        )
         if masked_lm_labels is not None and self.task_mask_lm:
             masked_lm_loss = self.loss_fcts["ce"](
                 lang_prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1)
@@ -1183,7 +1192,8 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Lxmert Model with a visual-answering head on top for downstream QA tasks""", LXMERT_START_DOCSTRING,
+    """Lxmert Model with a visual-answering head on top for downstream QA tasks""",
+    LXMERT_START_DOCSTRING,
 )
 class LxmertForQuestionAnswering(LxmertPreTrainedModel):
     def __init__(self, config):
