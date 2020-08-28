@@ -174,7 +174,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             array = numpy.expand_dims(array, axis=0)
 
         try:
-            assert list(symbolic_weight.shape) == list(array.shape), f"{sw_name}"
+            assert list(symbolic_weight.shape) == list(array.shape)
         except AssertionError as e:
             e.args += (symbolic_weight.shape, array.shape)
             raise e
