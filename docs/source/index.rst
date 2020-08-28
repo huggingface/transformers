@@ -124,7 +124,10 @@ conversion utilities for the following models:
 22. `DPR <https://github.com/facebookresearch/DPR>`_ (from Facebook) released with the paper `Dense Passage Retrieval
     for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_ by Vladimir Karpukhin, Barlas Oğuz, Sewon
     Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
-23. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+23. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
+    Cross-Modality Encoder Representations from Transformers for Open-Domain Question
+    Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
+24. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
