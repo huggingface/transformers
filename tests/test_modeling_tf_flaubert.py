@@ -40,7 +40,8 @@ if is_tf_available():
 
 class TFFlaubertModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -337,7 +338,8 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
         model = TFFlaubertModel.from_pretrained("jplu/tf-flaubert-small-cased")
 
         input_ids = tf.convert_to_tensor(
-            [[0, 158, 735, 2592, 1424, 6727, 82, 1]], dtype=tf.int32,
+            [[0, 158, 735, 2592, 1424, 6727, 82, 1]],
+            dtype=tf.int32,
         )  # "J'aime flaubert !"
 
         output = model(input_ids)[0]

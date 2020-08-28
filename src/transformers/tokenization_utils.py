@@ -17,7 +17,6 @@
 """
 
 import itertools
-import logging
 import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
@@ -40,9 +39,10 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def _is_whitespace(char):

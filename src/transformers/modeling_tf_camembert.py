@@ -15,9 +15,6 @@
 # limitations under the License.
 """ TF 2.0 CamemBERT model. """
 
-
-import logging
-
 from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_roberta import (
@@ -28,9 +25,10 @@ from .modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all CamemBERT models at https://huggingface.co/models?filter=camembert
@@ -79,7 +77,8 @@ class TFCamembertModel(TFRobertaModel):
 
 
 @add_start_docstrings(
-    """CamemBERT Model with a `language modeling` head on top. """, CAMEMBERT_START_DOCSTRING,
+    """CamemBERT Model with a `language modeling` head on top. """,
+    CAMEMBERT_START_DOCSTRING,
 )
 class TFCamembertForMaskedLM(TFRobertaForMaskedLM):
     """
