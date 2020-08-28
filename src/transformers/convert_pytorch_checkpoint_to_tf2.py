@@ -59,13 +59,13 @@ from transformers import (
     TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
-    TFLxmertForPretraining,
+    TFLxmertForPreTraining,
+    TFLxmertVisualFeatEncoder,
     TFOpenAIGPTLMHeadModel,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
     TFT5ForConditionalGeneration,
     TFTransfoXLLMHeadModel,
-    TFVisualFeatEncoder,
     TFXLMRobertaForMaskedLM,
     TFXLMWithLMHeadModel,
     TFXLNetLMHeadModel,
@@ -98,6 +98,8 @@ if is_torch_available():
         ElectraForPreTraining,
         FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
+        LxmertForPreTraining,
+        LxmertVisualFeatEncoder,
         OpenAIGPTLMHeadModel,
         RobertaForMaskedLM,
         RobertaForSequenceClassification,
@@ -106,8 +108,6 @@ if is_torch_available():
         XLMRobertaForMaskedLM,
         XLMWithLMHeadModel,
         XLNetLMHeadModel,
-        LxmertForPreTraining,
-        LxmertVisualFeatEncoder,
     )
 
 
@@ -212,10 +212,14 @@ MODEL_CLASSES = {
     ),
     "lxmert": (
         LxmertConfig,
-        LxmertForPretraining,
-        TFLxmertForPretraining,
-        VisualFeatEncoder,
-        TFVisualFeatEncoder,
+        TFLxmertForPreTraining,
+        LxmertForPreTraining,
+        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "lxmert-visual-feature-encoder": (
+        LxmertConfig,
+        TFLxmertVisualFeatEncoder,
+        LxmertVisualFeatEncoder,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "ctrl": (

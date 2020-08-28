@@ -168,7 +168,10 @@ CONFIG_MAPPING = OrderedDict(
             "encoder-decoder",
             EncoderDecoderConfig,
         ),
-        ("lxmert", LxmertConfig,),
+        (
+            "lxmert",
+            LxmertConfig,
+        ),
     ]
 )
 

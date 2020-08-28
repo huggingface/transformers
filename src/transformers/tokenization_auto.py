@@ -55,8 +55,8 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_marian import MarianTokenizer
 from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
@@ -132,7 +132,7 @@ class AutoTokenizer:
         - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
         - `electra`: ElectraTokenizer (Google ELECTRA model)
         - `lxmert`: LxmertTokenizer (Lxmert model)
-        
+
     This class cannot be instantiated using `__init__()` (throw an error).
     """
 

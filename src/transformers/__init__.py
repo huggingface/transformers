@@ -342,6 +342,15 @@ if is_torch_available():
         LongformerModel,
         LongformerSelfAttention,
     )
+    from .modeling_lxmert import (
+        LxmertEncoder,
+        LxmertForPreTraining,
+        LxmertForQuestionAnswering,
+        LxmertModel,
+        LxmertPreTrainedModel,
+        LxmertVisualFeatEncoder,
+        LxmertXLayer,
+    )
     from .modeling_marian import MarianMTModel
     from .modeling_mbart import MBartForConditionalGeneration
     from .modeling_mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
@@ -436,16 +445,6 @@ if is_torch_available():
         XLNetModel,
         XLNetPreTrainedModel,
         load_tf_weights_in_xlnet,
-    )
-
-    from .modeling_lxmert import (
-        LxmertForPreTraining,
-        LxmertModel,
-        LxmertPreTrainedModel,
-        LxmertEncoder,
-        LxmertXLayer,
-        LxmertVisualFeatEncoder,
-        LxmertForQuestionAnswering,
     )
 
     # Optimization
@@ -581,6 +580,14 @@ if is_tf_available():
         TFLongformerModel,
         TFLongformerSelfAttention,
     )
+    from .modeling_tf_lxmert import (
+        TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFLxmertForPreTraining,
+        TFLxmertMainLayer,
+        TFLxmertModel,
+        TFLxmertPreTrainedModel,
+        TFLxmertVisualFeatEncoder,
+    )
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFMobileBertForMaskedLM,
@@ -658,14 +665,6 @@ if is_tf_available():
         TFXLNetMainLayer,
         TFXLNetModel,
         TFXLNetPreTrainedModel,
-    )
-
-    from .modeling_tf_lxmert import (
-        TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFLxmertModel,
-        TFLxmertMainLayer,
-        TFLxmertPreTrainedModel,
-        TFLxmertForPreTraining,
     )
 
     # Optimization

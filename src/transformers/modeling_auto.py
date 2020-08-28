@@ -117,7 +117,7 @@ from .modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
-from .modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
+from .modeling_lxmert import LxmertForPreTraining, LxmertModel
 from .modeling_marian import MarianMTModel
 from .modeling_mbart import MBartForConditionalGeneration
 from .modeling_mobilebert import (
@@ -337,7 +337,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
-        (LxmertConfig, LxmertForQuestionAnswering),
     ]
 )
 
