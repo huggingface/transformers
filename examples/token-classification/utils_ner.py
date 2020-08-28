@@ -276,7 +276,7 @@ if is_torch_available():
 if is_tf_available():
     import tensorflow as tf
 
-    class TFNerDataset:
+    class TFTokenClassificationDataset:
         """
         This will be superseded by a framework-agnostic approach
         soon.

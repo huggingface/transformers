@@ -438,6 +438,7 @@ if is_torch_available():
 
     # Optimization
     from .optimization import (
+        Adafactor,
         AdamW,
         get_constant_schedule,
         get_constant_schedule_with_warmup,

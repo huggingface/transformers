@@ -160,9 +160,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             tokenizer_kwargs["max_length"] = max_target_length
 
         self.current_spm = self.spm_target
-        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
+        model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         self.current_spm = self.spm_source
         return model_inputs
 
