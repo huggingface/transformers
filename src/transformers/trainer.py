@@ -545,7 +545,8 @@ class Trainer:
             if trial.should_prune():
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            self._tune_save_checkpoint()
+            if self.global_step % self.args.save_steps == 0:
+                self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
 
     def _tune_save_checkpoint(self):
@@ -906,12 +907,16 @@ class Trainer:
             best_trial = study.best_trial
             best_run = BestRun(str(best_trial.number), best_trial.value, best_trial.params)
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            # The TensorBoard writer does not pickle so we have to remove it (if it exists) while doing the ray hp
-            # search.
+            # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
+            # while doing the ray hp search.
             _tb_writer = self.tb_writer
             self.tb_writer = None
+            _model = self.model
+            self.model = None
             # Setup default `resources_per_trial` and `reporter`.
             if "resources_per_trial" not in kwargs and self.args.n_gpu > 0:
+                # `args.n_gpu` is considered the total number of GPUs that will be split
+                # among the `n_jobs`
                 n_jobs = int(kwargs.pop("n_jobs", 1))
                 num_gpus_per_trial = self.args.n_gpu
                 if num_gpus_per_trial / n_jobs >= 1:
@@ -965,6 +970,7 @@ class Trainer:
             best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
             best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
             self.tb_writer = _tb_writer
+            self.model = _model
 
         self.hp_search_backend = None
         return best_run
