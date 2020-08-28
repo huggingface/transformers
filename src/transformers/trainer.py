@@ -41,7 +41,6 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
-    estimate_tokens,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -295,6 +294,7 @@ class Trainer:
 
         self.global_step = None
         self.epoch = None
+        self.total_flos = None
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
@@ -471,7 +471,11 @@ class Trainer:
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
-            combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
+            try:
+                combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
+            except AttributeError:
+                # in case the model has no config
+                combined_dict = {**self.args.to_sanitized_dict()}
             wandb.init(
                 project=os.getenv("WANDB_PROJECT", "huggingface"), config=combined_dict, name=self.args.run_name
             )
@@ -641,7 +645,7 @@ class Trainer:
 
         self.global_step = 0
         self.epoch = 0
-        self.non_embedding_flos = 0
+        self.total_flos = 0
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
         # Check if continuing training from a checkpoint
@@ -649,7 +653,7 @@ class Trainer:
             # set global_step to global_step of last saved checkpoint from model path
             try:
                 self.global_step = int(model_path.split("-")[-1].split("/")[0])
-                self.non_embedding_flos = getattr(model.config, "non_embedding_flos", 0)
+                self.total_flos = getattr(model.config, "total_flos", 0)
                 epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
                 steps_trained_in_current_epoch = self.global_step % (
                     len(train_dataloader) // self.args.gradient_accumulation_steps
@@ -659,12 +663,12 @@ class Trainer:
                 logger.info("  Continuing training from epoch %d", epochs_trained)
                 logger.info("  Continuing training from global step %d", self.global_step)
                 logger.info(
-                    "  Continuing training from %d non-embedding floating-point operations", self.non_embedding_flos
+                    "  Continuing training from %d non-embedding floating-point operations", self.total_flos
                 )
                 logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
             except ValueError:
                 self.global_step = 0
-                self.non_embedding_flos = 0
+                self.total_flos = 0
                 logger.info("  Starting fine-tuning.")
 
         tr_loss = 0.0
@@ -700,14 +704,10 @@ class Trainer:
                 tr_loss += self.training_step(model, inputs)
 
                 try:
-                    self.non_embedding_flos += 6 * model.floating_point_ops(
-                        *estimate_tokens(inputs), no_embeddings=True
-                    )
+                    self.total_flos += self.floating_point_ops(model, inputs)
                 except AttributeError:
                     # in case this is a DataParallel
-                    self.non_embedding_flos += 6 * model.module.floating_point_ops(
-                        *estimate_tokens(inputs), no_embeddings=True
-                    )
+                    self.total_flos += self.floating_point_ops(model.module, inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
@@ -946,12 +946,12 @@ class Trainer:
 
         if self.epoch is not None:
             logs["epoch"] = self.epoch
-        if self.non_embedding_flos is not None:
+        if self.total_flos is not None:
             if self.args.local_rank != -1:
-                gathered_flos = self.distributed_broadcast_scalars([self.non_embedding_flos])
-                logs["non_embedding_flos"] = gathered_flos.sum().item()
+                gathered_flos = self.distributed_broadcast_scalars([self.total_flos])
+                logs["total_flos"] = gathered_flos.sum().item()
             else:
-                logs["non_embedding_flos"] = self.non_embedding_flos
+                logs["total_flos"] = self.total_flos
         if self.global_step is None:
             # when logging evaluation metrics without training
             self.global_step = 0
@@ -1130,12 +1130,13 @@ class Trainer:
 
         xm.rendezvous("saving_checkpoint")
         # Storing the number of floating-point operations that went into the model
-        if self.non_embedding_flos is not None:
+        if self.total_flos is not None:
             if self.args.local_rank != -1:
-                gathered_flos = self.distributed_broadcast_scalars([self.non_embedding_flos])
-                self.model.config.non_embedding_flos = gathered_flos.sum().item()
+                total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
             else:
-                self.model.config.non_embedding_flos = self.non_embedding_flos
+                total_flos = self.total_flos
+        if total_flos > 0:
+            self.model.config.total_flos = total_flos
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
@@ -1149,7 +1150,13 @@ class Trainer:
         if not isinstance(self.model, PreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
         # Storing the number of floating-point operations that went into the model
-        self.model.config.non_embedding_flos = self.non_embedding_flos
+        if self.total_flos is not None:
+            if self.args.local_rank != -1:
+                total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
+            else:
+                total_flos = self.total_flos
+        if total_flos > 0:
+            self.model.config.total_flos = total_flos
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
@@ -1416,3 +1423,25 @@ class Trainer:
         if labels is not None:
             labels = labels.detach()
         return (loss, logits.detach(), labels)
+
+    def floating_point_ops(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]):
+        """
+        For models with a `floating_point_ops` method (e.g. models that inherit from `PretrainedModel`), uses
+        that method to compute the number of floating point operations for every backward + forward pass. If using
+        another model, either implement such a method in the model or override this method.
+
+        Args:
+            model (:obj:`nn.Module`):
+                The model to evaluate.
+            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+
+        Returns:
+            :obj:`int`: The number of floating-point operations.
+        """
+
+        if hasattr(model, "floating_point_ops"):
+            return model.floating_point_ops(inputs)
+
+        else:
+            return 0

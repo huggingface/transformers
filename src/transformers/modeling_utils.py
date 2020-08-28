@@ -18,7 +18,8 @@ import inspect
 import os
 import re
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union, Any
+import warnings
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -42,9 +43,7 @@ from .file_utils import (
 from .generation_utils import GenerationMixin
 from .utils import logging
 
-
 logger = logging.get_logger(__name__)
-
 
 try:
     from torch.nn import Identity
@@ -61,7 +60,7 @@ except ImportError:
 
 
 def find_pruneable_heads_and_indices(
-    heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
+        heads: List[int], n_heads: int, head_size: int, already_pruned_heads: Set[int]
 ) -> Tuple[Set[int], torch.LongTensor]:
     """
     Finds the heads and their indices taking :obj:`already_pruned_heads` into account.
@@ -259,7 +258,7 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_head_mask(
-        self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+            self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
     ) -> Tensor:
         """
         Prepare the head mask if needed.
@@ -293,7 +292,7 @@ class ModuleUtilsMixin:
         elif head_mask.dim() == 2:
             head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
         assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
-        head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
+        head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
         return head_mask
 
     def num_parameters(self, only_trainable: bool = False, no_embeddings: bool = False) -> int:
@@ -313,21 +312,56 @@ class ModuleUtilsMixin:
 
         def parameter_filter(x):
             return (x.requires_grad or not only_trainable) and not (
-                isinstance(x, torch.nn.Embedding) and no_embeddings
+                    isinstance(x, torch.nn.Embedding) and no_embeddings
             )
 
         params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
         return sum(p.numel() for p in params)
 
-    def floating_point_ops(self, batch_size: int, sequence_length: int, no_embeddings: bool = False) -> int:
+    def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]):
         """
-        Get number of (optionally, non-embeddings) floating-point operations. Default approximation neglects the
-        quadratic dependency on the number of tokens (valid if 12 * d_model << sequence_length) as laid out in
-        https://arxiv.org/pdf/2001.08361.pdf section 2.1. Should be overriden for transformers with parameter re-use
-        e.g. Albert or Universal Transformers.
+        Helper function to estimate the batch size and sequence length from the model inputs. Returned batch size is the
+        first dimension of input tensors, returned sequence length is the sum of the second dimensions of all input
+        tensors.
+
+        Args:
+            inputs (:obj:`dict`): The model inputs.
+
+        Returns:
+            seed (:obj:`tuple`): The batch size and sequence length.
+        """
+        token_inputs = [tensor for key, tensor in input_dict.items() if "input" in key]
+        if token_inputs:
+            return sum([token_input.numel() for token_input in token_inputs])
+        else:
+            warnings.warn(
+                "Could not estimate the number of tokens of the input, floating-point operations will not be computed"
+            )
+            return 0
+
+    def floating_point_ops(self, input_dict: Dict[str, Union[torch.Tensor, Any]], no_embeddings: bool = True) -> int:
+        """
+        Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
+        batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
+        tokens (valid if 12 * d_model << sequence_length) as laid out in https://arxiv.org/pdf/2001.08361.pdf section
+        2.1. Should be  overriden for transformers with parameter re-use e.g. Albert or Universal Transformers, or
+        if doing long-range modeling with very high sequence lengths.
+
+        Args:
+            batch_size (:obj:`int`):
+                The batch size for the forward pass.
+
+            sequence_length (:obj:`int`):
+                The number of tokens in each line of the batch.
+
+            no_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to count embedding and softmax operations.
+
+        Returns:
+            :obj:`int`: The number of floating-point operations.
         """
 
-        return 6 * batch_size * sequence_length * self.num_parameters(no_embeddings=no_embeddings)
+        return 6 * self.estimate_tokens(input_dict) * self.num_parameters(no_embeddings=no_embeddings)
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
@@ -443,11 +477,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         assert decoder.__class__ == encoder.__class__, f"{decoder.__class__} and {encoder.__class__} have to be equal."
 
         def tie_encoder_to_decoder_recursively(
-            decoder_pointer: nn.Module,
-            encoder_pointer: nn.Module,
-            module_name: str,
-            uninitialized_encoder_weights: List[str],
-            depth=0,
+                decoder_pointer: nn.Module,
+                encoder_pointer: nn.Module,
+                module_name: str,
+                uninitialized_encoder_weights: List[str],
+                depth=0,
         ):
             assert isinstance(decoder_pointer, nn.Module) and isinstance(
                 encoder_pointer, nn.Module
@@ -464,7 +498,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             decoder_modules = decoder_pointer._modules
             if len(decoder_modules) > 0:
                 assert (
-                    len(encoder_modules) > 0
+                        len(encoder_modules) > 0
                 ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
                 all_encoder_weights = set([module_name + "/" + sub_name for sub_name in encoder_modules.keys()])
@@ -562,7 +596,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
-        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
+            self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
     ) -> torch.nn.Embedding:
         """
         Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
@@ -1054,7 +1088,7 @@ class PoolerStartLogits(nn.Module):
         self.dense = nn.Linear(config.hidden_size, 1)
 
     def forward(
-        self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
+            self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
     ) -> torch.FloatTensor:
         """
         Args:
@@ -1096,11 +1130,11 @@ class PoolerEndLogits(nn.Module):
         self.dense_1 = nn.Linear(config.hidden_size, 1)
 
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        start_states: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        p_mask: Optional[torch.FloatTensor] = None,
+            self,
+            hidden_states: torch.FloatTensor,
+            start_states: Optional[torch.FloatTensor] = None,
+            start_positions: Optional[torch.LongTensor] = None,
+            p_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.FloatTensor:
         """
         Args:
@@ -1123,7 +1157,7 @@ class PoolerEndLogits(nn.Module):
             :obj:`torch.FloatTensor`: The end logits for SQuAD.
         """
         assert (
-            start_states is not None or start_positions is not None
+                start_states is not None or start_positions is not None
         ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             slen, hsz = hidden_states.shape[-2:]
@@ -1161,11 +1195,11 @@ class PoolerAnswerClass(nn.Module):
         self.dense_1 = nn.Linear(config.hidden_size, 1, bias=False)
 
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        start_states: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        cls_index: Optional[torch.LongTensor] = None,
+            self,
+            hidden_states: torch.FloatTensor,
+            start_states: Optional[torch.FloatTensor] = None,
+            start_positions: Optional[torch.LongTensor] = None,
+            cls_index: Optional[torch.LongTensor] = None,
     ) -> torch.FloatTensor:
         """
         Args:
@@ -1189,7 +1223,7 @@ class PoolerAnswerClass(nn.Module):
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
         assert (
-            start_states is not None or start_positions is not None
+                start_states is not None or start_positions is not None
         ), "One of start_states, start_positions should be not None"
         if start_positions is not None:
             start_positions = start_positions[:, None, None].expand(-1, -1, hsz)  # shape (bsz, 1, hsz)
@@ -1258,14 +1292,14 @@ class SQuADHead(nn.Module):
 
     @replace_return_docstrings(output_type=SquadHeadOutput, config_class=PretrainedConfig)
     def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        cls_index: Optional[torch.LongTensor] = None,
-        is_impossible: Optional[torch.LongTensor] = None,
-        p_mask: Optional[torch.FloatTensor] = None,
-        return_dict: bool = False,
+            self,
+            hidden_states: torch.FloatTensor,
+            start_positions: Optional[torch.LongTensor] = None,
+            end_positions: Optional[torch.LongTensor] = None,
+            cls_index: Optional[torch.LongTensor] = None,
+            is_impossible: Optional[torch.LongTensor] = None,
+            p_mask: Optional[torch.FloatTensor] = None,
+            return_dict: bool = False,
     ) -> Union[SquadHeadOutput, Tuple[torch.FloatTensor]]:
         """
         Args:
@@ -1412,7 +1446,7 @@ class SequenceSummary(nn.Module):
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
     def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
+            self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
     ) -> torch.FloatTensor:
         """
         Compute a single vector summary of a sequence hidden states.
@@ -1524,7 +1558,7 @@ def prune_conv1d_layer(layer: Conv1D, index: torch.LongTensor, dim: int = 1) -> 
 
 
 def prune_layer(
-    layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
+        layer: Union[torch.nn.Linear, Conv1D], index: torch.LongTensor, dim: Optional[int] = None
 ) -> Union[torch.nn.Linear, Conv1D]:
     """
     Prune a Conv1D or linear layer to keep only entries in index.
@@ -1549,7 +1583,7 @@ def prune_layer(
 
 
 def apply_chunking_to_forward(
-    forward_fn: Callable[..., torch.Tensor], chunk_size: int, chunk_dim: int, *input_tensors
+        forward_fn: Callable[..., torch.Tensor], chunk_size: int, chunk_dim: int, *input_tensors
 ) -> torch.Tensor:
     """
     This function chunks the :obj:`input_tensors` into smaller input tensor parts of size :obj:`chunk_size` over the
@@ -1599,7 +1633,7 @@ def apply_chunking_to_forward(
 
     if chunk_size > 0:
         assert (
-            input_tensors[0].shape[chunk_dim] % chunk_size == 0
+                input_tensors[0].shape[chunk_dim] % chunk_size == 0
         ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
             input_tensors[0].shape[chunk_dim], chunk_size
         )
