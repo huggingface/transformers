@@ -372,6 +372,5 @@ class T5Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         model_inputs["labels"] = labels_and_decoder_mask["input_ids"]
-        model_inputs["decoder_attention_mask"] = labels_and_decoder_mask["attention_mask"]
         self.prefix_tokens = []
         return model_inputs
