@@ -137,7 +137,7 @@ def test_opus_mt_distill_script():
         + bash_script.split()
         + [
             f"--output_dir={output_dir}",
-            f"--gpus=1",
+            "--gpus=1",
             "--learning_rate=1e-3",
             f"--num_train_epochs={epochs}",
             "--warmup_steps=10",
