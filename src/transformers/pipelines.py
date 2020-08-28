@@ -754,7 +754,7 @@ class TextGenerationPipeline(Pipeline):
     # in https://github.com/rusiaaman/XLNet-gen#methodology
     # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
 
-    PREFIX = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    XL_PREFIX = """In 1991, the remains of Russian Tsar Nicholas II and his family
     (except for Alexei and Maria) are discovered.
     The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
     remainder of the story. 1883 Western Siberia,
@@ -855,7 +855,7 @@ class TextGenerationPipeline(Pipeline):
                     "TFTransfoXLLMHeadModel",
                 ]:
                     # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
-                    prefix = self.PREFIX
+                    prefix = self.XL_PREFIX
 
                 if prefix:
                     prefix_inputs = self._parse_and_tokenize(prefix, padding=False, add_special_tokens=False)
@@ -863,7 +863,7 @@ class TextGenerationPipeline(Pipeline):
                     prefix_length = prefix_inputs["input_ids"].shape[-1]
                     if generate_kwargs.get("max_length", None) is not None:
                         generate_kwargs["max_length"] += prefix_length
-                    if "min_length" in generate_kwargs and generate_kwargs["min_length"] is not None:
+                    if generate_kwargs.get("min_length", None) is not None:
                         generate_kwargs["min_length"] += prefix_length
 
                 prefix = prefix or ""
