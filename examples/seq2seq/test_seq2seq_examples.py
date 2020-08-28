@@ -453,7 +453,8 @@ def test_pack_dataset():
 
 
 @pytest.mark.parametrize(
-    ["tok_name"], [pytest.param(MBART_TINY), pytest.param(MARIAN_TINY), pytest.param(T5_TINY), pytest.param(BART_TINY)]
+    ["tok_name"], [pytest.param(MBART_TINY), pytest.param(MARIAN_TINY), pytest.param(T5_TINY), pytest.param(BART_TINY),
+                   pytest.param('google/pegasus-xsum')]
 )
 def test_seq2seq_dataset_truncation(tok_name):
     tokenizer = AutoTokenizer.from_pretrained(tok_name)
@@ -494,7 +495,7 @@ def test_seq2seq_dataset_truncation(tok_name):
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize(["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), param(MARIAN_TINY)])
+@pytest.mark.parametrize(["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param("sshleifer/tiny-ctrl")])
 def test_legacy_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()
