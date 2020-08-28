@@ -114,6 +114,7 @@ class PegasusTokenizer(ReformerTokenizer):
         return_tensors: str = "pt",
         truncation=True,
         padding="longest",
+        **unused,
     ) -> BatchEncoding:
         """
         Prepare model inputs for summarization or translation.
@@ -133,7 +134,9 @@ class PegasusTokenizer(ReformerTokenizer):
             return model_inputs
         if max_target_length is not None:
             tokenizer_kwargs["max_length"] = max_target_length
-        decoder_inputs: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
+        # TODO(@sshleifer): maybe tgt_texts = [self.pad_token + t for t in tgt_texts]  # add decoder_start_token_id
+        labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
+        model_inputs["labels"] = labels
+        # for k, v in decoder_inputs.items():
+        #    model_inputs[f"decoder_{k}"] = v
         return model_inputs

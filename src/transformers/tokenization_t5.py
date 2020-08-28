@@ -346,7 +346,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         if max_length is None:
             max_length = self.max_len
         self.prefix_tokens = []
-        model_inputs: BatchEncoding = self(
+        model_inputs = self(
             src_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
@@ -362,7 +362,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             max_target_length = max_length
         # set prefix_tokens for target text
         self.prefix_tokens = [self.pad_token_id]
-        decoder_inputs: BatchEncoding = self(
+        labels_and_decoder_mask = self(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
@@ -371,8 +371,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             truncation=truncation,
             **kwargs,
         )
-        for k, v in decoder_inputs.items():
-            model_inputs[f"decoder_{k}"] = v
-
+        model_inputs["labels"] = labels_and_decoder_mask["input_ids"]
+        model_inputs["decoder_attention_mask"] = labels_and_decoder_mask["attention_mask"]
         self.prefix_tokens = []
         return model_inputs
