@@ -450,7 +450,7 @@ class LxmertLayer(nn.Module):
         self.intermediate = LxmertIntermediate(config)
         self.output = LxmertOutput(config)
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
         attention_output = outputs[0]
         intermediate_output = self.intermediate(attention_output)
@@ -520,7 +520,7 @@ class LxmertXLayer(nn.Module):
 
         lang_output, visual_output = self.output_fc(lang_att_output, visual_att_output)
         return (
-            (lang_output, visual_output) + (attention_probs[0],) if output_attentions else (lang_output, visual_output)
+            (lang_output, visual_output, attention_probs[0],) if output_attentions else (lang_output, visual_output)
         )
 
 
@@ -779,7 +779,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`transformers.LxmertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__c_` for details.
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         visual_feats: (:obj:`torch.FloatTensor` of shape :obj:՝(batch_size, num_visual_features, visual_feat_dim)՝):
@@ -984,8 +984,8 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         # Loss functions
         self.loss_fcts = {
             "l2": SmoothL1Loss(reduction="none"),
-            "visual_ce": CrossEntropyLoss(ignore_index=-100, reduction="none"),
-            "ce": CrossEntropyLoss(ignore_index=-100),
+            "visual_ce": CrossEntropyLoss(reduction="none"),
+            "ce": CrossEntropyLoss(),
         }
 
         visual_losses = {}

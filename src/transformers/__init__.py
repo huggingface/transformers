@@ -676,9 +676,8 @@ if is_tf_available():
 
     from .modeling_tf_lxmert import (
         TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFLxmertVisualFeatEncoder,
+        TFLxmertModel,
         TFLxmertMainLayer,
-        TFLxmertEncoder,
         TFLxmertPreTrainedModel,
         TFLxmertForPreTraining,
     )
