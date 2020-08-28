@@ -662,9 +662,7 @@ class Trainer:
                 logger.info("  Continuing training from checkpoint, will skip to saved global_step")
                 logger.info("  Continuing training from epoch %d", epochs_trained)
                 logger.info("  Continuing training from global step %d", self.global_step)
-                logger.info(
-                    "  Continuing training from %d non-embedding floating-point operations", self.total_flos
-                )
+                logger.info("  Continuing training from %d non-embedding floating-point operations", self.total_flos)
                 logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
             except ValueError:
                 self.global_step = 0
