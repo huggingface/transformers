@@ -162,14 +162,12 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             src_text, tgt_texts=tgt_text, max_target_length=32, padding="max_length", return_tensors=FRAMEWORK
         )
         self.assertEqual(32, batch["labels"].shape[1])
-        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
 
         # test None max_target_length
         batch = tokenizer.prepare_seq2seq_batch(
             src_text, tgt_texts=tgt_text, max_length=32, padding="max_length", return_tensors=FRAMEWORK
         )
         self.assertEqual(32, batch["labels"].shape[1])
-        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
 
     def test_outputs_not_longer_than_maxlen(self):
         tokenizer = self.t5_base_tokenizer
