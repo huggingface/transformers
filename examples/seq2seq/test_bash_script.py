@@ -13,8 +13,8 @@ import torch
 from transformers import BartForConditionalGeneration, MarianMTModel
 from transformers.testing_utils import slow
 
+from .distillation import BartSummarizationDistiller, distill_main
 from .finetune import SummarizationModule, main
-from .distillation import distill_main, BartSummarizationDistiller
 from .test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
 from .utils import load_json
 
@@ -48,7 +48,7 @@ def test_train_mbart_cc25_enro_script():
 
     # Clean up bash script
     bash_script = Path("examples/seq2seq/train_mbart_cc25_enro.sh").open().read().split("finetune.py")[1].strip()
-    bash_script = bash_script.replace("\\\n", "").strip().replace("\"$@\"", "")
+    bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
     for k, v in env_vars_to_replace.items():
         bash_script = bash_script.replace(k, str(v))
     output_dir = tempfile.mkdtemp(prefix="output_mar")
@@ -79,7 +79,7 @@ def test_train_mbart_cc25_enro_script():
     metrics = load_json(model.metrics_save_path)
     first_step_stats = metrics["val"][0]
     last_step_stats = metrics["val"][-1]
-    assert len(metrics["val"]) == (args.max_epochs / args.val_check_interval)  +1 # +1 accounts for val_sanity_check
+    assert len(metrics["val"]) == (args.max_epochs / args.val_check_interval) + 1  # +1 accounts for val_sanity_check
 
     assert last_step_stats["val_avg_gen_time"] >= 0.01
 
@@ -121,8 +121,10 @@ def test_opus_mt_distill_script():
     }
 
     # Clean up bash script
-    bash_script = Path("examples/seq2seq/distil_marian_no_teacher.sh").open().read().split("distillation.py")[1].strip()
-    bash_script = bash_script.replace("\\\n", "").strip().replace("\"$@\"", "")
+    bash_script = (
+        Path("examples/seq2seq/distil_marian_no_teacher.sh").open().read().split("distillation.py")[1].strip()
+    )
+    bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
     bash_script = bash_script.replace("--fp16 ", " ")
 
     for k, v in env_vars_to_replace.items():
@@ -137,7 +139,8 @@ def test_opus_mt_distill_script():
             f"--output_dir={output_dir}",
             f"--gpus=1",
             "--learning_rate=1e-3",
-            f"--num_train_epochs={epochs}", "--warmup_steps=10",
+            f"--num_train_epochs={epochs}",
+            "--warmup_steps=10",
             "--val_check_interval=1.0",
         ]
     )
@@ -155,7 +158,7 @@ def test_opus_mt_distill_script():
     metrics = load_json(model.metrics_save_path)
     first_step_stats = metrics["val"][0]
     last_step_stats = metrics["val"][-1]
-    assert len(metrics["val"]) == (args.max_epochs / args.val_check_interval) +1   # +1 accounts for val_sanity_check
+    assert len(metrics["val"]) == (args.max_epochs / args.val_check_interval) + 1  # +1 accounts for val_sanity_check
 
     assert last_step_stats["val_avg_gen_time"] >= 0.01
 

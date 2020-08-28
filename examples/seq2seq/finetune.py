@@ -121,7 +121,6 @@ class SummarizationModule(BaseTransformer):
         self.already_saved_batch = True
         return readable_batch
 
-
     def freeze_embeds(self):
         """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
         try:
