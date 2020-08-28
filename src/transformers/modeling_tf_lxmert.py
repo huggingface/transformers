@@ -1013,18 +1013,22 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
     def __init__(self, config, num_labels, **kwargs):
         super().__init__(**kwargs)
         hid_dim = config.hidden_size
-        self.logit_fc = tf.keras.Sequential(layers=None, name="logit_fc")
-        self.logit_fc.add(
-            tf.keras.layers.Dense(hid_dim * 2, kernel_initializer=get_initializer(config.initializer_range), name="0")
+        self.dense = tf.keras.layers.Dense(
+            hid_dim * 2, kernel_initializer=get_initializer(config.initializer_range), name="logit_fc_._0"
         )
-        self.logit_fc.add(tf.keras.layers.Activation(gelu))
-        self.logit_fc.add(tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="2"))
-        self.logit_fc.add(
-            tf.keras.layers.Dense(num_labels, kernel_initializer=get_initializer(config.initializer_range), name="3")
+        self.activation = tf.keras.layers.Activation(gelu)
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="logit_fc_._2")
+        self.dense_1 = tf.keras.layers.Dense(
+            num_labels, kernel_initializer=get_initializer(config.initializer_range), name="logit_fc_._3"
         )
 
     def call(self, hidden_states):
-        return self.logit_fc(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.dense_1(hidden_states)
+
+        return hidden_states
 
 
 class TFLxmertVisualObjHead(tf.keras.layers.Layer):
