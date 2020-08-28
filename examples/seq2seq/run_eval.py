@@ -90,11 +90,7 @@ def run_generate():
     parser.add_argument("--task", type=str, default="summarization", help="typically translation or summarization")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument(
-        "--decoder_start_token_id",
-        type=int,
-        default=None,
-        required=False,
-        help="Defaults to using config",
+        "--decoder_start_token_id", type=int, default=None, required=False, help="Defaults to using config",
     )
     parser.add_argument(
         "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."

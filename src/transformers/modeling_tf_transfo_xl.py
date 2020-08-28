@@ -628,13 +628,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                 hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
                 layer_outputs = layer(
-                    core_out,
-                    pos_emb,
-                    dec_attn_mask,
-                    mems_i,
-                    head_mask[i],
-                    output_attentions,
-                    training=training,
+                    core_out, pos_emb, dec_attn_mask, mems_i, head_mask[i], output_attentions, training=training,
                 )
                 core_out = layer_outputs[0]
                 if output_attentions:
@@ -663,10 +657,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
 
         return TFTransfoXLModelOutput(
-            last_hidden_state=core_out,
-            mems=new_mems,
-            hidden_states=hids,
-            attentions=attentions,
+            last_hidden_state=core_out, mems=new_mems, hidden_states=hids, attentions=attentions,
         )
 
 

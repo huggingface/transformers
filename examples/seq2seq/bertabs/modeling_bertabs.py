@@ -105,17 +105,10 @@ class BertAbs(BertAbsPreTrainedModel):
                 p.data.zero_()
 
     def forward(
-        self,
-        encoder_input_ids,
-        decoder_input_ids,
-        token_type_ids,
-        encoder_attention_mask,
-        decoder_attention_mask,
+        self, encoder_input_ids, decoder_input_ids, token_type_ids, encoder_attention_mask, decoder_attention_mask,
     ):
         encoder_output = self.bert(
-            input_ids=encoder_input_ids,
-            token_type_ids=token_type_ids,
-            attention_mask=encoder_attention_mask,
+            input_ids=encoder_input_ids, token_type_ids=token_type_ids, attention_mask=encoder_attention_mask,
         )
         encoder_hidden_states = encoder_output[0]
         dec_state = self.decoder.init_decoder_state(encoder_input_ids, encoder_hidden_states)
@@ -313,14 +306,7 @@ class TransformerDecoderLayer(nn.Module):
         self.register_buffer("mask", mask)
 
     def forward(
-        self,
-        inputs,
-        memory_bank,
-        src_pad_mask,
-        tgt_pad_mask,
-        previous_input=None,
-        layer_cache=None,
-        step=None,
+        self, inputs, memory_bank, src_pad_mask, tgt_pad_mask, previous_input=None, layer_cache=None, step=None,
     ):
         """
         Args:
@@ -344,25 +330,13 @@ class TransformerDecoderLayer(nn.Module):
             all_input = torch.cat((previous_input, input_norm), dim=1)
             dec_mask = None
 
-        query = self.self_attn(
-            all_input,
-            all_input,
-            input_norm,
-            mask=dec_mask,
-            layer_cache=layer_cache,
-            type="self",
-        )
+        query = self.self_attn(all_input, all_input, input_norm, mask=dec_mask, layer_cache=layer_cache, type="self",)
 
         query = self.drop(query) + inputs
 
         query_norm = self.layer_norm_2(query)
         mid = self.context_attn(
-            memory_bank,
-            memory_bank,
-            query_norm,
-            mask=src_pad_mask,
-            layer_cache=layer_cache,
-            type="context",
+            memory_bank, memory_bank, query_norm, mask=src_pad_mask, layer_cache=layer_cache, type="context",
         )
         output = self.feed_forward(self.drop(mid) + query)
 
@@ -447,14 +421,7 @@ class MultiHeadedAttention(nn.Module):
             self.final_linear = nn.Linear(model_dim, model_dim)
 
     def forward(
-        self,
-        key,
-        value,
-        query,
-        mask=None,
-        layer_cache=None,
-        type=None,
-        predefined_graph_1=None,
+        self, key, value, query, mask=None, layer_cache=None, type=None, predefined_graph_1=None,
     ):
         """
         Compute the context vector and the attention vectors.
@@ -1029,16 +996,10 @@ class BertSumOptimizer(object):
 
         self.optimizers = {
             "encoder": torch.optim.Adam(
-                model.encoder.parameters(),
-                lr=lr["encoder"],
-                betas=(beta_1, beta_2),
-                eps=eps,
+                model.encoder.parameters(), lr=lr["encoder"], betas=(beta_1, beta_2), eps=eps,
             ),
             "decoder": torch.optim.Adam(
-                model.decoder.parameters(),
-                lr=lr["decoder"],
-                betas=(beta_1, beta_2),
-                eps=eps,
+                model.decoder.parameters(), lr=lr["decoder"], betas=(beta_1, beta_2), eps=eps,
             ),
         }
 

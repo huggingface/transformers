@@ -73,99 +73,30 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
-        (
-            "retribert",
-            RetriBertConfig,
-        ),
-        (
-            "t5",
-            T5Config,
-        ),
-        (
-            "mobilebert",
-            MobileBertConfig,
-        ),
-        (
-            "distilbert",
-            DistilBertConfig,
-        ),
-        (
-            "albert",
-            AlbertConfig,
-        ),
-        (
-            "camembert",
-            CamembertConfig,
-        ),
-        (
-            "xlm-roberta",
-            XLMRobertaConfig,
-        ),
+        ("retribert", RetriBertConfig,),
+        ("t5", T5Config,),
+        ("mobilebert", MobileBertConfig,),
+        ("distilbert", DistilBertConfig,),
+        ("albert", AlbertConfig,),
+        ("camembert", CamembertConfig,),
+        ("xlm-roberta", XLMRobertaConfig,),
         ("pegasus", PegasusConfig),
-        (
-            "marian",
-            MarianConfig,
-        ),
-        (
-            "mbart",
-            MBartConfig,
-        ),
-        (
-            "bart",
-            BartConfig,
-        ),
-        (
-            "reformer",
-            ReformerConfig,
-        ),
-        (
-            "longformer",
-            LongformerConfig,
-        ),
-        (
-            "roberta",
-            RobertaConfig,
-        ),
-        (
-            "flaubert",
-            FlaubertConfig,
-        ),
-        (
-            "bert",
-            BertConfig,
-        ),
-        (
-            "openai-gpt",
-            OpenAIGPTConfig,
-        ),
-        (
-            "gpt2",
-            GPT2Config,
-        ),
-        (
-            "transfo-xl",
-            TransfoXLConfig,
-        ),
-        (
-            "xlnet",
-            XLNetConfig,
-        ),
-        (
-            "xlm",
-            XLMConfig,
-        ),
-        (
-            "ctrl",
-            CTRLConfig,
-        ),
-        (
-            "electra",
-            ElectraConfig,
-        ),
-        (
-            "encoder-decoder",
-            EncoderDecoderConfig,
-        ),
+        ("marian", MarianConfig,),
+        ("mbart", MBartConfig,),
+        ("bart", BartConfig,),
+        ("reformer", ReformerConfig,),
+        ("longformer", LongformerConfig,),
+        ("roberta", RobertaConfig,),
+        ("flaubert", FlaubertConfig,),
+        ("bert", BertConfig,),
+        ("openai-gpt", OpenAIGPTConfig,),
+        ("gpt2", GPT2Config,),
+        ("transfo-xl", TransfoXLConfig,),
+        ("xlnet", XLNetConfig,),
+        ("xlm", XLMConfig,),
+        ("ctrl", CTRLConfig,),
+        ("electra", ElectraConfig,),
+        ("encoder-decoder", EncoderDecoderConfig,),
     ]
 )
 
