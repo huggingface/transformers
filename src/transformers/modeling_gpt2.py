@@ -468,6 +468,10 @@ class GPT2Model(GPT2PreTrainedModel):
 
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
+        if config.type_vocab_size is not None:
+            self.tte = nn.Embedding(config.type_vocab_size, config.n_embd)
+        else:
+            self.tte = None
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
@@ -539,7 +543,14 @@ class GPT2Model(GPT2PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if token_type_ids is not None:
+            if self.tte is None:
+                raise ValueError("You cannot specify token_type_ids when the model's type_vocab_size is not set")
+            assert token_type_ids.size() == input_shape, f"token_type_ids and input_ids shapes do not match."
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
+        else:
+            if self.tte is not None:
+                raise ValueError("You have to specify token_type_ids when the model's type_vocab_size is set")
+
         if position_ids is not None:
             position_ids = position_ids.view(-1, input_shape[-1])
 
@@ -593,7 +604,7 @@ class GPT2Model(GPT2PreTrainedModel):
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
         if token_type_ids is not None:
-            token_type_embeds = self.wte(token_type_ids)
+            token_type_embeds = self.tte(token_type_ids)
         else:
             token_type_embeds = 0
         hidden_states = inputs_embeds + position_embeds + token_type_embeds

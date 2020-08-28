@@ -46,6 +46,9 @@ class GPT2Config(PretrainedConfig):
         vocab_size (:obj:`int`, optional, defaults to 50257):
             Vocabulary size of the GPT-2 model. Defines the different tokens that
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.GPT2Model`.
+        type_vocab_size (:obj:`int`, optional, defaults to None):
+            The vocabulary size of the `token_type_ids` passed into :class:`~transformers.GPT2Model`.
+            :obj:`None` will disable token_type embeddings.
         n_positions (:obj:`int`, optional, defaults to 1024):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
@@ -117,6 +120,7 @@ class GPT2Config(PretrainedConfig):
     def __init__(
         self,
         vocab_size=50257,
+        type_vocab_size=None,
         n_positions=1024,
         n_ctx=1024,
         n_embd=768,
@@ -141,6 +145,7 @@ class GPT2Config(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
+        self.type_vocab_size = type_vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
