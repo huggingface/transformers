@@ -10,7 +10,6 @@ from unittest.mock import patch
 import pytest
 import pytorch_lightning as pl
 import torch
-from pytest import param
 from torch.utils.data import DataLoader
 
 import lightning_base
@@ -453,8 +452,14 @@ def test_pack_dataset():
 
 
 @pytest.mark.parametrize(
-    ["tok_name"], [pytest.param(MBART_TINY), pytest.param(MARIAN_TINY), pytest.param(T5_TINY), pytest.param(BART_TINY),
-                   pytest.param('google/pegasus-xsum')]
+    ["tok_name"],
+    [
+        pytest.param(MBART_TINY),
+        pytest.param(MARIAN_TINY),
+        pytest.param(T5_TINY),
+        pytest.param(BART_TINY),
+        pytest.param("google/pegasus-xsum"),
+    ],
 )
 def test_seq2seq_dataset_truncation(tok_name):
     tokenizer = AutoTokenizer.from_pretrained(tok_name)
@@ -495,7 +500,7 @@ def test_seq2seq_dataset_truncation(tok_name):
         break  # No need to test every batch
 
 
-@pytest.mark.parametrize(["tok"], [pytest.param(T5_TINY), pytest.param(BART_TINY), pytest.param("sshleifer/tiny-ctrl")])
+@pytest.mark.parametrize(["tok"], [pytest.param(BART_TINY), pytest.param("bert-base-cased")])
 def test_legacy_dataset_truncation(tok):
     tokenizer = AutoTokenizer.from_pretrained(tok)
     tmp_dir = make_test_data_dir()
