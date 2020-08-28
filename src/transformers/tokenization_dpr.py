@@ -16,15 +16,15 @@
 
 
 import collections
-import logging
 from typing import List, Optional, Union
 
 from .file_utils import add_end_docstrings, add_start_docstrings
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_utils_base import BatchEncoding, TensorType
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -330,7 +330,11 @@ class CustomDPRReaderTokenizerMixin:
         return nbest_spans_predictions[:num_spans]
 
     def _get_best_spans(
-        self, start_logits: List[int], end_logits: List[int], max_answer_length: int, top_spans: int,
+        self,
+        start_logits: List[int],
+        end_logits: List[int],
+        max_answer_length: int,
+        top_spans: int,
     ) -> List[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage.

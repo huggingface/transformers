@@ -15,7 +15,6 @@
 """ Auto Model class. """
 
 
-import logging
 import warnings
 from collections import OrderedDict
 
@@ -33,8 +32,10 @@ from .configuration_auto import (
     GPT2Config,
     LongformerConfig,
     LxmertConfig,
+    MBartConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
+    PegasusConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -72,6 +73,7 @@ from .modeling_bert import (
     BertModel,
 )
 from .modeling_camembert import (
+    CamembertForCausalLM,
     CamembertForMaskedLM,
     CamembertForMultipleChoice,
     CamembertForQuestionAnswering,
@@ -117,6 +119,7 @@ from .modeling_longformer import (
 )
 from .modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from .modeling_marian import MarianMTModel
+from .modeling_mbart import MBartForConditionalGeneration
 from .modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -127,6 +130,7 @@ from .modeling_mobilebert import (
     MobileBertModel,
 )
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_pegasus import PegasusForConditionalGeneration
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
@@ -135,6 +139,7 @@ from .modeling_reformer import (
 )
 from .modeling_retribert import RetriBertModel
 from .modeling_roberta import (
+    RobertaForCausalLM,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -168,9 +173,10 @@ from .modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 MODEL_MAPPING = OrderedDict(
@@ -252,6 +258,8 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        (CamembertConfig, CamembertForCausalLM),
+        (RobertaConfig, RobertaForCausalLM),
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
@@ -287,7 +295,9 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         (T5Config, T5ForConditionalGeneration),
+        (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
+        (MBartConfig, MBartForConditionalGeneration),
         (BartConfig, BartForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
     ]
@@ -369,12 +379,12 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 
 class AutoModel:
     r"""
-        :class:`~transformers.AutoModel` is a generic model class
-        that will be instantiated as one of the base model classes of the library
-        when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
-        or the `AutoModel.from_config(config)` class methods.
+    :class:`~transformers.AutoModel` is a generic model class
+    that will be instantiated as one of the base model classes of the library
+    when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
+    or the `AutoModel.from_config(config)` class methods.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -386,7 +396,7 @@ class AutoModel:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -428,7 +438,7 @@ class AutoModel:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -526,11 +536,11 @@ class AutoModel:
 
 class AutoModelForPreTraining:
     r"""
-        :class:`~transformers.AutoModelForPreTraining` is a generic model class
-        that will be instantiated as one of the model classes of the library -with the architecture used for pretraining this model– when created with the `AutoModelForPreTraining.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForPreTraining` is a generic model class
+    that will be instantiated as one of the model classes of the library -with the architecture used for pretraining this model– when created with the `AutoModelForPreTraining.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -542,7 +552,7 @@ class AutoModelForPreTraining:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -584,7 +594,7 @@ class AutoModelForPreTraining:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the model classes of the library -with the architecture used for pretraining this model– from a pre-trained model configuration.
+        r"""Instantiates one of the model classes of the library -with the architecture used for pretraining this model– from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
@@ -675,12 +685,12 @@ class AutoModelForPreTraining:
 
 class AutoModelWithLMHead:
     r"""
-        :class:`~transformers.AutoModelWithLMHead` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelWithLMHead` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -692,7 +702,7 @@ class AutoModelWithLMHead:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -738,7 +748,7 @@ class AutoModelWithLMHead:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -834,12 +844,12 @@ class AutoModelWithLMHead:
 
 class AutoModelForCausalLM:
     r"""
-        :class:`~transformers.AutoModelForCausalLM` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForCausalLM` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -851,7 +861,7 @@ class AutoModelForCausalLM:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -888,7 +898,7 @@ class AutoModelForCausalLM:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -971,12 +981,12 @@ class AutoModelForCausalLM:
 
 class AutoModelForMaskedLM:
     r"""
-        :class:`~transformers.AutoModelForMaskedLM` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `AutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForMaskedLM` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `AutoModelForMaskedLM.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -988,7 +998,7 @@ class AutoModelForMaskedLM:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1028,7 +1038,7 @@ class AutoModelForMaskedLM:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1114,12 +1124,12 @@ class AutoModelForMaskedLM:
 
 class AutoModelForSeq2SeqLM:
     r"""
-        :class:`~transformers.AutoModelForSeq2SeqLM` is a generic model class
-        that will be instantiated as one of the language modeling model classes of the library
-        when created with the `AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForSeq2SeqLM` is a generic model class
+    that will be instantiated as one of the language modeling model classes of the library
+    when created with the `AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1131,7 +1141,7 @@ class AutoModelForSeq2SeqLM:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1167,7 +1177,7 @@ class AutoModelForSeq2SeqLM:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the language modeling model classes of the library
+        r"""Instantiates one of the language modeling model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1249,12 +1259,12 @@ class AutoModelForSeq2SeqLM:
 
 class AutoModelForSequenceClassification:
     r"""
-        :class:`~transformers.AutoModelForSequenceClassification` is a generic model class
-        that will be instantiated as one of the sequence classification model classes of the library
-        when created with the `AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForSequenceClassification` is a generic model class
+    that will be instantiated as one of the sequence classification model classes of the library
+    when created with the `AutoModelForSequenceClassification.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1266,7 +1276,7 @@ class AutoModelForSequenceClassification:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1308,7 +1318,7 @@ class AutoModelForSequenceClassification:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the sequence classification model classes of the library
+        r"""Instantiates one of the sequence classification model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1401,12 +1411,12 @@ class AutoModelForSequenceClassification:
 
 class AutoModelForQuestionAnswering:
     r"""
-        :class:`~transformers.AutoModelForQuestionAnswering` is a generic model class
-        that will be instantiated as one of the question answering model classes of the library
-        when created with the `AutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForQuestionAnswering` is a generic model class
+    that will be instantiated as one of the question answering model classes of the library
+    when created with the `AutoModelForQuestionAnswering.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1418,7 +1428,7 @@ class AutoModelForQuestionAnswering:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1457,7 +1467,7 @@ class AutoModelForQuestionAnswering:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the question answering model classes of the library
+        r"""Instantiates one of the question answering model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1546,12 +1556,12 @@ class AutoModelForQuestionAnswering:
 
 class AutoModelForTokenClassification:
     r"""
-        :class:`~transformers.AutoModelForTokenClassification` is a generic model class
-        that will be instantiated as one of the token classification model classes of the library
-        when created with the `AutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForTokenClassification` is a generic model class
+    that will be instantiated as one of the token classification model classes of the library
+    when created with the `AutoModelForTokenClassification.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):
@@ -1563,7 +1573,7 @@ class AutoModelForTokenClassification:
 
     @classmethod
     def from_config(cls, config):
-        r""" Instantiates one of the base model classes of the library
+        r"""Instantiates one of the base model classes of the library
         from a configuration.
 
         Note:
@@ -1606,7 +1616,7 @@ class AutoModelForTokenClassification:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the question answering model classes of the library
+        r"""Instantiates one of the question answering model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -1698,12 +1708,12 @@ class AutoModelForTokenClassification:
 
 class AutoModelForMultipleChoice:
     r"""
-        :class:`~transformers.AutoModelForMultipleChoice` is a generic model class
-        that will be instantiated as one of the multiple choice model classes of the library
-        when created with the `AutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+    :class:`~transformers.AutoModelForMultipleChoice` is a generic model class
+    that will be instantiated as one of the multiple choice model classes of the library
+    when created with the `AutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)`
+    class method.
 
-        This class cannot be instantiated using `__init__()` (throws an error).
+    This class cannot be instantiated using `__init__()` (throws an error).
     """
 
     def __init__(self):

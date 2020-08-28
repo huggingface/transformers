@@ -16,7 +16,6 @@
 
 import csv
 import json
-import logging
 import os
 import pickle
 import sys
@@ -39,46 +38,49 @@ from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import BatchEncoding, PaddingStrategy
+from .utils import logging
 
 
 if is_tf_available():
     import tensorflow as tf
+
     from .modeling_tf_auto import (
-        TFAutoModel,
-        TFAutoModelForSequenceClassification,
-        TFAutoModelForQuestionAnswering,
-        TFAutoModelForTokenClassification,
-        TFAutoModelWithLMHead,
-        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TFAutoModel,
         TFAutoModelForCausalLM,
+        TFAutoModelForQuestionAnswering,
+        TFAutoModelForSequenceClassification,
+        TFAutoModelForTokenClassification,
+        TFAutoModelWithLMHead,
     )
 
 if is_torch_available():
     import torch
+
     from .modeling_auto import (
-        AutoModel,
-        AutoModelForSequenceClassification,
-        AutoModelForQuestionAnswering,
-        AutoModelForTokenClassification,
-        AutoModelForSeq2SeqLM,
-        AutoModelForCausalLM,
-        AutoModelForMaskedLM,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        AutoModel,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
+        AutoModelForQuestionAnswering,
+        AutoModelForSeq2SeqLM,
+        AutoModelForSequenceClassification,
+        AutoModelForTokenClassification,
     )
 
 if TYPE_CHECKING:
-    from .modeling_utils import PreTrainedModel
     from .modeling_tf_utils import TFPreTrainedModel
+    from .modeling_utils import PreTrainedModel
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def get_framework(model=None):
@@ -206,7 +208,11 @@ class PipelineDataFormat:
     SUPPORTED_FORMATS = ["json", "csv", "pipe"]
 
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite: bool = False,
+        self,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite: bool = False,
     ):
         self.output_path = output_path
         self.input_path = input_path
@@ -259,7 +265,11 @@ class PipelineDataFormat:
 
     @staticmethod
     def from_str(
-        format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        format: str,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite=False,
     ) -> "PipelineDataFormat":
         """
         Creates an instance of the right subclass of :class:`~transformers.pipelines.PipelineDataFormat` depending
@@ -303,7 +313,11 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     """
 
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        self,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -344,7 +358,11 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     """
 
     def __init__(
-        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+        self,
+        output_path: Optional[str],
+        input_path: Optional[str],
+        column: Optional[str],
+        overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -608,7 +626,10 @@ class Pipeline(_ScikitCompat):
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer(
-            inputs, add_special_tokens=add_special_tokens, return_tensors=self.framework, padding=padding,
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            padding=padding,
         )
 
         return inputs
@@ -1158,12 +1179,17 @@ class FillMaskPipeline(Pipeline):
                 f"No mask_token ({self.tokenizer.mask_token}) found on the input",
             )
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, targets=None, **kwargs):
         """
         Fill the masked token in the text(s) given as inputs.
 
         Args:
-            args (:obj:`str` or :obj:`List[str]`): One or several texts (or one list of prompts) with masked tokens.
+            args (:obj:`str` or :obj:`List[str]`):
+                One or several texts (or one list of prompts) with masked tokens.
+            targets (:obj:`str` or :obj:`List[str]`, `optional`):
+                When passed, the model will return the scores for the passed token or tokens rather than the top k
+                predictions in the entire vocabulary. If the provided targets are not in the model vocab, they will
+                be tokenized and the first resulting token will be used (with a warning).
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the
@@ -1180,6 +1206,24 @@ class FillMaskPipeline(Pipeline):
         results = []
         batch_size = outputs.shape[0] if self.framework == "tf" else outputs.size(0)
 
+        if targets is not None:
+            if len(targets) == 0 or len(targets[0]) == 0:
+                raise ValueError("At least one target must be provided when passed.")
+            if isinstance(targets, str):
+                targets = [targets]
+
+            targets_proc = []
+            for target in targets:
+                target_enc = self.tokenizer.tokenize(target)
+                if len(target_enc) > 1 or target_enc[0] == self.tokenizer.unk_token:
+                    logger.warning(
+                        "The specified target token `{}` does not exist in the model vocabulary. Replacing with `{}`.".format(
+                            target, target_enc[0]
+                        )
+                    )
+                targets_proc.append(target_enc[0])
+            target_inds = np.array(self.tokenizer.convert_tokens_to_ids(targets_proc))
+
         for i in range(batch_size):
             input_ids = inputs["input_ids"][i]
             result = []
@@ -1192,17 +1236,29 @@ class FillMaskPipeline(Pipeline):
 
                 logits = outputs[i, masked_index.item(), :]
                 probs = tf.nn.softmax(logits)
-                topk = tf.math.top_k(probs, k=self.topk)
-                values, predictions = topk.values.numpy(), topk.indices.numpy()
+                if targets is None:
+                    topk = tf.math.top_k(probs, k=self.topk)
+                    values, predictions = topk.values.numpy(), topk.indices.numpy()
+                else:
+                    values = tf.gather_nd(probs, tf.reshape(target_inds, (-1, 1)))
+                    sort_inds = tf.reverse(tf.argsort(values), [0])
+                    values = tf.gather_nd(values, tf.reshape(sort_inds, (-1, 1))).numpy()
+                    predictions = target_inds[sort_inds.numpy()]
             else:
-                masked_index = (input_ids == self.tokenizer.mask_token_id).nonzero()
+                masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
                 self.ensure_exactly_one_mask_token(masked_index.numpy())
 
                 logits = outputs[i, masked_index.item(), :]
                 probs = logits.softmax(dim=0)
-                values, predictions = probs.topk(self.topk)
+                if targets is None:
+                    values, predictions = probs.topk(self.topk)
+                else:
+                    values = probs[..., target_inds]
+                    sort_inds = list(reversed(values.argsort(dim=-1)))
+                    values = values[..., sort_inds]
+                    predictions = target_inds[sort_inds]
 
             for v, p in zip(values.tolist(), predictions.tolist()):
                 tokens = input_ids.numpy()
@@ -1312,7 +1368,10 @@ class TokenClassificationPipeline(Pipeline):
             with self.device_placement():
 
                 tokens = self.tokenizer(
-                    sentence, return_attention_mask=False, return_tensors=self.framework, truncation=True,
+                    sentence,
+                    return_attention_mask=False,
+                    return_tensors=self.framework,
+                    truncation=True,
                 )
 
                 # Forward
@@ -1888,7 +1947,9 @@ class SummarizationPipeline(Pipeline):
                 )
 
             summaries = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
 
             results = []
@@ -1898,7 +1959,9 @@ class SummarizationPipeline(Pipeline):
                     record["summary_token_ids"] = summary
                 if return_text:
                     record["summary_text"] = self.tokenizer.decode(
-                        summary, skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                        summary,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 results.append(record)
             return results
@@ -1995,7 +2058,9 @@ class TranslationPipeline(Pipeline):
                 )
 
             translations = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
             results = []
             for translation in translations:
@@ -2234,7 +2299,9 @@ class ConversationalPipeline(Pipeline):
                     "You might consider trimming the early phase of the conversation".format(input_length, max_length)
                 )
             generated_responses = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
 
             cleaned_history = self._clean_padding_history(generated_responses)
@@ -2318,7 +2385,8 @@ class ConversationalPipeline(Pipeline):
         max_len = max([len(item) for item in outputs])
         outputs = [output + [self.pad_token_id] * (max_len - len(output)) for output in outputs]
         outputs = BatchEncoding(
-            {"input_ids": outputs, "attention_mask": [1] * len(outputs)}, tensor_type=self.framework
+            {"input_ids": outputs, "attention_mask": [[1] * len(outputs)]},
+            tensor_type=self.framework,
         )
         return outputs
 

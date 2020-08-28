@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 
-# Install newest ptl.
-pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 # for seqeval metrics import
 pip install -r ../requirements.txt
 
-curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-train.tsv?attredirects=0&d=1' \
+## The relevant files are currently on a shared Google
+## drive at https://drive.google.com/drive/folders/1kC0I2UGl2ltrluI9NqDjaQJGw5iliw_J
+## Monitor for changes and eventually migrate to nlp dataset
+curl -L 'https://drive.google.com/uc?export=download&id=1Jjhbal535VVz2ap4v4r_rN1UEHTdLK5P' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > train.txt.tmp
-curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-dev.tsv?attredirects=0&d=1' \
+curl -L 'https://drive.google.com/uc?export=download&id=1ZfRcQThdtAR5PPRjIDtrVP7BtXSCUBbm' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > dev.txt.tmp
-curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-test.tsv?attredirects=0&d=1' \
+curl -L 'https://drive.google.com/uc?export=download&id=1u9mb7kNJHWQCWyweMDRMuTFoOHOfeBTH' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > test.txt.tmp
 
 export MAX_LENGTH=128
@@ -31,7 +32,6 @@ mkdir -p $OUTPUT_DIR
 export PYTHONPATH="../":"${PYTHONPATH}"
 
 python3 run_pl_ner.py --data_dir ./ \
---model_type bert \
 --labels ./labels.txt \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \
@@ -39,5 +39,6 @@ python3 run_pl_ner.py --data_dir ./ \
 --num_train_epochs $NUM_EPOCHS \
 --train_batch_size $BATCH_SIZE \
 --seed $SEED \
+--gpus 1 \
 --do_train \
 --do_predict

@@ -1,7 +1,8 @@
 from argparse import ArgumentParser, Namespace
-from logging import getLogger
 
 from transformers.commands import BaseTransformersCLICommand
+
+from ..utils import logging
 
 
 def convert_command_factory(args: Namespace):
@@ -52,7 +53,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         finetuning_task_name: str,
         *args
     ):
-        self._logger = getLogger("transformers-cli/converting")
+        self._logger = logging.get_logger("transformers-cli/converting")
 
         self._logger.info("Loading model {}".format(model_type))
         self._model_type = model_type

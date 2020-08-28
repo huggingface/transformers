@@ -24,6 +24,7 @@ const versionMapping = {
 // The page that have a notebook and therefore should have the open in colab badge.
 const hasNotebook = [
     "benchmarks",
+    "custom_datasets",
     "multilingual",
     "perplexity",
     "preprocessing",

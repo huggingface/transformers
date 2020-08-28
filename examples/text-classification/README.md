@@ -269,7 +269,7 @@ on a single tesla V100 16GB. The data for XNLI can be downloaded with the follow
 `$XNLI_DIR` directory.
 
 * [XNLI 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-1.0.zip)
-* [XNLI-MT 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-MT-1.0.zip)
+* [XNLI-MT 1.0](https://dl.fbaipublicfiles.com/XNLI/XNLI-MT-1.0.zip)
 
 ```bash
 export XNLI_DIR=/path/to/XNLI

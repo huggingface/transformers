@@ -64,7 +64,10 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
                 else:
                     self.out_projs.append(None)
                 weight = self.add_weight(
-                    shape=(self.vocab_size, self.d_embed,),
+                    shape=(
+                        self.vocab_size,
+                        self.d_embed,
+                    ),
                     initializer="zeros",
                     trainable=True,
                     name="out_layers_._{}_._weight".format(i),
@@ -86,7 +89,10 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
                 )
                 self.out_projs.append(weight)
                 weight = self.add_weight(
-                    shape=(r_idx - l_idx, d_emb_i,),
+                    shape=(
+                        r_idx - l_idx,
+                        d_emb_i,
+                    ),
                     initializer="zeros",
                     trainable=True,
                     name="out_layers_._{}_._weight".format(i),

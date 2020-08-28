@@ -15,16 +15,16 @@
 """ Tokenization classes for XLM-RoBERTa model."""
 
 
-import logging
 import os
 from shutil import copyfile
 from typing import List, Optional
 
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 

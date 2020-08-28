@@ -43,8 +43,7 @@ class SummarizationDataProcessingTest(unittest.TestCase):
         self.assertEqual(truncate_or_pad(sequence, self.block_size, 0), expected_output)
 
     def test_process_story_no_highlights(self):
-        """ Processing a story with no highlights returns an empty list for the summary.
-        """
+        """Processing a story with no highlights returns an empty list for the summary."""
         raw_story = """It was the year of Our Lord one thousand seven hundred and
         seventy-five.\n\nSpiritual revelations were conceded to England at that
         favoured period, as at this."""
@@ -52,8 +51,7 @@ class SummarizationDataProcessingTest(unittest.TestCase):
         self.assertEqual(summary_lines, [])
 
     def test_process_empty_story(self):
-        """ An empty story returns an empty collection of lines.
-        """
+        """An empty story returns an empty collection of lines."""
         raw_story = ""
         story_lines, summary_lines = process_story(raw_story)
         self.assertEqual(story_lines, [])

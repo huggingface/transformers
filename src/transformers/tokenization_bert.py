@@ -16,7 +16,6 @@
 
 
 import collections
-import logging
 import os
 import unicodedata
 from typing import List, Optional
@@ -25,9 +24,10 @@ from tokenizers import BertWordPieceTokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -359,7 +359,7 @@ class BasicTokenizer(object):
     """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
     def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
-        """ Constructs a BasicTokenizer.
+        """Constructs a BasicTokenizer.
 
         Args:
             **do_lower_case**: Whether to lower case the input.
@@ -383,7 +383,7 @@ class BasicTokenizer(object):
         self.strip_accents = strip_accents
 
     def tokenize(self, text, never_split=None):
-        """ Basic Tokenization of a piece of text.
+        """Basic Tokenization of a piece of text.
             Split on "white spaces" only, for sub-word tokenization, see WordPieceTokenizer.
 
         Args:

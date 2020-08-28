@@ -87,16 +87,38 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
 
-    def test_mecab_tokenizer(self):
-        tokenizer = MecabTokenizer()
+    def test_mecab_tokenizer_ipadic(self):
+        tokenizer = MecabTokenizer(mecab_dic="ipadic")
 
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
             ["アップルストア", "で", "iPhone", "8", "が", "発売", "さ", "れ", "た", "。"],
         )
 
+    def test_mecab_tokenizer_unidic_lite(self):
+        try:
+            tokenizer = MecabTokenizer(mecab_dic="unidic_lite")
+        except ModuleNotFoundError:
+            return
+
+        self.assertListEqual(
+            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
+            ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れ", "た", "。"],
+        )
+
+    def test_mecab_tokenizer_unidic(self):
+        try:
+            tokenizer = MecabTokenizer(mecab_dic="unidic")
+        except ModuleNotFoundError:
+            return
+
+        self.assertListEqual(
+            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
+            ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れ", "た", "。"],
+        )
+
     def test_mecab_tokenizer_lower(self):
-        tokenizer = MecabTokenizer(do_lower_case=True)
+        tokenizer = MecabTokenizer(do_lower_case=True, mecab_dic="ipadic")
 
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
@@ -118,7 +140,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_mecab_tokenizer_no_normalize(self):
-        tokenizer = MecabTokenizer(normalize_text=False)
+        tokenizer = MecabTokenizer(normalize_text=False, mecab_dic="ipadic")
 
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
