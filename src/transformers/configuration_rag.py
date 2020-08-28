@@ -45,6 +45,7 @@ class RagConfig(PretrainedConfig):
         bos_token_id=None,
         eos_token_id=None,
         decoder_start_token_id=None,
+        prefix=None,
         title_sep=" / ",
         doc_sep=" // ",
         n_docs=5,
@@ -73,6 +74,7 @@ class RagConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
+        self.prefix = prefix
 
         self.title_sep = title_sep
         self.doc_sep = doc_sep

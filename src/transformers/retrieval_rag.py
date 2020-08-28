@@ -101,7 +101,7 @@ class HFIndex(Index):
         return torch.tensor(ids), torch.tensor(vectors)
 
 
-class RAGRetriever(object):
+class RagRetriever(object):
     def __init__(self, config):
         super().__init__()
         assert (
@@ -161,7 +161,7 @@ class RAGRetriever(object):
         for query_vectors in query_vectors_batched:
             start_time = time.time()
             ids, vectors = self.retriever.get_top_docs(query_vectors.numpy(), self.n_docs)
-            logger.info(
+            logger.debug(
                 "index search time: {} sec, batch size {}".format(time.time() - start_time, query_vectors.shape)
             )
             ids_batched.append(ids)
@@ -191,7 +191,6 @@ class RAGRetriever(object):
 
         # distributed training
         world_size = dist.get_world_size(group=self.process_group)
-        logger.info("world_size", world_size)
 
         # gather logic
         gather_list = None

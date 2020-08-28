@@ -1,7 +1,12 @@
+import logging
+
 import torch
 
 from transformers import BartTokenizer, RagSequenceModel, RagTokenModel, T5ForConditionalGeneration, T5Tokenizer
 
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -49,6 +54,14 @@ if __name__ == "__main__":
     print("\nSEQUENCE MODEL - Legacy retriever")
     rag_sequence_model_path = "/private/home/piktus/rag_huggingface/data/repro-rag-sequence-59"
     rag_model = RagSequenceModel.from_pretrained(rag_sequence_model_path)
+    generate_from_rag(rag_model, bart_tokenizer, questions, inputs, num_beams=4)
+
+    print("\nSEQUENCE MODEL - HF HNSW retriever")
+    rag_model = RagSequenceModel.from_pretrained(
+        rag_sequence_model_path,
+        retriever_type="hf_retriever",
+        index_path="/private/home/piktus/rag_huggingface/data/psgs_w100_with_nq_embeddings_HNSWFlatIP.faiss",
+    )
     generate_from_rag(rag_model, bart_tokenizer, questions, inputs, num_beams=4)
 
     print("\nTOKEN MODEL - HF retriever")

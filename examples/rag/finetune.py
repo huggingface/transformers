@@ -2,11 +2,12 @@ import argparse
 import glob
 import logging
 import os
+import sys
 import time
 import warnings
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -14,127 +15,94 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
-from examples.lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import (
+
+sys.path.append(os.path.join(os.getcwd()))  # isort:skip
+
+from examples.lightning_base import BaseTransformer, add_generic_args, generic_train  # isort:skip
+from examples.seq2seq.callbacks import Seq2SeqLoggingCallback, get_early_stopping_callback  # isort:skip
+from examples.seq2seq.utils import (  # isort:skip
+    flatten_list,
+    get_git_info,
+    lmap,
+    pickle_save,
+    save_git_info,
+    save_json,
+)
+from transformers import (  # isort:skip
+    AutoConfig,
     AutoTokenizer,
     BartForConditionalGeneration,
     BartTokenizer,
+    RagConfig,
     RagSequenceModel,
     RagTokenModel,
     T5ForConditionalGeneration,
     get_linear_schedule_with_warmup,
 )
 
-
-try:
-    from .utils import (
-        assert_all_frozen,
-        use_task_specific_params,
-        lmap,
-        flatten_list,
-        pickle_save,
-        save_git_info,
-        save_json,
-        freeze_params,
-        calculate_rouge,
-        calculate_exact_match,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        Seq2SeqDataset,
-        label_smoothed_nll_loss,
-        is_rag_model,
-    )
-
-    from .callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
-except ImportError:
-    from utils import (
-        Seq2SeqDataset,
-        assert_all_frozen,
-        use_task_specific_params,
-        lmap,
-        flatten_list,
-        pickle_save,
-        save_git_info,
-        save_json,
-        freeze_params,
-        calculate_rouge,
-        calculate_exact_match,
-        get_git_info,
-        ROUGE_KEYS,
-        calculate_bleu_score,
-        label_smoothed_nll_loss,
-        is_rag_model,
-    )
-    from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
+from utils import Seq2SeqDataset, calculate_exact_match, is_rag_model, set_extra_model_params  # isort:skip
+from callbacks import get_checkpoint_callback  # isort:skip
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 class GenerativeQAModule(BaseTransformer):
     mode = "generative_qa"
     loss_names = ["loss"]
-    # metric_names = ROUGE_KEYS + ["em"]
     metric_names = ["em"]
-    val_metric = "em"  # piktus
+    val_metric = "em"
 
     def __init__(self, hparams, **kwargs):
-        print("hparams", hparams)
-        if hparams.model_type == "rag_sequence":
-            model_type = RagSequenceModel
-        elif hparams.model_type == "rag_token":
-            model_type = RagTokenModel
-        else:
-            model_type = BartForConditionalGeneration
 
-        model = model_type.from_pretrained(hparams.model_name_or_path)
-        config = model.config
+        if hparams.model_type == "rag_sequence":
+            self.model_class = RagSequenceModel
+        elif hparams.model_type == "rag_token":
+            self.model_class = RagTokenModel
+        elif hparams.model_type == "bart":
+            self.model_class = BartForConditionalGeneration
+        else:
+            self.model_class = T5ForConditionalGeneration
+        self.is_rag_model = is_rag_model(hparams.model_type)
+
+        config_class = RagConfig if self.is_rag_model else AutoConfig
+        config = config_class.from_pretrained(hparams.model_name_or_path)
+
+        # set extra_model_params for generator configs and load_model
+        extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
+        if self.is_rag_model:
+            generator_config = AutoConfig.from_pretrained(config.pretrained_generator_name_or_path, prefix=config.prefix)
+            hparams, generator_config = set_extra_model_params(extra_model_params, hparams, generator_config)
+            model = self.model_class.from_pretrained(
+                hparams.model_name_or_path, config=config, generator_config=generator_config
+            )
+        else:
+            if args.prefix is not None:
+                setattr(config, "prefix", args.prefix)
+            hparams, config = set_extra_model_params(extra_model_params, hparams, config)
+            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config)
+            generator_config = config
+
         tokenizer = (
             model.model.generator_tokenizer
-            if is_rag_model(hparams.model_type)
+            if self.is_rag_model
             else AutoTokenizer.from_pretrained(hparams.model_name_or_path)
         )
 
-        # set extra_model_params for generator configs
-        if hparams.model_type in ["rag_sequence", "rag_token"]:
-            extra_model_params = (
-                ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
-                if isinstance(model.model.generator, BartForConditionalGeneration)
-                else ("dropout_rate",)
-            )
-            for p in extra_model_params:
-                if getattr(hparams, p, None):
-                    assert hasattr(
-                        model.model.generator.config, p
-                    ), f"generator model config doesn't have a `{p}` attribute"
-                    setattr(model.model.generator.config, p, getattr(hparams, p))
-                    delattr(hparams, p)
+        super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
 
-        super().__init__(
-            hparams, num_labels=None, mode=self.mode, config=config, tokenizer=tokenizer, model=model, **kwargs
-        )
-        self.model_type = model_type
-
-        use_task_specific_params(self.model, "generative_qa")
         save_git_info(self.hparams.output_dir)
+        self.output_dir = Path(self.hparams.output_dir)
         self.metrics_save_path = Path(self.output_dir) / "metrics.json"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
         pickle_save(self.hparams, self.hparams_save_path)
         self.step_count = 0
         self.metrics = defaultdict(list)
 
-        prefix = None
-        if (
-            is_rag_model(model.base_model_prefix) and isinstance(model.model.generator, T5ForConditionalGeneration)
-        ) or isinstance(model, T5ForConditionalGeneration):
-            prefix = "generate answer: "
-            print("EOS token", self.tokenizer.eos_token)
-            self.model.model.generator.config.prefix = prefix
-
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            prefix=prefix or self.model.config.prefix or "",
+            prefix=generator_config.prefix or "",
         )
         n_observations_per_split = {
             "train": self.hparams.n_train,
@@ -151,35 +119,16 @@ class GenerativeQAModule(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
 
-        if self.hparams.freeze_embeds:
-            self.freeze_embeds()
-        if self.hparams.freeze_encoder:
-            freeze_params(self.model.get_encoder())
-            assert_all_frozen(self.model.get_encoder())
-
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.distributed_port = self.hparams.distributed_port
 
     def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-        print("custom init_ddp_connection")
+        logger.info("Custom `init_ddp_connection`.")
         os.environ["MASTER_PORT"] = str(self.distributed_port)
         super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
-        if self.model.base_model_prefix in ["rag_sequence", "rag_token"]:
-            print("running init_retrieval")
+        if self.is_rag_model:
             self.model.model.retriever.init_retrieval(self.distributed_port)
-
-    def freeze_embeds(self):
-        """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-        try:
-            freeze_params(self.model.model.shared)
-            for d in [self.model.model.encoder, self.model.model.decoder]:
-                freeze_params(d.embed_positions)
-                freeze_params(d.embed_tokens)
-        except AttributeError:
-            freeze_params(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
-                freeze_params(d.embed_tokens)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -198,12 +147,10 @@ class GenerativeQAModule(BaseTransformer):
             decoder_input_ids = self.model._shift_right(target_ids)
             lm_labels = target_ids
         elif isinstance(self.model, BartForConditionalGeneration):
-            decoder_input_ids = target_ids[
-                :, :-1
-            ].contiguous()  # Why this line? - to match the length of the lm_labels
-            lm_labels = target_ids[:, 1:].clone()  # why clone? - shift left
+            decoder_input_ids = target_ids[:, :-1].contiguous()
+            lm_labels = target_ids[:, 1:].clone()
         else:
-            assert is_rag_model(self.model.base_model_prefix)
+            assert self.is_rag_model
             generator = self.model.model.generator
             if isinstance(generator, T5ForConditionalGeneration):
                 if isinstance(self.model, RagTokenModel):
@@ -211,28 +158,17 @@ class GenerativeQAModule(BaseTransformer):
                 decoder_start_token_id = generator.config.decoder_start_token_id
                 decoder_input_ids = (
                     torch.cat(
-                        [torch.Tensor([[decoder_start_token_id]] * target_ids.shape[0]).to(target_ids), target_ids,],
+                        [torch.Tensor([[decoder_start_token_id]] * target_ids.shape[0]).to(target_ids), target_ids],
                         dim=1,
                     )
                     if target_ids.shape[0] < self.target_lens["train"]
                     else generator._shift_right(target_ids)
                 )
-                # decoder_input_ids = target_ids
             elif isinstance(generator, BartForConditionalGeneration):
                 decoder_input_ids = target_ids
             lm_labels = None
 
         assert decoder_input_ids is not None
-
-        source_strings = self.tokenizer.batch_decode(source_ids, skip_special_tokens=False)
-        decoder_strings = self.tokenizer.batch_decode(decoder_input_ids, skip_special_tokens=False)
-
-        print("target_ids", target_ids.shape, target_ids)
-        print("source_ids", source_ids.shape, source_ids)
-        print("decoder_input_ids", decoder_input_ids.shape, decoder_input_ids)
-
-        print("source_strings", source_strings)
-        print("decoder_strings", decoder_strings)
 
         if lm_labels is not None:
             outputs = self(
@@ -271,15 +207,12 @@ class GenerativeQAModule(BaseTransformer):
         return {"loss": loss_tensors[0], "log": logs}
 
     def validation_step(self, batch, batch_idx) -> Dict:
-        print("VALIDATION STEP")
         return self._generative_step(batch)
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        print("len(outputs)", len(outputs))
-        print(outputs)
         gen_metrics = {
             k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
         }
@@ -289,7 +222,6 @@ class GenerativeQAModule(BaseTransformer):
         # fix for https://github.com/PyTorchLightning/pytorch-lightning/issues/2424
         dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
         reduced_metrics = metrics_tensor / dist.get_world_size()
-        print("gen_metrics reduced", len(gen_metrics), gen_metrics, reduced_metrics)
         gen_metrics.update({self.val_metric: reduced_metrics.item()})
 
         losses.update(gen_metrics)
@@ -307,18 +239,17 @@ class GenerativeQAModule(BaseTransformer):
         return calculate_exact_match(preds, target)
 
     def _generative_step(self, batch: dict) -> dict:
-        t0 = time.time()
+        start_time = time.time()
         generated_ids = self.model.generate(
             batch["input_ids"],
             attention_mask=batch["attention_mask"],
             use_cache=True,
-            min_length=1,  # make sure short answers are allowed
-            max_length=self.target_lens["val"],  # no need for crazy long answers in NQ
+            min_length=1,
+            max_length=self.target_lens["val"],
             dedup=False,  # rag specific parameter
         )
 
-        print("input_ids {}, generated_ids {}".format(batch["input_ids"].shape, generated_ids.shape))
-        gen_time = (time.time() - t0) / batch["input_ids"].shape[0]
+        gen_time = (time.time() - start_time) / batch["input_ids"].shape[0]
         preds: List[str] = self.ids_to_clean_text(generated_ids)
         target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
         loss_tensors = self._step(batch)
@@ -386,34 +317,41 @@ class GenerativeQAModule(BaseTransformer):
     def test_dataloader(self) -> DataLoader:
         return self.get_dataloader("test", batch_size=self.hparams.eval_batch_size)
 
+    @pl.utilities.rank_zero_only
+    def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
+        save_path = self.output_dir.joinpath("checkpoint{}".format(self.step_count))
+        self.model.config.save_step = self.step_count
+        self.model.save_pretrained(save_path)
+        self.tokenizer.save_pretrained(save_path)
+
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         BaseTransformer.add_model_specific_args(parser, root_dir)
         add_generic_args(parser, root_dir)
         parser.add_argument(
             "--max_source_length",
-            default=1024,
+            default=128,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
         parser.add_argument(
             "--max_target_length",
-            default=56,
+            default=25,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
         parser.add_argument(
             "--val_max_target_length",
-            default=142,  # these defaults are optimized for CNNDM. For xsum, see README.md.
+            default=25,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
         parser.add_argument(
             "--test_max_target_length",
-            default=142,
+            default=25,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
@@ -424,20 +362,13 @@ class GenerativeQAModule(BaseTransformer):
             required=True,
             help="The input data dir. Should contain train.source, train.target, val.source, val.target, test.source, test.target",
         )
-        parser.add_argument("--freeze_encoder", action="store_true")
-        parser.add_argument("--freeze_embeds", action="store_true")
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--n_val", type=int, default=500, required=False, help="# examples. -1 means use all.")
+        parser.add_argument("--n_val", type=int, default=-1, required=False, help="# examples. -1 means use all.")
         parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument(
-            "--task", type=str, default="generative_qa", required=False, help="# examples. -1 means use all."
-        )
         parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
-
-        parser.add_argument("--src_lang", type=str, default="", required=False)
-        parser.add_argument("--tgt_lang", type=str, default="", required=False)
+        parser.add_argument("--prefix", type=str, default=None, help="Prefix added at the beginning of each text, typically used with T5-based models.")
         parser.add_argument(
             "--early_stopping_patience",
             type=int,
@@ -446,11 +377,11 @@ class GenerativeQAModule(BaseTransformer):
             help="-1 means never early stop. early_stopping_patience is measured in validation checks, not epochs. So val_check_interval will effect it.",
         )
         parser.add_argument(
-            "--distributed-port", type=int, default=-1, required=False, help="# examples. -1 means use all."
+            "--distributed-port", type=int, default=-1, required=False, help="Port number for distributed training."
         )
         parser.add_argument(
             "--model_type",
-            choices=["rag_sequence", "rag_token", "bart"],
+            choices=["rag_sequence", "rag_token", "bart", "t5"],
             type=str,
             help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
         )
@@ -459,13 +390,8 @@ class GenerativeQAModule(BaseTransformer):
 
 def main(args, model=None) -> GenerativeQAModule:
     Path(args.output_dir).mkdir(exist_ok=True)
-    # if len(os.listdir(args.output_dir)) > 3 and args.do_train:
-    # raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
-        if args.task == "generative_qa":
-            model: GenerativeQAModule = GenerativeQAModule(args)
-        else:
-            model: GenerativeQAModule = TranslationModule(args)
+        model: GenerativeQAModule = GenerativeQAModule(args)
 
     dataset = Path(args.data_dir).name
     if (
@@ -486,10 +412,11 @@ def main(args, model=None) -> GenerativeQAModule:
 
         logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
 
-    if args.early_stopping_patience >= 0:
-        es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
-    else:
-        es_callback = False
+    es_callback = (
+        get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
+        if args.early_stopping_patience >= 0
+        else False
+    )
     trainer: pl.Trainer = generic_train(
         model,
         args,
@@ -497,7 +424,6 @@ def main(args, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
         logger=logger,
-        # TODO: early stopping callback seems messed up
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
 

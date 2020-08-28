@@ -31,9 +31,6 @@ VOCAB_FILES_NAMES = {
 }
 
 # TODO(piktus) Rename keys to facebook/default-rag or similar
-# TODO(piktus) Figure out handling of doc separator and title separator
-# see issues with adding tokens similar to https://github.com/huggingface/transformers/issues/3090
-
 RAG_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",

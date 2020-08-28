@@ -42,7 +42,6 @@ MODEL_MODES = {
     "language-modeling": AutoModelWithLMHead,
     "summarization": AutoModelForSeq2SeqLM,
     "translation": AutoModelForSeq2SeqLM,
-    "generative_qa": AutoModelForSeq2SeqLM,
 }
 
 
@@ -90,13 +89,11 @@ class BaseTransformer(pl.LightningModule):
         else:
             self.config: PretrainedConfig = config
 
-        """
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "dropout", "attention_dropout")
         for p in extra_model_params:
             if getattr(self.hparams, p, None):
                 assert hasattr(self.config, p), f"model config doesn't have a `{p}` attribute"
                 setattr(self.config, p, getattr(self.hparams, p))
-        """
 
         if tokenizer is None:
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -185,7 +182,7 @@ class BaseTransformer(pl.LightningModule):
 
     @pl.utilities.rank_zero_only
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        save_path = self.output_dir.joinpath("checkpoint{}".format(self.step_count))
+        save_path = self.output_dir.joinpath("best_tfmr")
         self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
@@ -345,8 +342,7 @@ def generic_train(
         train_params["distributed_backend"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
-    print("train_params", train_params)
-    print("args", args)
+
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,

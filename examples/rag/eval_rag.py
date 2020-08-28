@@ -23,16 +23,21 @@ import logging
 import os
 import re
 import string
+import sys
 
 import pandas as pd
 import torch
 from tqdm import tqdm
 
 from transformers import WEIGHTS_NAME, BartForConditionalGeneration, BartTokenizer, RagSequenceModel, RagTokenModel
-from utils import exact_match_score, f1_score
+
+
+sys.path.append(os.path.join(os.getcwd()))  # isort:skip
+from utils import exact_match_score, f1_score  # isort:skip
 
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 def infer_model_type(model_name_or_path):
@@ -53,11 +58,11 @@ def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
     return max(scores_for_ground_truths)
 
 
-def get_scores(preds_path, gold_data_path, gold_data_mode):
+def get_scores(args, preds_path, gold_data_path):
     hypos = [line.strip() for line in open(preds_path, "r").readlines()]
     answers = []
 
-    if gold_data_mode == "qa":
+    if args.gold_data_mode == "qa":
         data = pd.read_csv(gold_data_path, sep="\t", header=None)
         for answer_list in data[1]:
             ground_truths = ast.literal_eval(answer_list)
@@ -75,11 +80,47 @@ def get_scores(preds_path, gold_data_path, gold_data_mode):
     em = 100.0 * em / total
     f1 = 100.0 * f1 / total
 
-    print("F1: {}".format(f1))
-    print("EM: {}".format(em))
+    logger.info("F1: {}".format(f1))
+    logger.info("EM: {}".format(em))
 
 
-def evaluate_batch(args, rag_model, tokenizer, questions):
+def get_precision_at_k(args, preds_path, gold_data_path):
+    k = args.k
+    hypos = [line.strip() for line in open(preds_path, "r").readlines()]
+    references = [line.strip() for line in open(gold_data_path, "r").readlines()]
+
+    em = total = 0
+    for hypo, reference in zip(hypos, references):
+        hypo_provenance = set(hypo.split("\t")[:k])
+        ref_provenance = set(reference.split("\t")[1 : (k + 1)])
+        total += 1
+        em += len(hypo_provenance & ref_provenance) / k
+
+    em = 100.0 * em / total
+    logger.info("Precision@{}: {}".format(k, em))
+
+
+def evaluate_batch_retrieval(args, rag_model, tokenizer, questions):
+    def strip_title(title):
+        if title.startswith('"'):
+            title = title[1:]
+        if title.endswith('"'):
+            title = title[:-1]
+        return title
+
+    retriever_inputs = tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True,)
+    retriever_input_embs = rag_model.model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0]
+
+    _, all_docs = rag_model.model.retriever.retrieve(retriever_input_embs)
+
+    provenance_strings = []
+    for docs in all_docs:
+        provenance = [strip_title(title) for title in docs["title"]]
+        provenance_strings.append("\t".join(provenance))
+    return provenance_strings
+
+
+def evaluate_batch_e2e(args, rag_model, tokenizer, questions):
     with torch.no_grad():
         input_ids = tokenizer.batch_encode_plus(questions, return_tensors="pt", padding=True, truncation=True)[
             "input_ids"
@@ -87,21 +128,25 @@ def evaluate_batch(args, rag_model, tokenizer, questions):
         outputs = rag_model.generate(
             input_ids,
             num_beams=args.num_beams,
-            min_length=args.min_length,  # make sure short answers are allowed
-            max_length=args.max_length,  # no need for crazy long answers in NQ
+            min_length=args.min_length,
+            max_length=args.max_length,
             early_stopping=False,
             num_return_sequences=1,
             bad_words_ids=[[0, 0]],  # BART likes to repeat BOS tokens, dont allow it to generate more than one
             clean_up_tokenization=True,
+            print_docs=args.print_docs,
         )
-        output_strings = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        return output_strings
+        answers = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        if args.print_predictions:
+            for q, a in zip(questions, answers):
+                logger.info("Q: {} - A: {}".format(q, a))
+
+        return answers
 
 
-def main():
+def get_args():
     parser = argparse.ArgumentParser()
-
-    # Required parameters
     parser.add_argument(
         "--model_type",
         choices=["rag_sequence", "rag_token", "bart"],
@@ -115,6 +160,12 @@ def main():
         type=str,
         help="RAG model retriever type",
     )
+    parser.add_argument(
+        "--index_path",
+        default=None,
+        type=str,
+        help="Path to the retrieval index",
+    )
     parser.add_argument("--n_docs", default=5, type=int, help="Number of retrieved docs")
     parser.add_argument(
         "--model_name_or_path",
@@ -123,6 +174,14 @@ def main():
         required=True,
         help="Path to pretrained checkpoints or model identifier from huggingface.co/models",
     )
+    parser.add_argument(
+        "--eval_mode",
+        choices=["e2e", "retrieval"],
+        default="e2e",
+        type=str,
+        help="Evaluation mode, e2e calculates exact match and F1 of the downstream task, retrieval calulates precision@k.",
+    )
+    parser.add_argument("--k", default=1, type=int, help="k for the precision@k calculation")
     parser.add_argument(
         "--evaluation_set", default=None, type=str, required=True, help="Path to a file containing evaluation samples",
     )
@@ -160,20 +219,23 @@ def main():
         "--recalculate", help="Recalculate predictions even if the prediction file exists", action="store_true",
     )
     parser.add_argument(
-        "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model.",
-    )
-    parser.add_argument(
         "--num_beams", default=4, type=int, help="Number of beams to be used when generating answers",
     )
     parser.add_argument("--min_length", default=1, type=int, help="Min length of the generated answers")
     parser.add_argument("--max_length", default=50, type=int, help="Max length of the generated answers")
 
+    parser.add_argument(
+        "--print_predictions", action="store_true", help="If True, prints predictions while evaluating.",
+    )
+    parser.add_argument(
+        "--print_docs", action="store_true", help="If True, prints docs retried while generating.",
+    )
     args = parser.parse_args()
-
-    logging.getLogger(__name__).setLevel(logging.INFO)
-
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return args
 
+
+def main(args):
     model_kwargs = {}
     if args.model_type is None:
         args.model_type = infer_model_type(args.model_name_or_path)
@@ -183,6 +245,8 @@ def main():
         model_kwargs["n_docs"] = args.n_docs
         if args.retriever_type is not None:
             model_kwargs["retriever_type"] = args.retriever_type
+        if args.index_path is not None:
+            model_kwargs["index_path"] = args.index_path
     else:
         model_class = BartForConditionalGeneration
 
@@ -194,11 +258,14 @@ def main():
 
     logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
+    score_fn = get_scores if args.eval_mode == "e2e" else get_precision_at_k
+    evaluate_batch_fn = evaluate_batch_e2e if args.eval_mode == "e2e" else evaluate_batch_retrieval
+
     for checkpoint in checkpoints:
         predictions_path = os.path.join(checkpoint, args.predictions_filename)
         if os.path.exists(predictions_path) and (not args.recalculate):
             logger.info("Calculating metrics based on an existing predictions file: {}".format(predictions_path))
-            get_scores(predictions_path, args.gold_data_path, args.gold_data_mode)
+            score_fn(args, predictions_path, args.gold_data_path)
             continue
 
         logger.info("***** Running evaluation for {} *****".format(checkpoint))
@@ -209,31 +276,31 @@ def main():
         model.to(args.device)
         tokenizer = (
             model.model.generator_tokenizer
-            if args.model_type != "bart"
+            if args.model_type != "bart" and args.eval_mode == "e2e"
+            else model.model.retriever_tokenizer
+            if args.model_type != "bart" and args.eval_mode == "retrieval"
             else BartTokenizer.from_pretrained("facebook/bart-large")
         )
         if args.model_type != "bart":
-            model.model.retriever.init_retrieval(12345)
+            model.model.retriever.init_retrieval(distributed_port=12345)
 
         with open(args.evaluation_set, "r") as eval_file, open(predictions_path, "w") as preds_file:
             questions = []
             for line in tqdm(eval_file):
                 questions.append(line.strip())
                 if len(questions) == args.eval_batch_size:
-                    answers = evaluate_batch(args, model, tokenizer, questions)
+                    answers = evaluate_batch_fn(args, model, tokenizer, questions)
                     preds_file.write("\n".join(answers) + "\n")
                     preds_file.flush()
-                    for q, a in zip(questions, answers):
-                        print("Q:", q, "- A:", a)
                     questions = []
-                    print()
             if len(questions) > 0:
-                answers = evaluate_batch(args, model, tokenizer, questions)
+                answers = evaluate_batch_fn(args, model, tokenizer, questions)
                 preds_file.write("\n".join(answers))
                 preds_file.flush()
 
-            get_scores(predictions_path, args.gold_data_path, args.gold_data_mode)
+            score_fn(args, predictions_path, args.gold_data_path)
 
 
 if __name__ == "__main__":
-    main()
+    args = get_args()
+    main(args)
