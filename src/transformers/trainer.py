@@ -948,9 +948,10 @@ class Trainer:
             logs["epoch"] = self.epoch
         if self.total_flos is not None:
             if self.args.local_rank != -1:
-                gathered_flos = self.distributed_broadcast_scalars([self.total_flos])
-                logs["total_flos"] = gathered_flos.sum().item()
+                total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
             else:
+                total_flos = self.total_flos
+            if total_flos > 0:
                 logs["total_flos"] = self.total_flos
         if self.global_step is None:
             # when logging evaluation metrics without training
@@ -1135,8 +1136,8 @@ class Trainer:
                 total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
             else:
                 total_flos = self.total_flos
-        if total_flos > 0:
-            self.model.config.total_flos = total_flos
+            if total_flos > 0:
+                self.model.config.total_flos = total_flos
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
@@ -1155,8 +1156,8 @@ class Trainer:
                 total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
             else:
                 total_flos = self.total_flos
-        if total_flos > 0:
-            self.model.config.total_flos = total_flos
+            if total_flos > 0:
+                self.model.config.total_flos = total_flos
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
