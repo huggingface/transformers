@@ -28,6 +28,10 @@ RAG_CONFIG_DOC = r"""
     :class:`~transformers.RagConfig` is the configuration class to store the configuration of a `RagModel`.
 
     Args:
+        vocab_size (:obj:`int`, optional, defaults to ``None``):
+            Vocabulary size of the underlying generator model.
+        is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether the model is used as an encoder/decoder or not.
         title_sep (:obj:`str`, optional, defaults to  ``" / "``):
             Separator inserted between the title and the text of the retrieved document when running
             `:func:`~transformers.RagModel.contextualize``.
@@ -66,6 +70,18 @@ RAG_CONFIG_DOC = r"""
             A string specifying the ``generator`` tokenizer to be loaded.
         pretrained_generator_name_or_path: (:obj:`str`, optional, defaults to ``facebook/bart-large``):
             A string specifying the ``generator`` model to be loaded.
+
+    Args linked to the tokenizer - they have to be compatible with equivalent parameters of the ``generator``:
+        prefix (:obj:`str`, `optional`):
+            A specific prompt that should be added at the beginning of each text before calling the model.
+        bos_token_id (:obj:`int`, `optional`):
+            The id of the `beginning-of-stream` token.
+        pad_token_id (:obj:`int`, `optional`):
+            The id of the `padding` token.
+        eos_token_id (:obj:`int`, `optional`)"
+            The id of the `end-of-stream` token.
+        decoder_start_token_id** (:obj:`int`, `optional`):
+            If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
 """
 
 
@@ -75,6 +91,13 @@ class RagConfig(PretrainedConfig):
 
     def __init__(
         self,
+        vocab_size=None,
+        is_encoder_decoder=True,
+        prefix = None,
+        bos_token_id=None,
+        pad_token_id=None,
+        eos_token_id=None,
+        decoder_start_token_id=None,
         title_sep=" / ",
         doc_sep=" // ",
         n_docs=5,
@@ -94,6 +117,13 @@ class RagConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.is_encoder_decoder = is_encoder_decoder
+        self.prefix = prefix
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
 
         self.title_sep = title_sep
         self.doc_sep = doc_sep

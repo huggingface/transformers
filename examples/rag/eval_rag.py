@@ -97,7 +97,7 @@ def evaluate_batch_retrieval(args, rag_model, tokenizer, questions):
     )
     retriever_input_embs = rag_model.model.question_encoder(retriever_inputs["input_ids"].to(args.device))[0]
 
-    _, all_docs = rag_model.model.retriever.retrieve(retriever_input_embs)
+    _, all_docs = rag_model.model.retriever.retrieve(retriever_input_embs, rag_model.config.n_docs)
 
     provenance_strings = []
     for docs in all_docs:
@@ -279,7 +279,7 @@ def main(args):
         tokenizer = (
             model.model.generator_tokenizer
             if args.model_type != "bart" and args.eval_mode == "e2e"
-            else model.model.retriever_tokenizer
+            else model.model.question_encoder_tokenizer
             if args.model_type != "bart" and args.eval_mode == "retrieval"
             else BartTokenizer.from_pretrained("facebook/bart-large")
         )

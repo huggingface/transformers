@@ -50,6 +50,12 @@ class Index(object):
         """
         raise NotImplementedError
 
+    def is_initialized(self):
+        """
+        Returns :obj:`True` if index is already initialized.
+        """
+        raise NotImplementedError
+
     def init_index(self):
         """
         A function responsible for loading the index to memory. Should be called only once per training run of a RAG model.
@@ -79,6 +85,7 @@ class LegacyIndex(Index):
         self.index_path = index_path
         self.vector_size = vector_size
         self.index = None
+        self._index_initialize = False
 
     def _deserialize_from(self, index_path: str):
         logger.info("Loading index from {}".format(index_path))
@@ -89,12 +96,16 @@ class LegacyIndex(Index):
             len(self.index_id_to_db_id) == self.index.ntotal
         ), "Deserialized index_id_to_db_id should match faiss index size"
 
+    def is_initialized(self):
+        return self._index_initialize
+
     def init_index(self):
         index = faiss.IndexHNSWFlat(self.vector_size + 1, 512)
         index.hnsw.efSearch = 128
         index.hnsw.efConstruction = 200
         self.index = index
         self._deserialize_from(self.index_path)
+        self._index_initialize = True
 
     def get_doc_dicts(self, doc_ids):
         doc_list = []
@@ -147,14 +158,18 @@ class HFIndex(Index):
         self.dataset_split = dataset_split
         self.index_name = index_name
         self.index_path = index_path
-        self.index = None
+        self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split)
+        self._index_initialize = False
+
+    def is_initialized(self):
+        return self._index_initialize
 
     def init_index(self):
         if self.index_path is not None:
-            self.index = load_dataset(self.dataset, with_index=False, split=self.dataset_split)
             self.index.load_faiss_index(index_name=self.index_name, file=self.index_path)
         else:
             self.index = load_dataset(self.dataset, with_embeddings=True, with_index=True, split=self.dataset_split)
+        self._index_initialize = True
 
     def get_doc_dicts(self, doc_ids):
         return [self.index[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
@@ -224,6 +239,10 @@ class RagRetriever(object):
             logger.info("dist not initialized / main")
             self.retriever.init_index()
 
+        # all processes wait untill the retriever is initialized by the main process
+        if dist.is_initialized():
+            torch.distributed.barrier(group=self.process_group)
+
     def _is_main(self):
         return dist.get_rank(group=self.process_group) == 0
 
@@ -276,14 +295,14 @@ class RagRetriever(object):
 
         Ouput:
             total_scores (:obj:`torch.Tensor` of shape :obj:`(batch_size, vector_size)`
-                The retrieval scores of the retrieved examples per query.
+                The retrieval scores of the retrieved docs per query.
             total_examples (:obj:`List[dict]`):
                 The retrieved examples per query.
         """
 
-        # non-ddp initialization (init_retiever() is called at ddp initialization, if no ddp, then it's never called,
+        # non-ddp initialization (init_retrieval() is called at ddp initialization, if no ddp, then it's never called,
         # so it has to be initalized separately.
-        if not dist.is_initialized() and self.retriever.index is None:
+        if not dist.is_initialized() and not self.retriever.is_initialized():
             logger.info("Initializing index at first query")
             self.retriever.init_index()
 

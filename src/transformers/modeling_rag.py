@@ -287,15 +287,10 @@ class RagModel(torch.nn.Module):
             doc_title = doc_title[1:]
         if doc_title.endswith('"'):
             doc_title = doc_title[:-1]
+        prefix = self.generator.config.prefix if self.generator.config.prefix is not None else ""
         suffix = self.generator_tokenizer.eos_token if add_eos else ""
         out = (
-            self.generator.config.prefix
-            + doc_title
-            + self.config.title_sep
-            + doc_text
-            + self.config.doc_sep
-            + input_string
-            + suffix
+            prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string + suffix
         ).replace("  ", " ")
         if print_docs:
             logger.info("{} {}".format(doc_score, out))

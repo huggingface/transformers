@@ -127,7 +127,7 @@ class GenerativeQAModule(BaseTransformer):
         self.distributed_port = self.hparams.distributed_port
 
     def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-        logger.info("Custom `init_ddp_connection`.")
+        logger.info("Custom init_ddp_connection.")
         os.environ["MASTER_PORT"] = str(self.distributed_port)
         super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
         if self.is_rag_model:
@@ -222,16 +222,17 @@ class GenerativeQAModule(BaseTransformer):
         gen_metrics.update({k: v.item() for k, v in losses.items()})
 
         # fix for https://github.com/PyTorchLightning/pytorch-lightning/issues/2424
-        dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
-        reduced_metrics = metrics_tensor / dist.get_world_size()
-        gen_metrics.update({self.val_metric: reduced_metrics.item()})
+        if dist.is_initialized():
+            dist.all_reduce(metrics_tensor, op=dist.ReduceOp.SUM)
+            metrics_tensor = metrics_tensor / dist.get_world_size()
+            gen_metrics.update({self.val_metric: metrics_tensor.item()})
 
         losses.update(gen_metrics)
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         metrics["step_count"] = self.step_count
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": reduced_metrics}
+        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": metrics_tensor}
 
     def save_metrics(self, latest_metrics, type_path) -> None:
         self.metrics[type_path].append(latest_metrics)
@@ -244,11 +245,11 @@ class GenerativeQAModule(BaseTransformer):
         start_time = time.time()
         generated_ids = self.model.generate(
             batch["input_ids"],
+            dedup=False,  # rag specific parameter
             attention_mask=batch["attention_mask"],
             use_cache=True,
             min_length=1,
             max_length=self.target_lens["val"],
-            dedup=False,  # rag specific parameter
         )
 
         gen_time = (time.time() - start_time) / batch["input_ids"].shape[0]
@@ -357,12 +358,6 @@ class GenerativeQAModule(BaseTransformer):
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
-        )
-        parser.add_argument(
-            "--data_dir",
-            type=str,
-            required=True,
-            help="The input data dir. Should contain train.source, train.target, val.source, val.target, test.source, test.target",
         )
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
         parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
