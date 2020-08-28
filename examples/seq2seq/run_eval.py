@@ -1,6 +1,7 @@
 import argparse
 import json
 import time
+import warnings
 from logging import getLogger
 from pathlib import Path
 from typing import Dict, List
@@ -9,7 +10,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-import warnings
+
 
 logger = getLogger(__name__)
 
@@ -93,7 +94,7 @@ def run_generate():
         type=int,
         default=None,
         required=False,
-        help="decoder_start_token_id (otherwise will look at config)",
+        help="Defaults to using config",
     )
     parser.add_argument(
         "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
@@ -105,7 +106,7 @@ def run_generate():
         examples = examples[: args.n_obs]
     Path(args.save_path).parent.mkdir(exist_ok=True)
     if args.reference_path is None and Path(args.score_path).exists():
-        warnings.warn(f'score_path {args.score_path} will be overwritten unless you type ctrl-c.')
+        warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
     runtime_metrics = generate_summaries_or_translations(
         examples,
         args.save_path,
@@ -131,4 +132,6 @@ def run_generate():
 
 
 if __name__ == "__main__":
+    # Usage for MT:
+    # python run_eval.py MODEL_NAME $DATA_DIR/test.source $save_dir/test_translations.txt --reference_path $DATA_DIR/test.target --score_path $save_dir/test_bleu.json  --task translation $@
     run_generate()

@@ -126,7 +126,11 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, tokenizer.eos_token_id]
-        batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK,)
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text,
+            tgt_texts=tgt_text,
+            return_tensors=FRAMEWORK,
+        )
         self.assertIsInstance(batch, BatchEncoding)
         result = list(batch.input_ids.numpy()[0])
         self.assertListEqual(expected_src_tokens, result)
@@ -149,7 +153,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_max_target_length(self):
         tokenizer = self.t5_base_tokenizer
-        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        src_text = ["A short paragraph for summrization.", "Another short paragraph for summrization."]
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
@@ -157,15 +161,13 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         batch = tokenizer.prepare_seq2seq_batch(
             src_text, tgt_texts=tgt_text, max_target_length=32, padding="max_length", return_tensors=FRAMEWORK
         )
-        self.assertEqual(32, batch["decoder_input_ids"].shape[1])
-        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+        self.assertEqual(32, batch["labels"].shape[1])
 
         # test None max_target_length
         batch = tokenizer.prepare_seq2seq_batch(
             src_text, tgt_texts=tgt_text, max_length=32, padding="max_length", return_tensors=FRAMEWORK
         )
-        self.assertEqual(32, batch["decoder_input_ids"].shape[1])
-        self.assertEqual(32, batch["decoder_attention_mask"].shape[1])
+        self.assertEqual(32, batch["labels"].shape[1])
 
     def test_outputs_not_longer_than_maxlen(self):
         tokenizer = self.t5_base_tokenizer
@@ -186,7 +188,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK)
 
         src_ids = list(batch.input_ids.numpy()[0])
-        tgt_ids = list(batch.decoder_input_ids.numpy()[0])
+        tgt_ids = list(batch.labels.numpy()[0])
 
         self.assertEqual(expected_src_tokens, src_ids)
         self.assertEqual(expected_tgt_tokens, tgt_ids)
