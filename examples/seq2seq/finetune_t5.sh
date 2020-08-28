@@ -11,4 +11,4 @@ python finetune.py \
 --max_target_length=56 \
 --val_check_interval=0.1 --n_val=200 \
 --do_train --do_predict \
- $@
+ "$@"

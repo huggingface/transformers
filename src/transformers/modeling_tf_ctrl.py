@@ -16,8 +16,6 @@
 """ TF 2.0 CTRL model."""
 
 
-import logging
-
 import numpy as np
 import tensorflow as tf
 
@@ -32,9 +30,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "CTRLConfig"
 _TOKENIZER_FOR_DOC = "CTRLTokenizer"
@@ -246,8 +245,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-                heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         raise NotImplementedError
 
@@ -427,8 +426,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
 
 class TFCTRLPreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = CTRLConfig

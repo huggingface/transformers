@@ -47,8 +47,8 @@ output_ids = model.generate(input_ids)
 
 print(tokenizer.decode(output_ids[0], skip_special_tokens=True))
 # should produce
-# SAE's national chapter suspended the students from campus activities. The fraternity is under fire for a video showing the students singing a racist chant. SAE has had fewer than 400 members of the
-# fraternity. The group had fewer alcohol consumption, along with about 15, 000 undergraduates populating 219 chapters.
+# sae was founded in 1856, five years before the civil war. the fraternity has had to work hard to change recently. the university of oklahoma president says the university's affiliation with the fraternity is permanently done. the sae has had a string of members in recent mon
+ths.
 ```
 
 ## Training script:
@@ -69,7 +69,7 @@ from transformers import BertTokenizer, EncoderDecoderModel, Trainer, TrainingAr
 logging.basicConfig(level=logging.INFO)
 
 model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
-tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
 # CLS token will work as BOS token
 tokenizer.bos_token = tokenizer.cls_token
@@ -226,4 +226,4 @@ The obtained results should be:
 
 | -   |      Rouge2 - mid -precision      |  Rouge2 - mid - recall | Rouge2 - mid - fmeasure |
 |----------|:-------------:|:------:|:------:|
-| **CNN/Daily Mail** |  14.12 | 14.37 | **13.8** |
+| **CNN/Daily Mail** |  16.12 | 17.07 | **16.1** |

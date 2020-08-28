@@ -15,7 +15,6 @@
 # limitations under the License.
 """ GLUE processors and helpers """
 
-import logging
 import os
 from dataclasses import asdict
 from enum import Enum
@@ -23,13 +22,14 @@ from typing import List, Optional, Union
 
 from ...file_utils import is_tf_available
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
 
 if is_tf_available():
     import tensorflow as tf
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def glue_convert_examples_to_features(
@@ -69,7 +69,10 @@ def glue_convert_examples_to_features(
 if is_tf_available():
 
     def _tf_glue_convert_examples_to_features(
-        examples: tf.data.Dataset, tokenizer: PreTrainedTokenizer, task=str, max_length: Optional[int] = None,
+        examples: tf.data.Dataset,
+        tokenizer: PreTrainedTokenizer,
+        task=str,
+        max_length: Optional[int] = None,
     ) -> tf.data.Dataset:
         """
         Returns:
@@ -79,6 +82,7 @@ if is_tf_available():
         processor = glue_processors[task]()
         examples = [processor.tfds_map(processor.get_example_from_tensor_dict(example)) for example in examples]
         features = glue_convert_examples_to_features(examples, tokenizer, max_length=max_length, task=task)
+        label_type = tf.float32 if task == "sts-b" else tf.int64
 
         def gen():
             for ex in features:
@@ -90,7 +94,7 @@ if is_tf_available():
 
         return tf.data.Dataset.from_generator(
             gen,
-            ({k: tf.int32 for k in input_names}, tf.int64),
+            ({k: tf.int32 for k in input_names}, label_type),
             ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
         )
 

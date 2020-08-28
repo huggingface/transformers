@@ -15,11 +15,10 @@
 """ Auto Config class. """
 
 
-import logging
 from collections import OrderedDict
 
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig, MBartConfig
+from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
@@ -30,6 +29,7 @@ from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Flau
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
+from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 from .configuration_mobilebert import MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
@@ -44,14 +44,12 @@ from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 
 
-logger = logging.getLogger(__name__)
-
-
 ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MBART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -75,43 +73,112 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
-        ("retribert", RetriBertConfig,),
-        ("t5", T5Config,),
-        ("mobilebert", MobileBertConfig,),
-        ("distilbert", DistilBertConfig,),
-        ("albert", AlbertConfig,),
-        ("camembert", CamembertConfig,),
-        ("xlm-roberta", XLMRobertaConfig,),
+        (
+            "retribert",
+            RetriBertConfig,
+        ),
+        (
+            "t5",
+            T5Config,
+        ),
+        (
+            "mobilebert",
+            MobileBertConfig,
+        ),
+        (
+            "distilbert",
+            DistilBertConfig,
+        ),
+        (
+            "albert",
+            AlbertConfig,
+        ),
+        (
+            "camembert",
+            CamembertConfig,
+        ),
+        (
+            "xlm-roberta",
+            XLMRobertaConfig,
+        ),
         ("pegasus", PegasusConfig),
-        ("marian", MarianConfig,),
-        ("mbart", MBartConfig,),
-        ("bart", BartConfig,),
-        ("reformer", ReformerConfig,),
-        ("longformer", LongformerConfig,),
-        ("roberta", RobertaConfig,),
-        ("flaubert", FlaubertConfig,),
-        ("bert", BertConfig,),
-        ("openai-gpt", OpenAIGPTConfig,),
-        ("gpt2", GPT2Config,),
-        ("transfo-xl", TransfoXLConfig,),
-        ("xlnet", XLNetConfig,),
-        ("xlm", XLMConfig,),
-        ("ctrl", CTRLConfig,),
-        ("electra", ElectraConfig,),
-        ("encoder-decoder", EncoderDecoderConfig,),
+        (
+            "marian",
+            MarianConfig,
+        ),
+        (
+            "mbart",
+            MBartConfig,
+        ),
+        (
+            "bart",
+            BartConfig,
+        ),
+        (
+            "reformer",
+            ReformerConfig,
+        ),
+        (
+            "longformer",
+            LongformerConfig,
+        ),
+        (
+            "roberta",
+            RobertaConfig,
+        ),
+        (
+            "flaubert",
+            FlaubertConfig,
+        ),
+        (
+            "bert",
+            BertConfig,
+        ),
+        (
+            "openai-gpt",
+            OpenAIGPTConfig,
+        ),
+        (
+            "gpt2",
+            GPT2Config,
+        ),
+        (
+            "transfo-xl",
+            TransfoXLConfig,
+        ),
+        (
+            "xlnet",
+            XLNetConfig,
+        ),
+        (
+            "xlm",
+            XLMConfig,
+        ),
+        (
+            "ctrl",
+            CTRLConfig,
+        ),
+        (
+            "electra",
+            ElectraConfig,
+        ),
+        (
+            "encoder-decoder",
+            EncoderDecoderConfig,
+        ),
     ]
 )
 
 
 class AutoConfig:
     r"""
-        :class:`~transformers.AutoConfig` is a generic configuration class
-        that will be instantiated as one of the configuration classes of the library
-        when created with the :func:`~transformers.AutoConfig.from_pretrained` class method.
+    :class:`~transformers.AutoConfig` is a generic configuration class
+    that will be instantiated as one of the configuration classes of the library
+    when created with the :func:`~transformers.AutoConfig.from_pretrained` class method.
 
-        The :func:`~transformers.AutoConfig.from_pretrained` method takes care of returning the correct model class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+    The :func:`~transformers.AutoConfig.from_pretrained` method takes care of returning the correct model class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string.
     """
 
     def __init__(self):

@@ -9,12 +9,13 @@ from .test_modeling_bart import TOLERANCE, _assert_tensors_equal, _long_tensor
 
 if is_torch_available():
     import torch
+
     from transformers import (
         AutoModelForSeq2SeqLM,
-        BartConfig,
-        BartForConditionalGeneration,
-        BatchEncoding,
         AutoTokenizer,
+        BatchEncoding,
+        MBartConfig,
+        MBartForConditionalGeneration,
     )
 
 
@@ -92,7 +93,7 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
         mbart_models = ["facebook/mbart-large-en-ro"]
         expected = {"scale_embedding": True, "output_past": True}
         for name in mbart_models:
-            config = BartConfig.from_pretrained(name)
+            config = MBartConfig.from_pretrained(name)
             self.assertTrue(config.is_valid_mbart())
             for k, v in expected.items():
                 try:
@@ -102,7 +103,7 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
                     raise
 
     def test_mbart_fast_forward(self):
-        config = BartConfig(
+        config = MBartConfig(
             vocab_size=99,
             d_model=24,
             encoder_layers=2,
@@ -115,12 +116,12 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
             add_final_layer_norm=True,
             return_dict=True,
         )
-        lm_model = BartForConditionalGeneration(config).to(torch_device)
+        lm_model = MBartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
         result = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(result["logits"].shape, expected_shape)
+        self.assertEqual(result.logits.shape, expected_shape)
 
 
 @require_torch

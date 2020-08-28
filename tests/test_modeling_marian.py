@@ -24,18 +24,19 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
+
     from transformers import (
-        AutoTokenizer,
-        MarianConfig,
         AutoConfig,
         AutoModelWithLMHead,
-        MarianTokenizer,
+        AutoTokenizer,
+        MarianConfig,
         MarianMTModel,
+        MarianTokenizer,
     )
     from transformers.convert_marian_to_pytorch import (
+        ORG_NAME,
         convert_hf_name_to_opus_name,
         convert_opus_name_to_hf_name,
-        ORG_NAME,
     )
     from transformers.pipelines import TranslationPipeline
 
@@ -202,6 +203,17 @@ class TestMarian_MT_EN(MarianIntegrationTest):
 
     @slow
     def test_batch_generation_mt_en(self):
+        self._assert_generated_batch_equal_expected()
+
+
+class TestMarian_en_zh(MarianIntegrationTest):
+    src = "en"
+    tgt = "zh"
+    src_text = ["My name is Wolfgang and I live in Berlin"]
+    expected_text = ["我叫沃尔夫冈 我住在柏林"]
+
+    @slow
+    def test_batch_generation_eng_zho(self):
         self._assert_generated_batch_equal_expected()
 
 

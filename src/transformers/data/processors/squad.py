@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
@@ -10,6 +9,7 @@ from tqdm import tqdm
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
 from ...tokenization_utils_base import TruncationStrategy
+from ...utils import logging
 from .utils import DataProcessor
 
 
@@ -24,7 +24,7 @@ if is_torch_available():
 if is_tf_available():
     import tensorflow as tf
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer, orig_answer_text):

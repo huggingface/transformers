@@ -18,20 +18,15 @@
 """
 
 
-import logging
 import random
 import timeit
 from functools import wraps
 from typing import Callable, Optional
 
-from transformers import (
-    TF_MODEL_MAPPING,
-    TF_MODEL_WITH_LM_HEAD_MAPPING,
-    PretrainedConfig,
-    is_py3nvml_available,
-    is_tf_available,
-)
-
+from ..configuration_utils import PretrainedConfig
+from ..file_utils import is_py3nvml_available, is_tf_available
+from ..modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
+from ..utils import logging
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -44,13 +39,14 @@ from .benchmark_utils import (
 
 if is_tf_available():
     import tensorflow as tf
-    from .benchmark_args_tf import TensorFlowBenchmarkArguments
     from tensorflow.python.framework.errors_impl import ResourceExhaustedError
+
+    from .benchmark_args_tf import TensorFlowBenchmarkArguments
 
 if is_py3nvml_available():
     import py3nvml.py3nvml as nvml
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 def run_with_tf_optimizations(do_eager_mode: bool, use_xla: bool):
@@ -223,7 +219,11 @@ class TensorFlowBenchmark(Benchmark):
                     timeit.repeat(func, repeat=1, number=5)
 
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-                runtimes = timeit.repeat(func, repeat=self.args.repeat, number=10,)
+                runtimes = timeit.repeat(
+                    func,
+                    repeat=self.args.repeat,
+                    number=10,
+                )
 
                 return min(runtimes) / 10.0
             except ResourceExhaustedError as e:

@@ -21,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
+
     from transformers import CamembertModel
 
 
@@ -32,7 +33,9 @@ class CamembertModelIntegrationTest(unittest.TestCase):
         model.to(torch_device)
 
         input_ids = torch.tensor(
-            [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]], device=torch_device, dtype=torch.long,
+            [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]],
+            device=torch_device,
+            dtype=torch.long,
         )  # J'aime le camembert !
         output = model(input_ids)["last_hidden_state"]
         expected_shape = torch.Size((1, 10, 768))
