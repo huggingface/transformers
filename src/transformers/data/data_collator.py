@@ -340,7 +340,7 @@ class DataCollatorForNextSentencePrediction:
 
     tokenizer: PreTrainedTokenizer
     mlm: bool = True
-    block_size: int = 128
+    block_size: int = 512
     short_seq_probability: float = 0.1
     nsp_probability: float = 0.5
     mlm_probability: float = 0.15
@@ -351,12 +351,14 @@ class DataCollatorForNextSentencePrediction:
 
         input_ids = []
         segment_ids = []
+        attention_masks = []
         nsp_labels = []
 
         for i, doc in enumerate(examples):
-            input_id, segment_id, label = self.create_examples_from_document(doc, i, examples)
+            input_id, segment_id, attention_mask, label = self.create_examples_from_document(doc, i, examples)
             input_ids.extend(input_id)
             segment_ids.extend(segment_id)
+            attention_masks.extend(attention_mask)
             nsp_labels.extend(label)
         if self.mlm:
             input_ids, mlm_labels = self.mask_tokens(self._tensorize_batch(input_ids))
@@ -365,6 +367,7 @@ class DataCollatorForNextSentencePrediction:
 
         return {
             "input_ids": input_ids,
+            "attention_mask": self._tensorize_batch(attention_masks),
             "token_type_ids": self._tensorize_batch(segment_ids),
             "masked_lm_labels": mlm_labels if self.mlm else None,
             "next_sentence_label": torch.tensor(nsp_labels),
@@ -406,6 +409,7 @@ class DataCollatorForNextSentencePrediction:
         i = 0
         input_ids = []
         segment_ids = []
+        attention_masks = []
         labels = []
         while i < len(document):
             segment = document[i]
@@ -464,10 +468,20 @@ class DataCollatorForNextSentencePrediction:
                         truncation_strategy="longest_first",
                     )
 
-                    input_ids.append(torch.tensor(self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)))
-                    segment_ids.append(
-                        torch.tensor(self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b))
-                    )
+                    input_id = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+                    attention_mask = [1] * len(input_id)
+                    segment_id = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
+                    assert len(input_id) <= self.block_size
+
+                    # pad
+                    while len(input_id) < self.block_size:
+                        input_id.append(0)
+                        attention_mask.append(0)
+                        segment_id.append(0)
+
+                    input_ids.append(torch.tensor(input_id))
+                    segment_ids.append(torch.tensor(segment_id))
+                    attention_masks.append(torch.tensor(attention_mask))
                     labels.append(torch.tensor(1 if is_random_next else 0))
 
                 current_chunk = []
@@ -475,7 +489,7 @@ class DataCollatorForNextSentencePrediction:
 
             i += 1
 
-        return input_ids, segment_ids, labels
+        return input_ids, segment_ids, attention_masks, labels
 
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """

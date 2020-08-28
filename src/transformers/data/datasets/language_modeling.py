@@ -126,7 +126,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
-            directory, "cached_lm_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
+            directory, "cached_nsp_{}_{}_{}".format(tokenizer.__class__.__name__, str(block_size), filename,),
         )
 
         self.tokenizer = tokenizer
