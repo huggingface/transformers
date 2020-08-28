@@ -836,21 +836,15 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
         return getattr(self, self.base_model_prefix).dummy_inputs
 
 
-LXMERT_START_DOCSTRING = r"""    The LXMERT model was proposed in
-    `LXMERT: Learning Cross-Modality Encoder Representations from Transformers
+LXMERT_START_DOCSTRING = r"""
+    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
     by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
     using a combination of masked language modeling, region of interest feature regression,
     cross entropy loss for question answering attribute prediction, and object tag predicition.
 
-    This model is a tf.keras.Model `tf.keras.Model`_ sub-class. Use it as a regular TF 2.0 Keras Model and
+    This model is a tf.keras.Model `tf.keras.Model` sub-class. Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
-
-    .. _`LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
-        https://arxiv.org/pdf/1908.07490.pdf
-
-    .. _`tf.keras.Model`:
-        https://www.tensorflow.org/versions/r2.0/api_docs/python/tf/keras/Model
 
     Note on the model inputs:
         TF 2.0 models accepts two formats as inputs:
@@ -858,13 +852,17 @@ LXMERT_START_DOCSTRING = r"""    The LXMERT model was proposed in
             - having all inputs as keyword arguments (like PyTorch models), or
             - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is usefull when using `tf.keras.Model.fit()` method which currently requires having all the tensors in the first argument of the model call function: `model(inputs)`.
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
+        in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
+        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-        - a dictionary with one or several input Tensors associaed to the input names given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.LxmertConfig`): Model configuration class with all the parameters of the model.

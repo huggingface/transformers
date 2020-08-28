@@ -36,7 +36,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 # Mapping from model shortcut names to max length of inputs
 ####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "lxmert-base-uncased": 512,
+    "unc-nlp/lxmert-base-uncased": 512,
 }
 ####################################################
 # Mapping from model shortcut names to a dictionary of additional
@@ -44,7 +44,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 # To be used for checkpoint specific configurations.
 ####################################################
 PRETRAINED_INIT_CONFIGURATION = {
-    "lxmert-base-uncased": {"do_lower_case": True},
+    "unc-nlp/lxmert-base-uncased": {"do_lower_case": True},
 }
 
 

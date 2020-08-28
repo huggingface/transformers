@@ -7,7 +7,7 @@ Overview
 The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
 by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders (one for the vision modality, one for the language modality, and then one to fuse both modalities)
 pre-trained using a combination of masked language modeling, visual-language text alignment, ROI-feature regression, masked visual-attribute modeling, masked visual-object modeling, and visual-question answering objectives.
-The pretraining consits of mutliple multi-modal datasets: MSCOCO, Visual-Genome + Visual-Genome Question Answering, VQA 2.0, and GQA.
+The pretraining consists of multiple multi-modal datasets: MSCOCO, Visual-Genome + Visual-Genome Question Answering, VQA 2.0, and GQA.
 
 The abstract from the paper is the following:
 
@@ -34,11 +34,11 @@ attention visualizations for the different encoders*
 
 Tips:
 
-- Bounding boxes are not neccesary to be used in the visual feature embeddings, any kind of visual-spacial features will work
+- Bounding boxes are not necessary to be used in the visual feature embeddings, any kind of visual-spacial features will work
 - Both the language hidden states and the visual hidden states that LXMERT outputs are passed through the cross-modality layer, so they
-  contain information from both modalities. To access a modality singely attended on itself, select the vision/language hidden states from the first input in the tuple.
+  contain information from both modalities. To access a modality that only attends to itself, select the vision/language hidden states from the first input in the tuple.
 - The bi-directional cross-modality encoder attention only returns attention values when the language modality is used as the input and the vision modality is used as the context vector. Further,
-  while the cross-mdoality encoder contains self-attention for each respective modality and cross-attention, only the cross attention is returned and both self attention outputs are disgarded.
+  while the cross-modality encoder contains self-attention for each respective modality and cross-attention, only the cross attention is returned and both self attention outputs are disregarded.
 
 The code can be found `https://github.com/airsplay/lxmert`
 
@@ -59,9 +59,12 @@ LxmertTokenizer
 
 
 Lxmert specific outputs
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_lxmert.LxmertModelOutput
+    :members:
+
+.. autoclass:: transformers.modeling_lxmert.LxmertForPreTrainingOutput
     :members:
 
 .. autoclass:: transformers.modeling_lxmert.LxmertForQuestionAnsweringOutput
@@ -69,6 +72,10 @@ Lxmert specific outputs
 
 .. autoclass:: transformers.modeling_tf_lxmert.TFLxmertModelOutput
     :members:
+
+.. autoclass:: transformers.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
+    :members:
+
 
 LxmertModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -100,11 +107,4 @@ TFLxmertForPreTraining
 
 .. autoclass:: transformers.TFLxmertForPreTraining
     :members:
-
-TFLxmertForQuestionAnswering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.TFLxmertForQuestionAnswering
-    :members:
-
 

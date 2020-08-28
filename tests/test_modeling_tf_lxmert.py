@@ -436,7 +436,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
         import transformers
 
         for model_class in self.all_model_classes:
-            print(model_class)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
                 return_obj_labels="PreTraining" in model_class.__name__
             )
@@ -472,7 +471,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
                     return torch.long
 
             def recursive_numpy_convert(iterable):
-                print(iterable.keys())
                 return_dict = {}
                 for key, value in iterable.items():
                     if isinstance(value, dict):

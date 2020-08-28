@@ -753,22 +753,16 @@ class LxmertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-LXMERT_START_DOCSTRING = r"""    The LXMERT model was proposed in
-    `LXMERT: Learning Cross-Modality Encoder Representations from Transformers
+LXMERT_START_DOCSTRING = r"""
+    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
     by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
     using a combination of masked language modeling, region of interest feature regression,
     cross entropy loss for question answering attribute prediction, and object tag predicition.
 
-
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
-
-    .. _`LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
-        https://arxiv.org/pdf/1908.07490.pdf
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
 
     Parameters:
         config (:class:`~transformers.LxmertConfig`): Model configuration class with all the parameters of the model.
@@ -1010,6 +1004,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         """
         Build a resized question answering linear layer Module from a provided new linear layer. Increasing the size will add newly
         initialized weights. Reducing the size will remove weights from the end
+
         Args:
             cur_qa_logit_layer (:obj:`torch.nn.Linear`):
                 Old linear layer to be resized.
@@ -1018,6 +1013,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 Increasing the size will add newly initialized weights at the end. Reducing the size will remove
                 weights from the end. If not provided or :obj:`None`, just returns a pointer to the qa labels
                 :obj:`torch.nn.Linear`` module of the model wihtout doing anything.
+
         Return:
             :obj:`torch.nn.Linear`: Pointer to the resized Linear layer or the old Linear layer
         """
@@ -1039,11 +1035,11 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
     def get_qa_logit_layer(self) -> nn.Module:
         """
-        Returns the the linear layer that produces question answering logits
-        Returns:
-            :obj:`nn.Module`: A torch module mapping the question answering prediction hidden states.
-            :obj:`None`: A NoneType object if Lxmert does not have the visual answering head.
+        Returns the the linear layer that produces question answering logits.
 
+        Returns:
+            :obj:`nn.Module`: A torch module mapping the question answering prediction hidden states or :obj:`None` if
+                LXMERT does not have a visual answering head.
         """
         if hasattr(self, "answer_head"):
             return self.answer_head.logit_fc[-1]
@@ -1218,6 +1214,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         """
         Build a resized question answering linear layer Module from a provided new linear layer. Increasing the size will add newly
         initialized weights. Reducing the size will remove weights from the end
+
         Args:
             cur_qa_logit_layer (:obj:`torch.nn.Linear`):
                 Old linear layer to be resized.
@@ -1226,6 +1223,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
                 Increasing the size will add newly initialized weights at the end. Reducing the size will remove
                 weights from the end. If not provided or :obj:`None`, just returns a pointer to the qa labels
                 :obj:`torch.nn.Linear`` module of the model wihtout doing anything.
+
         Return:
             :obj:`torch.nn.Linear`: Pointer to the resized Linear layer or the old Linear layer
         """
@@ -1248,10 +1246,10 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
     def get_qa_logit_layer(self) -> nn.Module:
         """
         Returns the the linear layer that produces question answering logits
+
         Returns:
             :obj:`nn.Module`: A torch module mapping the question answering prediction hidden states.
             :obj:`None`: A NoneType object if Lxmert does not have the visual answering head.
-
         """
 
         if hasattr(self, "answer_head"):
@@ -1337,7 +1335,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
         if not return_dict:
             output = (answer_score,) + lxmert_output[3:]
-            return (loss,) + output
+            return (loss,) + output if loss is not None else output
 
         return LxmertForQuestionAnsweringOutput(
             loss=loss,
