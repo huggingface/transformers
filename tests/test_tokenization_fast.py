@@ -14,7 +14,7 @@ from transformers import (
     RobertaTokenizer,
     is_torch_available,
 )
-from transformers.testing_utils import get_tests_dir, require_torch
+from transformers.testing_utils import get_tests_dir
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
