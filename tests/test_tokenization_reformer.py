@@ -15,7 +15,6 @@
 
 
 import os
-import unittest
 
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow

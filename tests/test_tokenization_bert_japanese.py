@@ -15,7 +15,6 @@
 
 
 import os
-import unittest
 
 from transformers.testing_utils import custom_tokenizers
 from transformers.tokenization_bert import WordpieceTokenizer

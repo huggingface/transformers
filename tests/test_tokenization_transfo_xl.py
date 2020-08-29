@@ -15,7 +15,6 @@
 
 
 import os
-import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch

@@ -16,7 +16,6 @@
 
 import os
 import tempfile
-import unittest
 from pathlib import Path
 from shutil import copyfile
 

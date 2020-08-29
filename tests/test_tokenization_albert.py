@@ -15,7 +15,6 @@
 
 
 import os
-import unittest
 
 from transformers.tokenization_albert import AlbertTokenizer
 

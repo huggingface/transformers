@@ -15,7 +15,6 @@
 
 
 import os
-import unittest
 
 from transformers import BatchEncoding
 from transformers.file_utils import cached_property
