@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from dataclasses import dataclass, field
 from typing import Tuple
 
 from ..file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -29,7 +29,7 @@ if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass

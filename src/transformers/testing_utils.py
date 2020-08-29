@@ -1,3 +1,4 @@
+import inspect
 import os
 import re
 import shutil
@@ -144,6 +145,15 @@ def require_torch_and_cuda(test_case):
         return test_case
 
 
+def get_tests_dir():
+    """
+    returns the full path to the `tests` dir, so that the tests can be invoked from anywhere
+    """
+    # this function caller's __file__
+    caller__file__ = inspect.stack()[1][1]
+    return os.path.abspath(os.path.dirname(caller__file__))
+
+
 #
 # Helper functions for dealing with testing text outputs
 # The original code came from:
@@ -169,7 +179,7 @@ def assert_screenout(out, what):
 
 
 class CaptureStd:
-    """ Context manager to capture:
+    """Context manager to capture:
     stdout, clean it up and make it available via obj.out
     stderr, and make it available via obj.err
 

@@ -16,8 +16,6 @@
 """ TF 2.0 RoBERTa model. """
 
 
-import logging
-
 import tensorflow as tf
 
 from .configuration_roberta import RobertaConfig
@@ -48,9 +46,10 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils_base import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
@@ -74,7 +73,7 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
         self.padding_idx = 1
 
     def create_position_ids_from_input_ids(self, x):
-        """ Replace non-padding symbols with their position numbers. Position numbers begin at
+        """Replace non-padding symbols with their position numbers. Position numbers begin at
         padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
         `utils.make_positions`.
         :param tf.Tensor x:
@@ -85,7 +84,7 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
         return incremental_indicies + self.padding_idx
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """ We are provided embeddings directly. We cannot infer which are padded so just generate
+        """We are provided embeddings directly. We cannot infer which are padded so just generate
         sequential position ids.
         :param tf.Tensor inputs_embeds:
         :return tf.Tensor:
@@ -121,8 +120,8 @@ class TFRobertaMainLayer(TFBertMainLayer):
 
 
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = RobertaConfig
@@ -331,7 +330,10 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -432,7 +434,10 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -453,7 +458,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
 
     @property
     def dummy_inputs(self):
-        """ Dummy inputs to build the network.
+        """Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -550,7 +555,10 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -629,7 +637,10 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
