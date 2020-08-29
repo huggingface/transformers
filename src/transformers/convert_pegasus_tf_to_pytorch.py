@@ -23,13 +23,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import PegasusConfig, PegasusForConditionalGeneration, PegasusTokenizer
-from transformers.configuration_pegasus import (
-    DEFAULTS,
-    expected_alpha,
-    max_gen_length,
-    max_model_length,
-    task_specific_params,
-)
+from transformers.configuration_pegasus import DEFAULTS, task_specific_params
 
 
 PATTERNS = [
@@ -111,7 +105,7 @@ def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
 def convert_pegasus_ckpt_to_pytorch(ckpt_path: str, save_dir: str):
     # save tokenizer first
     dataset = Path(ckpt_path).parent.name
-    desired_max_model_length = max_model_length[dataset]
+    desired_max_model_length = task_specific_params[f"summarization_{dataset}"]["max_position_embeddings"]
     tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus", model_max_length=desired_max_model_length)
     assert tok.model_max_length == desired_max_model_length
     tok.save_pretrained(save_dir)
