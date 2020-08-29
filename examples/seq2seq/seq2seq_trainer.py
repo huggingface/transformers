@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -39,8 +40,11 @@ class Seq2SeqTrainer(Trainer):
         elif is_torch_tpu_available():
             return get_tpu_sampler(self.train_dataset)
         else:
-            if self.args.sortish_sampler and self.args.n_gpu <= 1 and self.args.local_rank == -1:
-                return self.train_dataset.make_sortish_sampler(self.args.per_device_train_batch_size)
+            if self.args.sortish_sampler:
+                if self.args.n_gpu <= 1 and self.args.local_rank == -1:
+                    return self.train_dataset.make_sortish_sampler(self.args.per_device_train_batch_size)
+                else:
+                    warnings.warn("sortish_sampler is being ignored because n_gpu > 1")
 
             return (
                 RandomSampler(self.train_dataset)
@@ -74,12 +78,24 @@ class Seq2SeqTrainer(Trainer):
             with autocast():
                 outputs = model(**inputs, use_cache=False)
                 logits = outputs[0]
-                loss = self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
+                loss = Seq2SeqTrainer.compute_loss(
+                    logits,
+                    labels,
+                    label_smoothing=self.args.label_smoothing,
+                    vocab_size=self.model.config.vocab_size,
+                    ignore_index=model.config.pad_token_id,
+                )
         else:
             outputs = model(**inputs, use_cache=False)
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             logits = outputs[0]
-            loss = self._compute_loss(logits, labels, ignore_index=model.config.pad_token_id)
+            loss = Seq2SeqTrainer.compute_loss(
+                logits,
+                labels,
+                label_smoothing=self.args.label_smoothing,
+                vocab_size=self.model.config.vocab_size,
+                ignore_index=model.config.pad_token_id,
+            )
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -97,18 +113,17 @@ class Seq2SeqTrainer(Trainer):
 
         return loss.item()
 
-    def _compute_loss(self, logits, labels, ignore_index):
+    @staticmethod
+    def compute_loss(logits, labels, label_smoothing, vocab_size, ignore_index):
         # assuming label_smoothing is in args
-        if self.args.label_smoothing == 0:
+        if label_smoothing == 0:
             # Same behavior as modeling_bart.py
             loss_fct = torch.nn.CrossEntropyLoss(ignore_index=ignore_index)
-            assert logits.shape[-1] == self.model.config.vocab_size
+            assert logits.shape[-1] == vocab_size
             loss = loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-            loss, nll_loss = label_smoothed_nll_loss(
-                lprobs, labels, self.args.label_smoothing, ignore_index=ignore_index
-            )
+            loss, nll_loss = label_smoothed_nll_loss(lprobs, labels, label_smoothing, ignore_index=ignore_index)
         return loss
 
     def prediction_step(
@@ -141,11 +156,13 @@ class Seq2SeqTrainer(Trainer):
         max_length = model.config.max_position_embeddings
         with torch.no_grad():
             if self.args.predict_from_generate:
-                logits_out = model.generate(
+                generated_tokens = model.generate(
                     inputs["input_ids"], attention_mask=inputs["attention_mask"], use_cache=True
                 )
                 # in case the batch is shorter than max length, the output should be padded
-                logits = self._pad_tensors_to_max_len(logits_out, max_length, model.config.pad_token_id)
+                generated_tokens = self._pad_tensors_to_max_len(
+                    generated_tokens, max_length, model.config.pad_token_id
+                )
 
                 if has_labels:
                     outputs = model(**inputs)
