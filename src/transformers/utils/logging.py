@@ -15,6 +15,7 @@
 """ Logging utilities. """
 
 import logging
+import re
 import threading
 from logging import CRITICAL  # NOQA
 from logging import DEBUG  # NOQA
@@ -163,3 +164,40 @@ def enable_propagation() -> None:
 
     _configure_library_root_logger()
     _get_library_root_logger().propagate = True
+
+
+log_levels = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
+
+
+def logging_levels_as_strings():
+    return log_levels.keys()
+
+
+def logging_level_str_to_code(level_str):
+    if level_str in log_levels:
+        return log_levels[level_str]
+    else:
+        raise ValueError(f"unknown level {level_str}, has to be one of: { log_levels.keys() }")
+
+
+def set_global_logging_level(level=logging.ERROR, prefices=[""]):
+    """
+    Override logging levels of different modules based on their name as a prefix.
+    It needs to be invoked after the modules have been loaded so that their loggers have been initialized.
+
+    Args:
+        - level: desired level. e.g. logging.INFO. Optional. Default is logging.ERROR
+        - prefices: list of one or more str prefices to match (e.g. ["transformers", "torch"]). Optional.
+          Default is `[""]` to match all active loggers.
+          The match is a case-sensitive `module_name.startswith(prefix)`
+    """
+    prefix_re = re.compile(fr'^(?:{ "|".join(prefices) })')
+    for name in logging.root.manager.loggerDict:
+        if re.match(prefix_re, name):
+            logging.getLogger(name).setLevel(level)
