@@ -68,7 +68,7 @@ class Seq2SeqDataCollator:
             input_ids = torch.stack([x["input_ids"] for x in batch])
             attention_mask = torch.stack([x["attention_mask"] for x in batch])
             target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
-            
+
             target_ids = trim_batch(target_ids, self.pad_token_id)
             input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
 
@@ -379,6 +379,19 @@ def main():
                     writer.write("%s = %s\n" % (key, value))
 
             eval_results.update(result)
+
+    if training_args.do_predict:
+        logging.info("*** Test ***")
+
+        test_metrics = trainer.predict(test_dataset=test_dataset).metrics
+        output_test_file = os.path.join(training_args.output_dir, f"test_results.txt")
+
+        if trainer.is_world_master():
+            with open(output_test_file, "w") as writer:
+                logger.info("***** Test results *****")
+                for key, value in test_metrics.items():
+                    logger.info("  %s = %s", key, value)
+                    writer.write("%s = %s\n" % (key, value))
 
     return eval_results
 
