@@ -51,7 +51,7 @@ def test_train_mbart_cc25_enro_script():
     bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
     for k, v in env_vars_to_replace.items():
         bash_script = bash_script.replace(k, str(v))
-    output_dir = tempfile.mkdtemp(prefix="output_mar")
+    output_dir = tempfile.mkdtemp(prefix="output_mbart")
 
     bash_script = bash_script.replace("--fp16 ", " ")
     testargs = (
