@@ -10,16 +10,18 @@ if is_torch_available():
     from transformers import (
         DataCollatorForLanguageModeling,
         DataCollatorForPermutationLanguageModeling,
+        DataCollatorForSOP,
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
+        LineByLineWithSOPTextDataset,
         TextDataset,
         default_data_collator,
     )
 
 
 PATH_SAMPLE_TEXT = "./tests/fixtures/sample_text.txt"
-
+PATH_SAMPLE_TEXT_DIR = "./tests/fixtures/tests_samples/wiki_text"
 
 @require_torch
 class DataCollatorIntegrationTest(unittest.TestCase):
@@ -122,6 +124,16 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertIsInstance(batch, dict)
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 512)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 512)))
+
+    def test_sop_dataset_datacollator(self):
+        tokenizer = AutoTokenizer.from_pretrained('albert-base-v2')
+        data_collator = DataCollatorForSOP(tokenizer)
+
+        dataset = LineByLineWithSOPTextDataset(tokenizer, file_dir=PATH_SAMPLE_TEXT_DIR, block_size=512, random_seed=42)
+        examples = [dataset[i] for i in range(len(dataset))]
+
+        batch = data_collator(examples)
+        self.assertIsInstance(batch, dict)
 
     def test_plm(self):
         tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
