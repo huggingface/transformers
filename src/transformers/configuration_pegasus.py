@@ -88,6 +88,22 @@ expected_alpha = {
     "billsum": 0.6,
 }  # otherwise 0.8
 
+task_specific_params = {
+    'summarization_xsum': {'length_penalty': 0.8, 'max_length': 64, 'max_position_embeddings': 512},
+    'summarization_cnn_dailymail': {'length_penalty': 0.8, 'max_length': 128, 'max_position_embeddings': 1024},
+    'summarization_newsroom': {'length_penalty': 0.8, 'max_length': 128, 'max_position_embeddings': 512},
+    'summarization_wikihow': {'length_penalty': 0.6, 'max_length': 256, 'max_position_embeddings': 512},
+    'summarization_multi_news': {'length_penalty': 0.8, 'max_length': 256, 'max_position_embeddings': 1024},
+    'summarization_reddit_tifu': {'length_penalty': 0.6, 'max_length': 128, 'max_position_embeddings': 512},
+    'summarization_big_patent': {'length_penalty': 0.7, 'max_length': 256, 'max_position_embeddings': 1024},
+    'summarization_arxiv': {'length_penalty': 0.8, 'max_length': 256, 'max_position_embeddings': 1024},
+    'summarization_pubmed': {'length_penalty': 0.8, 'max_length': 256, 'max_position_embeddings': 1024},
+    'summarization_gigaword': {'length_penalty': 0.6, 'max_length': 32, 'max_position_embeddings': 128},
+    'summarization_aeslc': {'length_penalty': 0.6, 'max_length': 32, 'max_position_embeddings': 512},
+    'summarization_billsum': {'length_penalty': 0.6, 'max_length': 256, 'max_position_embeddings': 1024},
+    'summarization_large': {'length_penalty': 0.8, 'max_length': 256, 'max_position_embeddings': 1024}
+}
+
 
 @add_start_docstrings_to_callable(BART_CONFIG_ARGS_DOC)
 class PegasusConfig(BartConfig):
