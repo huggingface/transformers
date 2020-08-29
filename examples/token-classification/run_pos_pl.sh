@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-if ! [ -f ./dev.txt ]; then
-  echo "Download dev dataset...."
-  curl -L -o ./dev.txt 'https://github.com/UniversalDependencies/UD_English-EWT/raw/master/en_ewt-ud-dev.conllu'
-fi
-
-if ! [ -f ./test.txt ]; then
-  echo "Download test dataset...."
-  curl -L -o ./test.txt 'https://github.com/UniversalDependencies/UD_English-EWT/raw/master/en_ewt-ud-test.conllu'
-fi
-
-if ! [ -f ./train.txt ]; then
-  echo "Download train dataset...."
-  curl -L -o ./train.txt 'https://github.com/UniversalDependencies/UD_English-EWT/raw/master/en_ewt-ud-train.conllu'
-fi
-
 export MAX_LENGTH=200
 export BERT_MODEL=bert-base-uncased
 export OUTPUT_DIR=postagger-model

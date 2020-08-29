@@ -5,9 +5,10 @@ import os
 from argparse import Namespace
 from importlib import import_module
 
+import nlp
 import numpy as np
 import torch
-from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
+from nlp import load_metric
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -37,7 +38,7 @@ class NERTransformer(BaseTransformer):
                 f"Task {hparams.task_type} needs to be defined as a TokenClassificationTask subclass in {module}. "
                 f"Available tasks classes are: {TokenClassificationTask.__subclasses__()}"
             )
-        self.labels = self.token_classification_task.get_labels(hparams.labels)
+        self.labels = self.token_classification_task.get_labels()
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
         super().__init__(hparams, len(self.labels), self.mode)
 
@@ -67,21 +68,13 @@ class NERTransformer(BaseTransformer):
                 features = torch.load(cached_features_file)
             else:
                 logger.info("Creating features from dataset file at %s", args.data_dir)
-                examples = self.token_classification_task.read_examples_from_file(args.data_dir, mode)
                 features = self.token_classification_task.convert_examples_to_features(
-                    examples,
-                    self.labels,
-                    args.max_seq_length,
                     self.tokenizer,
-                    cls_token_at_end=bool(self.config.model_type in ["xlnet"]),
-                    cls_token=self.tokenizer.cls_token,
-                    cls_token_segment_id=2 if self.config.model_type in ["xlnet"] else 0,
-                    sep_token=self.tokenizer.sep_token,
-                    sep_token_extra=False,
-                    pad_on_left=bool(self.config.model_type in ["xlnet"]),
-                    pad_token=self.tokenizer.pad_token_id,
-                    pad_token_segment_id=self.tokenizer.pad_token_type_id,
+                    args.max_seq_length,
                     pad_token_label_id=self.pad_token_label_id,
+                    cls_token_at_end=bool(self.config.model_type in ["xlnet"]),
+                    cls_token_segment_id=2 if self.config.model_type in ["xlnet"] else 0,
+                    split=nlp.Split.VALIDATION if mode == "dev" else nlp.NamedSplit(mode),
                 )
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
@@ -133,12 +126,14 @@ class NERTransformer(BaseTransformer):
                     out_label_list[i].append(label_map[out_label_ids[i][j]])
                     preds_list[i].append(label_map[preds[i][j]])
 
+        metric = load_metric("seqeval")
+        detailed_metrics = metric.compute(predictions=preds_list, references=out_label_list)
         results = {
             "val_loss": val_loss_mean,
-            "accuracy_score": accuracy_score(out_label_list, preds_list),
-            "precision": precision_score(out_label_list, preds_list),
-            "recall": recall_score(out_label_list, preds_list),
-            "f1": f1_score(out_label_list, preds_list),
+            "accuracy_score": detailed_metrics["overall_accuracy"],
+            "precision": detailed_metrics["overall_precision"],
+            "recall": detailed_metrics["overall_recall"],
+            "f1": detailed_metrics["overall_f1"],
         }
 
         ret = {k: v for k, v in results.items()}
@@ -175,13 +170,6 @@ class NERTransformer(BaseTransformer):
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
-        )
-
-        parser.add_argument(
-            "--labels",
-            default="",
-            type=str,
-            help="Path to a file containing all labels. If not specified, CoNLL-2003 labels are used.",
         )
         parser.add_argument(
             "--gpus",

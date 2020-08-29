@@ -22,7 +22,7 @@ from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
+from nlp import Split, load_metric
 from torch import nn
 
 from transformers import (
@@ -35,7 +35,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
+from utils_ner import TokenClassificationDataset, TokenClassificationTask
 
 
 logger = logging.getLogger(__name__)
@@ -180,11 +180,10 @@ def main():
             token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
-            labels=labels,
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
-            mode=Split.train,
+            split=Split.TRAIN,
         )
         if training_args.do_train
         else None
@@ -194,11 +193,10 @@ def main():
             token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
-            labels=labels,
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
-            mode=Split.dev,
+            split=Split.VALIDATION,
         )
         if training_args.do_eval
         else None
@@ -221,13 +219,9 @@ def main():
         return preds_list, out_label_list
 
     def compute_metrics(p: EvalPrediction) -> Dict:
-        preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
-        return {
-            "accuracy_score": accuracy_score(out_label_list, preds_list),
-            "precision": precision_score(out_label_list, preds_list),
-            "recall": recall_score(out_label_list, preds_list),
-            "f1": f1_score(out_label_list, preds_list),
-        }
+        metric = load_metric("seqeval")
+        preds, refs = align_predictions(p.predictions, p.label_ids)
+        return metric.compute(predictions=preds, references=refs)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -272,11 +266,10 @@ def main():
             token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
-            labels=labels,
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
-            mode=Split.test,
+            split=Split.TEST,
         )
 
         predictions, label_ids, metrics = trainer.predict(test_dataset)
@@ -293,8 +286,7 @@ def main():
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
         if trainer.is_world_master():
             with open(output_test_predictions_file, "w") as writer:
-                with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
-                    token_classification_task.write_predictions_to_file(writer, f, preds_list)
+                token_classification_task.write_predictions_to_file(writer, preds_list)
 
     return results
 

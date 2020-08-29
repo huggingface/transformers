@@ -1,18 +1,3 @@
-if ! [ -f ./dev.txt ]; then
-  echo "Downloading CONLL2003 dev dataset...."
-  curl -L -o ./dev.txt 'https://github.com/davidsbatista/NER-datasets/raw/master/CONLL2003/valid.txt'
-fi
-
-if ! [ -f ./test.txt ]; then
-  echo "Downloading CONLL2003 test dataset...."
-  curl -L -o ./test.txt 'https://github.com/davidsbatista/NER-datasets/raw/master/CONLL2003/test.txt'
-fi
-
-if ! [ -f ./train.txt ]; then
-  echo "Downloading CONLL2003 train dataset...."
-  curl -L -o ./train.txt 'https://github.com/davidsbatista/NER-datasets/raw/master/CONLL2003/train.txt'
-fi
-
 export MAX_LENGTH=200
 export BERT_MODEL=bert-base-uncased
 export OUTPUT_DIR=chunker-model

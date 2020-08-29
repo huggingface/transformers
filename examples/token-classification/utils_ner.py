@@ -18,32 +18,17 @@
 
 import logging
 import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
-from typing import List, Optional, Union
+from typing import List, Optional, TextIO
+
+import nlp
 
 from filelock import FileLock
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class InputExample:
-    """
-    A single training/test example for token classification.
-
-    Args:
-        guid: Unique id for the example.
-        words: list. The words of the sequence.
-        labels: (Optional) list. The labels for each word of the sequence. This should be
-        specified for train and dev examples, but not for test examples.
-    """
-
-    guid: str
-    words: List[str]
-    labels: Optional[List[str]]
 
 
 @dataclass
@@ -59,35 +44,47 @@ class InputFeatures:
     label_ids: Optional[List[int]] = None
 
 
-class Split(Enum):
-    train = "train"
-    dev = "dev"
-    test = "test"
+class TokenClassificationTask(ABC):
+    def __init__(self, source_column, target_column):
+        self.source_column = source_column
+        self.target_column = target_column
 
+    def get_target_column(self) -> str:
+        return self.target_column
 
-class TokenClassificationTask:
-    def read_examples_from_file(self, data_dir, mode: Union[Split, str]) -> List[InputExample]:
+    def get_source_column(self) -> str:
+        return self.source_column
+
+    @abstractmethod
+    def get_dataset(self, split: nlp.Split) -> nlp.Dataset:
         raise NotImplementedError
 
-    def get_labels(self, path: str) -> List[str]:
+    @abstractmethod
+    def get_labels(self, path: Optional[str] = None) -> List[str]:
         raise NotImplementedError
+
+    def write_predictions_to_file(self, writer: TextIO, preds_list: List):
+        example_id = 0
+        dataset = self.get_dataset(split=nlp.Split.TEST)
+        for entry in dataset:
+            s_p = preds_list[example_id]
+            out = ""
+            for source, target in zip(entry[self.get_source_column()], entry[self.get_target_column()]):
+                out += f"{source} ({target}|{s_p.pop(0)}) "
+            out += "\n"
+            writer.write(out)
+            example_id += 1
 
     def convert_examples_to_features(
         self,
-        examples: List[InputExample],
-        label_list: List[str],
-        max_seq_length: int,
         tokenizer: PreTrainedTokenizer,
-        cls_token_at_end=False,
-        cls_token="[CLS]",
-        cls_token_segment_id=1,
-        sep_token="[SEP]",
-        sep_token_extra=False,
-        pad_on_left=False,
-        pad_token=0,
-        pad_token_segment_id=0,
+        max_seq_length: int,
+        split: nlp.Split,
         pad_token_label_id=-100,
+        sep_token_extra=False,
+        cls_token_segment_id=0,
         sequence_a_segment_id=0,
+        cls_token_at_end=False,
         mask_padding_with_zero=True,
     ) -> List[InputFeatures]:
         """Loads a data file into a list of `InputFeatures`
@@ -98,16 +95,22 @@ class TokenClassificationTask:
         """
         # TODO clean up all this to leverage built-in features of tokenizers
 
-        label_map = {label: i for i, label in enumerate(label_list)}
+        label_map = {label: i for i, label in enumerate(self.get_labels())}
+
+        pad_left = bool(tokenizer.padding_side == "left")
+        pad_token_segment_id = tokenizer.pad_token_type_id
 
         features = []
-        for (ex_index, example) in enumerate(examples):
+        dataset: nlp.Dataset = self.get_dataset(split)
+        for (ex_index, example) in enumerate(dataset):
             if ex_index % 10_000 == 0:
-                logger.info("Writing example %d of %d", ex_index, len(examples))
+                logger.info("Writing example %d of %d", ex_index, len(dataset))
 
             tokens = []
             label_ids = []
-            for word, label in zip(example.words, example.labels):
+            words = example[self.get_source_column()]
+            labels = example[self.get_target_column()]
+            for word, label in zip(words, labels):
                 word_tokens = tokenizer.tokenize(word)
 
                 # bert-base-multilingual-cased sometimes output "nothing ([]) when calling tokenize with just a space.
@@ -140,20 +143,20 @@ class TokenClassificationTask:
             # For classification tasks, the first vector (corresponding to [CLS]) is
             # used as as the "sentence vector". Note that this only makes sense because
             # the entire model is fine-tuned.
-            tokens += [sep_token]
+            tokens += [tokenizer.sep_token_id]
             label_ids += [pad_token_label_id]
             if sep_token_extra:
                 # roberta uses an extra separator b/w pairs of sentences
-                tokens += [sep_token]
+                tokens += [tokenizer.sep_token_id]
                 label_ids += [pad_token_label_id]
             segment_ids = [sequence_a_segment_id] * len(tokens)
 
             if cls_token_at_end:
-                tokens += [cls_token]
+                tokens += [tokenizer.cls_token_id]
                 label_ids += [pad_token_label_id]
                 segment_ids += [cls_token_segment_id]
             else:
-                tokens = [cls_token] + tokens
+                tokens = [tokenizer.cls_token_id] + tokens
                 label_ids = [pad_token_label_id] + label_ids
                 segment_ids = [cls_token_segment_id] + segment_ids
 
@@ -165,13 +168,13 @@ class TokenClassificationTask:
 
             # Zero-pad up to the sequence length.
             padding_length = max_seq_length - len(input_ids)
-            if pad_on_left:
-                input_ids = ([pad_token] * padding_length) + input_ids
+            if pad_left:
+                input_ids = ([tokenizer.pad_token_id] * padding_length) + input_ids
                 input_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + input_mask
                 segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
                 label_ids = ([pad_token_label_id] * padding_length) + label_ids
             else:
-                input_ids += [pad_token] * padding_length
+                input_ids += [tokenizer.pad_token_id] * padding_length
                 input_mask += [0 if mask_padding_with_zero else 1] * padding_length
                 segment_ids += [pad_token_segment_id] * padding_length
                 label_ids += [pad_token_label_id] * padding_length
@@ -183,7 +186,7 @@ class TokenClassificationTask:
 
             if ex_index < 5:
                 logger.info("*** Example ***")
-                logger.info("guid: %s", example.guid)
+                logger.info("guid: %s", ex_index)
                 logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
                 logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
                 logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
@@ -222,16 +225,20 @@ if is_torch_available():
             token_classification_task: TokenClassificationTask,
             data_dir: str,
             tokenizer: PreTrainedTokenizer,
-            labels: List[str],
-            model_type: str,
+            model_type,
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,
-            mode: Split = Split.train,
+            split: nlp.Split = nlp.Split.TRAIN,
         ):
             # Load data features from cache or dataset file
             cached_features_file = os.path.join(
                 data_dir,
-                "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
+                "cached_{}_{}_{}_{}".format(
+                    token_classification_task.__class__.__name__,
+                    str(split),
+                    tokenizer.__class__.__name__,
+                    str(max_seq_length),
+                ),
             )
 
             # Make sure only the first process in distributed training processes the dataset,
@@ -244,24 +251,13 @@ if is_torch_available():
                     self.features = torch.load(cached_features_file)
                 else:
                     logger.info(f"Creating features from dataset file at {data_dir}")
-                    examples = token_classification_task.read_examples_from_file(data_dir, mode)
-                    # TODO clean up all this to leverage built-in features of tokenizers
                     self.features = token_classification_task.convert_examples_to_features(
-                        examples,
-                        labels,
-                        max_seq_length,
                         tokenizer,
-                        cls_token_at_end=bool(model_type in ["xlnet"]),
-                        # xlnet has a cls token at the end
-                        cls_token=tokenizer.cls_token,
-                        cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
-                        sep_token=tokenizer.sep_token,
-                        sep_token_extra=False,
-                        # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-                        pad_on_left=bool(tokenizer.padding_side == "left"),
-                        pad_token=tokenizer.pad_token_id,
-                        pad_token_segment_id=tokenizer.pad_token_type_id,
+                        max_seq_length,
                         pad_token_label_id=self.pad_token_label_id,
+                        cls_token_at_end=bool(model_type in ["xlnet"]),
+                        cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
+                        split=split,
                     )
                     logger.info(f"Saving features into cached file {cached_features_file}")
                     torch.save(self.features, cached_features_file)
@@ -296,26 +292,16 @@ if is_tf_available():
             model_type: str,
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,
-            mode: Split = Split.train,
+            split: nlp.Split = nlp.Split.TRAIN,
         ):
-            examples = token_classification_task.read_examples_from_file(data_dir, mode)
-            # TODO clean up all this to leverage built-in features of tokenizers
+
             self.features = token_classification_task.convert_examples_to_features(
-                examples,
-                labels,
-                max_seq_length,
                 tokenizer,
-                cls_token_at_end=bool(model_type in ["xlnet"]),
-                # xlnet has a cls token at the end
-                cls_token=tokenizer.cls_token,
-                cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
-                sep_token=tokenizer.sep_token,
-                sep_token_extra=False,
-                # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-                pad_on_left=bool(tokenizer.padding_side == "left"),
-                pad_token=tokenizer.pad_token_id,
-                pad_token_segment_id=tokenizer.pad_token_type_id,
+                max_seq_length,
                 pad_token_label_id=self.pad_token_label_id,
+                cls_token_at_end=bool(model_type in ["xlnet"]),
+                cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
+                split=split,
             )
 
             def gen():

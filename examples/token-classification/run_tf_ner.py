@@ -22,7 +22,7 @@ from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
+from nlp import Split, load_metric
 
 from transformers import (
     AutoConfig,
@@ -33,7 +33,7 @@ from transformers import (
     TFTrainer,
     TFTrainingArguments,
 )
-from utils_ner import Split, TFTokenClassificationDataset, TokenClassificationTask
+from utils_ner import TFTokenClassificationDataset, TokenClassificationTask
 
 
 logger = logging.getLogger(__name__)
@@ -73,9 +73,6 @@ class DataTrainingArguments:
 
     data_dir: str = field(
         metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
-    )
-    labels: Optional[str] = field(
-        metadata={"help": "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."}
     )
     max_seq_length: int = field(
         default=128,
@@ -132,7 +129,7 @@ def main():
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Prepare Token Classification task
-    labels = token_classification_task.get_labels(data_args.labels)
+    labels = token_classification_task.get_labels()
     label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
     num_labels = len(labels)
 
@@ -173,7 +170,7 @@ def main():
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
-            mode=Split.train,
+            split=Split.TRAIN,
         )
         if training_args.do_train
         else None
@@ -187,7 +184,7 @@ def main():
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
-            mode=Split.dev,
+            split=Split.VALIDATION,
         )
         if training_args.do_eval
         else None
@@ -208,13 +205,9 @@ def main():
         return preds_list, out_label_list
 
     def compute_metrics(p: EvalPrediction) -> Dict:
-        preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
-
-        return {
-            "precision": precision_score(out_label_list, preds_list),
-            "recall": recall_score(out_label_list, preds_list),
-            "f1": f1_score(out_label_list, preds_list),
-        }
+        metric = load_metric("seqeval")
+        preds, refs = align_predictions(p.predictions, p.label_ids)
+        return metric.compute(predictions=preds, references=refs)
 
     # Initialize our Trainer
     trainer = TFTrainer(
@@ -258,39 +251,24 @@ def main():
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
-            mode=Split.test,
+            split=Split.TEST,
         )
 
         predictions, label_ids, metrics = trainer.predict(test_dataset.get_dataset())
         preds_list, labels_list = align_predictions(predictions, label_ids)
-        report = classification_report(labels_list, preds_list)
-
-        logger.info("\n%s", report)
 
         output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
 
         with open(output_test_results_file, "w") as writer:
-            writer.write("%s\n" % report)
+            for key, value in metrics.items():
+                logger.info("  %s = %s", key, value)
+                writer.write("%s = %s\n" % (key, value))
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
 
         with open(output_test_predictions_file, "w") as writer:
-            with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
-                example_id = 0
-
-                for line in f:
-                    if line.startswith("-DOCSTART-") or line == "" or line == "\n":
-                        writer.write(line)
-
-                        if not preds_list[example_id]:
-                            example_id += 1
-                    elif preds_list[example_id]:
-                        output_line = line.split()[0] + " " + preds_list[example_id].pop(0) + "\n"
-
-                        writer.write(output_line)
-                    else:
-                        logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+            token_classification_task.write_predictions_to_file(writer, preds_list)
 
     return results
 
