@@ -18,13 +18,14 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from transformers.modeling_bart import shift_tokens_right
 
 
 try:
     from .seq2seq_trainer import Seq2SeqTrainer
     from .utils import (
+        LegacySeq2SeqDataset,
         Seq2SeqDataset,
-        TranslationDataset,
         assert_all_frozen,
         calculate_bleu,
         calculate_rouge,
@@ -35,8 +36,8 @@ try:
 except ImportError:
     from seq2seq_trainer import Seq2SeqTrainer
     from utils import (
+        LegacySeq2SeqDataset,
         Seq2SeqDataset,
-        TranslationDataset,
         assert_all_frozen,
         calculate_bleu,
         calculate_rouge,
@@ -56,27 +57,27 @@ class Seq2SeqDataCollator:
         self.data_args = data_args
 
     def __call__(self, batch) -> Dict[str, torch.Tensor]:
-        if self.data_args.task == "summarization":
-            input_ids = torch.stack([x["input_ids"] for x in batch])
-            attention_mask = torch.stack([x["attention_mask"] for x in batch])
-            target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
-        else:
-            batch = self._make_translation_batch(batch)
+        if hasattr(self.tokenizer, "prepare_seq2seq_batch"):
+            batch = self._encode(batch)
             input_ids, attention_mask, target_ids = (
                 batch["input_ids"],
                 batch["attention_mask"],
                 batch["decoder_input_ids"],
             )
-
-        target_ids = trim_batch(target_ids, self.pad_token_id)
-        input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
+        else:
+            input_ids = torch.stack([x["input_ids"] for x in batch])
+            attention_mask = torch.stack([x["attention_mask"] for x in batch])
+            target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
+            
+            target_ids = trim_batch(target_ids, self.pad_token_id)
+            input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
 
         if isinstance(self.tokenizer, T5Tokenizer):
-            decoder_input_ids = self._shift_right(target_ids)
+            decoder_input_ids = self._shift_right_t5(target_ids)
             labels = target_ids
         else:
-            decoder_input_ids = target_ids[:, :-1].contiguous()
-            labels = target_ids[:, 1:].clone()
+            decoder_input_ids = shift_tokens_right(target_ids, self.pad_token_id)
+            labels = target_ids
 
         batch = {
             "input_ids": input_ids,
@@ -86,7 +87,7 @@ class Seq2SeqDataCollator:
         }
         return batch
 
-    def _shift_right(self, input_ids):
+    def _shift_right_t5(self, input_ids):
         decoder_start_token_id = self.pad_token_id
 
         assert (
@@ -100,7 +101,7 @@ class Seq2SeqDataCollator:
 
         return shifted_input_ids
 
-    def _make_translation_batch(self, batch) -> Dict[str, torch.Tensor]:
+    def _encode(self, batch) -> Dict[str, torch.Tensor]:
         batch_encoding = self.tokenizer.prepare_seq2seq_batch(
             [x["src_texts"] for x in batch],
             src_lang=self.data_args.src_lang,
@@ -108,6 +109,8 @@ class Seq2SeqDataCollator:
             tgt_lang=self.data_args.tgt_lang,
             max_length=self.data_args.max_source_length,
             max_target_length=self.data_args.max_target_length,
+            return_tensors="pt",
+            add_prefix_space=self.data_args.add_prefix_space,  # where does this come from ?
         )
         return batch_encoding.data
 
@@ -245,25 +248,20 @@ def main():
     )
     model = AutoModelForSeq2SeqLM.from_pretrained(
         model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        from_tf=".ckpt" in model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
     )
 
-    # set decoder_start_token_id for MBart
+    # set decoder_start_token_id for MBart, TODO(@sshleifer): use_task_specific_params for this
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
         decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
         model.config.decoder_start_token_id = decoder_start_token_id
 
     def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
         def summarization_metrics(pred: EvalPrediction) -> Dict:
-            labels_ids = pred.label_ids
-            pred_ids = pred.predictions
-
-            # all unnecessary tokens are removed
-            pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-            label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-
+            pred_str = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
+            label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
             pred_str = lmap(str.strip, pred_str)
             label_str = lmap(str.strip, label_str)
 
@@ -271,13 +269,8 @@ def main():
             return rouge
 
         def translation_metrics(pred: EvalPrediction) -> Dict:
-            labels_ids = pred.label_ids
-            pred_ids = pred.predictions
-
-            # all unnecessary tokens are removed
-            pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-            label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-
+            pred_str = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
+            label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
             pred_str = lmap(str.strip, pred_str)
             label_str = lmap(str.strip, label_str)
 
@@ -305,10 +298,7 @@ def main():
         freeze_params(model.get_encoder())
         assert_all_frozen(model.get_encoder())
 
-    if isinstance(tokenizer, MBartTokenizer) or isinstance(tokenizer, MarianTokenizer):
-        dataset_class = TranslationDataset
-    else:
-        dataset_class = Seq2SeqDataset
+    dataset_class = Seq2SeqDataset if hasattr(tokenizer, "prepare_seq2seq_batch") else LegacySeq2SeqDataset
 
     # Get datasets
     train_dataset = (
