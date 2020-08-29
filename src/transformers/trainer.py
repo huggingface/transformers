@@ -1,5 +1,4 @@
 import inspect
-import logging
 import math
 import os
 import re
@@ -19,7 +18,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
-from .data.data_collator import DataCollator, default_data_collator
+from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import is_nlp_available, is_torch_tpu_available
 from .integrations import (
     default_hp_search_backend,
@@ -31,6 +30,7 @@ from .integrations import (
 )
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
+from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
     BestRun,
@@ -43,6 +43,7 @@ from .trainer_utils import (
     set_seed,
 )
 from .training_args import TrainingArguments
+from .utils import logging
 
 
 _use_native_amp = False
@@ -85,7 +86,7 @@ if is_optuna_available():
 if is_ray_available():
     from ray import tune
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @contextmanager
@@ -168,15 +169,20 @@ class Trainer:
         args (:class:`~transformers.TrainingArguments`, `optional`):
             The arguments to tweak for training. Will default to a basic instance of :class:`~transformers.TrainingArguments`
             with the ``output_dir`` set to a directory named `tmp_trainer` in the current directory if not provided.
-        data_collator (:obj:`DataCollator`, `optional`, defaults to :func:`~transformers.default_data_collator`):
+        data_collator (:obj:`DataCollator`, `optional`):
             The function to use to form a batch from a list of elements of :obj:`train_dataset` or
-            :obj:`eval_dataset`.
+            :obj:`eval_dataset`. Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is
+            provided, an instance of :func:`~transformers.DataCollatorWithPadding` otherwise.
         train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
             The dataset to use for training. If it is an :obj:`nlp.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
              The dataset to use for evaluation. If it is an :obj:`nlp.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
+        tokenizer (:class:`PreTrainedTokenizerBase`, `optional`):
+            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
+            maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
+            interrupted training or reuse the fine-tuned model.
         model_init (:obj:`Callable[[], PreTrainedModel]`, `optional`):
             A function that instantiates the model to be used. If provided, each call to
             :meth:`~transformers.Trainer.train` will start from a new instance of the model as given by this function.
@@ -200,28 +206,38 @@ class Trainer:
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         model_init: Callable[[], PreTrainedModel] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
         **kwargs,
     ):
+        if args is None:
+            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
+            args = TrainingArguments("tmp_trainer")
+        self.args = args
+        # Seed must be set before instantiating the model when using model
+        set_seed(self.args.seed)
         assert (
             model is not None or model_init is not None
         ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
         if model is None and model_init is not None:
             model = model_init()
         self.model = model.to(args.device) if model is not None else None
-        if args is None:
-            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
-            args = TrainingArguments("tmp_trainer")
-        self.args = args
-        self.data_collator = data_collator if data_collator is not None else default_data_collator
+        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        self.tokenizer = tokenizer
         self.model_init = model_init
         self.compute_metrics = compute_metrics
         self.optimizer, self.lr_scheduler = optimizers
+        if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
+            raise RuntimeError(
+                "Passing a `model_init` is incompatible with providing the `optimizers` argument."
+                "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
+            )
         self.tb_writer = tb_writer
         if "prediction_loss_only" in kwargs:
             warnings.warn(
@@ -251,7 +267,6 @@ class Trainer:
                 "To use comet_ml logging, run `pip/conda install comet_ml` "
                 "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
-        set_seed(self.args.seed)
         # Create output directory if needed
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
@@ -542,12 +557,18 @@ class Trainer:
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
         """
+        # This might change the seed so needs to run first.
+        self._hp_search_setup(trial)
+
         # Model re-init
         if self.model_init is not None:
+            # Seed must be set before instantiating the model when using model_init.
+            set_seed(self.args.seed)
             model = self.model_init()
             self.model = model.to(self.args.device)
 
-        self._hp_search_setup(trial)
+            # Reinitializes optimizer and scheduler
+            self.optimizer, self.lr_scheduler = None, None
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -641,8 +662,8 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
-        train_iterator = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
-        for epoch in train_iterator:
+        train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
+        for epoch in range(epochs_trained, int(np.ceil(num_train_epochs))):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
@@ -650,19 +671,21 @@ class Trainer:
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=disable_tqdm)
+                epoch_iterator = parallel_loader
             else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=disable_tqdm)
+                epoch_iterator = train_dataloader
 
             # Reset the past mems state at the beginning of each epoch if necessary.
             if self.args.past_index >= 0:
                 self._past = None
 
+            epoch_pbar = tqdm(epoch_iterator, desc="Iteration", disable=disable_tqdm)
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
                     steps_trained_in_current_epoch -= 1
+                    epoch_pbar.update(1)
                     continue
 
                 tr_loss += self.training_step(model, inputs)
@@ -745,11 +768,12 @@ class Trainer:
                             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
+                epoch_pbar.update(1)
                 if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
-                    epoch_iterator.close()
                     break
+            epoch_pbar.close()
+            train_pbar.update(1)
             if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
-                train_iterator.close()
                 break
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -761,6 +785,7 @@ class Trainer:
                         "configured. Check your training configuration if this is unexpected."
                     )
 
+        train_pbar.close()
         if self.tb_writer:
             self.tb_writer.close()
         if self.args.past_index and hasattr(self, "_past"):
@@ -780,9 +805,16 @@ class Trainer:
         **kwargs
     ) -> BestRun:
         """
-        Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by the
-        method, which is the evaluation loss when no metric is provided, the sum of all metrics otherwise (you can
-        change that behavior by subclassing and overriding this method).
+        Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
+        :obj:`compute_objectie`, which defaults to a function returning the evaluation loss when no metric is provided,
+        the sum of all metrics otherwise.
+
+        .. warning::
+
+            To use this method, you need to have provided a ``model_init`` when initializing your
+            :class:`~transformers.Trainer`: we need to reinitialize the model at each new run. This is incompatible
+            with the ``optimizers`` argument, so you need to subclass :class:`~transformers.Trainer` and override the
+            method :meth:`~transformers.Trainer.create_optimizer_and_scheduler` for custom optimizer/scheduler.
 
         Args:
             hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
@@ -805,7 +837,7 @@ class Trainer:
                 Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
                 more information see:
 
-                - the documentation of `optuna.create_stufy <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                - the documentation of `optuna.create_study <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
                 - the documentation of `tune.run <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
         Returns:
@@ -821,20 +853,22 @@ class Trainer:
                 )
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
-            raise RuntimeError(" You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
+            raise RuntimeError("You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
         if backend == HPSearchBackend.RAY and not is_ray_available():
             raise RuntimeError(
-                " You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
+                "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
         self.hp_search_backend = backend
+
+        if self.model_init is None:
+            raise RuntimeError(
+                "To use hyperparameter search, you need to pass your model through a model_init function."
+            )
 
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
         def _objective(trial):
-            # To make sure optimizer and lr_scheduler are reset with the new choices of HPs
-            self.optimizer = None
-            self.lr_scheduler = None
             self.objective = None
             self.train(trial=trial)
             # If there hasn't been any evaluation during the training loop.
@@ -1066,6 +1100,8 @@ class Trainer:
 
         xm.rendezvous("saving_checkpoint")
         self.model.save_pretrained(output_dir)
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1076,6 +1112,8 @@ class Trainer:
         if not isinstance(self.model, PreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
         self.model.save_pretrained(output_dir)
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))

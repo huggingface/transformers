@@ -264,7 +264,10 @@ class BertModelTester:
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, next_sentence_label=sequence_labels,
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            next_sentence_label=sequence_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 

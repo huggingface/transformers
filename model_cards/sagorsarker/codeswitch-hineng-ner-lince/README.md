@@ -2,6 +2,13 @@
 language:
 - hi
 - en
+datasets:
+- LinCE
+license: "MIT"
+tags:
+- codeswitching
+- hindi-english
+- ner
 ---
 
 # codeswitch-hineng-ner-lince
@@ -17,13 +24,13 @@ To install codeswitch:
 pip install codeswitch
 ```
 
-## Identify Language
+## Name Entity Recognition of Code-Mixed Data
 
-* Method-1
+* **Method-1**
 
 ```py
 
-from transformers import AutoTokenizer, AutoModelForTokenClassification
+from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
 
 tokenizer = AutoTokenizer.from_pretrained("sagorsarker/codeswitch-hineng-ner-lince")
 
@@ -35,7 +42,7 @@ ner_model("put any hindi english code-mixed sentence")
 
 ```
 
-* Method-2
+* **Method-2**
 
 ```py
 from codeswitch.codeswitch import NER

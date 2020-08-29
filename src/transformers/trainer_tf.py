@@ -1,7 +1,6 @@
 """Tensorflow trainer class."""
 
 import datetime
-import logging
 import math
 import os
 import warnings
@@ -16,6 +15,7 @@ from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
+from .utils import logging
 
 
 if is_wandb_available():
@@ -24,7 +24,7 @@ if is_wandb_available():
 if is_comet_available():
     import comet_ml
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFTrainer:
@@ -620,13 +620,23 @@ class TFTrainer:
             self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
         else:
             for _ in tf.range(self.args.gradient_accumulation_steps):
-                reduced_features = features[: self.args.train_batch_size / self.args.n_replicas]
-                reduced_labels = labels[: self.args.train_batch_size / self.args.n_replicas]
+                reduced_features = {
+                    k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
+                }
+                reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
 
                 self.training_step(reduced_features, reduced_labels)
 
-                features = tf.concat(
-                    [features[self.args.train_batch_size / self.args.n_replicas :], reduced_features], axis=0
+                features = {
+                    k: tf.concat(
+                        [ft[self.args.train_batch_size // self.args.n_replicas :], reduced_features[k]],
+                        axis=0,
+                    )
+                    for k, ft in features.items()
+                }
+
+                labels = tf.concat(
+                    [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
                 )
 
             gradients = self.gradient_accumulator.gradients
