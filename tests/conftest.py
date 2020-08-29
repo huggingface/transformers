@@ -13,7 +13,12 @@ git_repo_path = abspath(join(dirname(dirname(__file__)), "src"))
 sys.path.insert(1, git_repo_path)
 
 # import local modules after fixing up sys.path
-from transformers.utils.logging import logging_level_str_to_code, logging_levels_as_strings, set_global_logging_level
+if 1:  # flake be quiet
+    from transformers.utils.logging import (
+        logging_level_str_to_code,
+        logging_levels_as_strings,
+        set_global_logging_level,
+    )
 
 
 def pytest_addoption(parser):
