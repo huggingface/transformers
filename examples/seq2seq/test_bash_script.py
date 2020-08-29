@@ -37,6 +37,7 @@ def test_model_download():
 def test_train_mbart_cc25_enro_script():
     data_dir = "examples/seq2seq/test_data/wmt_en_ro"
     env_vars_to_replace = {
+        "--fp16_opt_level=O1": "",
         "$MAX_LEN": 128,
         "$BS": 4,
         "$GAS": 1,
