@@ -21,10 +21,11 @@ import unittest
 from transformers.testing_utils import slow
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES, AddedToken, RobertaTokenizer, RobertaTokenizerFast
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class RobertaTokenizationTest(TokenizerCommonTester):
+    __test__ = True
     tokenizer_class = RobertaTokenizer
 
     def setUp(self):

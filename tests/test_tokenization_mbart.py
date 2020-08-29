@@ -4,7 +4,7 @@ import unittest
 from transformers import AutoTokenizer, BatchEncoding, MBartTokenizer, is_torch_available
 from transformers.testing_utils import require_torch
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 from .test_tokenization_xlm_roberta import SAMPLE_VOCAB, SPIECE_UNDERLINE
 
 
@@ -15,7 +15,8 @@ EN_CODE = 250004
 RO_CODE = 250020
 
 
-class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class MBartTokenizationTest(TokenizerCommonTester):
+    __test__ = True
     tokenizer_class = MBartTokenizer
 
     def setUp(self):

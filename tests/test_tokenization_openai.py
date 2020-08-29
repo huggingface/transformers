@@ -20,10 +20,11 @@ import unittest
 
 from transformers.tokenization_openai import VOCAB_FILES_NAMES, OpenAIGPTTokenizer
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class OpenAIGPTTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = OpenAIGPTTokenizer
 

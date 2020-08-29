@@ -19,10 +19,11 @@ import unittest
 
 from transformers.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class CTRLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class CTRLTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = CTRLTokenizer
 

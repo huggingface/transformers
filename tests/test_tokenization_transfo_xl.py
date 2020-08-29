@@ -20,7 +20,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
 if is_torch_available():
@@ -28,7 +28,8 @@ if is_torch_available():
 
 
 @require_torch
-class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class TransfoXLTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = TransfoXLTokenizer if is_torch_available() else None
 

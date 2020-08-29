@@ -20,10 +20,11 @@ import unittest
 
 from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES, GPT2Tokenizer, GPT2TokenizerFast
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class GPT2TokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = GPT2Tokenizer
     test_rust_tokenizer = True

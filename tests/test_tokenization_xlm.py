@@ -21,10 +21,11 @@ import unittest
 from transformers.testing_utils import slow
 from transformers.tokenization_xlm import VOCAB_FILES_NAMES, XLMTokenizer
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class XLMTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = XLMTokenizer
 

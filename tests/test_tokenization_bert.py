@@ -29,10 +29,11 @@ from transformers.tokenization_bert import (
     _is_whitespace,
 )
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class BertTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = BertTokenizer
     test_rust_tokenizer = True

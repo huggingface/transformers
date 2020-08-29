@@ -19,13 +19,14 @@ import unittest
 
 from transformers.tokenization_albert import AlbertTokenizer
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/spiece.model")
 
 
-class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class AlbertTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = AlbertTokenizer
 

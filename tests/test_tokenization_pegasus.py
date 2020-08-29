@@ -5,10 +5,11 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch
 from transformers.tokenization_pegasus import PegasusTokenizer
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class PegasusTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = PegasusTokenizer
 

@@ -7,10 +7,11 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
-class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
+class TestTokenizationBart(TokenizerCommonTester):
+    __test__ = True
     tokenizer_class = BartTokenizer
 
     def setUp(self):

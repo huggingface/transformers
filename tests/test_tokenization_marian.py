@@ -24,7 +24,7 @@ from transformers.testing_utils import _torch_available
 from transformers.tokenization_marian import MarianTokenizer, save_json, vocab_files_names
 from transformers.tokenization_utils import BatchEncoding
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
@@ -35,7 +35,8 @@ ORG_NAME = "Helsinki-NLP/"
 FRAMEWORK = "pt" if _torch_available else "tf"
 
 
-class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class MarianTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = MarianTokenizer
 

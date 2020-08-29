@@ -26,11 +26,12 @@ from transformers.tokenization_bert_japanese import (
     MecabTokenizer,
 )
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
 @custom_tokenizers
-class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class BertJapaneseTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = BertJapaneseTokenizer
 
@@ -178,7 +179,8 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 
 @custom_tokenizers
-class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class BertJapaneseCharacterTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = BertJapaneseTokenizer
 

@@ -20,13 +20,14 @@ import unittest
 from transformers.testing_utils import slow
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
-class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class XLNetTokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = XLNetTokenizer
 

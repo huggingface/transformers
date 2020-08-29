@@ -23,7 +23,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import TestCasePlus, require_tf, require_torch, slow
 from transformers.tokenization_utils import AddedToken
 
 
@@ -53,16 +53,28 @@ def merge_model_tokenizer_mappings(
     return model_tokenizer_mapping
 
 
-class TokenizerTesterMixin:
+DEBUG = False
+
+
+class TokenizerCommonTester(TestCasePlus):
+
+    # to ensure that these tests don't get run directly
+    __test__ = False
+    # then in the subclass set:
+    # __test__ = True
 
     tokenizer_class = None
     test_rust_tokenizer = False
 
     def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+        super().setUp()
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+        # if you need to debug the contents of the tmpdirname, set DEBUG to True, which will then use
+        # a hardcoded path and won't delete it at the end of the test
+        if not DEBUG:
+            self.tmpdirname = self.get_auto_remove_tmp_dir()
+        else:
+            self.tmpdirname = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/token-test", after=False)
 
     def get_input_output_texts(self, tokenizer):
         input_txt = self.get_clean_sequence(tokenizer)[0]

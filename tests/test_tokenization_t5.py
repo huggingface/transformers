@@ -23,7 +23,7 @@ from transformers.testing_utils import _torch_available
 from transformers.tokenization_t5 import T5Tokenizer
 from transformers.tokenization_xlnet import SPIECE_UNDERLINE
 
-from .test_tokenization_common import TokenizerTesterMixin
+from .test_tokenization_common import TokenizerCommonTester
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
@@ -31,7 +31,8 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 FRAMEWORK = "pt" if _torch_available else "tf"
 
 
-class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+class T5TokenizationTest(TokenizerCommonTester):
+    __test__ = True
 
     tokenizer_class = T5Tokenizer
 
