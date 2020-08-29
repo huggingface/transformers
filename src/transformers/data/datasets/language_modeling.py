@@ -117,7 +117,7 @@ class LineByLineWithSOPTextDataset(Dataset):
     Dataset for sentence order prediction task, prepare sentence pairs for SOP task
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int, random_seed: int):
+    def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int):
         assert os.path.isdir(file_dir)
         logger.info(f"Creating features from dataset file folder at {file_dir}")
         self.examples = []

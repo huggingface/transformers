@@ -129,7 +129,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained('albert-base-v2')
         data_collator = DataCollatorForSOP(tokenizer)
 
-        dataset = LineByLineWithSOPTextDataset(tokenizer, file_dir=PATH_SAMPLE_TEXT_DIR, block_size=512, random_seed=42)
+        dataset = LineByLineWithSOPTextDataset(tokenizer, file_dir=PATH_SAMPLE_TEXT_DIR, block_size=512)
         examples = [dataset[i] for i in range(len(dataset))]
 
         batch = data_collator(examples)
