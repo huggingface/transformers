@@ -86,7 +86,8 @@ Datasets: `LegacySeq2SeqDataset` will be used for all tokenizers without a `prep
 Future work/help wanted: A new dataset to support multilingual tasks.
 
 
-### Command Line Options
+### Finetuning Scripts
+All finetuning bash scripts call finetune.py (or distillation.py) with reasonable command line arguments. They usually require extra command line arguments to work.
 
 To see all the possible command line options, run:
 
@@ -120,6 +121,8 @@ The following command should work on a 16GB GPU:
     --num_train_epochs 6 \
     --model_name_or_path facebook/bart-large
 ```
+
+There is a starter finetuning script for pegasus at `finetune_pegasus_xsum.sh`.
 
 ### Translation Finetuning
 
