@@ -6,8 +6,9 @@ Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
 For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 
 
-### Data
-XSUM Data:
+## Datasets
+
+#### XSUM:
 ```bash
 cd examples/seq2seq
 wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/xsum.tar.gz
@@ -17,23 +18,33 @@ export XSUM_DIR=${PWD}/xsum
 this should make a directory called `xsum/` with files like `test.source`.
 To use your own data, copy that files format. Each article to be summarized is on its own line.
 
-CNN/DailyMail data
+#### CNN/DailyMail
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm.tgz
-tar -xzvf cnn_dm.tgz
+wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm_v2.tgz
+tar -xzvf cnn_dm_v2.tgz  # empty lines removed
+mv cnn_cln cnn_dm
 export CNN_DIR=${PWD}/cnn_dm
-this should make a directory called `cnn_dm/` with files like `test.source`.
 ```
+this should make a directory called `cnn_dm/` with 6 files.
 
-WMT16 English-Romanian Translation Data:
+#### WMT16 English-Romanian Translation Data:
 download with this command:
 ```bash
 wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
-this should make a directory called `wmt_en_ro/` with files like `test.source`.
 ```
+this should make a directory called `wmt_en_ro/` with 6 files.
+
+#### WMT English-German:
+```bash
+wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_de.tgz
+tar -xzvf wmt_en_de.tar.gz
+export DATA_DIR=${PWD}/wmt_en_de
+```
+
+#### Private Data
 
 If you are using your own data, it must be formatted as one directory with 6 files: 
 ```
@@ -75,7 +86,8 @@ Datasets: `LegacySeq2SeqDataset` will be used for all tokenizers without a `prep
 Future work/help wanted: A new dataset to support multilingual tasks.
 
 
-### Command Line Options
+### Finetuning Scripts
+All finetuning bash scripts call finetune.py (or distillation.py) with reasonable command line arguments. They usually require extra command line arguments to work.
 
 To see all the possible command line options, run:
 
@@ -109,6 +121,8 @@ The following command should work on a 16GB GPU:
     --num_train_epochs 6 \
     --model_name_or_path facebook/bart-large
 ```
+
+There is a starter finetuning script for pegasus at `finetune_pegasus_xsum.sh`.
 
 ### Translation Finetuning
 
