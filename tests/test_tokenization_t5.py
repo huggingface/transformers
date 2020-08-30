@@ -120,12 +120,12 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_prepare_seq2seq_batch(self):
         tokenizer = self.t5_base_tokenizer
-        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
         ]
-        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, tokenizer.eos_token_id]
+        expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, tokenizer.eos_token_id]
         batch = tokenizer.prepare_seq2seq_batch(
             src_text,
             tgt_texts=tgt_text,
@@ -135,15 +135,15 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         result = list(batch.input_ids.numpy()[0])
         self.assertListEqual(expected_src_tokens, result)
 
-        self.assertEqual((2, 10), batch.input_ids.shape)
-        self.assertEqual((2, 10), batch.attention_mask.shape)
+        self.assertEqual((2, 9), batch.input_ids.shape)
+        self.assertEqual((2, 9), batch.attention_mask.shape)
 
         # Test that special tokens are reset
         self.assertEqual(tokenizer.prefix_tokens, [])
 
     def test_empty_target_text(self):
         tokenizer = self.t5_base_tokenizer
-        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         batch = tokenizer.prepare_seq2seq_batch(src_text, return_tensors=FRAMEWORK)
         # check if input_ids are returned and no decoder_input_ids
         self.assertIn("input_ids", batch)
@@ -153,7 +153,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_max_target_length(self):
         tokenizer = self.t5_base_tokenizer
-        src_text = ["A short paragraph for summrization.", "Another short paragraph for summrization."]
+        src_text = ["A short paragraph for summarization.", "Another short paragraph for summarization."]
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
@@ -180,9 +180,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_eos_in_input(self):
         tokenizer = self.t5_base_tokenizer
-        src_text = ["A long paragraph for summrization. </s>"]
+        src_text = ["A long paragraph for summarization. </s>"]
         tgt_text = ["Summary of the text. </s>"]
-        expected_src_tokens = [71, 307, 8986, 21, 4505, 51, 52, 1707, 5, 1]
+        expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, 1]
         expected_tgt_tokens = [0, 20698, 13, 8, 1499, 5, 1]
 
         batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors=FRAMEWORK)
