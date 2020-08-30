@@ -21,12 +21,12 @@ To use your own data, copy that files format. Each article to be summarized is o
 #### CNN/DailyMail
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_cln.tgz
-tar -xzvf cnn_cln.tgz  # empty lines removed
+wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm_v2.tgz
+tar -xzvf cnn_dm_v2.tgz  # empty lines removed
 mv cnn_cln cnn_dm
 export CNN_DIR=${PWD}/cnn_dm
 ```
-this should make a directory called `cnn_dm/` with files like `test.source`.
+this should make a directory called `cnn_dm/` with 6 files.
 
 #### WMT16 English-Romanian Translation Data:
 download with this command:
