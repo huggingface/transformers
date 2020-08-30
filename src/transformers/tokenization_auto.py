@@ -32,6 +32,7 @@ from .configuration_auto import (
     LongformerConfig,
     MBartConfig,
     OpenAIGPTConfig,
+    PhobertConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -58,6 +59,7 @@ from .tokenization_longformer import LongformerTokenizer
 from .tokenization_marian import MarianTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_phobert import PhobertTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -73,6 +75,7 @@ logger = logging.getLogger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
+        (PhobertConfig, (PhobertTokenizer, None)),
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, None)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
@@ -118,6 +121,7 @@ class AutoTokenizer:
             - `roberta`: RobertaTokenizer (RoBERTa model)
             - `bert`: BertTokenizer (Bert model)
             - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+            - `phobert`: PhobertTokenizer (PhoBERT model)
             - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
             - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - `xlnet`: XLNetTokenizer (XLNet model)
@@ -153,6 +157,7 @@ class AutoTokenizer:
             - `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
             - `bert`: BertTokenizer (Bert model)
             - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+            - `phobert`: PhobertTokenizer (PhoBERT model)
             - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
             - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
             - `xlnet`: XLNetTokenizer (XLNet model)

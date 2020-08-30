@@ -189,6 +189,8 @@ logger = logging.getLogger(__name__)
 
 MODEL_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetModel),
+        (PhobertConfig, PhobertModel),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
@@ -209,13 +211,13 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
-        (BertweetConfig, BertweetModel),
-        (PhobertConfig, PhobertModel),
     ]
 )
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetForMaskedLM),
+        (PhobertConfig, PhobertForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -235,13 +237,13 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
-        (BertweetConfig, BertweetForMaskedLM),
-        (PhobertConfig, PhobertForMaskedLM),
     ]
 )
 
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetForMaskedLM),
+        (PhobertConfig, PhobertForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
@@ -263,8 +265,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
-        (BertweetConfig, BertweetForMaskedLM),
-        (PhobertConfig, PhobertForMaskedLM),
     ]
 )
 
@@ -286,6 +286,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetForMaskedLM),
+        (PhobertConfig, PhobertForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (BartConfig, BartForConditionalGeneration),
@@ -299,8 +301,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
-        (BertweetConfig, BertweetForMaskedLM),
-        (PhobertConfig, PhobertForMaskedLM),
     ]
 )
 
@@ -315,6 +315,8 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetForSequenceClassification),
+        (PhobertConfig, PhobertForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
@@ -328,13 +330,13 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
         (ElectraConfig, ElectraForSequenceClassification),
-        (BertweetConfig, BertweetForSequenceClassification),
-        (PhobertConfig, PhobertForSequenceClassification),
     ]
 )
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetForQuestionAnswering),
+        (PhobertConfig, PhobertForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),
@@ -349,13 +351,13 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
-        (BertweetConfig, BertweetForQuestionAnswering),
-        (PhobertConfig, PhobertForQuestionAnswering),
     ]
 )
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetForTokenClassification),
+        (PhobertConfig, PhobertForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
@@ -368,13 +370,13 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
         (ElectraConfig, ElectraForTokenClassification),
-        (BertweetConfig, BertweetForTokenClassification),
-        (PhobertConfig, PhobertForTokenClassification),
     ]
 )
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
+        (BertweetConfig, BertweetForMultipleChoice),
+        (PhobertConfig, PhobertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
@@ -385,8 +387,6 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (MobileBertConfig, MobileBertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
         (AlbertConfig, AlbertForMultipleChoice),
-        (BertweetConfig, BertweetForMultipleChoice),
-        (PhobertConfig, PhobertForMultipleChoice),
     ]
 )
 
