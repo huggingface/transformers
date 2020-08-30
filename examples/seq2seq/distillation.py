@@ -1,6 +1,7 @@
 import argparse
 import gc
 import os
+import warnings
 from pathlib import Path
 from typing import List
 
@@ -10,23 +11,41 @@ from torch import nn
 from torch.nn import functional as F
 
 from lightning_base import generic_train
-from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Config, T5ForConditionalGeneration
+from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5Config, T5ForConditionalGeneration
+from transformers.modeling_bart import shift_tokens_right
 
 
 try:
-    from .finetune import SummarizationModule
+    from .finetune import SummarizationModule, TranslationModule
     from .finetune import main as ft_main
-    from .initialization_utils import init_student, copy_layers
-    from .utils import use_task_specific_params, pickle_load, freeze_params, assert_all_frozen, any_requires_grad
-
+    from .initialization_utils import copy_layers, init_student
+    from .utils import (
+        any_requires_grad,
+        assert_all_frozen,
+        calculate_bleu,
+        freeze_params,
+        label_smoothed_nll_loss,
+        pickle_load,
+        use_task_specific_params,
+    )
 except ImportError:
-    from finetune import SummarizationModule
+    from finetune import SummarizationModule, TranslationModule
     from finetune import main as ft_main
-    from initialization_utils import init_student, copy_layers
-    from utils import use_task_specific_params, pickle_load, freeze_params, assert_all_frozen, any_requires_grad
+    from initialization_utils import copy_layers, init_student
+    from utils import (
+        any_requires_grad,
+        assert_all_frozen,
+        calculate_bleu,
+        freeze_params,
+        label_smoothed_nll_loss,
+        pickle_load,
+        use_task_specific_params,
+    )
 
 
 class BartSummarizationDistiller(SummarizationModule):
+    """Supports Bart, Pegasus and other models that inherit from Bart."""
+
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
     def __init__(self, hparams):
@@ -61,22 +80,22 @@ class BartSummarizationDistiller(SummarizationModule):
     def pre_init(self, hparams):
         self.output_dir = Path(hparams.output_dir)
         self.output_dir.mkdir(exist_ok=True)
-        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
+        teacher = AutoModelForSeq2SeqLM.from_pretrained(hparams.teacher).eval()
         student_updates = {
             "decoder_layers": hparams.student_decoder_layers,
             "encoder_layers": hparams.student_encoder_layers,
         }
         if hparams.length_penalty != -1:
             student_updates["length_penalty"] = hparams.length_penalty
-        d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
+        d_layers_to_copy: List = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
         hparams.d_layer_to_copy = d_layers_to_copy
         hparams.e_layer_to_copy = e_layers_to_copy
         kw = teacher.config.to_diff_dict()
         kw.update(student_updates)
         # Copy weights
-        student_cfg = BartConfig(**kw)
-        student = BartForConditionalGeneration(student_cfg)
+        student_cfg = teacher.config_class(**kw)
+        student = type(teacher)(student_cfg)
         student, _ = init_student(student, teacher)
         save_dir = self.output_dir.joinpath("student")
         self.copy_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
@@ -138,59 +157,41 @@ class BartSummarizationDistiller(SummarizationModule):
         )
         return loss_ce, s_logits_slct, t_logits_slct
 
-    def configure_optimizers(self):
-        "Prepare optimizer and schedule (linear warmup and decay)"
-        model = self.model
-        no_decay = ["bias", "LayerNorm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-                "weight_decay": self.hparams.weight_decay,
-            },
-            {
-                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-                "weight_decay": 0.0,
-            },
-        ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
-        self.opt = optimizer
-        return [optimizer]
-
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         SummarizationModule.add_model_specific_args(parser, root_dir)
-        parser.add_argument("--teacher", default="facebook/bart-large-cnn", type=str)
-        parser.add_argument("--alpha_ce", default=0.8, type=float)
-        parser.add_argument("--alpha_mlm", default=0.2, type=float)
-        # parser.add_argument("--alpha_cos", default=0.0, type=float)
-        parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
-        parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
-        parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
-        parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
-        parser.add_argument("--no_teacher", action="store_true", default=False)
-        parser.add_argument("--length_penalty", type=float, default=-1)
-
+        add_distill_args(parser)
         return parser
 
     def _step(self, batch):
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
-        input_ids, src_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        decoder_input_ids = y[:, :-1].contiguous()
-        labels = y[:, 1:].clone()
-        labels[y[:, 1:] == pad_token_id] = -100
+        input_ids, src_mask, tgt_ids = batch["input_ids"], batch["attention_mask"], batch["labels"]
+        decoder_input_ids = shift_tokens_right(tgt_ids, pad_token_id)
         # noinspection PyCallingNonCallable
-        sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
+        lm_logits, dec_hidden, enc_outputs, enc_hidden_state = self(
             input_ids,
             attention_mask=src_mask,
             decoder_input_ids=decoder_input_ids,
-            labels=labels,
             output_hidden_states=True,
             output_attentions=False,
-        )
+            use_cache=False,
+        )  # TODO(@sshleifer): return_dict=True cleanup
+
+        # Same cross entropy vs. label smoothing logic as finetune.py
+        assert lm_logits.shape[-1] == self.model.config.vocab_size
+        if self.hparams.label_smoothing == 0:
+            # Same behavior as modeling_bart.py, besides ignoring pad_token_id
+            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            student_lm_loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
+        else:
+            lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
+            student_lm_loss, _ = label_smoothed_nll_loss(
+                lprobs, tgt_ids, self.hparams.label_smoothing, ignore_index=pad_token_id
+            )
 
         def zero_tensor():
-            return torch.tensor(0.0).type_as(sloss)
+            return torch.tensor(0.0).type_as(student_lm_loss)
 
         loss_encoder, hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor(), zero_tensor()
         if self.different_encoder:
@@ -214,29 +215,26 @@ class BartSummarizationDistiller(SummarizationModule):
                 attention_mask=src_mask,
                 encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
-                lm_labels=labels,
+                lm_labels=tgt_ids,
                 output_hidden_states=True,
             )
         dec_mask = decoder_input_ids.ne(pad_token_id)
-        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
+        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
 
         blended_loss = (
             self.alpha_ce * loss_ce
-            + self.alpha_mlm * sloss
+            + self.alpha_mlm * student_lm_loss
             + self.hparams.alpha_encoder_loss * loss_encoder
             + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
         )
-        return blended_loss, loss_ce, sloss, loss_encoder, hid_loss_enc, hid_loss_dec
+        return blended_loss, loss_ce, student_lm_loss, loss_encoder, hid_loss_enc, hid_loss_dec
 
     def calc_hidden_loss(self, attention_mask, hidden_states, hidden_states_T, matches):
-        assert not isinstance(
-            hidden_states, torch.Tensor
-        ), f"expected list or tuple for hidden_states, got tensor of shape {hidden_states.shape}"
-        assert not isinstance(
-            hidden_states_T, torch.Tensor
-        ), f"expected list or tuple for hidden_states_T, got tensor of shape {hidden_states_T.shape}"
+        msg = "expected list or tuple for hidden_states, got tensor of shape: "
+        assert not isinstance(hidden_states, torch.Tensor), f"{msg}{hidden_states.shape}"
+        assert not isinstance(hidden_states_T, torch.Tensor), f"{msg}{hidden_states_T.shape}"
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
         hidden_losses = [
@@ -245,6 +243,44 @@ class BartSummarizationDistiller(SummarizationModule):
             for i, j in enumerate(matches)
         ]
         return sum(hidden_losses)
+
+
+def add_distill_args(parser):
+    parser.add_argument("--teacher", type=str)
+    parser.add_argument("--alpha_ce", default=0.8, type=float)
+    parser.add_argument("--alpha_mlm", default=0.2, type=float)
+    parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
+    parser.add_argument("--alpha_hid", default=0.0, type=float, required=False)
+    parser.add_argument("--student_decoder_layers", default=12, type=int, required=False)
+    parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
+    parser.add_argument("--no_teacher", action="store_true", default=False)
+    parser.add_argument("--length_penalty", type=float, default=-1)
+
+
+class BartTranslationDistiller(BartSummarizationDistiller):
+    """Supports Mbart, Marian, other models that inherit from Bart."""
+
+    mode = "translation"
+    metric_names = ["bleu"]
+    val_metric = "bleu"
+
+    def __init__(self, hparams, **kwargs):
+        super().__init__(hparams, **kwargs)
+        assert hparams.src_lang is not None
+        assert hparams.tgt_lang is not None
+        self.dataset_kwargs["src_lang"] = hparams.src_lang
+        self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
+        if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
+            self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
+
+    def calc_generative_metrics(self, preds, target) -> dict:
+        return calculate_bleu(preds, target)
+
+    @staticmethod
+    def add_model_specific_args(parser, root_dir):
+        TranslationModule.add_model_specific_args(parser, root_dir)
+        add_distill_args(parser)
+        return parser
 
 
 class T5SummarizationDistiller(BartSummarizationDistiller):
@@ -325,7 +361,10 @@ class T5SummarizationDistiller(BartSummarizationDistiller):
         if self.different_encoder:
             with torch.no_grad():
                 teacher_enc_outputs, teacher_enc_hid = self.teacher.encoder(
-                    source_ids, attention_mask=source_mask, output_hidden_states=True, use_cache=False,
+                    source_ids,
+                    attention_mask=source_mask,
+                    output_hidden_states=True,
+                    use_cache=False,
                 )
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)
@@ -343,7 +382,7 @@ class T5SummarizationDistiller(BartSummarizationDistiller):
                 attention_mask=source_mask,
                 encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
-                lm_labels=labels,
+                labels=labels,
                 output_hidden_states=True,
                 use_cache=False,
             )
@@ -364,20 +403,20 @@ class T5SummarizationDistiller(BartSummarizationDistiller):
 def create_module(args):
     t5 = "t5" in args.model_name_or_path
     if args.no_teacher:
-        assert not args.enc_only
-        module_cls = SummarizationModule
-    elif t5:
+        module_cls = TranslationModule if "translation" in args.task else SummarizationModule
+    elif t5:  # DISTILL T5 WITH TEACHER FOR SUMMARIZATION
+        assert "translation" not in args.task, "t5 translation distillation not supported"
         module_cls = T5SummarizationDistiller
-    elif args.enc_only:
-        raise ValueError("Deleted that")
-    else:
-        module_cls = BartSummarizationDistiller
+    else:  # DISTILL WITH TEACHER
+        module_cls = BartTranslationDistiller if "translation" in args.task else BartSummarizationDistiller
     args.setup_cls: str = module_cls.__name__
+    print(f"using module {args.setup_cls}")
     model = module_cls(args)
     return model
 
 
 def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
+    # TODO(SS): DELETE?
     exp_dir = ckpt_path.parent
     if dest_dir is None:
         dest_dir = exp_dir
@@ -400,21 +439,40 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
     trainer.test(model)
 
 
-def get_layers_to_copy(n_to_get, tot):
-    all_layers = list(range(tot))
-    if tot == 12:  # Alternating for special cases
-        layers_to_copy = {  # maps  num layers in student -> which teacher layers to copy
-            1: [0],
-            2: [0, 6],
-            3: [0, 6, 11],
-            4: [0, 4, 8, 11],
-            6: [0, 2, 4, 7, 9, 11],
-            9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
-            12: all_layers,
-        }
-        return layers_to_copy[n_to_get]
-    else:
-        return all_layers[:n_to_get]  # TODO: better version on theseus-bart branch
+LAYERS_TO_COPY = {
+    # maps  num layers in student -> which teacher layers to copy.
+    # 12: bart, 16: pegasus, 6: marian/Helsinki-NLP
+    12: {
+        1: [0],
+        2: [0, 6],
+        3: [0, 6, 11],
+        4: [0, 4, 8, 11],
+        6: [0, 2, 4, 7, 9, 11],
+        9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
+        12: list(range(12)),
+    },
+    16: {  # maps  num layers in student -> which teacher layers to copy
+        1: [0],
+        2: [0, 8],
+        3: [0, 8, 15],
+        4: [0, 5, 10, 15],
+        6: [0, 3, 6, 9, 12, 15],
+        8: [0, 2, 4, 6, 8, 10, 12, 15],
+        9: [0, 1, 3, 5, 7, 9, 11, 13, 15],
+        16: list(range(16)),
+    },
+    6: {1: [0], 2: [0, 5], 3: [0, 2, 5], 4: [0, 1, 3, 5], 6: list(range(6))},
+}
+
+
+def get_layers_to_copy(n_student, n_teacher):
+    try:
+        return LAYERS_TO_COPY[n_teacher][n_student]
+    except KeyError:
+        warnings.warn(
+            f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"
+        )
+        return list(range(n_student))
 
 
 def distill_main(args):

@@ -35,7 +35,15 @@ export ENRO_DIR=${PWD}/wmt_en_ro
 this should make a directory called `wmt_en_ro/` with files like `test.source`.
 ```
 
-If you are using your own data, it must be formatted as one directory with 6 files: train.source, train.target, val.source, val.target, test.source, test.target.
+If you are using your own data, it must be formatted as one directory with 6 files: 
+```
+train.source
+train.target
+val.source
+val.target
+test.source
+test.target
+```
 The `.source` files are the input, the `.target` files are the desired output.
 
 
@@ -63,8 +71,8 @@ Summarization Tips:
 (It rarely makes sense to start from `bart-large` unless you are a researching finetuning methods).
 
 **Update 2018-07-18**
-Datasets: `Seq2SeqDataset` should be used for all tokenizers without a `prepare_translation_batch` method. For those who do (like Marian, MBart), `TranslationDataset` should be used.**
-A new dataset is needed to support multilingual tasks.
+Datasets: `LegacySeq2SeqDataset` will be used for all tokenizers without a `prepare_seq2seq_batch` method. Otherwise, `Seq2SeqDataset` will be used.
+Future work/help wanted: A new dataset to support multilingual tasks.
 
 
 ### Command Line Options
@@ -98,7 +106,7 @@ The following command should work on a 16GB GPU:
     --train_batch_size=1 \
     --eval_batch_size=1 \
     --output_dir=xsum_results \
-    --num_train_epochs 1 \
+    --num_train_epochs 6 \
     --model_name_or_path facebook/bart-large
 ```
 

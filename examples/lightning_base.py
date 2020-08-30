@@ -22,9 +22,11 @@ from transformers import (
     PreTrainedTokenizer,
 )
 from transformers.optimization import (
+    Adafactor,
     get_cosine_schedule_with_warmup,
     get_cosine_with_hard_restarts_schedule_with_warmup,
     get_linear_schedule_with_warmup,
+    get_polynomial_decay_schedule_with_warmup,
 )
 
 
@@ -48,7 +50,7 @@ arg_to_scheduler = {
     "linear": get_linear_schedule_with_warmup,
     "cosine": get_cosine_schedule_with_warmup,
     "cosine_w_restarts": get_cosine_with_hard_restarts_schedule_with_warmup,
-    # polynomial': '',                       # TODO
+    "polynomial": get_polynomial_decay_schedule_with_warmup,
     # '': get_constant_schedule,             # not supported for now
     # '': get_constant_schedule_with_warmup, # not supported for now
 }
@@ -136,7 +138,15 @@ class BaseTransformer(pl.LightningModule):
                 "weight_decay": 0.0,
             },
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
+        if self.hparams.adafactor:
+            optimizer = Adafactor(
+                optimizer_grouped_parameters, lr=self.hparams.learning_rate, scale_parameter=False, relative_step=False
+            )
+
+        else:
+            optimizer = AdamW(
+                optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon
+            )
         self.opt = optimizer
 
         scheduler = self.get_lr_scheduler()
@@ -149,15 +159,20 @@ class BaseTransformer(pl.LightningModule):
     def test_epoch_end(self, outputs):
         return self.validation_end(outputs)
 
-    def setup(self, step):
-        train_batch_size = self.hparams.train_batch_size
-        dataloader = self.get_dataloader("train", train_batch_size, shuffle=True)
-        self.train_loader = dataloader
-        self.total_steps = (
-            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.gpus)))
-            // self.hparams.accumulate_grad_batches
-            * float(self.hparams.max_epochs)
-        )
+    @property
+    def total_steps(self) -> int:
+        """The number of total training steps that will be run. Used for lr scheduler purposes."""
+        num_devices = max(1, self.hparams.gpus)  # TODO: consider num_tpu_cores
+        effective_batch_size = self.hparams.train_batch_size * self.hparams.accumulate_grad_batches * num_devices
+        dataset_size = len(self.train_loader.dataset)
+        return (dataset_size / effective_batch_size) * self.hparams.max_epochs
+
+    def setup(self, mode):
+        if mode == "fit":
+            self.train_loader = self.get_dataloader("train", self.hparams.train_batch_size, shuffle=True)
+
+    def get_dataloader(self, type_path, batch_size, shuffle=False):
+        raise NotImplementedError("You must implement this for your task")
 
     def train_dataloader(self):
         return self.train_loader
@@ -220,10 +235,14 @@ class BaseTransformer(pl.LightningModule):
             help="Decoder layer dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument(
-            "--dropout", type=float, help="Dropout probability (Optional). Goes into model.config",
+            "--dropout",
+            type=float,
+            help="Dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument(
-            "--attention_dropout", type=float, help="Attention dropout probability (Optional). Goes into model.config",
+            "--attention_dropout",
+            type=float,
+            help="Attention dropout probability (Optional). Goes into model.config",
         )
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
         parser.add_argument(
@@ -241,11 +260,13 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--num_train_epochs", dest="max_epochs", default=3, type=int)
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
+        parser.add_argument("--adafactor", action="store_true")
 
 
 class LoggingCallback(pl.Callback):
     def on_batch_end(self, trainer, pl_module):
-        lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
+        lr_scheduler = trainer.lr_schedulers[0]["scheduler"]
+        lrs = {f"lr_group_{i}": lr for i, lr in enumerate(lr_scheduler.get_lr())}
         pl_module.logger.log_metrics(lrs)
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
@@ -277,11 +298,6 @@ def add_generic_args(parser, root_dir) -> None:
         required=True,
         help="The output directory where the model predictions and checkpoints will be written.",
     )
-
-    parser.add_argument(
-        "--gpus", default=0, type=int, help="The number of GPUs allocated for this, it is by default 0 meaning none",
-    )
-
     parser.add_argument(
         "--fp16",
         action="store_true",
@@ -307,6 +323,13 @@ def add_generic_args(parser, root_dir) -> None:
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+    parser.add_argument(
+        "--data_dir",
+        default=None,
+        type=str,
+        required=True,
+        help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
+    )
 
 
 def generic_train(

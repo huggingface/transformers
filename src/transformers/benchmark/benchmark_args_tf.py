@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 from dataclasses import dataclass, field
 from typing import Tuple
 
 from ..file_utils import cached_property, is_tf_available, tf_required
+from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -26,16 +26,18 @@ if is_tf_available():
     import tensorflow as tf
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @dataclass
 class TensorFlowBenchmarkArguments(BenchmarkArguments):
     tpu_name: str = field(
-        default=None, metadata={"help": "Name of TPU"},
+        default=None,
+        metadata={"help": "Name of TPU"},
     )
     device_idx: int = field(
-        default=0, metadata={"help": "CPU / GPU device index. Defaults to 0."},
+        default=0,
+        metadata={"help": "CPU / GPU device index. Defaults to 0."},
     )
     eager_mode: bool = field(default=False, metadata={"help": "Benchmark models in eager model."})
     use_xla: bool = field(

@@ -1,4 +1,3 @@
-import logging
 import os
 import warnings
 from dataclasses import dataclass
@@ -27,9 +26,10 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 from .modeling_utils import SequenceSummary
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ElectraConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
@@ -46,10 +46,10 @@ ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_or_generator="discriminator"):
-    """ Load tf checkpoints in a pytorch model.
-    """
+    """Load tf checkpoints in a pytorch model."""
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
@@ -178,8 +178,8 @@ class ElectraGeneratorPredictions(nn.Module):
 
 
 class ElectraPreTrainedModel(BertPreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = ElectraConfig
@@ -310,9 +310,9 @@ class ElectraModel(ElectraPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -511,24 +511,24 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
-            Labels for computing the ELECTRA loss. Input should be a sequence of tokens (see :obj:`input_ids` docstring)
-            Indices should be in ``[0, 1]``.
-            ``0`` indicates the token is an original token,
-            ``1`` indicates the token was replaced.
+            labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+                Labels for computing the ELECTRA loss. Input should be a sequence of tokens (see :obj:`input_ids` docstring)
+                Indices should be in ``[0, 1]``.
+                ``0`` indicates the token is an original token,
+                ``1`` indicates the token was replaced.
 
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import ElectraTokenizer, ElectraForPreTraining
-        >>> import torch
+            >>> from transformers import ElectraTokenizer, ElectraForPreTraining
+            >>> import torch
 
-        >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-        >>> model = ElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+            >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+            >>> model = ElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
 
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        >>> logits = model(input_ids).logits
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> logits = model(input_ids).logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -835,7 +835,10 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits,) + discriminator_hidden_states[1:]
+            output = (
+                start_logits,
+                end_logits,
+            ) + discriminator_hidden_states[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
@@ -857,7 +860,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
-        self.summary = SequenceSummary(config)
+        self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -879,6 +882,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
     ):
         r"""
@@ -908,12 +912,13 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
         sequence_output = discriminator_hidden_states[0]
 
-        pooled_output = self.summary(sequence_output)
+        pooled_output = self.sequence_summary(sequence_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
