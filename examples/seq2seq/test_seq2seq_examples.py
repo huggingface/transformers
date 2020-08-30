@@ -345,7 +345,7 @@ def test_finetune(model):
 
     example_batch = load_json(module.output_dir / "text_batch.json")
     assert isinstance(example_batch, dict)
-    assert len(example_batch) >= 4
+    assert len(example_batch) == 4
 
 
 def test_finetune_extra_model_args():
