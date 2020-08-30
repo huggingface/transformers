@@ -237,12 +237,15 @@ class BartSummarizationDistiller(SummarizationModule):
         assert not isinstance(hidden_states_T, torch.Tensor), f"{msg}{hidden_states_T.shape}"
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
-        hidden_losses = [
-            (F.mse_loss(hidden_states[i], hidden_states_T[j], reduction="none") * mask.unsqueeze(-1)).sum()
-            / valid_count
-            for i, j in enumerate(matches)
-        ]
-        return sum(hidden_losses)
+        student_states = torch.stack([hidden_states[i] for i in range(len(matches))])
+        normed_student_states = F.layer_norm(student_states, student_states.shape[1:])
+        teacher_states = torch.stack([hidden_states_T[j] for j in matches])
+        normed_teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
+
+        hidden_losses = (
+            F.mse_loss(normed_student_states, normed_teacher_states, reduction="none") * mask.unsqueeze(-1)
+        ).sum() / valid_count
+        return hidden_losses
 
 
 def add_distill_args(parser):
