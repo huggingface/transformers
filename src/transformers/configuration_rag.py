@@ -93,7 +93,7 @@ class RagConfig(PretrainedConfig):
         self,
         vocab_size=None,
         is_encoder_decoder=True,
-        prefix = None,
+        prefix=None,
         bos_token_id=None,
         pad_token_id=None,
         eos_token_id=None,

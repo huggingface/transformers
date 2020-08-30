@@ -119,6 +119,15 @@ try:
 except ImportError:
     _has_apex = False
 
+
+try:
+    import faiss  # noqa: F401
+
+    _faiss_available = True
+except ImportError:
+    _faiss_available = False
+
+
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 
@@ -167,6 +176,10 @@ def is_py3nvml_available():
 
 def is_apex_available():
     return _has_apex
+
+
+def is_faiss_available():
+    return _faiss_available
 
 
 def add_start_docstrings(*docstr):

@@ -37,7 +37,6 @@ from .configuration_mmbt import MMBTConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
-from .configuration_rag import RagConfig
 from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -81,6 +80,7 @@ from .file_utils import (
     add_start_docstrings,
     cached_path,
     is_apex_available,
+    is_faiss_available,
     is_nlp_available,
     is_psutil_available,
     is_py3nvml_available,
@@ -134,7 +134,6 @@ from .pipelines import (
     ZeroShotClassificationPipeline,
     pipeline,
 )
-from .retrieval_rag import RagRetriever
 
 # Tokenizers
 from .tokenization_albert import AlbertTokenizer
@@ -161,7 +160,6 @@ from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_pegasus import PegasusTokenizer
-from .tokenization_rag import RagDefaultTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -369,7 +367,6 @@ if is_torch_available():
         load_tf_weights_in_openai_gpt,
     )
     from .modeling_pegasus import PegasusForConditionalGeneration
-    from .modeling_rag import RagSequence, RagToken
     from .modeling_reformer import (
         REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         ReformerAttention,
@@ -455,6 +452,7 @@ if is_torch_available():
 
     # Trainer
     from .trainer import EvalPrediction, Trainer, set_seed, torch_distributed_zero_first
+
 
 # TensorFlow
 if is_tf_available():
@@ -657,6 +655,13 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
+
+
+if is_torch_available() and is_nlp_available() and is_faiss_available() and is_psutil_available():
+    from .configuration_rag import RagConfig
+    from .modeling_rag import RagSequence, RagToken
+    from .retrieval_rag import RagRetriever
+    from .tokenization_rag import RagDefaultTokenizer
 
 
 if not is_tf_available() and not is_torch_available():
