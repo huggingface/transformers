@@ -13,8 +13,8 @@ from tqdm import tqdm
 from transformers import BartForConditionalGeneration, BartTokenizer, RagSequence, RagToken
 
 
-sys.path.append(os.path.join(os.getcwd()))  # isort:skip
-from utils import exact_match_score, f1_score  # isort:skip
+sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # isort:skip
+from examples.rag.utils import exact_match_score, f1_score  # noqa: E402 # isort:skip
 
 
 logger = logging.getLogger(__name__)

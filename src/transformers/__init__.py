@@ -453,7 +453,6 @@ if is_torch_available():
     # Trainer
     from .trainer import EvalPrediction, Trainer, set_seed, torch_distributed_zero_first
 
-
 # TensorFlow
 if is_tf_available():
     from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments

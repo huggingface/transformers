@@ -17,20 +17,7 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
-
-sys.path.append(os.path.join(os.getcwd()))  # isort:skip
-
-from examples.lightning_base import BaseTransformer, add_generic_args, generic_train  # isort:skip
-from examples.seq2seq.callbacks import Seq2SeqLoggingCallback, get_early_stopping_callback  # isort:skip
-from examples.seq2seq.utils import (  # isort:skip
-    flatten_list,
-    get_git_info,
-    lmap,
-    pickle_save,
-    save_git_info,
-    save_json,
-)
-from transformers import (  # isort:skip
+from transformers import (
     AutoConfig,
     AutoTokenizer,
     BartForConditionalGeneration,
@@ -41,8 +28,26 @@ from transformers import (  # isort:skip
     get_linear_schedule_with_warmup,
 )
 
-from utils import Seq2SeqDataset, calculate_exact_match, is_rag_model, set_extra_model_params  # isort:skip
-from callbacks import get_checkpoint_callback  # isort:skip
+
+sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
+
+from examples.lightning_base import BaseTransformer, add_generic_args, generic_train  # noqa: E402 # isort:skip
+from examples.rag.callbacks import get_checkpoint_callback  # noqa: E402 # isort:skip
+from examples.rag.utils import (  # noqa: E402 # isort:skip
+    Seq2SeqDataset,
+    calculate_exact_match,
+    is_rag_model,
+    set_extra_model_params,
+)
+from examples.seq2seq.callbacks import Seq2SeqLoggingCallback, get_early_stopping_callback  # noqa: E402 # isort:skip
+from examples.seq2seq.utils import (  # noqa: E402 # isort:skip
+    flatten_list,
+    get_git_info,
+    lmap,
+    pickle_save,
+    save_git_info,
+    save_json,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
