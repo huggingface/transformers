@@ -51,16 +51,16 @@ This model was trained and open sourced in conjunction with the [**German NLP Gr
 
 ## Evaluation: GermEval18 Coarse
 
-| Model Name                                              |</br>F1 macro<br/> Mean | </br>F1 macro<br/>Median | </br>F1 macro<br/>Std |
+| Model Name                                              | F1 macro<br/>Mean | F1 macro<br/>Median | F1 macro<br/>Std |
 |---|---|---|---|
-| <span style="color:red">**ELECTRA-base-german-uncased** (this model)                 | <span style="color:red">**0.778** | **0.778** | **0.00392** |
-| dbmdz/bert-base-german-uncased                          | 0.770 |  0.770 | 0.00572       |
-| dbmdz/bert-base-german-cased                            | 0.765 | 0.765 | 0.00523        |
-| bert-base-german-cased                                  | 0.762 | 0.761 | 0.00597        |
-| distilbert-base-german-cased                            | 0.752 | 0.752 | 0.00341        |
-| dbmdz/electra-base-german-europeana-cased-discriminator | 0.745 | 0.745 | 0.00498        |
-| dbmdz-bert-base-german-europeana-uncased                | 0.736 | 0.737 | 0.00476        |
-| dbmdz-bert-base-german-europeana-cased                  |  0.727 | 0.729 | 0.00674       |
+| dbmdz-bert-base-german-europeana-cased                  | 0.727     | 0.729     | 0.00674     |
+| dbmdz-bert-base-german-europeana-uncased                | 0.736     | 0.737     | 0.00476     |
+| dbmdz/electra-base-german-europeana-cased-discriminator | 0.745     | 0.745     | 0.00498     |
+| distilbert-base-german-cased                            | 0.752     | 0.752     | 0.00341     |
+| bert-base-german-cased                                  | 0.762     | 0.761     | 0.00597     |
+| dbmdz/bert-base-german-cased                            | 0.765     | 0.765     | 0.00523     |
+| dbmdz/bert-base-german-uncased                          | 0.770     | 0.770     | 0.00572     |
+| **ELECTRA-base-german-uncased (this model)**            | **0.778** | **0.778** | **0.00392** |
 
 - (1): Hyperparameters taken from the [FARM project](https://farm.deepset.ai/) "[germEval18Coarse_config.json](https://github.com/deepset-ai/FARM/blob/master/experiments/german-bert2.0-eval/germEval18Coarse_config.json)"
 
