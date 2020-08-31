@@ -329,7 +329,7 @@ class ModuleUtilsMixin:
             inputs (:obj:`dict`): The model inputs.
 
         Returns:
-            seed (:obj:`tuple`): The batch size and sequence length.
+            :obj:`Tuple[int, int]`: The batch size and sequence length.
         """
         token_inputs = [tensor for key, tensor in input_dict.items() if "input" in key]
         if token_inputs:
