@@ -87,16 +87,19 @@ class BartSummarizationDistiller(SummarizationModule):
         }
         if hparams.length_penalty != -1:
             student_updates["length_penalty"] = hparams.length_penalty
-        d_layers_to_copy: List = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
-        hparams.d_layer_to_copy = d_layers_to_copy
+        hparams.e_layer_to_copy = e_layers_to_copy
+
+        d_layers_to_copy: List = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
+
         if hparams.supervise_forward:
             hparams.d_matches = get_layers_to_supervise(
                 student_updates["decoder_layers"], teacher.config.decoder_layers
             )
         else:
             hparams.d_matches = d_layers_to_copy
-        hparams.e_layer_to_copy = e_layers_to_copy
+        hparams.d_layer_to_copy = d_layers_to_copy
+
         kw = teacher.config.to_diff_dict()
         kw.update(student_updates)
         # Copy weights
@@ -489,6 +492,7 @@ def get_layers_to_copy(n_student, n_teacher):
     try:
         val = LAYERS_TO_COPY[n_teacher][n_student]
         assert len(LAYERS_TO_SUPERVISE[n_teacher][n_student]) == len(val) == n_student
+        return val
     except KeyError:
         warnings.warn(
             f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"
