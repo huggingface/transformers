@@ -54,7 +54,7 @@ def _configure_library_root_logger() -> None:
         # Apply our default configuration to the library root logger.
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
-        library_root_logger.setLevel(logging.INFO)
+        library_root_logger.setLevel(logging.WARN)
         library_root_logger.propagate = False
 
 
