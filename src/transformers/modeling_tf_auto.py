@@ -160,6 +160,8 @@ logger = logging.getLogger(__name__)
 
 TF_MODEL_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetModel),
+        (PhobertConfig, TFPhobertModel),
         (T5Config, TFT5Model),
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
@@ -176,13 +178,13 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
         (ElectraConfig, TFElectraModel),
-        (BertweetConfig, TFBertweetModel),
-        (PhobertConfig, TFPhobertModel),
     ]
 )
 
 TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetForMaskedLM),
+        (PhobertConfig, TFPhobertForMaskedLM),
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForPreTraining),
@@ -199,13 +201,13 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, TFXLMWithLMHeadModel),
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForPreTraining),
-        (BertweetConfig, TFBertweetForMaskedLM),
-        (PhobertConfig, TFPhobertForMaskedLM),
     ]
 )
 
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetForMaskedLM),
+        (PhobertConfig, TFPhobertForMaskedLM),
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
@@ -222,8 +224,6 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMConfig, TFXLMWithLMHeadModel),
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
-        (BertweetConfig, TFBertweetForMaskedLM),
-        (PhobertConfig, TFPhobertForMaskedLM),
     ]
 )
 
@@ -244,6 +244,8 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetForMaskedLM),
+        (PhobertConfig, TFPhobertForMaskedLM),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
         (CamembertConfig, TFCamembertForMaskedLM),
@@ -254,8 +256,6 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FlaubertConfig, TFFlaubertWithLMHeadModel),
         (XLMConfig, TFXLMWithLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
-        (BertweetConfig, TFBertweetForMaskedLM),
-        (PhobertConfig, TFPhobertForMaskedLM),
     ]
 )
 
@@ -263,6 +263,8 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict([(T5Config, TFT5ForCondi
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetForSequenceClassification),
+        (PhobertConfig, TFPhobertForSequenceClassification),
         (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
         (CamembertConfig, TFCamembertForSequenceClassification),
@@ -273,13 +275,13 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (MobileBertConfig, TFMobileBertForSequenceClassification),
         (FlaubertConfig, TFFlaubertForSequenceClassification),
         (XLMConfig, TFXLMForSequenceClassification),
-        (BertweetConfig, TFBertweetForSequenceClassification),
-        (PhobertConfig, TFPhobertForSequenceClassification),
     ]
 )
 
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetForQuestionAnswering),
+        (PhobertConfig, TFPhobertForQuestionAnswering),
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
         (AlbertConfig, TFAlbertForQuestionAnswering),
         (CamembertConfig, TFCamembertForQuestionAnswering),
@@ -291,13 +293,13 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
         (ElectraConfig, TFElectraForQuestionAnswering),
-        (BertweetConfig, TFBertweetForQuestionAnswering),
-        (PhobertConfig, TFPhobertForQuestionAnswering),
     ]
 )
 
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetForTokenClassification),
+        (PhobertConfig, TFPhobertForTokenClassification),
         (DistilBertConfig, TFDistilBertForTokenClassification),
         (AlbertConfig, TFAlbertForTokenClassification),
         (CamembertConfig, TFCamembertForTokenClassification),
@@ -309,13 +311,13 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (MobileBertConfig, TFMobileBertForTokenClassification),
         (XLNetConfig, TFXLNetForTokenClassification),
         (ElectraConfig, TFElectraForTokenClassification),
-        (BertweetConfig, TFBertweetForTokenClassification),
-        (PhobertConfig, TFPhobertForTokenClassification),
     ]
 )
 
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
+        (BertweetConfig, TFBertweetForMultipleChoice),
+        (PhobertConfig, TFPhobertForMultipleChoice),
         (CamembertConfig, TFCamembertForMultipleChoice),
         (XLMConfig, TFXLMForMultipleChoice),
         (XLMRobertaConfig, TFXLMRobertaForMultipleChoice),
@@ -326,8 +328,6 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetForMultipleChoice),
         (FlaubertConfig, TFFlaubertForMultipleChoice),
         (AlbertConfig, TFAlbertForMultipleChoice),
-        (BertweetConfig, TFBertweetForMultipleChoice),
-        (PhobertConfig, TFPhobertForMultipleChoice),
     ]
 )
 
