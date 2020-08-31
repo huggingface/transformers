@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, HPSearchBackend
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
 from transformers.utils import logging
 
 
