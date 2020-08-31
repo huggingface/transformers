@@ -827,7 +827,7 @@ class TextGenerationPipeline(Pipeline):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
-            prefix (:obj:`str`, defaults to :obj:`None`):
+            prefix (:obj:`str`, `optional`):
                 Prefix added to prompt.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate
