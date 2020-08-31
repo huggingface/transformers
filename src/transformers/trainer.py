@@ -1425,7 +1425,7 @@ class Trainer:
 
     def floating_point_ops(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
-        For models with a `floating_point_ops` method (e.g. models that inherit from `PretrainedModel`), uses
+        For models that inherit from :class:`~transformers.PretrainedModel`, uses
         that method to compute the number of floating point operations for every backward + forward pass. If using
         another model, either implement such a method in the model or override this method.
 
