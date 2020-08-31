@@ -9,6 +9,7 @@ class HfArgumentParserTest(unittest.TestCase):
         logger = logging.get_logger()
 
         level_origin = logging.get_verbosity()
+        self.assertEqual(level_origin, logging.WARNING)
 
         logging.set_verbosity_error()
         self.assertEqual(logger.getEffectiveLevel(), logging.get_verbosity())
@@ -26,12 +27,14 @@ class HfArgumentParserTest(unittest.TestCase):
         logging.set_verbosity(level_origin)
 
     def test_integration(self):
-        import transformers.tokenization_bart
+
+        import transformers.tokenization_bart  # noqa
 
         logger = logging.get_logger("transformers.tokenization_bart")
         msg = "Testing 1, 2, 3"
 
-        # should be able to log warn (default setting)
+
+        # should be able to log warnings (default setting)
         with CaptureLogger(logger) as cl:
             logger.warn(msg)
         self.assertEqual(cl.out, msg + "\n")
@@ -39,13 +42,13 @@ class HfArgumentParserTest(unittest.TestCase):
         # this is setting the level for all of `transformers.*` loggers
         logging.set_verbosity_error()
 
-        # should not be able to log warn
+        # should not be able to log warnings
         with CaptureLogger(logger) as cl:
             logger.warn(msg)
         self.assertEqual(cl.out, "")
 
-        # should be able to log warn again
+        # should be able to log warnings again
         logging.set_verbosity_warning()
         with CaptureLogger(logger) as cl:
-            logger.warn(msg)
+            logger.warning(msg)
         self.assertEqual(cl.out, msg + "\n")
