@@ -12,7 +12,6 @@ from transformers import (
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
-    MarianTokenizer,
     MBartTokenizer,
     T5Tokenizer,
     TrainingArguments,
@@ -384,7 +383,7 @@ def main():
         logging.info("*** Test ***")
 
         test_metrics = trainer.predict(test_dataset=test_dataset).metrics
-        output_test_file = os.path.join(training_args.output_dir, f"test_results.txt")
+        output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
 
         if trainer.is_world_master():
             with open(output_test_file, "w") as writer:
