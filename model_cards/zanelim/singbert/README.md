@@ -13,8 +13,8 @@ datasets:
 - reddit singapore, malaysia
 - hardwarezone
 widget:
-- text: "die [MASK] must try"
 - text: "kopi c siew [MASK]"
+- text: "die [MASK] must try"
 ---
 
 # Model name
