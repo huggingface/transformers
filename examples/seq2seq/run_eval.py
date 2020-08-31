@@ -67,7 +67,7 @@ def generate_summaries_or_translations(
             fout.write(hypothesis + "\n")
             fout.flush()
     fout.close()
-    runtime = time.time() - start_time
+    runtime = int(time.time() - start_time)  # seconds
     n_obs = len(examples)
     return dict(n_obs=n_obs, runtime=runtime, seconds_per_sample=round(runtime / n_obs, 4))
 
@@ -132,4 +132,6 @@ def run_generate():
 
 
 if __name__ == "__main__":
+    # Usage for MT:
+    # python run_eval.py MODEL_NAME $DATA_DIR/test.source $save_dir/test_translations.txt --reference_path $DATA_DIR/test.target --score_path $save_dir/test_bleu.json  --task translation $@
     run_generate()

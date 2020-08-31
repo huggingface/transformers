@@ -109,3 +109,91 @@ class LineByLineTextDataset(Dataset):
 
     def __getitem__(self, i) -> torch.Tensor:
         return torch.tensor(self.examples[i], dtype=torch.long)
+
+
+class TextDatasetForNextSentencePrediction(Dataset):
+    """
+    This will be superseded by a framework-agnostic approach
+    soon.
+    """
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        file_path: str,
+        block_size: int,
+        overwrite_cache=False,
+    ):
+        assert os.path.isfile(file_path), f"Input file path {file_path} not found"
+
+        block_size = block_size - tokenizer.num_special_tokens_to_add(pair=True)
+
+        directory, filename = os.path.split(file_path)
+        cached_features_file = os.path.join(
+            directory,
+            "cached_nsp_{}_{}_{}".format(
+                tokenizer.__class__.__name__,
+                str(block_size),
+                filename,
+            ),
+        )
+
+        self.tokenizer = tokenizer
+        self.examples = []
+
+        # Make sure only the first process in distributed training processes the dataset,
+        # and the others will use the cache.
+        lock_path = cached_features_file + ".lock"
+
+        # Input file format:
+        # (1) One sentence per line. These should ideally be actual sentences, not
+        # entire paragraphs or arbitrary spans of text. (Because we use the
+        # sentence boundaries for the "next sentence prediction" task).
+        # (2) Blank lines between documents. Document boundaries are needed so
+        # that the "next sentence prediction" task doesn't span between documents.
+        #
+        # Example:
+        # I am very happy.
+        # Here is the second sentence.
+        #
+        # A new document.
+
+        with FileLock(lock_path):
+            if os.path.exists(cached_features_file) and not overwrite_cache:
+                start = time.time()
+                with open(cached_features_file, "rb") as handle:
+                    self.examples = pickle.load(handle)
+                logger.info(
+                    f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
+                )
+            else:
+                logger.info(f"Creating features from dataset file at {directory}")
+
+                self.examples = [[]]
+                with open(file_path, encoding="utf-8") as f:
+                    while True:
+                        line = f.readline()
+                        if not line:
+                            break
+                        line = line.strip()
+
+                        # Empty lines are used as document delimiters
+                        if not line and len(self.examples[-1]) != 0:
+                            self.examples.append([])
+                        tokens = tokenizer.tokenize(line)
+                        tokens = tokenizer.convert_tokens_to_ids(tokens)
+                        if tokens:
+                            self.examples[-1].append(tokens)
+
+                start = time.time()
+                with open(cached_features_file, "wb") as handle:
+                    pickle.dump(self.examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                logger.info(
+                    "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
+                )
+
+    def __len__(self):
+        return len(self.examples)
+
+    def __getitem__(self, i):
+        return self.examples[i]

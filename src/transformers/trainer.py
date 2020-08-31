@@ -658,7 +658,7 @@ class Trainer:
         if model_path is not None:
             # set global_step to global_step of last saved checkpoint from model path
             try:
-                self.global_step = int(model_path.split("-")[-1].split("/")[0])
+                self.global_step = int(model_path.split("-")[-1].split(os.path.sep)[0])
                 epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
                 steps_trained_in_current_epoch = self.global_step % (
                     len(train_dataloader) // self.args.gradient_accumulation_steps
@@ -672,8 +672,8 @@ class Trainer:
                 self.global_step = 0
                 logger.info("  Starting fine-tuning.")
 
-        tr_loss = 0.0
-        logging_loss = 0.0
+        tr_loss = torch.tensor(0.0).to(self.args.device)
+        logging_loss_scalar = 0.0
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
         train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
@@ -734,14 +734,15 @@ class Trainer:
                         self.global_step == 1 and self.args.logging_first_step
                     ):
                         logs: Dict[str, float] = {}
-                        logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
+                        tr_loss_scalar = tr_loss.item()
+                        logs["loss"] = (tr_loss_scalar - logging_loss_scalar) / self.args.logging_steps
                         # backward compatibility for pytorch schedulers
                         logs["learning_rate"] = (
                             self.lr_scheduler.get_last_lr()[0]
                             if version.parse(torch.__version__) >= version.parse("1.4")
                             else self.lr_scheduler.get_lr()[0]
                         )
-                        logging_loss = tr_loss
+                        logging_loss_scalar = tr_loss_scalar
 
                         self.log(logs)
 
@@ -787,8 +788,6 @@ class Trainer:
                     break
             epoch_pbar.close()
             train_pbar.update(1)
-            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
-                break
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -798,6 +797,8 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
+            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
+                break
 
         train_pbar.close()
         if self.tb_writer:
@@ -807,7 +808,7 @@ class Trainer:
             delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        return TrainOutput(self.global_step, tr_loss / self.global_step)
+        return TrainOutput(self.global_step, tr_loss.item() / self.global_step)
 
     def hyperparameter_search(
         self,
@@ -1042,7 +1043,7 @@ class Trainer:
 
         return inputs
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> float:
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -1058,7 +1059,7 @@ class Trainer:
                 argument :obj:`labels`. Check your model's documentation for all accepted arguments.
 
         Return:
-            :obj:`float`: The training loss on this batch.
+            :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
         if hasattr(self, "_training_step"):
             warnings.warn(
@@ -1096,7 +1097,7 @@ class Trainer:
         else:
             loss.backward()
 
-        return loss.item()
+        return loss
 
     def is_local_master(self) -> bool:
         """
@@ -1345,6 +1346,10 @@ class Trainer:
                 preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
             if label_ids is not None:
                 label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+            if eval_losses is not None:
+                eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
+            if samples_count is not None:
+                samples_count = sum(xm.mesh_reduce("samples_count", torch.tensor([samples_count]), torch.cat).tolist())
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
