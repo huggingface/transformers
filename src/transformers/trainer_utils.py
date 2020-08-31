@@ -4,7 +4,6 @@ from typing import Any, Dict, NamedTuple, Optional
 import numpy as np
 
 from .file_utils import is_tf_available, is_torch_available
-from .integrations import is_ray_available
 from .tokenization_utils_base import ExplicitEnum
 
 
@@ -93,6 +92,9 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
 
 
 def default_hp_space_optuna(trial) -> Dict[str, float]:
+    from .integrations import is_optuna_available
+
+    assert is_optuna_available(), "This function needs Optuna installed: `pip install optuna`"
     return {
         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
         "num_train_epochs": trial.suggest_int("num_train_epochs", 1, 5),
@@ -102,12 +104,14 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
 
 
 def default_hp_space_ray(trial) -> Dict[str, float]:
+    from .integrations import is_ray_available
+
     assert is_ray_available(), "This function needs ray installed: `pip install ray[tune]`"
     from ray import tune
 
     return {
         "learning_rate": tune.loguniform(1e-6, 1e-4),
-        "num_train_epochs": tune.choice(range(1, 6)),
+        "num_train_epochs": tune.choice(list(range(1, 6))),
         "seed": tune.uniform(1, 40),
         "per_device_train_batch_size": tune.choice([4, 8, 16, 32, 64]),
     }
