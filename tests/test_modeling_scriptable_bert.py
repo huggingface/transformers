@@ -35,7 +35,7 @@ from .test_modeling_common import (
 
 if is_torch_available():
     import torch
-    from transformers.modeling_bert import *
+    from transformers.modeling_bert import BertModel
 
     from transformers.modeling_scriptable_bert import (
         BertConfig,
@@ -628,7 +628,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                 if "labels" in inputs_dict:
                     decoder_attention_idx += 1
                 # Question Answering model returns start_logits and end_logits
-                if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                if model_class in [BertScriptableForQuestionAnswering]:
                     decoder_attention_idx += 1
 
                 decoder_attentions = outputs[decoder_attention_idx]
