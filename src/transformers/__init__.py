@@ -198,21 +198,21 @@ if is_torch_available():
     from .benchmark.benchmark import PyTorchBenchmark
     from .benchmark.benchmark_args import PyTorchBenchmarkArguments
     from .data.data_collator import (
-        default_data_collator,
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorWithPadding,
-        DataCollatorForNextSentencePrediction,
+        default_data_collator,
     )
     from .data.datasets import (
         GlueDataset,
-        TextDataset,
-        LineByLineTextDataset,
-        TextDatasetForNextSentencePrediction,
         GlueDataTrainingArguments,
+        LineByLineTextDataset,
         SquadDataset,
         SquadDataTrainingArguments,
+        TextDataset,
+        TextDatasetForNextSentencePrediction,
     )
     from .generation_utils import top_k_top_p_filtering
     from .modeling_albert import (

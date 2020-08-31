@@ -9,8 +9,8 @@ if is_torch_available():
 
     from transformers import (
         DataCollatorForLanguageModeling,
-        DataCollatorForPermutationLanguageModeling,
         DataCollatorForNextSentencePrediction,
+        DataCollatorForPermutationLanguageModeling,
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
