@@ -33,7 +33,6 @@ class HfArgumentParserTest(unittest.TestCase):
         logger = logging.get_logger("transformers.tokenization_bart")
         msg = "Testing 1, 2, 3"
 
-
         # should be able to log warnings (default setting)
         with CaptureLogger(logger) as cl:
             logger.warn(msg)
