@@ -32,7 +32,13 @@ from .configuration_bert import BertConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from .modeling_bert import BertLayerNorm, BertSelfOutput, BertIntermediate, BertOutput, BertPooler
-from .modeling_bert import BertPredictionHeadTransform, BertLMPredictionHead, BertOnlyMLMHead, BertOnlyNSPHead, BertPreTrainingHeads
+from .modeling_bert import (
+    BertPredictionHeadTransform,
+    BertLMPredictionHead,
+    BertOnlyMLMHead,
+    BertOnlyNSPHead,
+    BertPreTrainingHeads,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -144,15 +150,23 @@ def mish(x):
 
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
+
 def act_fn(name: str, input: torch.Tensor) -> torch.Tensor:
-    if name == "gelu": return gelu(input)
-    if name == "relu": return torch.nn.functional.relu(input)
-    if name == "swish": return swish(input)
-    if name == "gelu_new": return gelu_new(input)
-    else: raise KeyError("Unknown activation function '" + name + "'!")
+    if name == "gelu":
+        return gelu(input)
+    if name == "relu":
+        return torch.nn.functional.relu(input)
+    if name == "swish":
+        return swish(input)
+    if name == "gelu_new":
+        return gelu_new(input)
+    else:
+        raise KeyError("Unknown activation function '" + name + "'!")
+
 
 def filter_outputs(module: nn.Module, *args, **kwargs):
     return tuple(x for x in module.forward(*args, **kwargs) if x is not None)
+
 
 # Identical to BertEmbeddings, except for input/output type specification.
 class BertScriptableEmbeddings(nn.Module):
@@ -170,11 +184,13 @@ class BertScriptableEmbeddings(nn.Module):
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self,
-                input_ids: Optional[torch.Tensor] = None,
-                token_type_ids: Optional[torch.Tensor] = None,
-                position_ids: Optional[torch.Tensor] = None,
-                inputs_embeds: Optional[torch.Tensor] = None):
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+    ):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -207,6 +223,7 @@ class BertScriptableEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+
 class BertScriptableSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -228,8 +245,7 @@ class BertScriptableSelfAttention(nn.Module):
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape[0], new_x_shape[1],
-                   new_x_shape[2], new_x_shape[3])
+        x = x.view(new_x_shape[0], new_x_shape[1], new_x_shape[2], new_x_shape[3])
         return x.permute(0, 2, 1, 3)
 
     def forward(
@@ -239,7 +255,7 @@ class BertScriptableSelfAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,    
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -280,12 +296,13 @@ class BertScriptableSelfAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape[0],
-                                           new_context_layer_shape[1],
-                                           new_context_layer_shape[2])
+        context_layer = context_layer.view(
+            new_context_layer_shape[0], new_context_layer_shape[1], new_context_layer_shape[2]
+        )
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer, None)
         return outputs
+
 
 class BertScriptableAttention(nn.Module):
     def __init__(self, config):
@@ -319,7 +336,7 @@ class BertScriptableAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,           
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         self_outputs = self.self(
             hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, output_attentions,
@@ -328,27 +345,34 @@ class BertScriptableAttention(nn.Module):
         outputs = (attention_output, self_outputs[1])  # add attentions if we output them
         return outputs
 
+
 class DummyModule(nn.Module):
     """
     Dummy Module as a placeholder for cross attention Module.
     Used to appease TorchScript in BertLayers which are not decoders.
     """
+
     def __init__(self):
         super().__init__()
-    def forward(self, a,
-                b: Optional[torch.Tensor],
-                c: Optional[torch.Tensor],
-                d: Optional[torch.Tensor],
-                e: Optional[torch.Tensor],
-                f: bool):
+
+    def forward(
+        self,
+        a,
+        b: Optional[torch.Tensor],
+        c: Optional[torch.Tensor],
+        d: Optional[torch.Tensor],
+        e: Optional[torch.Tensor],
+        f: bool,
+    ):
         return torch.zeros([0])
+
 
 class BertScriptableLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention = BertScriptableAttention(config)
         self.is_decoder = config.is_decoder
-        self.crossattention = DummyModule() # dummy module
+        self.crossattention = DummyModule()  # dummy module
         if self.is_decoder:
             self.crossattention = BertScriptableAttention(config)
         self.intermediate = BertIntermediate(config)
@@ -372,7 +396,7 @@ class BertScriptableLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
         self_attention_weights = self_attention_outputs[1]
-        cross_attention_weights : Optional[torch.Tensor] = None
+        cross_attention_weights: Optional[torch.Tensor] = None
         if self.is_decoder and encoder_hidden_states is not None:
             cross_attention_outputs = self.crossattention(
                 attention_output,
@@ -390,6 +414,7 @@ class BertScriptableLayer(nn.Module):
         outputs = (layer_output, self_attention_weights, cross_attention_weights)
         return outputs
 
+
 class BertScriptableEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -405,7 +430,7 @@ class BertScriptableEncoder(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+    ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]:
         all_hidden_states = []
         all_attentions = []
         i = 0
@@ -434,9 +459,12 @@ class BertScriptableEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states.append(hidden_states)
 
-        return (hidden_states,
-                all_hidden_states if output_hidden_states else None,
-                all_attentions if output_attentions else None)
+        return (
+            hidden_states,
+            all_hidden_states if output_hidden_states else None,
+            all_attentions if output_attentions else None,
+        )
+
 
 class BertPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
@@ -518,6 +546,7 @@ BERT_INPUTS_DOCSTRING = r"""
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
+
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
@@ -538,6 +567,7 @@ class BertScriptableModel(BertPreTrainedModel):
         https://arxiv.org/abs/1706.03762
 
     """
+
     def __init__(self, config: BertConfig):
         super().__init__(config)
 
@@ -554,7 +584,9 @@ class BertScriptableModel(BertPreTrainedModel):
 
         self.init_weights()
 
-    def scriptable_get_extended_attention_mask(self, attention_mask: torch.Tensor, input_shape: Tuple[int, int], device: torch.device) -> torch.Tensor:
+    def scriptable_get_extended_attention_mask(
+        self, attention_mask: torch.Tensor, input_shape: Tuple[int, int], device: torch.device
+    ) -> torch.Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
 
@@ -601,7 +633,7 @@ class BertScriptableModel(BertPreTrainedModel):
         extended_attention_mask = extended_attention_mask.to(dtype=self.mask_dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
-    
+
     def scriptable_invert_attention_mask(self, encoder_attention_mask: torch.Tensor) -> torch.Tensor:
         """
         Invert an attention mask (e.g., switches 0. and 1.).
@@ -617,13 +649,15 @@ class BertScriptableModel(BertPreTrainedModel):
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.dim() == 2:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-        assert encoder_extended_attention_mask is not None    
+        assert encoder_extended_attention_mask is not None
         # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
         # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow
         # /transformer/transformer_layers.py#L270
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.mask_dtype)  # fp16 compatibility
+        encoder_extended_attention_mask = encoder_extended_attention_mask.to(
+            dtype=self.mask_dtype
+        )  # fp16 compatibility
 
         if self.mask_dtype == torch.float16:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
@@ -649,7 +683,9 @@ class BertScriptableModel(BertPreTrainedModel):
         head_mask = head_mask.to(dtype=self.mask_dtype)  # switch to fload if need + fp16 compatibility
         return head_mask
 
-    def scriptable_get_head_mask(self, head_mask: Optional[torch.Tensor], num_hidden_layers: int, is_attention_chunked: bool = False) -> Optional[torch.Tensor]:
+    def scriptable_get_head_mask(
+        self, head_mask: Optional[torch.Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+    ) -> Optional[torch.Tensor]:
         """
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -663,12 +699,12 @@ class BertScriptableModel(BertPreTrainedModel):
         """
         if head_mask is None:
             return None
-        else:    
+        else:
             head_mask = self._scriptable_convert_head_mask_to_5d(head_mask, num_hidden_layers)
             if is_attention_chunked is True:
                 head_mask = head_mask.unsqueeze(-1)
         return head_mask
-                
+
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
@@ -723,9 +759,7 @@ class BertScriptableModel(BertPreTrainedModel):
             heads.
         """
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        )
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -749,7 +783,9 @@ class BertScriptableModel(BertPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.scriptable_get_extended_attention_mask(attention_mask, (input_shape[0], input_shape[1]), device)
+        extended_attention_mask: torch.Tensor = self.scriptable_get_extended_attention_mask(
+            attention_mask, (input_shape[0], input_shape[1]), device
+        )
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
         # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
@@ -816,9 +852,11 @@ class BertScriptableForPreTraining(BertPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         next_sentence_label: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] =None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        ) -> Tuple[Optional[torch.Tensor], torch.Tensor, torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+    ) -> Tuple[
+        Optional[torch.Tensor], torch.Tensor, torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]
+    ]:
         r"""
         labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
@@ -886,10 +924,13 @@ class BertScriptableForPreTraining(BertPreTrainedModel):
         total_loss: Optional[torch.Tensor] = None
         if labels is not None and next_sentence_label is not None:
             masked_lm_loss = nn.functional.cross_entropy(prediction_scores.view(-1, self.vocab_size), labels.view(-1))
-            next_sentence_loss = nn.functional.cross_entropy(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+            next_sentence_loss = nn.functional.cross_entropy(
+                seq_relationship_score.view(-1, 2), next_sentence_label.view(-1)
+            )
             total_loss = masked_lm_loss + next_sentence_loss
 
         return (total_loss, prediction_scores, seq_relationship_score, hidden_states, attentions)
+
 
 @add_start_docstrings(
     """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, BERT_START_DOCSTRING
@@ -897,7 +938,9 @@ class BertScriptableForPreTraining(BertPreTrainedModel):
 class BertScriptableLMHeadModel(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        assert config.is_decoder, "If you want to use `BertScriptableLMHeadModel` as a standalone, add `is_decoder=True`."
+        assert (
+            config.is_decoder
+        ), "If you want to use `BertScriptableLMHeadModel` as a standalone, add `is_decoder=True`."
 
         self.bert = BertScriptableModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -921,7 +964,7 @@ class BertScriptableLMHeadModel(BertPreTrainedModel):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None
+        output_hidden_states: Optional[bool] = None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -981,13 +1024,13 @@ class BertScriptableLMHeadModel(BertPreTrainedModel):
 
         prediction_scores = self.cls(sequence_output)
 
-        ltr_lm_loss : Optional[torch.Tensor] = None
+        ltr_lm_loss: Optional[torch.Tensor] = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
             prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             ltr_lm_loss = nn.functional.cross_entropy(prediction_scores.view(-1, self.vocab_size), labels.view(-1))
-        
+
         return (ltr_lm_loss, prediction_scores, hidden_states, attentions)
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
@@ -1031,7 +1074,7 @@ class BertScriptableForMaskedLM(BertPreTrainedModel):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None        
+        output_hidden_states: Optional[bool] = None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1060,7 +1103,7 @@ class BertScriptableForMaskedLM(BertPreTrainedModel):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         """
-        
+
         sequence_output, pooled_output, hidden_states, attentions = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1076,10 +1119,10 @@ class BertScriptableForMaskedLM(BertPreTrainedModel):
 
         prediction_scores = self.cls(sequence_output)
 
-        masked_lm_loss : Optional[torch.Tensor] = None
+        masked_lm_loss: Optional[torch.Tensor] = None
         if labels is not None:
             masked_lm_loss = nn.functional.cross_entropy(prediction_scores.view(-1, self.vocab_size), labels.view(-1))
-        
+
         return (masked_lm_loss, prediction_scores, hidden_states, attentions)
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
@@ -1096,6 +1139,7 @@ class BertScriptableForMaskedLM(BertPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
+
 @add_start_docstrings(
     """Bert Model with a `next sentence prediction (classification)` head on top. """, BERT_START_DOCSTRING,
 )
@@ -1103,6 +1147,7 @@ class BertScriptableForNextSentencePrediction(BertPreTrainedModel):
     """
     Torch-Script-able version of BertForNextSentencePrediction, below
     """
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1122,7 +1167,7 @@ class BertScriptableForNextSentencePrediction(BertPreTrainedModel):
         next_sentence_label: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+    ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]:
         r"""
         next_sentence_label (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see ``input_ids`` docstring)
@@ -1179,11 +1224,14 @@ class BertScriptableForNextSentencePrediction(BertPreTrainedModel):
 
         seq_relationship_score = self.cls(pooled_output)
 
-        next_sentence_loss : Optional[torch.Tensor] = None
+        next_sentence_loss: Optional[torch.Tensor] = None
         if next_sentence_label is not None:
-            next_sentence_loss = nn.functional.cross_entropy(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+            next_sentence_loss = nn.functional.cross_entropy(
+                seq_relationship_score.view(-1, 2), next_sentence_label.view(-1)
+            )
 
-        return  (next_sentence_loss, seq_relationship_score, hidden_states, attentions)
+        return (next_sentence_loss, seq_relationship_score, hidden_states, attentions)
+
 
 @add_start_docstrings(
     """Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of
@@ -1212,7 +1260,7 @@ class BertScriptableForSequenceClassification(BertPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) ->  Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+    ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]:
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the sequence classification/regression loss.
@@ -1264,6 +1312,7 @@ class BertScriptableForSequenceClassification(BertPreTrainedModel):
 
         return (loss, logits, hidden_states, attentions)
 
+
 @add_start_docstrings(
     """Bert Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -1290,7 +1339,7 @@ class BertScriptableForMultipleChoice(BertPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+    ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]:
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the multiple choice classification loss.
@@ -1322,7 +1371,7 @@ class BertScriptableForMultipleChoice(BertPreTrainedModel):
         else:
             assert inputs_embeds is not None
             num_choices = inputs_embeds.shape[1]
-        
+
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
@@ -1332,7 +1381,7 @@ class BertScriptableForMultipleChoice(BertPreTrainedModel):
             if inputs_embeds is not None
             else None
         )
-        
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -1345,7 +1394,7 @@ class BertScriptableForMultipleChoice(BertPreTrainedModel):
         )
 
         pooled_output = outputs[1]
-        
+
         hidden_states, attentions = outputs[2], outputs[3]
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
@@ -1355,7 +1404,8 @@ class BertScriptableForMultipleChoice(BertPreTrainedModel):
         if labels is not None:
             loss = nn.functional.cross_entropy(reshaped_logits, labels)
 
-        return  (loss, reshaped_logits, hidden_states, attentions)
+        return (loss, reshaped_logits, hidden_states, attentions)
+
 
 @add_start_docstrings(
     """Bert Model with a token classification head on top (a linear layer on top of
@@ -1385,7 +1435,7 @@ class BertScriptableForTokenClassification(BertPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+    ) -> Tuple[Optional[torch.Tensor], torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]:
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
@@ -1441,6 +1491,7 @@ class BertScriptableForTokenClassification(BertPreTrainedModel):
 
         return (loss, logits, hidden_states, attentions)
 
+
 @add_start_docstrings(
     """Bert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
@@ -1468,7 +1519,9 @@ class BertScriptableForQuestionAnswering(BertPreTrainedModel):
         end_positions: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    )-> Tuple[Optional[torch.Tensor], torch.Tensor, torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]] :
+    ) -> Tuple[
+        Optional[torch.Tensor], torch.Tensor, torch.Tensor, Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]
+    ]:
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

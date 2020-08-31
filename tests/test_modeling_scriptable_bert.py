@@ -24,12 +24,19 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, _config_zero_init, global_rng
+from .test_modeling_common import (
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+    _config_zero_init,
+    global_rng,
+)
 
 if is_torch_available():
     import torch
     from transformers.modeling_bert import *
-    
+
     from transformers.modeling_scriptable_bert import (
         BertConfig,
         BertScriptableForMaskedLM,
@@ -43,6 +50,7 @@ if is_torch_available():
         BertScriptableModel,
     )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+
 
 class BertScriptableModelTester:
     def __init__(
@@ -212,7 +220,9 @@ class BertScriptableModelTester:
             token_type_ids=token_type_ids,
             encoder_hidden_states=encoder_hidden_states,
         )
-        sequence_output, pooled_output, hidden_states, attentions = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        sequence_output, pooled_output, hidden_states, attentions = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         self.parent.assertEqual(sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(pooled_output.shape, (self.batch_size, self.hidden_size))
 
@@ -401,10 +411,12 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in [BertScriptableForTokenClassification,
-                                BertScriptableForTokenClassification,
-                                BertScriptableLMHeadModel,
-                                BertScriptableForMaskedLM]:
+            elif model_class in [
+                BertScriptableForTokenClassification,
+                BertScriptableForTokenClassification,
+                BertScriptableLMHeadModel,
+                BertScriptableForMaskedLM,
+            ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
@@ -455,7 +467,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        #self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+        # self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -463,7 +475,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_for_causal_lm_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        #self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
+        # self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -544,10 +556,10 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                     models_equal = False
 
             self.assertTrue(models_equal)
-    
+
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self._scriptable_create_and_check_torchscript(config, inputs_dict)        
+        self._scriptable_create_and_check_torchscript(config, inputs_dict)
 
     def test_torchscript_output_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -560,7 +572,8 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
         self._scriptable_create_and_check_torchscript(config, inputs_dict)
 
     # ScriptableBert models do not support dictionary outputs.
-    def test_model_outputs_equivalence(self): return True
+    def test_model_outputs_equivalence(self):
+        return True
 
     # Common tests: copied from test_modeling_common, modified output indexes only.
     def test_attention_outputs(self):
@@ -607,7 +620,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
             out_len = len(outputs)
-            
+
             if self.is_encoder_decoder:
                 decoder_attention_idx = 3
 
@@ -617,7 +630,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                 # Question Answering model returns start_logits and end_logits
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
                     decoder_attention_idx += 1
-            
+
                 decoder_attentions = outputs[decoder_attention_idx]
                 self.assertIsInstance(decoder_attentions, (list, tuple))
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
@@ -625,7 +638,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                     list(decoder_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
                 )
-            
+
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
@@ -634,7 +647,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            
+
             self_attentions = outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
@@ -647,7 +660,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                     list(self_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
-    
+
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -738,7 +751,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
             self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
             self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
-    
+
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -772,7 +785,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-  
+
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -797,4 +810,3 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                 out_1[np.isnan(out_1)] = 0
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
-   
