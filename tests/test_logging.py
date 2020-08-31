@@ -31,22 +31,21 @@ class HfArgumentParserTest(unittest.TestCase):
         logger = logging.get_logger("transformers.tokenization_bart")
         msg = "Testing 1, 2, 3"
 
-        # should be able to log info (default setting)
-        logging.set_verbosity_info()
+        # should be able to log warn (default setting)
         with CaptureLogger(logger) as cl:
-            logger.info(msg)
+            logger.warn(msg)
         self.assertEqual(cl.out, msg + "\n")
 
         # this is setting the level for all of `transformers.*` loggers
         logging.set_verbosity_error()
 
-        # should not be able to log info
+        # should not be able to log warn
         with CaptureLogger(logger) as cl:
-            logger.info(msg)
+            logger.warn(msg)
         self.assertEqual(cl.out, "")
 
-        # should be able to log info again
-        logging.set_verbosity_info()
+        # should be able to log warn again
+        logging.set_verbosity_warning()
         with CaptureLogger(logger) as cl:
-            logger.info(msg)
+            logger.warn(msg)
         self.assertEqual(cl.out, msg + "\n")
