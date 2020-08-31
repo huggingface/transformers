@@ -27,6 +27,7 @@ from .integrations import (
     is_ray_available,
     is_tensorboard_available,
     is_wandb_available,
+    run_hp_search,
 )
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -295,7 +296,7 @@ class Trainer:
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
-        self._use_tune_checkpoints = False
+        self.use_tune_checkpoints = False
 
     def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -550,7 +551,7 @@ class Trainer:
             tune.report(objective=self.objective, **metrics)
 
     def _tune_save_checkpoint(self):
-        if not self._use_tune_checkpoints:
+        if not self.use_tune_checkpoints:
             return
         with tune.checkpoint_dir(step=self.global_step) as checkpoint_dir:
             self.args.output_dir = checkpoint_dir
@@ -883,95 +884,7 @@ class Trainer:
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        def _objective(trial, checkpoint_dir=None):
-            model_path = None
-            if checkpoint_dir:
-                for subdir in os.listdir(checkpoint_dir):
-                    if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                        model_path = os.path.join(checkpoint_dir, subdir)
-            self.objective = None
-            self.train(model_path=model_path, trial=trial)
-            # If there hasn't been any evaluation during the training loop.
-            if getattr(self, "objective", None) is None:
-                metrics = self.evaluate()
-                self.objective = self.compute_objective(metrics)
-                if self.hp_search_backend == HPSearchBackend.RAY:
-                    self._tune_save_checkpoint()
-                    tune.report(objective=self.objective)
-            return self.objective
-
-        if self.hp_search_backend == HPSearchBackend.OPTUNA:
-            timeout = kwargs.pop("timeout", None)
-            n_jobs = kwargs.pop("n_jobs", 1)
-            study = optuna.create_study(direction=direction, **kwargs)
-            study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
-            best_trial = study.best_trial
-            best_run = BestRun(str(best_trial.number), best_trial.value, best_trial.params)
-        elif self.hp_search_backend == HPSearchBackend.RAY:
-            # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
-            # while doing the ray hp search.
-            _tb_writer = self.tb_writer
-            self.tb_writer = None
-            _model = self.model
-            self.model = None
-            # Setup default `resources_per_trial` and `reporter`.
-            if "resources_per_trial" not in kwargs and self.args.n_gpu > 0:
-                # `args.n_gpu` is considered the total number of GPUs that will be split
-                # among the `n_jobs`
-                n_jobs = int(kwargs.pop("n_jobs", 1))
-                num_gpus_per_trial = self.args.n_gpu
-                if num_gpus_per_trial / n_jobs >= 1:
-                    num_gpus_per_trial = int(np.ceil(num_gpus_per_trial / n_jobs))
-                kwargs["resources_per_trial"] = {"gpu": num_gpus_per_trial}
-
-            if "reporter" not in kwargs:
-                from ray.tune import CLIReporter
-
-                kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
-            if "keep_checkpoints_num" in kwargs and kwargs["keep_checkpoints_num"] > 0:
-                # `keep_checkpoints_num=0` would disabled checkpointing
-                self._use_tune_checkpoints = True
-                if kwargs["keep_checkpoints_num"] > 1:
-                    logger.warning(
-                        "Currently keeping {} checkpoints for each trial. Checkpoints are usually huge, "
-                        "consider setting `keep_checkpoints_num=1`."
-                    )
-            if "scheduler" in kwargs:
-                from ray.tune.schedulers import (
-                    ASHAScheduler,
-                    HyperBandForBOHB,
-                    MedianStoppingRule,
-                    PopulationBasedTraining,
-                )
-
-                # Check if checkpointing is enabled for PopulationBasedTraining
-                if isinstance(kwargs["scheduler"], PopulationBasedTraining):
-                    if not self._use_tune_checkpoints:
-                        logger.warning(
-                            "You are using PopulationBasedTraining but you haven't enabled checkpointing. "
-                            "This means your trials will train from scratch everytime they are exploiting "
-                            "new configurations. Consider enabling checkpointing by passing "
-                            "`keep_checkpoints_num=1` as an additional argument to `Trainer.hyperparameter_search`."
-                        )
-
-                # Check for `do_eval` and `eval_during_training` for schedulers that require intermediate reporting.
-                if isinstance(
-                    kwargs["scheduler"], (ASHAScheduler, MedianStoppingRule, HyperBandForBOHB, PopulationBasedTraining)
-                ) and (not self.args.do_eval or not self.args.evaluate_during_training):
-                    raise RuntimeError(
-                        "You are using {cls} as a scheduler but you haven't enabled evaluation during training. "
-                        "This means your trials will not report intermediate results to Ray Tune, and "
-                        "can thus not be stopped early or used to exploit other trials parameters. "
-                        "If this is what you want, do not use {cls}. If you would like to use {cls}, "
-                        "make sure you pass `do_eval=True` and `evaluate_during_training=True` in the "
-                        "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
-                    )
-
-            analysis = tune.run(_objective, config=self.hp_space(None), num_samples=n_trials, **kwargs)
-            best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
-            best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
-            self.tb_writer = _tb_writer
-            self.model = _model
+        best_run = run_hp_search(self, n_trials, direction, kwargs)
 
         self.hp_search_backend = None
         return best_run
