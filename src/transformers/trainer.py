@@ -27,7 +27,8 @@ from .integrations import (
     is_ray_available,
     is_tensorboard_available,
     is_wandb_available,
-    run_hp_search,
+    run_hp_search_optuna,
+    run_hp_search_ray,
 )
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -884,7 +885,8 @@ class Trainer:
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        best_run = run_hp_search(self, n_trials, direction, kwargs)
+        run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
+        best_run = run_hp_search(self, n_trials, direction, **kwargs)
 
         self.hp_search_backend = None
         return best_run
