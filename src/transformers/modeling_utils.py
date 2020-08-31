@@ -344,7 +344,7 @@ class ModuleUtilsMixin:
         """
         Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
         batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
-        tokens (valid if 12 * d_model << sequence_length) as laid out in https://arxiv.org/pdf/2001.08361.pdf section
+        tokens (valid if :obj:`12 * d_model << sequence_length`) as laid out in `this paper <https://arxiv.org/pdf/2001.08361.pdf>`__ section
         2.1. Should be  overriden for transformers with parameter re-use e.g. Albert or Universal Transformers, or
         if doing long-range modeling with very high sequence lengths.
 
