@@ -241,9 +241,9 @@ class BartSummarizationDistiller(SummarizationModule):
         normed_student_states = F.layer_norm(student_states, student_states.shape[1:])
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
         normed_teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
-
+        #import ipdb; ipdb.set_trace()
         hidden_losses = (
-            F.mse_loss(normed_student_states, normed_teacher_states, reduction="none") * mask.unsqueeze(-1)
+            F.mse_loss(normed_student_states, normed_teacher_states, reduction="none") * mask.unsqueeze(0).unsqueeze(-1)
         ).sum() / valid_count
         return hidden_losses
 
