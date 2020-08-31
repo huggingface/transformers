@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import argparse
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -22,7 +23,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import PegasusConfig, PegasusForConditionalGeneration, PegasusTokenizer
-from transformers.configuration_pegasus import DEFAULTS, expected_alpha, max_gen_length, max_model_length
+from transformers.configuration_pegasus import DEFAULTS, task_specific_params
 
 
 PATTERNS = [
@@ -101,23 +102,25 @@ def get_tf_weights_as_numpy(path="./ckpt/aeslc/model.ckpt-32000") -> Dict:
     return tf_weights
 
 
-def convert_pegasus_ckpt_to_pytorch(ckpt_path, save_dir):
+def convert_pegasus_ckpt_to_pytorch(ckpt_path: str, save_dir: str):
     # save tokenizer first
     dataset = Path(ckpt_path).parent.name
-    desired_max_model_length = max_model_length[dataset]
+    desired_max_model_length = task_specific_params[f"summarization_{dataset}"]["max_position_embeddings"]
     tok = PegasusTokenizer.from_pretrained("sshleifer/pegasus", model_max_length=desired_max_model_length)
     assert tok.model_max_length == desired_max_model_length
     tok.save_pretrained(save_dir)
 
     # convert model
     tf_weights = get_tf_weights_as_numpy(ckpt_path)
-    cfg_updates = dict(
-        max_length=max_gen_length[dataset],
-        length_penalty=expected_alpha.get(dataset, 0.8),
-        max_position_embeddings=desired_max_model_length,
-    )
+    cfg_updates = task_specific_params[f"summarization_{dataset}"]
+    if dataset == "large":
+        cfg_updates["task_specific_params"] = task_specific_params
     torch_model = convert_pegasus_to_bart(tf_weights, cfg_updates)
     torch_model.save_pretrained(save_dir)
+    sd = torch_model.state_dict()
+    sd.pop("model.decoder.embed_positions.weight")
+    sd.pop("model.encoder.embed_positions.weight")
+    torch.save(sd, Path(save_dir) / "pytorch_model.bin")
 
 
 if __name__ == "__main__":
@@ -127,5 +130,6 @@ if __name__ == "__main__":
     parser.add_argument("save_dir", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
     if args.save_dir is None:
-        args.save_dir = f"pegasus/{Path(args.tf_ckpt_path).parent.name}"
+        dataset = Path(args.tf_ckpt_path).parent.name
+        args.save_dir = os.path.join("pegasus", dataset)
     convert_pegasus_ckpt_to_pytorch(args.tf_ckpt_path, args.save_dir)
