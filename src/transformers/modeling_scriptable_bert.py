@@ -1023,9 +1023,9 @@ class BertScriptableLMHeadModel(BertPreTrainedModel):
         ltr_lm_loss: Optional[torch.Tensor] = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
-            prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
-            ltr_lm_loss = nn.functional.cross_entropy(prediction_scores.view(-1, self.vocab_size), labels.view(-1))
+            ltr_lm_loss = nn.functional.cross_entropy(shifted_prediction_scores.view(-1, self.vocab_size), labels.view(-1))
 
         return (ltr_lm_loss, prediction_scores, hidden_states, attentions)
 
