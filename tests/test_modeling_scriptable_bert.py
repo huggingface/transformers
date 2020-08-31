@@ -312,7 +312,10 @@ class BertScriptableModelTester:
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, next_sentence_label=sequence_labels,
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            next_sentence_label=sequence_labels,
         )
         self.parent.assertEqual(result[1].shape, (self.batch_size, 2))
 
@@ -677,7 +680,10 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertLessEqual(max_diff, 1e-5)
 
     def test_feed_forward_chunking(self):
-        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
@@ -715,7 +721,9 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
             # Prepare head_mask
             # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
             head_mask = torch.ones(
-                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device,
+                self.model_tester.num_hidden_layers,
+                self.model_tester.num_attention_heads,
+                device=torch_device,
             )
             head_mask[0, 0] = 0
             head_mask[-1, :-1] = 0
@@ -769,7 +777,8 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                 seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
