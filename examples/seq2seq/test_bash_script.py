@@ -20,6 +20,7 @@ from .utils import load_json
 
 
 MODEL_NAME = MBART_TINY
+# TODO(SS): MODEL_NAME = "sshleifer/student_mbart_en_ro_1_1"
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 
 
@@ -54,7 +55,7 @@ def test_train_mbart_cc25_enro_script():
         bash_script = bash_script.replace(k, str(v))
     output_dir = tempfile.mkdtemp(prefix="output_mbart")
 
-    bash_script = bash_script.replace("--fp16 ", " ")
+    bash_script = bash_script.replace("--fp16 ", "")
     testargs = (
         ["finetune.py"]
         + bash_script.split()
