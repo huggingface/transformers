@@ -185,6 +185,7 @@ conversion utilities for the following models:
     main_classes/trainer
     main_classes/optimizer_schedules
     main_classes/processors
+    main_classes/logging
     model_doc/auto
     model_doc/encoderdecoder
     model_doc/bert
