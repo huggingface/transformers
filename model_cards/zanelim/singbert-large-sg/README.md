@@ -13,17 +13,17 @@ datasets:
 - reddit singapore, malaysia
 - hardwarezone
 widget:
-- text: "die [MASK] must try"
 - text: "kopi c siew [MASK]"
+- text: "die [MASK] must try"
 ---
 
 # Model name
 
-SingBert - Bert for Singlish (SG) and Manglish (MY).
+SingBert Large - Bert for Singlish (SG) and Manglish (MY).
 
 ## Model description
 
-Similar to [SingBert](https://huggingface.co/zanelim/singbert) but initialized from [BERT large uncased (whole word masking)](https://github.com/google-research/bert#pre-trained-models), with pre-training finetuned on
+Similar to [SingBert](https://huggingface.co/zanelim/singbert) but the large version, which was initialized from [BERT large uncased (whole word masking)](https://github.com/google-research/bert#pre-trained-models), with pre-training finetuned on
 [singlish](https://en.wikipedia.org/wiki/Singlish) and [manglish](https://en.wikipedia.org/wiki/Manglish) data.
 
 ## Intended uses & limitations
