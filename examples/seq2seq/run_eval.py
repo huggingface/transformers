@@ -67,7 +67,7 @@ def generate_summaries_or_translations(
             fout.write(hypothesis + "\n")
             fout.flush()
     fout.close()
-    runtime = time.time() - start_time
+    runtime = int(time.time() - start_time)  # seconds
     n_obs = len(examples)
     return dict(n_obs=n_obs, runtime=runtime, seconds_per_sample=round(runtime / n_obs, 4))
 

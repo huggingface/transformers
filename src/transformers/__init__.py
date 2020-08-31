@@ -200,6 +200,7 @@ if is_torch_available():
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorWithPadding,
         default_data_collator,
@@ -211,6 +212,7 @@ if is_torch_available():
         SquadDataset,
         SquadDataTrainingArguments,
         TextDataset,
+        TextDatasetForNextSentencePrediction,
     )
     from .generation_utils import top_k_top_p_filtering
     from .modeling_albert import (

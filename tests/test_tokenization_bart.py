@@ -69,12 +69,12 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_prepare_seq2seq_batch(self):
-        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
         ]
-        expected_src_tokens = [0, 250, 251, 17818, 13, 32933, 21645, 1258, 4, 2]
+        expected_src_tokens = [0, 250, 251, 17818, 13, 39186, 1938, 4, 2]
 
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             batch = tokenizer.prepare_seq2seq_batch(
@@ -82,8 +82,8 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
             )
             self.assertIsInstance(batch, BatchEncoding)
 
-            self.assertEqual((2, 10), batch.input_ids.shape)
-            self.assertEqual((2, 10), batch.attention_mask.shape)
+            self.assertEqual((2, 9), batch.input_ids.shape)
+            self.assertEqual((2, 9), batch.attention_mask.shape)
             result = batch.input_ids.tolist()[0]
             self.assertListEqual(expected_src_tokens, result)
             # Test that special tokens are reset
@@ -91,7 +91,7 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
     # Test Prepare Seq
     @require_torch
     def test_seq2seq_batch_empty_target_text(self):
-        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
             batch = tokenizer.prepare_seq2seq_batch(src_text, return_tensors="pt")
             # check if input_ids are returned and no labels
@@ -102,7 +102,7 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_seq2seq_batch_max_target_length(self):
-        src_text = ["A long paragraph for summrization.", "Another paragraph for summrization."]
+        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
@@ -131,7 +131,7 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_special_tokens(self):
 
-        src_text = ["A long paragraph for summrization."]
+        src_text = ["A long paragraph for summarization."]
         tgt_text = [
             "Summary of the text.",
         ]
