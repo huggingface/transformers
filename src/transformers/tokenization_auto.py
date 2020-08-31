@@ -23,6 +23,7 @@ from .configuration_auto import (
     AutoConfig,
     BartConfig,
     BertConfig,
+    BertweetConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -48,6 +49,7 @@ from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer, MBartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
@@ -75,6 +77,7 @@ logger = logging.getLogger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
+        (BertweetConfig, (BertweetTokenizer, None)),
         (PhobertConfig, (PhobertTokenizer, None)),
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, None)),
@@ -116,6 +119,7 @@ class AutoTokenizer:
             - `distilbert`: DistilBertTokenizer (DistilBert model)
             - `albert`: AlbertTokenizer (ALBERT model)
             - `camembert`: CamembertTokenizer (CamemBERT model)
+            - `bertweet`: BertweetTokenizer (BERTweet model)
             - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
             - `longformer`: LongformerTokenizer (AllenAI Longformer model)
             - `roberta`: RobertaTokenizer (RoBERTa model)
@@ -151,6 +155,7 @@ class AutoTokenizer:
             - `distilbert`: DistilBertTokenizer (DistilBert model)
             - `albert`: AlbertTokenizer (ALBERT model)
             - `camembert`: CamembertTokenizer (CamemBERT model)
+            - `bertweet`: BertweetTokenizer (BERTweet model)
             - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
             - `longformer`: LongformerTokenizer (AllenAI Longformer model)
             - `roberta`: RobertaTokenizer (RoBERTa model)
