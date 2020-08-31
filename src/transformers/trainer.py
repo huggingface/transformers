@@ -27,6 +27,7 @@ from .integrations import (
     is_ray_available,
     is_tensorboard_available,
     is_wandb_available,
+    run_hp_search,
 )
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -295,6 +296,7 @@ class Trainer:
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
+        self.use_tune_checkpoints = False
 
     def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -544,7 +546,20 @@ class Trainer:
             if trial.should_prune():
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
+            if self.global_step % self.args.save_steps == 0:
+                self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
+
+    def _tune_save_checkpoint(self):
+        if not self.use_tune_checkpoints:
+            return
+        with tune.checkpoint_dir(step=self.global_step) as checkpoint_dir:
+            self.args.output_dir = checkpoint_dir
+            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
+            self.save_model(output_dir)
+            if self.is_world_master():
+                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
     def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
         """
@@ -869,40 +884,7 @@ class Trainer:
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        def _objective(trial):
-            self.objective = None
-            self.train(trial=trial)
-            # If there hasn't been any evaluation during the training loop.
-            if getattr(self, "objective", None) is None:
-                metrics = self.evaluate()
-                self.objective = self.compute_objective(metrics)
-                if self.hp_search_backend == HPSearchBackend.RAY:
-                    tune.report(objective=self.objective)
-            return self.objective
-
-        if self.hp_search_backend == HPSearchBackend.OPTUNA:
-            timeout = kwargs.pop("timeout", None)
-            n_jobs = kwargs.pop("n_jobs", 1)
-            study = optuna.create_study(direction=direction, **kwargs)
-            study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
-            best_trial = study.best_trial
-            best_run = BestRun(str(best_trial.number), best_trial.value, best_trial.params)
-        elif self.hp_search_backend == HPSearchBackend.RAY:
-            # The TensorBoard writer does not pickle so we have to remove it (if it exists) while doing the ray hp
-            # search.
-            _tb_writer = self.tb_writer
-            self.tb_writer = None
-            # Setup default `resources_per_trial` and `reporter`.
-            if "resources_per_trial" not in kwargs and self.args.n_gpu > 0:
-                kwargs["resources_per_trial"] = {"gpu": self.args.n_gpu}
-            if "reporter" not in kwargs:
-                from ray.tune import CLIReporter
-
-                kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
-            analysis = tune.run(_objective, config=self.hp_space(None), num_samples=n_trials, **kwargs)
-            best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
-            best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
-            self.tb_writer = _tb_writer
+        best_run = run_hp_search(self, n_trials, direction, kwargs)
 
         self.hp_search_backend = None
         return best_run
