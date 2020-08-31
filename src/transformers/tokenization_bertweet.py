@@ -279,7 +279,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
     def _tokenize(self, text):
         """ Tokenize a string.
         """
-        if self.normalization:
+        if self.normalization: # Perform Tweet normalization before performing BPE
             text = self.normalizeTweet(text)
 
         split_tokens = []
