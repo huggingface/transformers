@@ -262,7 +262,7 @@ class BartTranslationDistiller(BartSummarizationDistiller):
 
     mode = "translation"
     metric_names = ["bleu"]
-    val_metric = "bleu"
+    default_val_metric = "bleu"
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, **kwargs)
