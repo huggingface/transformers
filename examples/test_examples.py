@@ -114,7 +114,9 @@ class ExamplesTests(TestCasePlus):
             --max_seq_length=128
             """.split()
         if torch.cuda.is_available():
-            testargs += ["--fp16", "--gpus=1"]
+            testargs += ["--gpus=1"]
+        if is_cuda_and_apex_avaliable():
+            testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
             result = run_pl_glue.main()
