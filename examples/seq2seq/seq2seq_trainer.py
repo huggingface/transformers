@@ -155,7 +155,7 @@ class Seq2SeqTrainer(Trainer):
 
         max_length = model.config.max_position_embeddings
         with torch.no_grad():
-            if self.args.predict_from_generate:
+            if self.args.predict_with_generate:
                 generated_tokens = model.generate(
                     inputs["input_ids"], attention_mask=inputs["attention_mask"], use_cache=True
                 )

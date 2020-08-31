@@ -119,7 +119,7 @@ class Seq2SeqDataCollator:
 class Seq2SeqTrainingArguments(TrainingArguments):
     label_smoothing: Optional[float] = field(default=0.0, metadata={"help": "Label smoothing"})
     sortish_sampler: bool = field(default=False, metadata={"help": "Sortish Sampler"})
-    predict_from_generate: bool = field(default=False, metadata={"help": "should generate or not"})
+    predict_with_generate: bool = field(default=False, metadata={"help": "should generate or not"})
 
 
 @dataclass
@@ -348,7 +348,7 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=Seq2SeqDataCollator(tokenizer, data_args),
-        compute_metrics=build_compute_metrics_fn(data_args.task) if training_args.predict_from_generate else None,
+        compute_metrics=build_compute_metrics_fn(data_args.task) if training_args.predict_with_generate else None,
         prediction_loss_only=training_args.prediction_loss_only,
     )
 
