@@ -90,6 +90,12 @@ class BartSummarizationDistiller(SummarizationModule):
         d_layers_to_copy: List = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
         hparams.d_layer_to_copy = d_layers_to_copy
+        if hparams.supervise_forward:
+            hparams.d_matches = get_layers_to_supervise(
+                student_updates["decoder_layers"], teacher.config.decoder_layers
+            )
+        else:
+            hparams.d_matches = d_layers_to_copy
         hparams.e_layer_to_copy = e_layers_to_copy
         kw = teacher.config.to_diff_dict()
         kw.update(student_updates)
@@ -221,7 +227,7 @@ class BartSummarizationDistiller(SummarizationModule):
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
         if self.alpha_hid > 0:
-            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
+            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_matches)
 
         blended_loss = (
             self.alpha_ce * loss_ce
@@ -241,9 +247,9 @@ class BartSummarizationDistiller(SummarizationModule):
         normed_student_states = F.layer_norm(student_states, student_states.shape[1:])
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
         normed_teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
-        #import ipdb; ipdb.set_trace()
         hidden_losses = (
-            F.mse_loss(normed_student_states, normed_teacher_states, reduction="none") * mask.unsqueeze(0).unsqueeze(-1)
+            F.mse_loss(normed_student_states, normed_teacher_states, reduction="none")
+            * mask.unsqueeze(0).unsqueeze(-1)
         ).sum() / valid_count
         return hidden_losses
 
@@ -258,6 +264,7 @@ def add_distill_args(parser):
     parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
     parser.add_argument("--no_teacher", action="store_true", default=False)
     parser.add_argument("--length_penalty", type=float, default=-1)
+    parser.add_argument("--supervise_forward", action="store_true", type=bool, default=-1)
 
 
 class BartTranslationDistiller(BartSummarizationDistiller):
@@ -392,7 +399,7 @@ class T5SummarizationDistiller(BartSummarizationDistiller):
 
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         if self.alpha_hid > 0:
-            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
+            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_matches)
 
         blended_loss = (
             self.alpha_ce * loss_ce
@@ -466,11 +473,22 @@ LAYERS_TO_COPY = {
     },
     6: {1: [0], 2: [0, 5], 3: [0, 2, 5], 4: [0, 1, 3, 5], 6: list(range(6))},
 }
+LAYERS_TO_SUPERVISE = {
+    12: {1: [11], 2: [5, 11], 3: [3, 7, 11], 6: [1, 3, 5, 8, 10, 11]},
+    16: {1: [15], 4: [4, 9, 12, 15], 8: [1, 3, 5, 7, 9, 11, 13, 15]},
+    6: {1: [5], 2: [3, 5], 3: [1, 4, 5], 4: [1, 2, 4, 5]},
+    2: {1: [1], 2: [0, 1]},
+}
+
+
+def get_layers_to_supervise(n_student, n_teacher):
+    return LAYERS_TO_SUPERVISE[n_teacher][n_student]
 
 
 def get_layers_to_copy(n_student, n_teacher):
     try:
-        return LAYERS_TO_COPY[n_teacher][n_student]
+        val = LAYERS_TO_COPY[n_teacher][n_student]
+        assert len(LAYERS_TO_SUPERVISE[n_teacher][n_student]) == len(val) == n_student
     except KeyError:
         warnings.warn(
             f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"

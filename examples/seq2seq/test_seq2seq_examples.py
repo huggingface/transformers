@@ -30,6 +30,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
+    "supervise_forward": True,
     "label_smoothing": 0.2,
     "adafactor": True,
     "early_stopping_patience": 2,
