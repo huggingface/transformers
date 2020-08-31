@@ -89,10 +89,10 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
 def get_verbosity() -> int:
     """
     Return the current level for the 🤗 Transformers's root logger as an int.
-    
+
     Returns:
         :obj:`int`: The logging level.
-    
+
     .. note::
 
         🤗 Transformers has following logging levels:
@@ -115,7 +115,7 @@ def set_verbosity(verbosity: int) -> None:
     Args:
         verbosity (:obj:`int`):
             Logging level, e.g., one of:
-            
+
             - ``transformers.logging.CRITICAL`` or ``transformers.logging.FATAL``
             - ``transformers.logging.ERROR``
             - ``transformers.logging.WARNING`` or ``transformers.logging.WARN``
