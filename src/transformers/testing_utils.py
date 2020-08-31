@@ -1,4 +1,5 @@
 import inspect
+import logging
 import os
 import re
 import shutil
@@ -268,6 +269,45 @@ class CaptureStderr(CaptureStd):
 
     def __init__(self):
         super().__init__(out=False)
+
+
+class CaptureLogger:
+    """Context manager to capture `logging` streams
+
+    Args:
+    - logger: 'logging` logger object
+
+    Results:
+        The captured output is available via `self.out`
+
+    Example:
+
+    from transformers import logging
+    from transformers.testing_utils import CaptureLogger
+
+    msg = "Testing 1, 2, 3"
+    logging.set_verbosity_info()
+    logger = logging.get_logger("transformers.tokenization_bart")
+    with CaptureLogger(logger) as cl:
+        logger.info(msg)
+    assert cl.out, msg+"\n"
+    """
+
+    def __init__(self, logger):
+        self.logger = logger
+        self.io = StringIO()
+        self.sh = logging.StreamHandler(self.io)
+
+    def __enter__(self):
+        self.logger.addHandler(self.sh)
+        return self
+
+    def __exit__(self, *exc):
+        self.logger.removeHandler(self.sh)
+        self.out = self.io.getvalue()
+
+    def __repr__(self):
+        return f"captured: {self.out}\n"
 
 
 class TestCasePlus(unittest.TestCase):
