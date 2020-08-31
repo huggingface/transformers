@@ -253,20 +253,7 @@ class Trainer:
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
-        if is_wandb_available():
-            self.setup_wandb()
-        elif os.environ.get("WANDB_DISABLED") != "true":
-            logger.info(
-                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
-                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
-            )
-        if is_comet_available():
-            self.setup_comet()
-        elif os.environ.get("COMET_MODE") != "DISABLED":
-            logger.info(
-                "To use comet_ml logging, run `pip/conda install comet_ml` "
-                "see https://www.comet.ml/docs/python-sdk/huggingface/"
-            )
+
         # Create output directory if needed
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
@@ -515,6 +502,22 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
+    def _logger_setup(self):
+        if is_wandb_available():
+            self.setup_wandb()
+        elif os.environ.get("WANDB_DISABLED") != "true":
+            logger.info(
+                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
+                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+            )
+        if is_comet_available():
+            self.setup_comet()
+        elif os.environ.get("COMET_MODE") != "DISABLED":
+            logger.info(
+                "To use comet_ml logging, run `pip/conda install comet_ml` "
+                "see https://www.comet.ml/docs/python-sdk/huggingface/"
+            )
+
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """ HP search setup code """
         if self.hp_search_backend is None or trial is None:
@@ -557,6 +560,9 @@ class Trainer:
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
         """
+        # Set up loggers like W&B or Comet ML
+        self._logger_setup()
+
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
 
