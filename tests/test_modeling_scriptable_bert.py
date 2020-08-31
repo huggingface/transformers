@@ -185,8 +185,8 @@ class BertScriptableModelTester:
         model = BertScriptableModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
+        model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        model(input_ids, token_type_ids=token_type_ids)
         sequence_output, pooled_output, hidden_states, attentions = model(input_ids)
         self.parent.assertEqual(sequence_output.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(pooled_output.shape, (self.batch_size, self.hidden_size))
@@ -207,14 +207,14 @@ class BertScriptableModelTester:
         model = BertScriptableModel(config)
         model.to(torch_device)
         model.eval()
-        result = model(
+        model(
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
         )
-        result = model(
+        model(
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
@@ -467,7 +467,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        # self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -475,7 +475,7 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_for_causal_lm_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        # self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
+        self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -518,7 +518,6 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)["input_ids"]  # Let's keep only input_ids
 
             try:
                 scripted = torch.jit.script(model)
@@ -619,7 +618,6 @@ class BertScriptableModelTest(ModelTesterMixin, unittest.TestCase):
                     list(attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
-            out_len = len(outputs)
 
             if self.is_encoder_decoder:
                 decoder_attention_idx = 3
