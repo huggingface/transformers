@@ -10,6 +10,8 @@ from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
 
+import transformers
+
 from .file_utils import _tf_available, _torch_available, _torch_tpu_available
 
 
@@ -397,3 +399,47 @@ class TestCasePlus(unittest.TestCase):
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
+
+
+# a set of functions to make testing easier by controlling the noise-levels of all libs (not just transformers)
+
+log_levels = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+}
+
+
+def logging_levels_as_strings():
+    return log_levels.keys()
+
+
+def logging_level_str_to_code(level_str):
+    if level_str in log_levels:
+        return log_levels[level_str]
+    else:
+        raise ValueError(f"unknown level {level_str}, has to be one of: { log_levels.keys() }")
+
+
+def set_verbosity_all(level=logging.ERROR, prefices=[""]):
+    """
+    Override logging levels of different modules based on their name as a prefix.
+    It needs to be invoked after the modules have been imported so that their loggers have been initialized.
+
+    Args:
+        - level: desired level. e.g. logging.INFO. Optional. Default is logging.ERROR
+        - prefices: list of one or more str prefices to match (e.g. ["transformers", "torch"]). Optional.
+          Default is `[""]` to match all active loggers.
+          The match is a case-sensitive `module_name.startswith(prefix)`
+    """
+
+    # for transformers use its specific own way
+    if "transformers" in prefices or prefices == [""]:
+        transformers.logging.set_verbosity(level)
+
+    prefix_re = re.compile(fr'^(?:{ "|".join(prefices) })')
+    for name in logging.root.manager.loggerDict:
+        if re.match(prefix_re, name) and not name.startswith("transformers"):
+            logging.getLogger(name).setLevel(level)

@@ -8,8 +8,8 @@ class HfArgumentParserTest(unittest.TestCase):
     def test_set_level(self):
         logger = logging.get_logger()
 
+        # the current default level is logging.WARNING
         level_origin = logging.get_verbosity()
-        self.assertEqual(level_origin, logging.WARNING)
 
         logging.set_verbosity_error()
         self.assertEqual(logger.getEffectiveLevel(), logging.get_verbosity())
@@ -23,20 +23,23 @@ class HfArgumentParserTest(unittest.TestCase):
         logging.set_verbosity_debug()
         self.assertEqual(logger.getEffectiveLevel(), logging.get_verbosity())
 
-        # restore
+        # restore to the original level
         logging.set_verbosity(level_origin)
 
     def test_integration(self):
 
         import transformers.tokenization_bart  # noqa
 
+        level_origin = logging.get_verbosity()
+
         logger = logging.get_logger("transformers.tokenization_bart")
         msg = "Testing 1, 2, 3"
 
-        # should be able to log warnings (default setting)
-        with CaptureLogger(logger) as cl:
-            logger.warn(msg)
-        self.assertEqual(cl.out, msg + "\n")
+        # should be able to log warnings (if default settings weren't overriden by `pytest --log-level-all`)
+        if level_origin <= logging.WARNING:
+            with CaptureLogger(logger) as cl:
+                logger.warn(msg)
+            self.assertEqual(cl.out, msg + "\n")
 
         # this is setting the level for all of `transformers.*` loggers
         logging.set_verbosity_error()
@@ -51,3 +54,6 @@ class HfArgumentParserTest(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             logger.warning(msg)
         self.assertEqual(cl.out, msg + "\n")
+
+        # restore to the original level
+        logging.set_verbosity(level_origin)
