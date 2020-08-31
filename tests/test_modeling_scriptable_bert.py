@@ -14,10 +14,11 @@
 # limitations under the License.
 
 
-import unittest
 import copy
-import tempfile
 import os
+import tempfile
+import unittest
+
 import numpy as np
 
 from transformers import is_torch_available
@@ -26,17 +27,18 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import (
     ModelTesterMixin,
+    _config_zero_init,
     floats_tensor,
+    global_rng,
     ids_tensor,
     random_attention_mask,
-    _config_zero_init,
-    global_rng,
 )
+
 
 if is_torch_available():
     import torch
-    from transformers.modeling_bert import BertModel
 
+    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST, BertModel
     from transformers.modeling_scriptable_bert import (
         BertConfig,
         BertScriptableForMaskedLM,
@@ -49,7 +51,6 @@ if is_torch_available():
         BertScriptableLMHeadModel,
         BertScriptableModel,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BertScriptableModelTester:

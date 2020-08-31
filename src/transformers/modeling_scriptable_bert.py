@@ -28,13 +28,17 @@ from torch import nn
 from .activations import gelu, gelu_new, swish
 from .configuration_bert import BertConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from .modeling_bert import BertLayerNorm, BertSelfOutput, BertIntermediate, BertOutput, BertPooler
 from .modeling_bert import (
+    BertIntermediate,
+    BertLayerNorm,
     BertOnlyMLMHead,
     BertOnlyNSPHead,
+    BertOutput,
+    BertPooler,
     BertPreTrainingHeads,
+    BertSelfOutput,
 )
+from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +76,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
         import re
+
         import numpy as np
         import tensorflow as tf
     except ImportError:
