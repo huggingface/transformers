@@ -16,15 +16,15 @@
 
 
 import collections
-import logging
 import os
 import unicodedata
 from typing import Optional
 
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 

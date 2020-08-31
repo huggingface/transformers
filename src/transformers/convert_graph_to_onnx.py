@@ -38,24 +38,39 @@ class OnnxConverterArgumentParser(ArgumentParser):
         super().__init__("ONNX Converter")
 
         self.add_argument(
-            "--pipeline", type=str, choices=SUPPORTED_PIPELINES, default="feature-extraction",
+            "--pipeline",
+            type=str,
+            choices=SUPPORTED_PIPELINES,
+            default="feature-extraction",
         )
         self.add_argument(
-            "--model", type=str, required=True, help="Model's id or path (ex: bert-base-cased)",
+            "--model",
+            type=str,
+            required=True,
+            help="Model's id or path (ex: bert-base-cased)",
         )
         self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
         self.add_argument(
-            "--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model",
+            "--framework",
+            type=str,
+            choices=["pt", "tf"],
+            help="Framework for loading the model",
         )
         self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
         self.add_argument(
-            "--check-loading", action="store_true", help="Check ONNX is able to load the model",
+            "--check-loading",
+            action="store_true",
+            help="Check ONNX is able to load the model",
         )
         self.add_argument(
-            "--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb",
+            "--use-external-format",
+            action="store_true",
+            help="Allow exporting model >= than 2Gb",
         )
         self.add_argument(
-            "--quantize", action="store_true", help="Quantize the neural network to be run with int8",
+            "--quantize",
+            action="store_true",
+            help="Quantize the neural network to be run with int8",
         )
         self.add_argument("output")
 
@@ -273,7 +288,9 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
-        from keras2onnx import convert_keras, save_model, __version__ as k2ov
+
+        from keras2onnx import __version__ as k2ov
+        from keras2onnx import convert_keras, save_model
 
         print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
 
@@ -340,7 +357,7 @@ def optimize(onnx_model_path: Path) -> Path:
     Returns: Path where the optimized model binary description has been saved
 
     """
-    from onnxruntime import SessionOptions, InferenceSession
+    from onnxruntime import InferenceSession, SessionOptions
 
     # Generate model name with suffix "optimized"
     opt_model_path = generate_identified_filename(onnx_model_path, "-optimized")
@@ -362,32 +379,32 @@ def quantize(onnx_model_path: Path) -> Path:
 
     Returns: The Path generated for the quantized
     """
-    try:
-        import onnx
-        from onnxruntime.quantization import quantize, QuantizationMode
+    import onnx
+    from onnxruntime.quantization import QuantizationMode, quantize
 
-        onnx_model = onnx.load(onnx_model_path.as_posix())
+    onnx_model = onnx.load(onnx_model_path.as_posix())
 
-        # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
-        print(
-            "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
-            "This limitation will be removed in the next release of onnxruntime."
-        )
+    # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
+    print(
+        "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
+        "This limitation will be removed in the next release of onnxruntime."
+    )
 
-        quantized_model = quantize(
-            model=onnx_model, quantization_mode=QuantizationMode.IntegerOps, force_fusions=True, symmetric_weight=True,
-        )
+    quantized_model = quantize(
+        model=onnx_model,
+        quantization_mode=QuantizationMode.IntegerOps,
+        force_fusions=True,
+        symmetric_weight=True,
+    )
 
-        # Append "-quantized" at the end of the model's name
-        quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
+    # Append "-quantized" at the end of the model's name
+    quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
-        # Save model
-        print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
-        onnx.save_model(quantized_model, quantized_model_path.as_posix())
+    # Save model
+    print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
+    onnx.save_model(quantized_model, quantized_model_path.as_posix())
 
-        return quantized_model_path
-    except Exception as ie:
-        print(f"Error while quantizing the model:\n{str(ie)}")
+    return quantized_model_path
 
 
 def verify(path: Path):

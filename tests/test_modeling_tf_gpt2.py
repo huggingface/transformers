@@ -25,18 +25,20 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers.modeling_tf_gpt2 import (
-        TFGPT2Model,
-        TFGPT2LMHeadModel,
-        TFGPT2DoubleHeadsModel,
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFGPT2DoubleHeadsModel,
+        TFGPT2LMHeadModel,
+        TFGPT2Model,
         shape_list,
     )
 
 
 class TFGPT2ModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13

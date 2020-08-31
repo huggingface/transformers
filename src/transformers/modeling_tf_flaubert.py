@@ -15,7 +15,6 @@
 """ TF 2.0 Flaubert model.
 """
 
-import logging
 import random
 
 import tensorflow as tf
@@ -36,9 +35,10 @@ from .modeling_tf_xlm import (
     get_masks,
 )
 from .tokenization_utils import BatchEncoding
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Flaubert models at https://huggingface.co/models?filter=flaubert
@@ -296,7 +296,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             else:
                 tensor_normalized = self.layer_norm1[i](tensor)
                 attn_outputs = self.attentions[i](
-                    tensor_normalized, attn_mask, None, cache, head_mask[i], training=training
+                    tensor_normalized, attn_mask, None, cache, head_mask[i], output_attentions, training=training
                 )
                 attn = attn_outputs[0]
                 if output_attentions:

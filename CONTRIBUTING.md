@@ -134,12 +134,6 @@ Follow these steps to start contributing:
    it with `pip uninstall transformers` before reinstalling it in editable
    mode with the `-e` flag.)
 
-   Right now, we need an unreleased version of `isort` to avoid a
-   [bug](https://github.com/timothycrosley/isort/pull/1000):
-
-   ```bash
-   $ pip install -U git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
-   ```
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
@@ -169,6 +163,16 @@ Follow these steps to start contributing:
 
    ```bash
    $ make quality
+   ```
+
+   If you're modifying documents under `docs/source`, make sure to validate that
+   they can still be built. This check also runs in CI. To run a local check
+   make sure you have installed the documentation builder requirements, by
+   running `pip install .[tf,torch,docs]` once from the root of this repository
+   and then run:
+
+   ```bash
+   $ make docs
    ```
 
    Once you're happy with your changes, add changed files using `git add` and

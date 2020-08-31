@@ -16,7 +16,6 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-import logging
 import os
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -38,9 +37,10 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(
@@ -139,12 +139,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> Dict[str, Any]:
-        """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
+        """Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
 
-            Overflowing tokens are converted to additional examples (like batches) so the output values of
-            the dict are lists (overflows) of lists (tokens).
+        Overflowing tokens are converted to additional examples (like batches) so the output values of
+        the dict are lists (overflows) of lists (tokens).
 
-            Output shape: (overflows, sequence length)
+        Output shape: (overflows, sequence length)
         """
         if return_token_type_ids is None:
             return_token_type_ids = "token_type_ids" in self.model_input_names

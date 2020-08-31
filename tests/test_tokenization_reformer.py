@@ -44,7 +44,8 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
 
         self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [285, 46, 10, 170, 382],
+            tokenizer.convert_tokens_to_ids(tokens),
+            [285, 46, 10, 170, 382],
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
@@ -76,7 +77,8 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
-            ids, [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
+            ids,
+            [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
@@ -232,7 +234,8 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_torch_encode_plus_sent_to_model(self):
         import torch
-        from transformers import ReformerModel, ReformerConfig
+
+        from transformers import ReformerConfig, ReformerModel
 
         # Build sequence
         first_ten_tokens = list(self.big_tokenizer.get_vocab().keys())[:10]
