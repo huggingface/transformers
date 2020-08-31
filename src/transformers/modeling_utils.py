@@ -296,7 +296,7 @@ class ModuleUtilsMixin:
         head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
         return head_mask
 
-    def num_parameters(self, only_trainable: bool = False, no_embeddings: bool = False) -> int:
+    def num_parameters(self, only_trainable: bool = False, exclude_embeddings: bool = False) -> int:
         """
         Get number of (optionally, trainable or non-embeddings) parameters in the module.
 
@@ -304,7 +304,7 @@ class ModuleUtilsMixin:
             only_trainable (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return only the number of trainable parameters
 
-            no_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            exclude_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return only the number of non-embeddings parameters
 
         Returns:
@@ -313,23 +313,21 @@ class ModuleUtilsMixin:
 
         def parameter_filter(x):
             return (x.requires_grad or not only_trainable) and not (
-                isinstance(x, torch.nn.Embedding) and no_embeddings
+                isinstance(x, torch.nn.Embedding) and exclude_embeddings
             )
 
         params = filter(parameter_filter, self.parameters()) if only_trainable else self.parameters()
         return sum(p.numel() for p in params)
 
-    def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]):
+    def estimate_tokens(self, input_dict: Dict[str, Union[torch.Tensor, Any]]) -> int:
         """
-        Helper function to estimate the batch size and sequence length from the model inputs. Returned batch size is the
-        first dimension of input tensors, returned sequence length is the sum of the second dimensions of all input
-        tensors.
+        Helper function to estimate the total number of tokens from the model inputs.
 
         Args:
             inputs (:obj:`dict`): The model inputs.
 
         Returns:
-            :obj:`Tuple[int, int]`: The batch size and sequence length.
+            :obj:`int`: The total number of tokens.
         """
         token_inputs = [tensor for key, tensor in input_dict.items() if "input" in key]
         if token_inputs:
@@ -340,7 +338,9 @@ class ModuleUtilsMixin:
             )
             return 0
 
-    def floating_point_ops(self, input_dict: Dict[str, Union[torch.Tensor, Any]], no_embeddings: bool = True) -> int:
+    def floating_point_ops(
+        self, input_dict: Dict[str, Union[torch.Tensor, Any]], exclude_embeddings: bool = True
+    ) -> int:
         """
         Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
         batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
@@ -355,14 +355,14 @@ class ModuleUtilsMixin:
             sequence_length (:obj:`int`):
                 The number of tokens in each line of the batch.
 
-            no_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            exclude_embeddings (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to count embedding and softmax operations.
 
         Returns:
             :obj:`int`: The number of floating-point operations.
         """
 
-        return 6 * self.estimate_tokens(input_dict) * self.num_parameters(no_embeddings=no_embeddings)
+        return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):

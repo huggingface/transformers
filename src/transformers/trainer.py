@@ -41,6 +41,8 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    distributed_broadcast_scalars,
+    distributed_concat,
     set_seed,
 )
 from .training_args import TrainingArguments
@@ -700,12 +702,7 @@ class Trainer:
                     continue
 
                 tr_loss += self.training_step(model, inputs)
-
-                try:
-                    self.total_flos += self.floating_point_ops(model, inputs)
-                except AttributeError:
-                    # in case this is a DataParallel
-                    self.total_flos += self.floating_point_ops(model.module, inputs)
+                self.total_flos += self.floating_point_ops(inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
@@ -946,7 +943,7 @@ class Trainer:
             logs["epoch"] = self.epoch
         if self.total_flos is not None:
             if self.args.local_rank != -1:
-                total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
+                total_flos = distributed_broadcast_scalars([self.total_flos]).sum().item()
             else:
                 total_flos = self.total_flos
             if total_flos > 0:
@@ -1128,14 +1125,7 @@ class Trainer:
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
 
         xm.rendezvous("saving_checkpoint")
-        # Storing the number of floating-point operations that went into the model
-        if self.total_flos is not None:
-            if self.args.local_rank != -1:
-                total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
-            else:
-                total_flos = self.total_flos
-            if total_flos > 0:
-                self.model.config.total_flos = total_flos
+        self._store_flos()
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
@@ -1148,14 +1138,7 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
-        # Storing the number of floating-point operations that went into the model
-        if self.total_flos is not None:
-            if self.args.local_rank != -1:
-                total_flos = self.distributed_broadcast_scalars([self.total_flos]).sum().item()
-            else:
-                total_flos = self.total_flos
-            if total_flos > 0:
-                self.model.config.total_flos = total_flos
+        self._store_flos()
         self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
@@ -1165,6 +1148,16 @@ class Trainer:
         json.dump(
             self.log_history, open(os.path.join(output_dir, "log_history.json"), "w"), indent=2, ensure_ascii=False
         )
+
+    def _store_flos(self):
+        # Storing the number of floating-point operations that went into the model
+        if self.total_flos is not None:
+            if self.args.local_rank != -1:
+                total_flos = distributed_broadcast_scalars([self.total_flos]).sum().item()
+            else:
+                total_flos = self.total_flos
+            if total_flos > 0:
+                self.model.config.total_flos = total_flos
 
     def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
         ordering_and_checkpoint_path = []
@@ -1313,9 +1306,9 @@ class Trainer:
         if self.args.local_rank != -1:
             # In distributed mode, concatenate all results from all nodes:
             if preds is not None:
-                preds = self.distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
+                preds = distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
             if label_ids is not None:
-                label_ids = self.distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
+                label_ids = distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
         elif is_torch_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
@@ -1336,7 +1329,7 @@ class Trainer:
         if len(eval_losses) > 0:
             if self.args.local_rank != -1:
                 metrics["eval_loss"] = (
-                    self.distributed_broadcast_scalars(eval_losses, num_total_examples=self.num_examples(dataloader))
+                    distributed_broadcast_scalars(eval_losses, num_total_examples=self.num_examples(dataloader))
                     .mean()
                     .item()
                 )
@@ -1349,33 +1342,6 @@ class Trainer:
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
-
-    def distributed_concat(self, tensor: torch.Tensor, num_total_examples: Optional[int] = None) -> torch.Tensor:
-        assert self.args.local_rank != -1
-
-        output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather(output_tensors, tensor)
-        concat = torch.cat(output_tensors, dim=0)
-
-        # truncate the dummy elements added by SequentialDistributedSampler
-        if num_total_examples is not None:
-            concat = concat[:num_total_examples]
-        return concat
-
-    def distributed_broadcast_scalars(
-        self, scalars: List[Union[int, float]], num_total_examples: Optional[int] = None
-    ) -> torch.Tensor:
-        assert self.args.local_rank != -1
-
-        tensorized_scalar = torch.Tensor(scalars).cuda()
-        output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather(output_tensors, tensorized_scalar)
-        concat = torch.cat(output_tensors, dim=0)
-
-        # truncate the dummy elements added by SequentialDistributedSampler
-        if num_total_examples is not None:
-            concat = concat[:num_total_examples]
-        return concat
 
     def prediction_step(
         self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
@@ -1423,11 +1389,11 @@ class Trainer:
             labels = labels.detach()
         return (loss, logits.detach(), labels)
 
-    def floating_point_ops(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]):
+    def floating_point_ops(self, inputs: Dict[str, Union[torch.Tensor, Any]]):
         """
         For models that inherit from :class:`~transformers.PretrainedModel`, uses
         that method to compute the number of floating point operations for every backward + forward pass. If using
-        another model, either implement such a method in the model or override this method.
+        another model, either implement such a method in the model or subclass and override this method.
 
         Args:
             model (:obj:`nn.Module`):
@@ -1438,6 +1404,13 @@ class Trainer:
         Returns:
             :obj:`int`: The number of floating-point operations.
         """
+
+        if isinstance(self.model, torch.nn.DataParallel) or isinstance(
+            self.model, torch.nn.parallel.DistributedDataParallel
+        ):
+            model = self.model.module
+        else:
+            model = self.model
 
         if hasattr(model, "floating_point_ops"):
             return model.floating_point_ops(inputs)
