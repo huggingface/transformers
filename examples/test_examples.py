@@ -53,7 +53,7 @@ def get_setup_file():
     return args.f
 
 
-def is_cuda_and_apex_avaliable():
+def is_cuda_and_apex_available():
     is_using_cuda = torch.cuda.is_available() and torch_device == "cuda"
     return is_using_cuda and is_apex_available()
 
@@ -85,7 +85,7 @@ class ExamplesTests(TestCasePlus):
         testargs += "--output_dir " + output_dir
         testargs = testargs.split()
 
-        if is_cuda_and_apex_avaliable():
+        if is_cuda_and_apex_available():
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -115,7 +115,7 @@ class ExamplesTests(TestCasePlus):
             """.split()
         if torch.cuda.is_available():
             testargs += ["--gpus=1"]
-        if is_cuda_and_apex_avaliable():
+        if is_cuda_and_apex_available():
             testargs.append("--fp16")
 
         with patch.object(sys, "argv", testargs):
@@ -195,7 +195,7 @@ class ExamplesTests(TestCasePlus):
 
         testargs = ["run_generation.py", "--prompt=Hello", "--length=10", "--seed=42"]
 
-        if is_cuda_and_apex_avaliable():
+        if is_cuda_and_apex_available():
             testargs.append("--fp16")
 
         model_type, model_name = (
