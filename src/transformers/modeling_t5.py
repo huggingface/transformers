@@ -838,27 +838,27 @@ T5_INPUTS_DOCSTRING = r"""
             Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
-            If `decoder_past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see `decoder_past_key_values`).
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
             To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
             `T5 Training <./t5.html#training>`__. If decoder_input_ids and decoder_inputs_embeds are both None,
             decoder_input_ids takes the value of input_ids.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
-        decoder_past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.
-            If `decoder_past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all `decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If `use_cache` is True, `decoder_past_key_values` are returned and can be used to speed up decoding (see `decoder_past_key_values`).
+            If `use_cache` is True, `past_key_values` are returned and can be used to speed up decoding (see `past_key_values`).
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
-            If `decoder_past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be input (see `decoder_past_key_values`).
+            If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`).
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix. If decoder_input_ids and decoder_inputs_embeds are both None,
             decoder_inputs_embeds takes the value of inputs_embeds.
@@ -928,7 +928,7 @@ class T5Model(T5PreTrainedModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        decoder_past_key_values=None,
+        past_key_values=None,
         use_cache=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -955,10 +955,16 @@ class T5Model(T5PreTrainedModel):
         """
         if "decoder_past_key_value_states" in kwargs:
             warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `decoder_past_key_values` instead.",
+                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
                 FutureWarning,
             )
-            decoder_past_key_values = kwargs.pop("decoder_past_key_value_states")
+            past_key_values = kwargs.pop("decoder_past_key_value_states")
+        if "decoder_past_key_values" in kwargs:
+            warnings.warn(
+                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            past_key_values = kwargs.pop("decoder_past_key_values")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -992,7 +998,7 @@ class T5Model(T5PreTrainedModel):
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
-        if decoder_past_key_values is not None:
+        if past_key_values is not None:
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
             if decoder_inputs_embeds is not None:
@@ -1003,7 +1009,7 @@ class T5Model(T5PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_value_states=decoder_past_key_values,
+            past_key_value_states=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
@@ -1013,15 +1019,12 @@ class T5Model(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
         if not return_dict:
-            if past is not None:
-                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_past_key_values=past,
+            past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1080,7 +1083,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        decoder_past_key_values=None,
+        past_key_values=None,
         use_cache=None,
         labels=None,
         inputs_embeds=None,
@@ -1127,10 +1130,16 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             labels = kwargs.pop("lm_labels")
         if "decoder_past_key_value_states" in kwargs:
             warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `decoder_past_key_values` instead.",
+                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
                 FutureWarning,
             )
-            decoder_past_key_values = kwargs.pop("decoder_past_key_value_states")
+            past_key_values = kwargs.pop("decoder_past_key_value_states")
+        if "decoder_past_key_values" in kwargs:
+            warnings.warn(
+                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            past_key_values = kwargs.pop("decoder_past_key_values")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1163,7 +1172,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
-        if decoder_past_key_values is not None:
+        if past_key_values is not None:
             assert labels is None, "Decoder should not use cached key value states when training."
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
@@ -1175,7 +1184,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_value_states=decoder_past_key_values,
+            past_key_value_states=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
@@ -1197,17 +1206,14 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
-        past = (encoder_outputs, decoder_outputs[1]) if use_cache is True else None
         if not return_dict:
-            if past is not None:
-                decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
             logits=lm_logits,
-            decoder_past_key_values=past,
+            past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -1215,14 +1221,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        encoder_outputs, decoder_past_key_values = past
-
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs):
         return {
             "decoder_input_ids": input_ids,
-            "decoder_past_key_values": decoder_past_key_values,
+            "past_key_values": past,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "use_cache": use_cache,
@@ -1231,14 +1233,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past[1] is None:
+        if past is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past
 
-        decoder_past = past[1]
-        past = (past[0],)
         reordered_decoder_past = ()
-        for layer_past_states in decoder_past:
+        for layer_past_states in past:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -1252,4 +1252,4 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             assert len(reordered_layer_past_states) == len(layer_past_states)
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return past + (reordered_decoder_past,)
+        return reordered_decoder_past

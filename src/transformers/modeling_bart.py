@@ -111,15 +111,15 @@ BART_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.
-            If ``decoder_past_key_value_states`` are used, the user can optionally input only the last
+            If ``past_key_values`` are used, the user can optionally input only the last
             ``decoder_input_ids`` (those that don't have their past key value states given to this model) of shape
             :obj:`(batch_size, 1)` instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If `use_cache` is True, ``decoder_past_key_values`` are returned and can be used to speed up decoding (see
-            ``decoder_past_key_values``).
+            If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
+            ``past_key_values``).
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
@@ -502,7 +502,7 @@ class BartDecoder(nn.Module):
         encoder_padding_mask,
         decoder_padding_mask,
         decoder_causal_mask,
-        decoder_past_key_values=None,
+        past_key_values=None,
         use_cache=False,
         output_attentions=False,
         output_hidden_states=False,
@@ -519,7 +519,7 @@ class BartDecoder(nn.Module):
             encoder_hidden_states: output from the encoder, used for
                 encoder-side attention
             encoder_padding_mask: for ignoring pad tokens
-            decoder_past_key_values (dict or None): dictionary used for storing state during generation
+            past_key_values (dict or None): dictionary used for storing state during generation
 
         Returns:
             BaseModelOutputWithPast or tuple:
@@ -530,10 +530,16 @@ class BartDecoder(nn.Module):
         """
         if "decoder_cached_states" in unused:
             warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `decoder_past_key_values` instead.",
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
                 FutureWarning,
             )
-            decoder_past_key_values = unused.pop("decoder_cached_states")
+            past_key_values = unused.pop("decoder_cached_states")
+        if "decoder_past_key_values" in unused:
+            warnings.warn(
+                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            past_key_values = unused.pop("decoder_past_key_values")
 
         # check attention mask and invert
         if encoder_padding_mask is not None:
@@ -568,7 +574,7 @@ class BartDecoder(nn.Module):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            layer_state = decoder_past_key_values[idx] if decoder_past_key_values is not None else None
+            layer_state = past_key_values[idx] if past_key_values is not None else None
 
             x, layer_self_attn, layer_past = decoder_layer(
                 x,
@@ -594,10 +600,7 @@ class BartDecoder(nn.Module):
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
-        if use_cache:
-            next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
-        else:
-            next_cache = None
+        next_cache = next_decoder_cache if use_cache else None
 
         if not return_dict:
             return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
@@ -869,13 +872,19 @@ class BartModel(PretrainedBartModel):
         decoder_input_ids=None,
         encoder_outputs: Optional[Tuple] = None,
         decoder_attention_mask=None,
-        decoder_past_key_values=None,
+        past_key_values=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
         **kwargs,
     ):
+        if "decoder_past_key_values" in kwargs:
+            warnings.warn(
+                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            past_key_values = kwargs.pop("decoder_past_key_values")
 
         if decoder_input_ids is None:
             use_cache = False
@@ -924,7 +933,7 @@ class BartModel(PretrainedBartModel):
             attention_mask,
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
-            decoder_past_key_values=decoder_past_key_values,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -936,7 +945,7 @@ class BartModel(PretrainedBartModel):
 
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            decoder_past_key_values=decoder_outputs.past_key_values,
+            past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -994,7 +1003,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        decoder_past_key_values=None,
+        past_key_values=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
@@ -1037,10 +1046,16 @@ class BartForConditionalGeneration(PretrainedBartModel):
             labels = unused.pop("lm_labels")
         if "decoder_cached_states" in unused:
             warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `decoder_past_key_values` instead.",
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
                 FutureWarning,
             )
-            decoder_past_key_values = unused.pop("decoder_cached_states")
+            past_key_values = unused.pop("decoder_cached_states")
+        if "decoder_past_key_values" in unused:
+            warnings.warn(
+                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            past_key_values = unused.pop("decoder_past_key_values")
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -1054,7 +1069,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            decoder_past_key_values=decoder_past_key_values,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1075,7 +1090,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         return Seq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
-            decoder_past_key_values=outputs.decoder_past_key_values,
+            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
@@ -1083,14 +1098,13 @@ class BartForConditionalGeneration(PretrainedBartModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
-        assert past is not None, "past has to be defined for encoder_outputs"
-
-        encoder_outputs, decoder_past_key_values = past
+    def prepare_inputs_for_generation(
+        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+    ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "decoder_past_key_values": decoder_past_key_values,
+            "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
@@ -1109,20 +1123,14 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        ((enc_out, enc_mask), decoder_past_key_values) = past
         reordered_past = []
-        for layer_past in decoder_past_key_values:
+        for layer_past in past:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
             reordered_past.append(layer_past_new)
-
-        new_enc_out = enc_out if enc_out is None else enc_out.index_select(0, beam_idx)
-        new_enc_mask = enc_mask if enc_mask is None else enc_mask.index_select(0, beam_idx)
-
-        past = ((new_enc_out, new_enc_mask), reordered_past)
-        return past
+        return reordered_past
 
     def get_encoder(self):
         return self.model.encoder
@@ -1208,7 +1216,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         return Seq2SeqSequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            decoder_past_key_values=outputs.decoder_past_key_values,
+            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
@@ -1316,7 +1324,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
-            decoder_past_key_values=outputs.decoder_past_key_values,
+            past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
