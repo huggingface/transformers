@@ -156,6 +156,7 @@ from .modeling_xlm import (
     XLMWithLMHeadModel,
 )
 from .modeling_xlm_roberta import (
+    XLMRobertaForCausalLM,
     XLMRobertaForMaskedLM,
     XLMRobertaForMultipleChoice,
     XLMRobertaForQuestionAnswering,
@@ -255,6 +256,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         (CamembertConfig, CamembertForCausalLM),
+        (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
