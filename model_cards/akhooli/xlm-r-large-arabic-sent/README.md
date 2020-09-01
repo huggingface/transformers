@@ -1,7 +1,4 @@
 ---
-tags:
-- text-classification
-- xlm-roberta
 
 language:
 - ar
