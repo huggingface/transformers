@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 
 ENCODER_DECODER_START_DOCSTRING = r"""
-    The Encoder Decoder model class can be used to inialize a sequence-to-sequnece model with any pre-trained autoencoding model as the encoder and any pre-trained autoregressive model as the decoder. The encoder is loaded via :obj:`AutoModel`'s :func:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via :obj:`AutoModelForCausalLM` :func:`~transformers.AutoModelForCausalLM.from_pretrained` function.
+    This class can be used to inialize a sequence-to-sequnece model with any pretrained autoencoding model as the encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via :meth:`~transformers.AutoModelForCausalLM.from_pretrained` function.
     Cross-attention layers are automatically added to the decoder and should be fine-tuned on a downstream generative task, *i.e.* summarization.
 
     The effectiveness of initializing sequence-to-sequence models with pre-trained checkpoints for sequence generation tasks was shown in `Leveraging Pre-trained Checkpoints for Sequence Generation Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, Aliaksei Severyn.
@@ -51,20 +51,20 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary for the encoder.
-            Indices can be obtained using :class:`transformers.PretrainedTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+            Indices can be obtained using :class:`~transformers.PretrainedTokenizer`.
+            See :meth:`~transformers.PreTrainedTokenizer.encode` and
+            :meth:`~transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices for the encoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
-            Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
-            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
+        encoder_outputs (:obj:`tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
+            This tuple must consist of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
+            `last_hidden_state` (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`) is a tensor of hidden-states at the output of the last layer of the encoder.
             Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for sequence to sequence training to the decoder.
@@ -86,8 +86,8 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             If set to ``True``, the model will return a :class:`~transformers.file_utils.Seq2SeqLMOutput` instead of a
             plain tuple.
         kwargs: (`optional`) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
-            - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
-            - With a `decoder_` prefix which will be input as `**decoder_kwargs` for the decoder forward function.
+            - Without a prefix which will be input as ``**encoder_kwargs`` for the encoder forward function.
+            - With a `decoder_` prefix which will be input as ``**decoder_kwargs`` for the decoder forward function.
 """
 
 
@@ -288,30 +288,30 @@ class EncoderDecoderModel(PreTrainedModel):
         **kwargs,
     ):
         r"""
-    Returns:
+        Returns:
 
-    Examples::
+        Examples::
 
-        >>> from transformers import EncoderDecoderModel, BertTokenizer
-        >>> import torch
+            >>> from transformers import EncoderDecoderModel, BertTokenizer
+            >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
 
-        >>> # forward
-        >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            >>> # forward
+            >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
-        >>> # training
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids, return_dict=True)
-        >>> loss, logits = outputs.loss, outputs.logits
+            >>> # training
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids, return_dict=True)
+            >>> loss, logits = outputs.loss, outputs.logits
 
-        >>> # save and load from pretrained
-        >>> model.save_pretrained("bert2bert")
-        >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
+            >>> # save and load from pretrained
+            >>> model.save_pretrained("bert2bert")
+            >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
 
-        >>> # generation
-        >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+            >>> # generation
+            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
 
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -352,7 +352,7 @@ class EncoderDecoderModel(PreTrainedModel):
         return Seq2SeqLMOutput(
             loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
-            decoder_past_key_values=None,  # TODO(PVP) - need to implement cache for BERT, etc... before this works
+            past_key_values=None,  # TODO(PVP) - need to implement cache for BERT, etc... before this works
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
@@ -378,7 +378,7 @@ class EncoderDecoderModel(PreTrainedModel):
             input_dict["decoder_use_cache"] = decoder_inputs["use_cache"]
 
         if "past_key_values" in decoder_inputs:
-            input_dict["decoder_past_key_values"] = decoder_inputs["past_key_values"]
+            input_dict["past_key_values"] = decoder_inputs["past_key_values"]
 
         return input_dict
 

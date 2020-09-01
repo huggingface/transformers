@@ -1103,7 +1103,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         return TFSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs[0],
-            decoder_past_key_values=past,
+            past_key_values=past,
             decoder_hidden_states=decoder_outputs[2],
             decoder_attentions=decoder_outputs[3],
             encoder_last_hidden_state=encoder_outputs[0],
@@ -1324,7 +1324,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         return TFSeq2SeqLMOutput(
             loss=loss,
             logits=logits,
-            decoder_past_key_values=past,
+            past_key_values=past,
             decoder_hidden_states=decoder_outputs[2],
             decoder_attentions=decoder_outputs[3],
             encoder_last_hidden_state=encoder_outputs[0],

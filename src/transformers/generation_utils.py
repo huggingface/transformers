@@ -20,6 +20,7 @@ import torch
 from torch import Tensor
 from torch.nn import functional as F
 
+from .file_utils import ModelOutput
 from .utils import logging
 
 
@@ -45,14 +46,6 @@ class GenerationMixin:
         the generate method.
         """
         return logits
-
-    def _use_cache(self, outputs, use_cache):
-        """During generation, decide whether to pass the `past` variable to the next forward pass."""
-        if len(outputs) <= 1 or use_cache is False:
-            return False
-        if hasattr(self.config, "mem_len") and self.config.mem_len == 0:
-            return False
-        return True
 
     def enforce_repetition_penalty_(self, lprobs, batch_size, num_beams, prev_output_tokens, repetition_penalty):
         """
@@ -137,7 +130,7 @@ class GenerationMixin:
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
-        **model_specific_kwargs
+        **model_kwargs
     ) -> torch.LongTensor:
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
@@ -208,7 +201,7 @@ class GenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
-            model_specific_kwargs:
+            model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
         Return:
@@ -400,7 +393,7 @@ class GenerationMixin:
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
-            encoder_outputs = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
+            encoder_outputs: ModelOutput = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
 
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
@@ -445,8 +438,8 @@ class GenerationMixin:
                 0, expanded_batch_idxs
             )
 
-            # save encoder_outputs in `model_specific_kwargs`
-            model_specific_kwargs["encoder_outputs"] = encoder_outputs
+            # save encoder_outputs in `model_kwargs`
+            model_kwargs["encoder_outputs"] = encoder_outputs
 
         else:
             cur_len = input_ids.shape[-1]
@@ -478,7 +471,7 @@ class GenerationMixin:
                 vocab_size=vocab_size,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
-                model_specific_kwargs=model_specific_kwargs,
+                model_kwargs=model_kwargs,
             )
         else:
             output = self._generate_no_beam_search(
@@ -498,7 +491,7 @@ class GenerationMixin:
                 batch_size=effective_batch_size,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
-                model_specific_kwargs=model_specific_kwargs,
+                model_kwargs=model_kwargs,
             )
 
         return output
@@ -521,7 +514,7 @@ class GenerationMixin:
         batch_size,
         attention_mask,
         use_cache,
-        model_specific_kwargs,
+        model_kwargs,
     ):
         """Generate sequences for each example without beam search (num_beams == 1).
         All returned sequence are generated independantly.
@@ -533,7 +526,7 @@ class GenerationMixin:
         past = None
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_kwargs
             )
 
             outputs = self(**model_inputs, return_dict=True)
@@ -554,12 +547,10 @@ class GenerationMixin:
             )
 
             # if model has past, then set the past variable to speed up decoding
-            if outputs.get("past_key_values", None) is not None:
-                past = outputs["past_key_values"]
-            elif outputs.get("mems", None) is not None:
-                past = outputs["mems"]
-            elif outputs.get("decoder_past_key_values", None) is not None:
-                past = outputs["decoder_past_key_values"]
+            if "past_key_values" in outputs:
+                past = outputs.past_key_values
+            elif "mems" in outputs:
+                past = outputs.mems
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
@@ -628,7 +619,7 @@ class GenerationMixin:
         vocab_size,
         attention_mask,
         use_cache,
-        model_specific_kwargs,
+        model_kwargs,
     ):
         """Generate sequences for each example with beam search."""
 
@@ -654,20 +645,16 @@ class GenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_kwargs
             )
             outputs = self(**model_inputs, return_dict=True)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs.logits[:, -1, :]  # (batch_size * num_beams, vocab_size)
 
             # if model has past, then set the past variable to speed up decoding
-            if outputs.get("past_key_values", None) is not None:
-                past = outputs["past_key_values"]
-            elif outputs.get("mems", None) is not None:
-                past = outputs["mems"]
-            elif outputs.get("decoder_past_key_values", None) is not None:
-                past = outputs["decoder_past_key_values"]
-            elif outputs.get("prediction_scores", None) is not None:
-                past = outputs["prediction_scores"]
+            if "past_key_values" in outputs:
+                past = outputs.past_key_values
+            elif "mems" in outputs:
+                past = outputs.mems
 
             if self.config.is_encoder_decoder and do_sample is False:
                 # TODO (PVP) still a bit hacky here - there might be a better solution
