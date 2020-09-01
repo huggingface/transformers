@@ -1,7 +1,6 @@
 """Tensorflow trainer class."""
 
 import datetime
-import logging
 import math
 import os
 import warnings
@@ -12,12 +11,14 @@ import tensorflow as tf
 from packaging.version import parse
 from tensorflow.python import data
 
+from .integrations import is_comet_available, is_wandb_available
 from .configuration_utils import PretrainedConfig
 from .modeling_tf_utils import TFPreTrainedModel
 from .integrations import is_comet_available, is_wandb_available
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
+from .utils import logging
 
 
 if is_wandb_available():
@@ -26,7 +27,7 @@ if is_wandb_available():
 if is_comet_available():
     import comet_ml
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class TFTrainer:
@@ -149,7 +150,6 @@ class TFTrainer:
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
-        # return self.args.training_args.strategy.experimental_distribute_dataset(ds)
         return ds
 
     def get_eval_tfdataset(self, eval_dataset: Optional[tf.data.Dataset] = None) -> tf.data.Dataset:
@@ -183,7 +183,6 @@ class TFTrainer:
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
-        # return self.args.training_args.strategy.experimental_distribute_dataset(ds), steps, num_examples
         return ds, steps, num_examples
 
     def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
@@ -214,7 +213,6 @@ class TFTrainer:
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
-        # return self.args.training_args.strategy.experimental_distribute_dataset(ds), steps, num_examples
         return ds, steps, num_examples
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
