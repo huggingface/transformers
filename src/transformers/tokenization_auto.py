@@ -46,6 +46,7 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
+    SqueezeBertConfig,
     T5Config,
     TransfoXLConfig,
     XLMConfig,
@@ -83,6 +84,7 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
+from .tokenization_squeezebert import SqueezeBertTokenizer, SqueezeBertTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
@@ -117,6 +119,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
+        (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
