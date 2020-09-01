@@ -6,7 +6,7 @@ datasets:
 - Wikipedia
 ---
 
-# HuBERT base model (cased)
+# huBERT base model (cased)
 
 ## Model description
 
