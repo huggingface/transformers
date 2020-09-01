@@ -1674,7 +1674,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 max_seq_length=kwargs["max_seq_len"],
                 doc_stride=kwargs["doc_stride"],
                 max_query_length=kwargs["max_question_len"],
-                padding_strategy=PaddingStrategy.DO_NOT_PAD.value,
+                padding_strategy=PaddingStrategy.MAX_LENGTH.value,
                 is_training=False,
                 tqdm_enabled=False,
             )
