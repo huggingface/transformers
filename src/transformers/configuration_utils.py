@@ -195,7 +195,6 @@ class PretrainedConfig(object):
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forwar", 0)
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)

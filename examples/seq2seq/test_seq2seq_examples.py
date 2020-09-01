@@ -32,6 +32,8 @@ CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
     "supervise_forward": True,
     "label_smoothing": 0.2,
+    "eval_beams": 1,
+    "val_metric": None,
     "adafactor": True,
     "early_stopping_patience": 2,
     "logger_name": "default",
