@@ -14,8 +14,6 @@
 # limitations under the License.
 """ Funnel Transformer model configuration """
 
-from typing import Callable, Union
-
 from .configuration_utils import PretrainedConfig
 from .utils import logging
 
@@ -80,7 +78,12 @@ class FunnelConfig(PretrainedConfig):
         type_vocab_size (:obj:`int`, `optional`, defaults to 3):
             The vocabulary size of the `token_type_ids` passed into :class:`~transformers.FunnelModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.1):
-            The standard deviation of the `uniform_initializer` for initializing all weight matrices.
+            The standard deviation of the `uniform initializer` for initializing all weight matrices in attention
+            layers.
+        initializer_std (:obj:`float`, `optional`):
+            The standard deviation of the `normal initializer` for initializing the embedding matrix and the weight of
+            linear layers. Will default to 1 for the embedding matrix and the value given by Xavier initialization for
+            linear layers.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-9):
             The epsilon used by the layer normalization layers.
         pooling_type (:obj:`str`, `optional`, defaults to `:obj:`"mean"):
@@ -116,11 +119,12 @@ class FunnelConfig(PretrainedConfig):
         max_position_embeddings=512,
         type_vocab_size=3,
         initializer_range=0.1,
+        initializer_std=None,
         layer_norm_eps=1e-9,
         pooling_type="mean",
         attention_type="relative_shift",
         separate_cls=True,
-        truncate_seq=False,
+        truncate_seq=True,
         pool_q_only=True,
         **kwargs
     ):
@@ -140,6 +144,7 @@ class FunnelConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
+        self.initializer_std = initializer_std
         self.layer_norm_eps = layer_norm_eps
         assert pooling_type in [
             "mean",

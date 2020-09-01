@@ -14,25 +14,15 @@
 # limitations under the License.
 """ PyTorch Funnel Transformer model. """
 
-import os
-
 import numpy as np
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from .activations import ACT2FN
 from .configuration_funnel import FunnelConfig
 from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_outputs import (
-    BaseModelOutput,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from .modeling_outputs import BaseModelOutput
 from .modeling_utils import PreTrainedModel
 from .utils import logging
 
@@ -517,6 +507,7 @@ class FunnelEncoder(nn.Module):
         token_type_ids=None,
         output_attentions=False,
         output_hidden_states=False,
+        return_dict=False,
     ):
         # The pooling is not implemented on long tensors, so we convert this mask.
         attention_mask = attention_mask.type_as(inputs_embeds)
@@ -554,7 +545,9 @@ class FunnelEncoder(nn.Module):
                 if output_hidden_states:
                     all_hidden_states = all_hidden_states + (hidden,)
 
-        return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
+        if not return_dict:
+            return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
+        return BaseModelOutput(last_hidden_state=hidden, hidden_states=all_hidden_states, attentions=all_attentions)
 
 
 def upsample(x, stride, target_len, separate_cls=True, truncate_seq=False):
@@ -567,9 +560,10 @@ def upsample(x, stride, target_len, separate_cls=True, truncate_seq=False):
     if separate_cls:
         if truncate_seq:
             output = nn.functional.pad(output, (0, 0, 0, stride - 1, 0, 0))
-        else:
-            output = output[:, : target_len - 1]
+        output = output[:, : target_len - 1]
         output = torch.cat([cls, output], dim=1)
+    else:
+        output = output[:, :target_len]
     return output
 
 
@@ -588,6 +582,7 @@ class FunnelDecoder(nn.Module):
         token_type_ids=None,
         output_attentions=False,
         output_hidden_states=False,
+        return_dict=False,
     ):
         upsampled_hidden = upsample(
             final_hidden,
@@ -616,7 +611,9 @@ class FunnelDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden,)
 
-        return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
+        if not return_dict:
+            return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
+        return BaseModelOutput(last_hidden_state=hidden, hidden_states=all_hidden_states, attentions=all_attentions)
 
 
 class FunnelPreTrainedModel(PreTrainedModel):
@@ -632,19 +629,23 @@ class FunnelPreTrainedModel(PreTrainedModel):
         classname = module.__class__.__name__
         if classname.find("Linear") != -1:
             if getattr(module, "weight", None) is not None:
-                fan_out, fan_in = module.weight.shape
-                std = np.sqrt(1.0 / float(fan_in + fan_out))
+                if self.config.initializer_std is None:
+                    fan_out, fan_in = module.weight.shape
+                    std = np.sqrt(1.0 / float(fan_in + fan_out))
+                else:
+                    std = self.config.initializer_std
                 nn.init.normal_(module.weight, std=std)
             if getattr(module, "bias", None) is not None:
                 nn.init.constant_(module.bias, 0.0)
         elif classname == "FunnelRelMultiheadAttention":
-            nn.init.uniform_(module.r_w_bias, b=0.1)
-            nn.init.uniform_(module.r_r_bias, b=0.1)
-            nn.init.uniform_(module.r_kernel, b=0.1)
-            nn.init.uniform_(module.r_s_bias, b=0.1)
-            nn.init.uniform_(module.seg_embed, b=0.1)
+            nn.init.uniform_(module.r_w_bias, b=self.config.initializer_range)
+            nn.init.uniform_(module.r_r_bias, b=self.config.initializer_range)
+            nn.init.uniform_(module.r_kernel, b=self.config.initializer_range)
+            nn.init.uniform_(module.r_s_bias, b=self.config.initializer_range)
+            nn.init.uniform_(module.seg_embed, b=self.config.initializer_range)
         elif classname == "FunnelEmbeddings":
-            nn.init.normal_(module.word_embeddings.weight)
+            std = 1.0 if self.config.initializer_std is None else self.config.initializer_std
+            nn.init.normal_(module.word_embeddings.weight, std=std)
 
 
 FUNNEL_START_DOCSTRING = r"""    The Funnel Transformer model was proposed in
@@ -767,7 +768,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
             token_type_ids=token_type_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            # return_dict=return_dict,
+            return_dict=return_dict,
         )
 
         return encoder_outputs
@@ -786,6 +787,12 @@ class FunnelModel(FunnelPreTrainedModel):
         self.decoder = FunnelDecoder(config)
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, new_embeddings):
+        self.embeddings.word_embeddings = new_embeddings
 
     @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
@@ -836,7 +843,7 @@ class FunnelModel(FunnelPreTrainedModel):
             token_type_ids=token_type_ids,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            # return_dict=return_dict,
+            return_dict=return_dict,
         )
 
         decoder_outputs = self.decoder(
@@ -846,15 +853,24 @@ class FunnelModel(FunnelPreTrainedModel):
             token_type_ids=token_type_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            # return_dict=return_dict,
+            return_dict=return_dict,
         )
 
-        idx = 0
-        outputs = (decoder_outputs[0],)
-        if output_hidden_states:
-            idx += 1
-            outputs = outputs + (encoder_outputs[1] + decoder_outputs[idx])
-        if output_attentions:
-            idx += 1
-            outputs = outputs + (encoder_outputs[2] + decoder_outputs[idx])
-        return outputs
+        if not return_dict:
+            idx = 0
+            outputs = (decoder_outputs[0],)
+            if output_hidden_states:
+                idx += 1
+                outputs = outputs + (encoder_outputs[1] + decoder_outputs[idx],)
+            if output_attentions:
+                idx += 1
+                outputs = outputs + (encoder_outputs[2] + decoder_outputs[idx],)
+            return outputs
+
+        return BaseModelOutput(
+            last_hidden_state=decoder_outputs[0],
+            hidden_states=(encoder_outputs.hidden_states + decoder_outputs.hidden_states)
+            if output_hidden_states
+            else None,
+            attentions=(encoder_outputs.attentions + decoder_outputs.attentions) if output_attentions else None,
+        )
