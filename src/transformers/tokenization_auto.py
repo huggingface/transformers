@@ -213,7 +213,7 @@ class AutoTokenizer:
 
         use_fast = kwargs.pop("use_fast", False)
         for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():
-            if isinstance(config, config_class):
+            if type(config) is config_class:
                 if tokenizer_class_fast and use_fast:
                     return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 else:
