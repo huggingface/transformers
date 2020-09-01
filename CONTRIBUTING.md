@@ -165,6 +165,16 @@ Follow these steps to start contributing:
    $ make quality
    ```
 
+   If you're modifying documents under `docs/source`, make sure to validate that
+   they can still be built. This check also runs in CI. To run a local check
+   make sure you have installed the documentation builder requirements, by
+   running `pip install .[tf,torch,docs]` once from the root of this repository
+   and then run:
+
+   ```bash
+   $ make docs
+   ```
+
    Once you're happy with your changes, add changed files using `git add` and
    make a commit with `git commit` to record your changes locally:
 

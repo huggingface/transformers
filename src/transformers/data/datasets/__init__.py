@@ -3,5 +3,5 @@
 # module, but to preserve other warnings. So, don't check this module at all.
 
 from .glue import GlueDataset, GlueDataTrainingArguments
-from .language_modeling import LineByLineTextDataset, TextDataset, LineByLineWithSOPTextDataset
+from .language_modeling import LineByLineTextDataset, TextDataset, LineByLineWithSOPTextDataset, TextDatasetForNextSentencePrediction
 from .squad import SquadDataset, SquadDataTrainingArguments

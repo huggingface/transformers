@@ -22,11 +22,13 @@ import glob
 import os
 import pickle
 import re
+import warnings
 from collections import Counter, OrderedDict
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 
+import sacremoses as sm
 from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
@@ -70,6 +72,47 @@ PRETRAINED_CORPUS_ARCHIVE_MAP = {
 }
 CORPUS_NAME = "corpus.bin"
 
+MATCH_NUMBERS = r"(?<=\d)[,.](?=\d)", r" @\g<0>@ "
+DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
+
+
+def tokenize_numbers(text_array: List[str]) -> List[str]:
+    """
+    Splits large comma-separated numbers and floating point values.
+    This is done by replacing commas with ' @,@ ' and dots with ' @.@ '.
+    Args:
+        text_array: An already tokenized text as list
+    Returns:
+        A list of strings with tokenized numbers
+    Example::
+        >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
+        ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
+    """
+    tokenized = []
+    for i in range(len(text_array)):
+        reg, sub = MATCH_NUMBERS
+        replaced = re.sub(reg, sub, text_array[i]).split()
+        tokenized.extend(replaced)
+
+    return tokenized
+
+
+def detokenize_numbers(text: str) -> str:
+    """
+    Inverts the operation of `tokenize_numbers`.
+    This is replacing ' @,@ ' and ' @.@' by ',' and '.'.
+    Args:
+        text: A string where the number should be detokenized
+    Returns:
+        A detokenized string
+    Example::
+        >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
+        "$ 5,000 1.73 m"
+    """
+    for reg, sub in DETOKENIZE_NUMBERS:
+        text = re.sub(reg, sub, text)
+    return text
+
 
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
@@ -97,6 +140,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         eos_token="<eos>",
         additional_special_tokens=["<formula>"],
+        language="en",
         **kwargs
     ):
         super().__init__(
@@ -118,6 +162,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
+        self.language = language
+        self.moses_punct_normalizer = sm.MosesPunctNormalizer(language)
+        self.moses_tokenizer = sm.MosesTokenizer(language)
+        self.moses_detokenizer = sm.MosesDetokenizer(language)
 
         try:
             if pretrained_vocab_file is not None:
@@ -300,6 +348,34 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         del self.added_tokens_decoder[old_index]
         del self.added_tokens_encoder[token]
 
+    def moses_punct_norm(self, text):
+        return self.moses_punct_normalizer.normalize(text)
+
+    def moses_tokenize(self, text):
+        return self.moses_tokenizer.tokenize(
+            text, aggressive_dash_splits=True, return_str=False, escape=False, protected_patterns=self.never_split
+        )
+
+    def moses_pipeline(self, text: str) -> List[str]:
+        """
+        Does basic tokenization using :class:`sacremoses.MosesPunctNormalizer` and :class:`sacremoses.MosesTokenizer`
+        with `aggressive_dash_splits=True` (see :func:`sacremoses.tokenize.MosesTokenizer.tokenize`).
+        Additionally, large comma-separated numbers and floating point values are split.
+        E.g. "23,000 people are 1.80m tall" -> "23 @,@ 000 people are 1 @.@ 80m tall".
+        Args:
+            text: Text to be tokenized
+        Returns:
+            A list of tokenized strings
+        Example::
+            >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
+            >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
+            ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
+        """
+        text = self.moses_punct_norm(text)
+        text = self.moses_tokenize(text)
+        text = tokenize_numbers(text)
+        return text
+
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
         assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
@@ -323,9 +399,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                 raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement")
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
-        out_string = " ".join(tokens).strip()
-        return out_string
+        """
+        Converts a sequence of tokens (string) in a single string.
+        Additionally, the split numbers are converted back into it's original form.
+        """
+        out_string = self.moses_detokenizer.detokenize(tokens)
+        return detokenize_numbers(out_string).strip()
 
     def convert_to_tensor(self, symbols):
         return torch.LongTensor(self.convert_tokens_to_ids(symbols))
@@ -347,7 +426,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if self.delimiter == "":
             symbols = line
         else:
-            symbols = line.split(self.delimiter)
+            symbols = self.moses_pipeline(line)
 
         if add_double_eos:  # lm1b
             return ["<S>"] + symbols + ["<S>"]
@@ -355,19 +434,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             return symbols + ["<eos>"]
         else:
             return symbols
-
-    def prepare_for_tokenization(self, text, is_pretokenized=False, **kwargs):
-        # add spaces before punctuation symbols as should be done in transfo-xl
-        add_space_before_punct_symbol = kwargs.pop("add_space_before_punct_symbol", False)
-        if add_space_before_punct_symbol:
-            text = self.punctuation_with_space_around_pattern.sub(r" ", text)
-        elif self.punction_without_space_before_pattern.search(text):
-            # searches until the first occurence of a punctuation symbol without surrounding spaces
-            logger.warning(
-                "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
-            )
-
-        return (text, kwargs)
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
@@ -482,6 +548,11 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
+        )
+
+        warnings.warn(
+            "The class `TransfoXLTokenizerFast` is deprecated and will be removed in a future version. Please use `TransfoXLTokenizer` with it's enhanced tokenization instead.",
+            FutureWarning,
         )
 
     def save_pretrained(self, save_directory):

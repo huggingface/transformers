@@ -14,13 +14,17 @@ Portuguese (Brazil) model for text inference.
 
 ## Params
 
-Trained on a corpus of 5_258_624 sentences, with 132_807_374 non unique tokens (992_418 unique tokens).
+Trained on a corpus of 6_993_330 sentences.
 
-- Vocab size: 220_000
-- RobertaForMaskedLM  size : 32
-- Num train epochs: 2
-- Time to train: ~23hs (on GCP with a Nvidia T4)
+- Vocab size: 150_000
+- RobertaForMaskedLM  size : 512
+- Num train epochs: 3
+- Time to train: ~10days (on GCP with a Nvidia T4)
 
 I follow the great tutorial from HuggingFace team:
 
 [How to train a new language model from scratch using Transformers and Tokenizers](https://huggingface.co/blog/how-to-train)
+
+More infor here:
+
+[BR_BERTo](https://github.com/rdenadai/BR-BERTo)

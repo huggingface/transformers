@@ -27,6 +27,8 @@ from .integrations import (
     is_ray_available,
     is_tensorboard_available,
     is_wandb_available,
+    run_hp_search_optuna,
+    run_hp_search_ray,
 )
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -295,6 +297,7 @@ class Trainer:
         if self.args.fp16 and _use_native_amp:
             self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
+        self.use_tune_checkpoints = False
 
     def _remove_unused_columns(self, dataset: "nlp.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
@@ -544,7 +547,20 @@ class Trainer:
             if trial.should_prune():
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
+            if self.global_step % self.args.save_steps == 0:
+                self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
+
+    def _tune_save_checkpoint(self):
+        if not self.use_tune_checkpoints:
+            return
+        with tune.checkpoint_dir(step=self.global_step) as checkpoint_dir:
+            self.args.output_dir = checkpoint_dir
+            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
+            self.save_model(output_dir)
+            if self.is_world_master():
+                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
     def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
         """
@@ -644,7 +660,7 @@ class Trainer:
         if model_path is not None:
             # set global_step to global_step of last saved checkpoint from model path
             try:
-                self.global_step = int(model_path.split("-")[-1].split("/")[0])
+                self.global_step = int(model_path.split("-")[-1].split(os.path.sep)[0])
                 epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
                 steps_trained_in_current_epoch = self.global_step % (
                     len(train_dataloader) // self.args.gradient_accumulation_steps
@@ -658,8 +674,8 @@ class Trainer:
                 self.global_step = 0
                 logger.info("  Starting fine-tuning.")
 
-        tr_loss = 0.0
-        logging_loss = 0.0
+        tr_loss = torch.tensor(0.0).to(self.args.device)
+        logging_loss_scalar = 0.0
         model.zero_grad()
         disable_tqdm = self.args.disable_tqdm or not self.is_local_process_zero()
         train_pbar = trange(epochs_trained, int(np.ceil(num_train_epochs)), desc="Epoch", disable=disable_tqdm)
@@ -720,14 +736,15 @@ class Trainer:
                         self.global_step == 1 and self.args.logging_first_step
                     ):
                         logs: Dict[str, float] = {}
-                        logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
+                        tr_loss_scalar = tr_loss.item()
+                        logs["loss"] = (tr_loss_scalar - logging_loss_scalar) / self.args.logging_steps
                         # backward compatibility for pytorch schedulers
                         logs["learning_rate"] = (
                             self.lr_scheduler.get_last_lr()[0]
                             if version.parse(torch.__version__) >= version.parse("1.4")
                             else self.lr_scheduler.get_lr()[0]
                         )
-                        logging_loss = tr_loss
+                        logging_loss_scalar = tr_loss_scalar
 
                         self.log(logs)
 
@@ -773,8 +790,6 @@ class Trainer:
                     break
             epoch_pbar.close()
             train_pbar.update(1)
-            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
-                break
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -784,6 +799,8 @@ class Trainer:
                         "You enabled PyTorch/XLA debug metrics but you don't have a TPU "
                         "configured. Check your training configuration if this is unexpected."
                     )
+            if self.args.max_steps > 0 and self.global_step >= self.args.max_steps:
+                break
 
         train_pbar.close()
         if self.tb_writer:
@@ -793,7 +810,7 @@ class Trainer:
             delattr(self, "_past")
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        return TrainOutput(self.global_step, tr_loss / self.global_step)
+        return TrainOutput(self.global_step, tr_loss.item() / self.global_step)
 
     def hyperparameter_search(
         self,
@@ -868,40 +885,8 @@ class Trainer:
         self.hp_space = default_hp_space[backend] if hp_space is None else hp_space
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        def _objective(trial):
-            self.objective = None
-            self.train(trial=trial)
-            # If there hasn't been any evaluation during the training loop.
-            if getattr(self, "objective", None) is None:
-                metrics = self.evaluate()
-                self.objective = self.compute_objective(metrics)
-                if self.hp_search_backend == HPSearchBackend.RAY:
-                    tune.report(objective=self.objective)
-            return self.objective
-
-        if self.hp_search_backend == HPSearchBackend.OPTUNA:
-            timeout = kwargs.pop("timeout", None)
-            n_jobs = kwargs.pop("n_jobs", 1)
-            study = optuna.create_study(direction=direction, **kwargs)
-            study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
-            best_trial = study.best_trial
-            best_run = BestRun(str(best_trial.number), best_trial.value, best_trial.params)
-        elif self.hp_search_backend == HPSearchBackend.RAY:
-            # The TensorBoard writer does not pickle so we have to remove it (if it exists) while doing the ray hp
-            # search.
-            _tb_writer = self.tb_writer
-            self.tb_writer = None
-            # Setup default `resources_per_trial` and `reporter`.
-            if "resources_per_trial" not in kwargs and self.args.n_gpu > 0:
-                kwargs["resources_per_trial"] = {"gpu": self.args.n_gpu}
-            if "reporter" not in kwargs:
-                from ray.tune import CLIReporter
-
-                kwargs["progress_reporter"] = CLIReporter(metric_columns=["objective"])
-            analysis = tune.run(_objective, config=self.hp_space(None), num_samples=n_trials, **kwargs)
-            best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
-            best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
-            self.tb_writer = _tb_writer
+        run_hp_search = run_hp_search_optuna if backend == HPSearchBackend.OPTUNA else run_hp_search_ray
+        best_run = run_hp_search(self, n_trials, direction, **kwargs)
 
         self.hp_search_backend = None
         return best_run
@@ -973,7 +958,7 @@ class Trainer:
 
         return inputs
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> float:
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
 
@@ -989,7 +974,7 @@ class Trainer:
                 argument :obj:`labels`. Check your model's documentation for all accepted arguments.
 
         Return:
-            :obj:`float`: The training loss on this batch.
+            :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
         if hasattr(self, "_training_step"):
             warnings.warn(
@@ -1027,7 +1012,7 @@ class Trainer:
         else:
             loss.backward()
 
-        return loss.item()
+        return loss
 
     def is_local_master(self) -> bool:
         """
@@ -1276,6 +1261,10 @@ class Trainer:
                 preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
             if label_ids is not None:
                 label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+            if eval_losses is not None:
+                eval_losses = xm.mesh_reduce("eval_losses", torch.tensor(eval_losses), torch.cat).tolist()
+            if samples_count is not None:
+                samples_count = sum(xm.mesh_reduce("samples_count", torch.tensor([samples_count]), torch.cat).tolist())
 
         # Finally, turn the aggregated tensors into numpy arrays.
         if preds is not None:
