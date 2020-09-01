@@ -237,6 +237,16 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
+def DenseEinsum(output_size, kernel_initializer=None, name=None):
+    return tf.keras.layers.experimental.EinsumDense(
+        "abc,cd->abd",
+        output_shape=(None, output_size),
+        kernel_initializer=kernel_initializer,
+        name=name,
+        bias_axes="d",
+    )
+
+
 class TFBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -251,13 +261,13 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         assert config.hidden_size % config.num_attention_heads == 0
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.query = tf.keras.layers.Dense(
+        self.query = DenseEinsum(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = DenseEinsum(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = DenseEinsum(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
@@ -311,7 +321,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 class TFBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = DenseEinsum(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -347,7 +357,7 @@ class TFBertAttention(tf.keras.layers.Layer):
 class TFBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = DenseEinsum(
             config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -366,7 +376,7 @@ class TFBertIntermediate(tf.keras.layers.Layer):
 class TFBertOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = DenseEinsum(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
