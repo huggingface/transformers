@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Tokenization class for Funnel Transformer."""
 
+from typing import List, Optional
+
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .utils import logging
 
@@ -79,6 +81,7 @@ class FunnelTokenizer(BertTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    cls_token_type_id: int = 2
 
     def __init__(
         self,
@@ -113,6 +116,36 @@ class FunnelTokenizer(BertTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
+    
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        Funnel Transformer expects a sequence pair mask that has the following format:
+
+        ::
+
+            2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+
+        if token_ids_1 is None, only returns the first portion of the mask (0's).
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return len(cls) * [self.cls_token_type_id] + len(token_ids_0 + sep) * [0]
+        return len(cls) * [self.cls_token_type_id] + len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
 
 class FunnelTokenizerFast(BertTokenizerFast):
@@ -130,6 +163,7 @@ class FunnelTokenizerFast(BertTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    cls_token_type_id: int = 2
 
     def __init__(
         self,
@@ -164,3 +198,41 @@ class FunnelTokenizerFast(BertTokenizerFast):
             wordpieces_prefix=wordpieces_prefix,
             **kwargs,
         )
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        Funnel Transformer expects a sequence pair mask that has the following format:
+
+        ::
+
+            2 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+
+        if token_ids_1 is None, only returns the first portion of the mask (0's).
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return len(cls) * [self.cls_token_type_id] + len(token_ids_0 + sep) * [0]
+        return len(cls) * [self.cls_token_type_id] + len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+    def _convert_encoding(self, encoding, **kwargs):
+        # The fast tokenizer doesn't use the function above so we fix the cls token type id when decoding the fast
+        # tokenzier output.
+        encoding_dict = super()._convert_encoding(encoding, **kwargs)
+        if "token_type_ids" in encoding_dict:
+            encoding_dict["token_type_ids"] = [[self.cls_token_type_id] + type_ids[1:] for type_ids in encoding_dict["token_type_ids"]]
+        return encoding_dict
