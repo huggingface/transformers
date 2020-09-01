@@ -494,9 +494,10 @@ def get_layers_to_copy(n_student, n_teacher):
         assert len(LAYERS_TO_SUPERVISE[n_teacher][n_student]) == len(val) == n_student
         return val
     except KeyError:
-        warnings.warn(
-            f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"
-        )
+        if n_student != n_teacher:
+            warnings.warn(
+                f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"
+            )
         return list(range(n_student))
 
 
