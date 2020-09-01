@@ -4,7 +4,7 @@ LXMERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~
 
-The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers <https://arxiv.org/abs/1908.07490>`
+The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers <https://arxiv.org/abs/1908.07490>`__
 by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders (one for the vision modality, one for the language modality, and then one to fuse both modalities)
 pre-trained using a combination of masked language modeling, visual-language text alignment, ROI-feature regression, masked visual-attribute modeling, masked visual-object modeling, and visual-question answering objectives.
 The pretraining consists of multiple multi-modal datasets: MSCOCO, Visual-Genome + Visual-Genome Question Answering, VQA 2.0, and GQA.
@@ -40,7 +40,7 @@ Tips:
 - The bi-directional cross-modality encoder attention only returns attention values when the language modality is used as the input and the vision modality is used as the context vector. Further,
   while the cross-modality encoder contains self-attention for each respective modality and cross-attention, only the cross attention is returned and both self attention outputs are disregarded.
 
-The code can be found `here <https://github.com/airsplay/lxmert>`__.
+The code can be found `here <https://github.com/airsplay/lxmert>`__
 
 
 LxmertConfig

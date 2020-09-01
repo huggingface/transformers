@@ -382,7 +382,7 @@ class LxmertAttention(nn.Module):
         return outputs
 
 
-class LxmertAttOutput(nn.Module):
+class LxmertAttentionOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -396,11 +396,11 @@ class LxmertAttOutput(nn.Module):
         return hidden_states
 
 
-class LxmertCrossattLayer(nn.Module):
+class LxmertCrossAttentionLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.att = LxmertAttention(config)
-        self.output = LxmertAttOutput(config)
+        self.output = LxmertAttentionOutput(config)
 
     def forward(self, input_tensor, ctx_tensor, ctx_att_mask=None, output_attentions=False):
         output = self.att(input_tensor, ctx_tensor, ctx_att_mask, output_attentions=output_attentions)
@@ -415,7 +415,7 @@ class LxmertSelfAttentionLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.self = LxmertAttention(config)
-        self.output = LxmertAttOutput(config)
+        self.output = LxmertAttentionOutput(config)
 
     def forward(self, input_tensor, attention_mask, output_attentions=False):
         # Self attention attends to itself, thus keys and querys are the same (input_tensor).
@@ -478,7 +478,7 @@ class LxmertXLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         # The cross-attention Layer
-        self.visual_attention = LxmertCrossattLayer(config)
+        self.visual_attention = LxmertCrossAttentionLayer(config)
 
         # Self-attention Layers
         self.lang_self_att = LxmertSelfAttentionLayer(config)
@@ -806,7 +806,7 @@ class LxmertPreTrainedModel(PreTrainedModel):
 
 
 LXMERT_START_DOCSTRING = r"""
-    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
+    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers <https://arxiv.org/abs/1908.07490>`__
     by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
     using a combination of masked language modeling, region of interest feature regression,

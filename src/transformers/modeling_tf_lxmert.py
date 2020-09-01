@@ -440,7 +440,7 @@ class TFLxmertOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFLxmertAttOutput(tf.keras.layers.Layer):
+class TFLxmertAttentionOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
@@ -462,7 +462,7 @@ class TFLxmertSelfAttentionLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.self = TFLxmertAttention(config, name="self")
-        self.attention_output = TFLxmertAttOutput(config, name="output")
+        self.attention_output = TFLxmertAttentionOutput(config, name="output")
 
     def call(self, input_tensor, attention_mask, output_attentions, training=False):
         # Self attention attends to itself, thus keys and querys are the same (input_tensor).
@@ -477,7 +477,7 @@ class TFLxmertCrossAttentionLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.att = TFLxmertAttention(config, name="att")
-        self.attention_output = TFLxmertAttOutput(config, name="output")
+        self.attention_output = TFLxmertAttentionOutput(config, name="output")
 
     def call(
         self,
@@ -903,13 +903,14 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
 
 
 LXMERT_START_DOCSTRING = r"""
-    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers`
+    The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Representations from Transformers <https://arxiv.org/abs/1908.07490>`__
     by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
     using a combination of masked language modeling, region of interest feature regression,
     cross entropy loss for question answering attribute prediction, and object tag predicition.
 
-    This model is a tf.keras.Model `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>` sub-class. Use it as a regular TF 2.0 Keras Model and
+    This model is a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ sub-class.
+    Use it as a regular TF 2.0 Keras Model and
     refer to the TF 2.0 documentation for all matter related to general usage and behavior.
 
     Note on the model inputs:

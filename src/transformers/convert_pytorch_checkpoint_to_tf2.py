@@ -60,7 +60,7 @@ from transformers import (
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
     TFLxmertForPreTraining,
-    TFLxmertVisualFeatEncoder,
+    TFLxmertVisualFeatureEncoder,
     TFOpenAIGPTLMHeadModel,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
@@ -99,7 +99,7 @@ if is_torch_available():
         FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
         LxmertForPreTraining,
-        LxmertVisualFeatEncoder,
+        LxmertVisualFeatureEncoder,
         OpenAIGPTLMHeadModel,
         RobertaForMaskedLM,
         RobertaForSequenceClassification,
@@ -218,8 +218,8 @@ MODEL_CLASSES = {
     ),
     "lxmert-visual-feature-encoder": (
         LxmertConfig,
-        TFLxmertVisualFeatEncoder,
-        LxmertVisualFeatEncoder,
+        TFLxmertVisualFeatureEncoder,
+        LxmertVisualFeatureEncoder,
         LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
     "ctrl": (
