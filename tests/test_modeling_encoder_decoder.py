@@ -482,7 +482,7 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         EXPECTED_SUMMARY = """sae was founded in 1856, five years before the civil war. the fraternity has had to work hard to change recently. the university of oklahoma president says the university's affiliation with the fraternity is permanently done. the sae has had a string of members in recent months."""
 
-        input_ids = tokenizer(ARTICLE, return_tensors="pt").input_ids
+        input_ids = tokenizer(ARTICLE, return_tensors="pt").input_ids.to(torch_device)
         output_ids = model.generate(input_ids)
         summary = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
