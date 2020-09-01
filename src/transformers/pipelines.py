@@ -2135,8 +2135,6 @@ class Text2TextGenerationPipeline(Pipeline):
         """
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
 
-        # prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
-
         if isinstance(args[0], list):
             assert (
                 self.tokenizer.pad_token_id is not None
