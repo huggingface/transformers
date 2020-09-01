@@ -267,7 +267,7 @@ def add_distill_args(parser):
     parser.add_argument("--student_encoder_layers", default=12, type=int, required=False)
     parser.add_argument("--no_teacher", action="store_true", default=False)
     parser.add_argument("--length_penalty", type=float, default=-1)
-    parser.add_argument("--supervise_forward", action="store_true", default=-1)
+    parser.add_argument("--supervise_forward", action="store_true", default=False)
 
 
 class BartTranslationDistiller(BartSummarizationDistiller):
