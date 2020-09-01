@@ -25,7 +25,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = FunnelTokenizer
-    #test_rust_tokenizer = True
+    # test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
