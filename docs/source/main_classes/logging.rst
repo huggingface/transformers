@@ -20,7 +20,7 @@ verbose to the most verbose), those levels (with their corresponding int values 
 - :obj:`transformers.logging.ERROR` (int value, 40): only report errors.
 - :obj:`transformers.logging.WARNING` or :obj:`transformers.logging.WARN` (int value, 30): only reports error and
   warnings. This the default level used by the library.
-- :obj:`transformers.logging.INFO` (int value, 20): reports error, warnings and basic informations.
+- :obj:`transformers.logging.INFO` (int value, 20): reports error, warnings and basic information.
 - :obj:`transformers.logging.DEBUG` (int value, 10): report all information.
 
 Base setters
