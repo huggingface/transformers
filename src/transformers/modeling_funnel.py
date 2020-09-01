@@ -591,7 +591,7 @@ class FunnelDecoder(nn.Module):
     ):
         upsampled_hidden = upsample(
             final_hidden,
-            stride=2 ** len(self.config.block_sizes),
+            stride=2 ** (len(self.config.block_sizes) - 1),
             target_len=first_block_hidden.shape[1],
             separate_cls=self.config.separate_cls,
             truncate_seq=self.config.truncate_seq,
