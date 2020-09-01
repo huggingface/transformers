@@ -961,7 +961,7 @@ class T5Model(T5PreTrainedModel):
             past_key_values = kwargs.pop("decoder_past_key_value_states")
         if "decoder_past_key_values" in kwargs:
             warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
                 FutureWarning,
             )
             past_key_values = kwargs.pop("decoder_past_key_values")
@@ -1136,7 +1136,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             past_key_values = kwargs.pop("decoder_past_key_value_states")
         if "decoder_past_key_values" in kwargs:
             warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
                 FutureWarning,
             )
             past_key_values = kwargs.pop("decoder_past_key_values")
