@@ -104,6 +104,7 @@ class TFTrainingArguments(TrainingArguments):
         metadata={"help": "Name of TPU"},
     )
 
+    """
     @cached_property
     @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
@@ -137,14 +138,17 @@ class TFTrainingArguments(TrainingArguments):
                 raise ValueError("Cannot find the proper strategy please check your environment properties.")
 
         return strategy
+    """
 
+    """
     @property
     @tf_required
     def strategy(self) -> "tf.distribute.Strategy":
-        """
-        The strategy used for distributed training.
-        """
-        return self._setup_strategy
+    """
+    """
+    The strategy used for distributed training.
+    """
+    #    return self._setup_strategy
 
     @property
     @tf_required
@@ -152,7 +156,16 @@ class TFTrainingArguments(TrainingArguments):
         """
         The number of replicas (CPUs, GPUs or TPU cores) used in this training.
         """
-        return self._setup_strategy.num_replicas_in_sync
+        tpus = len(tf.config.list_logical_devices('TPU'))
+        gpus = len(tf.config.list_physical_devices("GPU"))
+        cpus = len(tf.config.list_physical_devices("CPU"))
+
+        if tpus > 0 and not self.no_cuda:
+            return tpus
+        elif gpus > 0 and not self.no_cuda:
+            return gpus
+        else:
+            return cpus
 
     @property
     def train_batch_size(self) -> int:
@@ -190,4 +203,13 @@ class TFTrainingArguments(TrainingArguments):
             "The n_gpu argument is deprecated and will be removed in a future version, use n_replicas instead.",
             FutureWarning,
         )
-        return self._setup_strategy.num_replicas_in_sync
+        tpus = len(tf.config.list_logical_devices('TPU'))
+        gpus = len(tf.config.list_physical_devices("GPU"))
+        cpus = len(tf.config.list_physical_devices("CPU"))
+
+        if tpus > 0:
+            return tpus
+        elif gpus > 0:
+            return gpus
+        else:
+            return cpus
