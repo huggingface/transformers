@@ -116,7 +116,7 @@ class FunnelTokenizer(BertTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
-    
+
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -234,5 +234,7 @@ class FunnelTokenizerFast(BertTokenizerFast):
         # tokenzier output.
         encoding_dict = super()._convert_encoding(encoding, **kwargs)
         if "token_type_ids" in encoding_dict:
-            encoding_dict["token_type_ids"] = [[self.cls_token_type_id] + type_ids[1:] for type_ids in encoding_dict["token_type_ids"]]
+            encoding_dict["token_type_ids"] = [
+                [self.cls_token_type_id] + type_ids[1:] for type_ids in encoding_dict["token_type_ids"]
+            ]
         return encoding_dict
