@@ -1,4 +1,4 @@
-# Roberta2Roberta Summarization with 🤗 EncoderDecoder Framework
+# Longformer2Roberta Summarization with 🤗 EncoderDecoder Framework
 
 This model is a Longformer2Roberta model fine-tuned on summarization.
 
