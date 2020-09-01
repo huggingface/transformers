@@ -299,7 +299,7 @@ class CaptureLogger:
         self.logger = logger
         self.io = StringIO()
         self.sh = logging.StreamHandler(self.io)
-        self.out = ''
+        self.out = ""
 
     def __enter__(self):
         self.logger.addHandler(self.sh)
