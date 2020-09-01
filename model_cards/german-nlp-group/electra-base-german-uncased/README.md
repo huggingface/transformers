@@ -29,12 +29,8 @@ At the time of release (August 2020) this Model is the best performing publicly 
 This model is **uncased** but does not use **strip accents**.
 The necessary parameter is `strip_accents=False`.
 
-This needs to be set for the tokenizer otherwise the model will perform slightly worse.
 It was added to Transformers with [PR #6280](https://github.com/huggingface/transformers/pull/6280).
-
-Since Transformers has not been released since the PR #6280 was merged, you have to install directly from source:
-
-`pip install git+https://github.com/huggingface/transformers.git -U`
+To use it you have to use Transformers version 3.1.0 or newer.
 
 ---
 
