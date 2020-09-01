@@ -212,6 +212,7 @@ conversion utilities for the following models:
     model_doc/dpr
     model_doc/pegasus
     model_doc/mbart
+    model_doc/funnel
     internal/modeling_utils
     internal/tokenization_utils
     internal/pipelines_utils

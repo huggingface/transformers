@@ -86,7 +86,7 @@ class FunnelConfig(PretrainedConfig):
             linear layers.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-9):
             The epsilon used by the layer normalization layers.
-        pooling_type (:obj:`str`, `optional`, defaults to `:obj:`"mean"):
+        pooling_type (:obj:`str`, `optional`, defaults to :obj:`"mean"`):
             Possible values are ``"mean"`` or ``"max"``. The way pooling is performed at the beginning of each
             block.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`"relative_shift"`):

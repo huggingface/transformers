@@ -1,4 +1,4 @@
-BERT
+Funnel Transformer
 ----------------------------------------------------
 
 Overview
