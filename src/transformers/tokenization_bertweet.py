@@ -70,15 +70,38 @@ class BertweetTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
+        normalization (:obj:`boolean`, defaults to False)
+            Whether to apply a normalization pre-process.
         bos_token (:obj:`string`, `optional`, defaults to "<s>"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the beginning
+                of sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`string`, `optional`, defaults to "</s>"):
             The end of sequence token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the end
+                of sequence. The token used is the :obj:`sep_token`.
+        sep_token (:obj:`string`, `optional`, defaults to "</s>"):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
+            for sequence classification or for a text and a question for question answering.
+            It is also used as the last token of a sequence built with special tokens.
+        cls_token (:obj:`string`, `optional`, defaults to "<s>"):
+            The classifier token which is used when doing sequence classification (classification of the whole
+            sequence instead of per-token classification). It is the first token of the sequence when built with
+            special tokens.
         unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
             The token used for padding, for example when batching sequences of different lengths.
+        mask_token (:obj:`string`, `optional`, defaults to "<mask>"):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
