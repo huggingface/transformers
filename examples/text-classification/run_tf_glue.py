@@ -121,7 +121,8 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     parser = HfArgumentParser((ModelArguments, GlueDataTrainingArguments, TFTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
+    FinalArguments = make_dataclass('FinalArguments', [('model_args', ModelArguments), ('data_args', DataTrainingArguments), ('training_args', TFTrainingArguments)])
+    final_args = FinalArguments(model_args, data_args, training_args)
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -169,14 +170,6 @@ def main():
         cache_dir=model_args.cache_dir,
     )
 
-    with training_args.strategy.scope():
-        model = TFAutoModelForSequenceClassification.from_pretrained(
-            model_args.model_name_or_path,
-            from_pt=bool(".bin" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-        )
-
     # Get datasets
     train_dataset = (
         get_tfds(
@@ -209,8 +202,9 @@ def main():
 
     # Initialize our Trainer
     trainer = TFTrainer(
-        model=model,
-        args=training_args,
+        model_class=TFAutoModelForSequenceClassification,
+        config=config,
+        args=final_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
