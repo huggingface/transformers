@@ -7,7 +7,7 @@ python distillation.py \
   --do_train \
   --fp16 \
   --val_check_interval 0.25 \
-  --teacher Helsinki-NLP/opus-mt-en-ro --data_dir $ENRO_DIR \
+  --teacher Helsinki-NLP/opus-mt-en-ro \
   --max_source_length $MAX_LEN --max_target_length $MAX_LEN --val_max_target_length $MAX_LEN --test_max_target_length $MAX_LEN \
   --student_decoder_layers 3 --student_encoder_layers 6 \
   --freeze_encoder --freeze_embeds \
