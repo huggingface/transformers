@@ -1,5 +1,3 @@
-from typing import Union
-
 import fire
 import torch
 
