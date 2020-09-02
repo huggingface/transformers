@@ -872,7 +872,7 @@ LXMERT_START_DOCSTRING = r"""
 
 LXMERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`np.ndarray` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.LxmertTokenizer`.
