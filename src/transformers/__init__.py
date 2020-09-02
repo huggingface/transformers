@@ -126,6 +126,7 @@ from .pipelines import (
     PipelineDataFormat,
     QuestionAnsweringPipeline,
     SummarizationPipeline,
+    Text2TextGenerationPipeline,
     TextClassificationPipeline,
     TextGenerationPipeline,
     TokenClassificationPipeline,
@@ -418,6 +419,7 @@ if is_torch_available():
     )
     from .modeling_xlm_roberta import (
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        XLMRobertaForCausalLM,
         XLMRobertaForMaskedLM,
         XLMRobertaForMultipleChoice,
         XLMRobertaForQuestionAnswering,
