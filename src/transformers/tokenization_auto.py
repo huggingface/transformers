@@ -27,6 +27,7 @@ from .configuration_auto import (
     DistilBertConfig,
     ElectraConfig,
     FlaubertConfig,
+    FunnelConfig,
     GPT2Config,
     LongformerConfig,
     MarianConfig,
@@ -53,6 +54,7 @@ from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
+from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_marian import MarianTokenizer
@@ -99,6 +101,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (FunnelConfig, (FunnelTokenizer, FunnelTokenizerFast)),
     ]
 )
 
@@ -128,6 +131,7 @@ class AutoTokenizer:
         - `xlm`: XLMTokenizer (XLM model)
         - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
         - `electra`: ElectraTokenizer (Google ELECTRA model)
+        - `funnel`: FunnelTokenizer (Funnel Transformer model)
 
     This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -163,6 +167,7 @@ class AutoTokenizer:
             - `xlm`: XLMTokenizer (XLM model)
             - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `funnel`: FunnelTokenizer (Funnel Transformer model)
 
         Params:
             pretrained_model_name_or_path: either:
