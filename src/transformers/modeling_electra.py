@@ -185,6 +185,7 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
     config_class = ElectraConfig
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
+    authorized_missing_keys = [r"position_ids"]
 
 
 @dataclass
