@@ -732,7 +732,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
             kwargs (remaining dictionary of keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
-                :obj:`output_attention=True`). Behaves differently depending on whether a ``config`` is provided or
+                :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
                 automatically loaded:
 
                     - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the
@@ -752,8 +752,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
             model = BertModel.from_pretrained('./test/saved_model/')
             # Update configuration during loading.
-            model = BertModel.from_pretrained('bert-base-uncased', output_attention=True)
-            assert model.config.output_attention == True
+            model = BertModel.from_pretrained('bert-base-uncased', output_attentions=True)
+            assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
             config = BertConfig.from_json_file('./tf_model/my_tf_model_config.json')
             model = BertModel.from_pretrained('./tf_model/my_tf_checkpoint.ckpt.index', from_tf=True, config=config)

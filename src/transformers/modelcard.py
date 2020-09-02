@@ -122,7 +122,7 @@ class ModelCard:
             modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
             modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
             modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
-            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
+            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
 
         """
         cache_dir = kwargs.pop("cache_dir", None)
