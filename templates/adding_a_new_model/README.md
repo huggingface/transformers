@@ -79,7 +79,6 @@ You can then finish the addition step by adding imports for your classes in the 
 - [ ] Add your configuration in `configuration_auto.py`.
 - [ ] Add your PyTorch and TF 2.0 model respectively in `modeling_auto.py` and `modeling_tf_auto.py`.
 - [ ] Add your tokenizer in `tokenization_auto.py`.
-- [ ] Add your models and tokenizer to `pipeline.py`.
 - [ ] Add a link to your conversion script in the main conversion utility (in `commands/convert.py`)
 - [ ] Edit the PyTorch to TF 2.0 conversion script to add your model in the `convert_pytorch_checkpoint_to_tf2.py`
   file.
