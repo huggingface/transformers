@@ -34,7 +34,7 @@ attention visualizations for the different encoders*
 
 Tips:
 
-- Bounding boxes are not necessary to be used in the visual feature embeddings, any kind of visual-spacial features will work
+- Bounding boxes are not necessary to be used in the visual feature embeddings, any kind of visual-spacial features will work.
 - Both the language hidden states and the visual hidden states that LXMERT outputs are passed through the cross-modality layer, so they
   contain information from both modalities. To access a modality that only attends to itself, select the vision/language hidden states from the first input in the tuple.
 - The bi-directional cross-modality encoder attention only returns attention values when the language modality is used as the input and the vision modality is used as the context vector. Further,
@@ -107,4 +107,3 @@ TFLxmertForPreTraining
 
 .. autoclass:: transformers.TFLxmertForPreTraining
     :members:
-
