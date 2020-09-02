@@ -168,7 +168,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-        position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
+        position_embeddings = tf.cast(self.position_embeddings(position_ids), inputs_embeds.dtype)  # (bs, max_seq_length, dim)
 
         embeddings = inputs_embeds + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
