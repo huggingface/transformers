@@ -37,30 +37,31 @@ def average_state_dicts(state_dicts: List[Dict[str, torch.Tensor]]):
     return new_sd
 
 
-def convert_pl_to_hf(pl_ckpt_glob: str, hf_src_model_dir: str, save_path: str) -> None:
+def convert_pl_to_hf(pl_ckpt_path: str, hf_src_model_dir: str, save_path: str) -> None:
     """Cleanup a pytorch-lightning .ckpt file or experiment dir and save a huggingface model with that state dict.
     Silently allows extra pl keys (like teacher.) Puts all ckpt models into CPU RAM at once!
 
     Args:
-        pl_ckpt_glob: (str) path to a .ckpt file saved by pytorch_lightning, or a glob expression like dir/*.ckpt
+        pl_ckpt_path: (str) path to a .ckpt file saved by pytorch_lightning, or a glob expression like dir/*.ckpt.
+            If a directory is passed, all .ckpt files inside it will be averaged!
         hf_src_model_dir: (str) path to a directory containing a correctly shaped checkpoint
         save_path: (str) directory to save the new model
 
     """
     hf_model = AutoModelForSeq2SeqLM.from_pretrained(hf_src_model_dir)
-    import glob
-    files = list(glob.glob(pl_ckpt_glob))
-    if os.path.isfile(pl_ckpt_glob):
-        state_dict = sanitize(torch.load(pl_ckpt_glob, map_location="cpu")["state_dict"])
+    if os.path.isfile(pl_ckpt_path):
+        ckpt_files = [pl_ckpt_path]
+    elif os.path.isdir(pl_ckpt_path):
+        ckpt_files = list(Path(pl_ckpt_path).glob("*.ckpt"))
     else:
-        assert os.path.isdir(pl_ckpt_glob), f"{pl_ckpt_glob} must be a directory containing ckpt files or a ckpt file"
-        import glob
+        ckpt_files = list(Path.glob(pl_ckpt_path))
+    assert ckpt_files, f"could not find any ckpt files in {pl_ckpt_path} directory"
 
-        ckpt_files = list(Path(pl_ckpt_glob).parent.glob('*.ckpt'))
-        assert ckpt_files, f"could not find any ckpt files in {pl_ckpt_glob} directory"
-        logger.log(f"average {ckpt_files}")
-        state_dicts = [sanitize(torch.load(x, map_location="cpu")["state_dict"]) for x in ckpt_files]
-        state_dict = average_state_dicts(state_dicts)
+    if len(ckpt_files) > 1:
+        logger.info(f"averaging {ckpt_files}")
+
+    state_dicts = [sanitize(torch.load(x, map_location="cpu")["state_dict"]) for x in ckpt_files]
+    state_dict = average_state_dicts(state_dicts)
 
     missing, unexpected = hf_model.load_state_dict(state_dict, strict=False)
     assert not missing, f"missing keys: {missing}"
