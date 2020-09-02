@@ -261,11 +261,11 @@ class AutoConfig:
             config = AutoConfig.from_pretrained('bert-base-uncased')  # Download configuration from S3 and cache.
             config = AutoConfig.from_pretrained('./test/bert_saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = AutoConfig.from_pretrained('./test/bert_saved_model/my_configuration.json')
-            config = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
-            assert config.output_attention == True
-            config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True,
+            config = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+            assert config.output_attentions == True
+            config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True,
                                                                foo=False, return_unused_kwargs=True)
-            assert config.output_attention == True
+            assert config.output_attentions == True
             assert unused_kwargs == {'foo': False}
 
         """

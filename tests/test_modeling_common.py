@@ -822,7 +822,7 @@ class ModelTesterMixin:
             with self.assertRaises(AssertionError):
                 # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
-                model.generate(input_ids, do_sample=False, num_return_sequences=2)
+                model.generate(input_ids, do_sample=False, num_beams=1, num_return_sequences=2)
 
             # num_return_sequences > 1, sample
             self._check_generated_ids(model.generate(input_ids, do_sample=True, num_return_sequences=2))

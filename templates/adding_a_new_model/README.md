@@ -62,8 +62,8 @@ Here is the workflow for the adding tests:
 
 Here is the workflow for documentation:
 
-- [ ] Make sure all your arguments are properly documened in your configuration and tokenizer.
-- [ ] Most of the documentation of the models is automatically generated, you just ahve to male sure that
+- [ ] Make sure all your arguments are properly documented in your configuration and tokenizer.
+- [ ] Most of the documentation of the models is automatically generated, you just have to make sure that
   `XXX_START_DOCSTRING` contains an introduction to the model you're adding and a link to the original
   article and that `XXX_INPUTS_DOCSTRING` contains all the inputs of your model.
 - [ ] Create a new page `xxx.rst` in the folder `docs/source/model_doc` and add this file in `docs/source/index.rst`.

@@ -196,7 +196,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
-                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``).
+                Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attentions=True``).
                 - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter
                 - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter
                 - To update the parent model configuration, do not use a prefix for each configuration parameter
