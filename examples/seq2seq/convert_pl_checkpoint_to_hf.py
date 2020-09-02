@@ -42,7 +42,7 @@ def convert_pl_to_hf(pl_ckpt_path: str, hf_src_model_dir: str, save_path: str) -
     Silently allows extra pl keys (like teacher.) Puts all ckpt models into CPU RAM at once!
 
     Args:
-        pl_ckpt_path: (str) path to a .ckpt file saved by pytorch_lightning, or a glob expression like dir/*.ckpt.
+        pl_ckpt_path: (str) path to a .ckpt file saved by pytorch_lightning or dir containing ckpt files.
             If a directory is passed, all .ckpt files inside it will be averaged!
         hf_src_model_dir: (str) path to a directory containing a correctly shaped checkpoint
         save_path: (str) directory to save the new model
@@ -51,11 +51,10 @@ def convert_pl_to_hf(pl_ckpt_path: str, hf_src_model_dir: str, save_path: str) -
     hf_model = AutoModelForSeq2SeqLM.from_pretrained(hf_src_model_dir)
     if os.path.isfile(pl_ckpt_path):
         ckpt_files = [pl_ckpt_path]
-    elif os.path.isdir(pl_ckpt_path):
-        ckpt_files = list(Path(pl_ckpt_path).glob("*.ckpt"))
     else:
-        ckpt_files = list(Path.glob(pl_ckpt_path))
-    assert ckpt_files, f"could not find any ckpt files in {pl_ckpt_path} directory"
+        assert os.path.isdir(pl_ckpt_path)
+        ckpt_files = list(Path(pl_ckpt_path).glob("*.ckpt"))
+        assert ckpt_files, f"could not find any ckpt files inside the {pl_ckpt_path} directory"
 
     if len(ckpt_files) > 1:
         logger.info(f"averaging {ckpt_files}")
