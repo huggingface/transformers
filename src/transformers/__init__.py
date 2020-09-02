@@ -348,7 +348,7 @@ if is_torch_available():
         LxmertForQuestionAnswering,
         LxmertModel,
         LxmertPreTrainedModel,
-        LxmertVisualFeatEncoder,
+        LxmertVisualFeatureEncoder,
         LxmertXLayer,
     )
     from .modeling_marian import MarianMTModel
@@ -586,7 +586,7 @@ if is_tf_available():
         TFLxmertMainLayer,
         TFLxmertModel,
         TFLxmertPreTrainedModel,
-        TFLxmertVisualFeatEncoder,
+        TFLxmertVisualFeatureEncoder,
     )
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
