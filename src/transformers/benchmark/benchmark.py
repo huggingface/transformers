@@ -86,19 +86,9 @@ class PyTorchBenchmark(Benchmark):
         config = self.config_dict[model_name]
 
         if self.args.torchscript:
+            from transformers.modeling_bert import BertScriptableModel
             config.torchscript = True
-
-        has_model_class_in_config = hasattr(config, "architecture") and len(config.architectures) > 1
-        if not self.args.only_pretrain_model and has_model_class_in_config:
-            try:
-                model_class = config.architectures[0]
-                transformers_module = __import__("transformers", fromlist=[model_class])
-                model_cls = getattr(transformers_module, model_class)
-                model = model_cls(config)
-            except ImportError:
-                raise ImportError(
-                    f"{model_class} does not exist. If you just want to test the pretrained model, you might want to set `--only_pretrain_model` or `args.only_pretrain_model=True`."
-                )
+            model = BertScriptableModel(config)
         else:
             model = MODEL_MAPPING[config.__class__](config)
 
@@ -118,7 +108,7 @@ class PyTorchBenchmark(Benchmark):
 
         if self.args.torchscript:
             with torch.no_grad():
-                inference_model = torch.jit.trace(model, input_ids)
+                inference_model = torch.jit.script(model)
         else:
             inference_model = model
 

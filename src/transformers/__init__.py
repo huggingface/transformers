@@ -211,6 +211,7 @@ if is_torch_available():
 
     from .modeling_bert import (
         BertPreTrainedModel,
+        BertScriptableModel,
         BertModel,
         BertForPreTraining,
         BertForMaskedLM,
