@@ -2,8 +2,8 @@
 language: hu
 license: apache-2.0
 datasets:
-- Common Crawl
-- Wikipedia
+- common_crawl
+- wikipedia
 ---
 
 # huBERT base model (cased)
