@@ -1068,7 +1068,7 @@ class TFAutoModelForCausalLM:
 
             model = TFAutoModelForCausalLM.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
             model = TFAutoModelForCausalLM.from_pretrained('./test/gpt2_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelForCausalLM.from_pretrained('gpt2', output_attentions=True)  # Update configuration during loading 
+            model = TFAutoModelForCausalLM.from_pretrained('gpt2', output_attentions=True)  # Update configuration during loading
             assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/gpt2_tf_model_config.json')
