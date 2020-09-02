@@ -91,6 +91,20 @@ class ConvertCommand(BaseTransformersCLICommand):
                 raise ImportError(msg)
 
             convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
+        elif self._model_type == "funnel":
+            try:
+                from transformers.convert_funnel_original_tf_checkpoint_to_pytorch import (
+                    convert_tf_checkpoint_to_pytorch,
+                )
+            except ImportError:
+                msg = (
+                    "transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions."
+                )
+                raise ImportError(msg)
+
+            convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         elif self._model_type == "gpt":
             from transformers.convert_openai_original_tf_checkpoint_to_pytorch import (
                 convert_openai_checkpoint_to_pytorch,

@@ -326,7 +326,18 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
-    from .modeling_funnel import FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST, FunnelBaseModel, FunnelModel
+    from .modeling_funnel import (
+        FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FunnelBaseModel,
+        FunnelForMaskedLM,
+        FunnelForMultipleChoice,
+        FunnelForPreTraining,
+        FunnelForQuestionAnswering,
+        FunnelForSequenceClassification,
+        FunnelForTokenClassification,
+        FunnelModel,
+        load_tf_weights_in_funnel,
+    )
     from .modeling_gpt2 import (
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
