@@ -3,7 +3,7 @@ from typing import Union
 import fire
 import torch
 
-from transformers import AutoModelForSeq2SeqLM
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 
 def remove_prefix(text: str, prefix: str):
@@ -29,6 +29,12 @@ def convert_pl_to_hf(pl_ckpt_path: str, hf_src_model_dir: str, save_path: str) -
     missing, unexpected = hf_model.load_state_dict(state_dict, strict=False)
     assert not missing, f"missing keys: {missing}"
     hf_model.save_pretrained(save_path)
+    try:
+        tok = AutoTokenizer.from_pretrained(hf_src_model_dir)
+        tok.save_pretrained(save_path)
+    except Exception:
+        pass
+        # dont copy tokenizer if cant
 
 
 if __name__ == "__main__":
