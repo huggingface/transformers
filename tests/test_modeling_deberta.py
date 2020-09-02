@@ -24,15 +24,12 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
-    from transformers import (
+    from transformers import (  # XxxForMaskedLM,; XxxForQuestionAnswering,; XxxForTokenClassification,
         DeBERTaConfig,
-        DeBERTaModel,
-        # XxxForMaskedLM,
-        # XxxForQuestionAnswering,
         DeBERTaForSequenceClassification,
-        # XxxForTokenClassification,
+        DeBERTaModel,
     )
-    from transformers.modeling_deberta import DeBERTa_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -246,6 +243,6 @@ class DeBERTaModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DeBERTa_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = DeBERTaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

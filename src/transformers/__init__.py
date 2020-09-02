@@ -25,7 +25,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
-from .configuration_deberta import DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP, DeBERTaConfig
+from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DeBERTaConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
 from .configuration_dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
@@ -303,6 +303,12 @@ if is_torch_available():
         CamembertModel,
     )
     from .modeling_ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel, CTRLModel, CTRLPreTrainedModel
+    from .modeling_deberta import (
+        DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DeBERTaForSequenceClassification,
+        DeBERTaModel,
+        DeBERTaPreTrainedModel,
+    )
     from .modeling_distilbert import (
         DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DistilBertForMaskedLM,
@@ -479,13 +485,6 @@ if is_torch_available():
         XLNetModel,
         XLNetPreTrainedModel,
         load_tf_weights_in_xlnet,
-    )
-
-    from .modeling_deberta import (
-        DeBERTa_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DeBERTaPreTrainedModel,
-        DeBERTaModel,
-        DeBERTaForSequenceClassification,
     )
 
     # Optimization

@@ -19,11 +19,11 @@ import logging
 from .configuration_utils import PretrainedConfig
 
 
-__all__ = ["DeBERTaConfig", "DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP"]
+__all__ = ["DeBERTaConfig", "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"]
 
 logger = logging.getLogger(__name__)
 
-DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/deberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-base/config.json",
     "microsoft/deberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-large/config.json",
 }
@@ -31,35 +31,35 @@ DeBERTa_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class DeBERTaConfig(PretrainedConfig):
     r"""
-        :class:`~transformers.DeBERTaConfig` is the configuration class to store the configuration of a
-        `DeBERTaModel`.
+    :class:`~transformers.DeBERTaConfig` is the configuration class to store the configuration of a
+    `DeBERTaModel`.
 
-        Arguments:
-            hidden_size (int): Size of the encoder layers and the pooler layer, default: `768`.
-            num_hidden_layers (int): Number of hidden layers in the Transformer encoder, default: `12`.
-            num_attention_heads (int): Number of attention heads for each attention layer in
-                the Transformer encoder, default: `12`.
-            intermediate_size (int): The size of the "intermediate" (i.e., feed-forward)
-                layer in the Transformer encoder, default: `3072`.
-            hidden_act (str): The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu" and "swish" are supported, default: `gelu`.
-            hidden_dropout_prob (float): The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler, default: `0.1`.
-            attention_probs_dropout_prob (float): The dropout ratio for the attention
-                probabilities, default: `0.1`.
-            max_position_embeddings (int): The maximum sequence length that this model might
-                ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048), default: `512`.
-            type_vocab_size (int): The vocabulary size of the `token_type_ids` passed into
-                `DeBERTa` model, default: `-1`.
-            initializer_range (int): The sttdev of the _normal_initializer for
-                initializing all weight matrices, default: `0.02`.
-            relative_attention (:obj:`bool`): Whether use relative position encoding, default: `False`.
-            max_relative_positions (int): The range of relative positions [`-max_position_embeddings`, `max_position_embeddings`], default: -1, use the same value as `max_position_embeddings`.
-            padding_idx (int): The value used to pad input_ids, default: `0`.
-            position_biased_input (:obj:`bool`): Whether add absolute position embedding to content embedding, default: `True`.
-            pos_att_type (:obj:`str`): The type of relative position attention, it can be a combination of [`p2c`, `c2p`, `p2p`], e.g. "p2c", "p2c|c2p", "p2c|c2p|p2p", default: "None".
-            vocab_size (int): The size of the vocabulary, default: `-1`.
+    Arguments:
+        hidden_size (int): Size of the encoder layers and the pooler layer, default: `768`.
+        num_hidden_layers (int): Number of hidden layers in the Transformer encoder, default: `12`.
+        num_attention_heads (int): Number of attention heads for each attention layer in
+            the Transformer encoder, default: `12`.
+        intermediate_size (int): The size of the "intermediate" (i.e., feed-forward)
+            layer in the Transformer encoder, default: `3072`.
+        hidden_act (str): The non-linear activation function (function or string) in the
+            encoder and pooler. If string, "gelu", "relu" and "swish" are supported, default: `gelu`.
+        hidden_dropout_prob (float): The dropout probabilitiy for all fully connected
+            layers in the embeddings, encoder, and pooler, default: `0.1`.
+        attention_probs_dropout_prob (float): The dropout ratio for the attention
+            probabilities, default: `0.1`.
+        max_position_embeddings (int): The maximum sequence length that this model might
+            ever be used with. Typically set this to something large just in case
+            (e.g., 512 or 1024 or 2048), default: `512`.
+        type_vocab_size (int): The vocabulary size of the `token_type_ids` passed into
+            `DeBERTa` model, default: `0`.
+        initializer_range (int): The sttdev of the _normal_initializer for
+            initializing all weight matrices, default: `0.02`.
+        relative_attention (:obj:`bool`): Whether use relative position encoding, default: `False`.
+        max_relative_positions (int): The range of relative positions [`-max_position_embeddings`, `max_position_embeddings`], default: -1, use the same value as `max_position_embeddings`.
+        padding_idx (int): The value used to pad input_ids, default: `0`.
+        position_biased_input (:obj:`bool`): Whether add absolute position embedding to content embedding, default: `True`.
+        pos_att_type (:obj:`str`): The type of relative position attention, it can be a combination of [`p2c`, `c2p`, `p2p`], e.g. "p2c", "p2c|c2p", "p2c|c2p|p2p", default: "None".
+        vocab_size (int): The size of the vocabulary, default: `-1`.
     """
     model_type = "deberta"
 
@@ -73,7 +73,7 @@ class DeBERTaConfig(PretrainedConfig):
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        type_vocab_size=-1,
+        type_vocab_size=0,
         initializer_range=0.02,
         relative_attention=False,
         max_relative_positions=-1,

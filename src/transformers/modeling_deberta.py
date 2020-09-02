@@ -28,6 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from .configuration_deberta import DeBERTaConfig
 from .file_utils import add_start_docstrings
+from .modeling_outputs import BaseModelOutputWithPooling, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel
 
 
@@ -40,7 +41,7 @@ __all__ = [
     "DeBERTaModel",
     "DeBERTaForSequenceClassification",
     "DeBERTaPreTrainedModel",
-    "DeBERTa_PRETRAINED_MODEL_ARCHIVE_LIST",
+    "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
 ]
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ logger = logging.getLogger(__name__)
 # This list contrains shortcut names for some of
 # the pretrained weights provided with the models
 ####################################################
-DeBERTa_PRETRAINED_MODEL_ARCHIVE_LIST = [
+DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/deberta-base",
     "microsoft/deberta-large",
 ]
@@ -59,7 +60,7 @@ def gelu(x):
     """Implementation of the gelu activation function.
     For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
     0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-  """
+    """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
@@ -82,13 +83,13 @@ ACT2FN = {
 
 
 def traceable(cls):
-    """ Decorator over customer functions
-      There is an issue for tracing customer python torch Function, using this decorator to work around it.
-      e.g.
-      @traceable
-      class MyOp(torch.autograd.Function):
-      xxx
-  """
+    """Decorator over customer functions
+    There is an issue for tracing customer python torch Function, using this decorator to work around it.
+    e.g.
+    @traceable
+    class MyOp(torch.autograd.Function):
+    xxx
+    """
 
     class _Function(object):
         @staticmethod
@@ -147,86 +148,34 @@ class AbsModelConfig(object):
         return json.dumps(self.__dict__, indent=2, sort_keys=True, default=_json_default) + "\n"
 
 
-class ModelConfig(AbsModelConfig):
-    """Configuration class to store the configuration of a :class:`~DeBERTa.deberta.DeBERTa` model.
-
-        Attributes:
-            hidden_size (int): Size of the encoder layers and the pooler layer, default: `768`.
-            num_hidden_layers (int): Number of hidden layers in the Transformer encoder, default: `12`.
-            num_attention_heads (int): Number of attention heads for each attention layer in
-                the Transformer encoder, default: `12`.
-            intermediate_size (int): The size of the "intermediate" (i.e., feed-forward)
-                layer in the Transformer encoder, default: `3072`.
-            hidden_act (str): The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu" and "swish" are supported, default: `gelu`.
-            hidden_dropout_prob (float): The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler, default: `0.1`.
-            attention_probs_dropout_prob (float): The dropout ratio for the attention
-                probabilities, default: `0.1`.
-            max_position_embeddings (int): The maximum sequence length that this model might
-                ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048), default: `512`.
-            type_vocab_size (int): The vocabulary size of the `token_type_ids` passed into
-                `DeBERTa` model, default: `-1`.
-            initializer_range (int): The sttdev of the _normal_initializer for
-                initializing all weight matrices, default: `0.02`.
-            relative_attention (:obj:`bool`): Whether use relative position encoding, default: `False`.
-            max_relative_positions (int): The range of relative positions [`-max_position_embeddings`, `max_position_embeddings`], default: -1, use the same value as `max_position_embeddings`.
-            padding_idx (int): The value used to pad input_ids, default: `0`.
-            position_biased_input (:obj:`bool`): Whether add absolute position embedding to content embedding, default: `True`.
-            pos_att_type (:obj:`str`): The type of relative position attention, it can be a combination of [`p2c`, `c2p`, `p2p`], e.g. "p2c", "p2c|c2p", "p2c|c2p|p2p"., default: "None".
-
-
-    """
-
-    def __init__(self):
-        """Constructs ModelConfig.
-
-        """
-
-        self.hidden_size = 768
-        self.num_hidden_layers = 12
-        self.num_attention_heads = 12
-        self.hidden_act = "gelu"
-        self.intermediate_size = 3072
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 0
-        self.initializer_range = 0.02
-        self.layer_norm_eps = 1e-7
-        self.padding_idx = 0
-        self.vocab_size = -1
-
-
 class PoolConfig(AbsModelConfig):
     """Configuration class to store the configuration of `pool layer`.
 
-        Parameters:
-            config (:class:`~DeBERTa.deberta.ModelConfig`): The model config. The field of pool config will be initalized with the `pooling` field in model config.
+    Parameters:
+        config (:class:`~transformers.DeBERTaConfig`): The model config. The field of pool config will be initialized with the `pooling` field in model config.
 
-        Attributes:
-            hidden_size (int): Size of the encoder layers and the pooler layer, default: `768`.
+    Attributes:
+        hidden_size (int): Size of the encoder layers and the pooler layer, default: `768`.
 
-            dropout (float): The dropout rate applied on the output of `[CLS]` token,
+        dropout (float): The dropout rate applied on the output of `[CLS]` token,
 
-            hidden_act (:obj:`str`): The activation function of the projection layer, it can be one of ['gelu', 'tanh'].
+        hidden_act (:obj:`str`): The activation function of the projection layer, it can be one of ['gelu', 'tanh'].
 
-        Example::
-            # Here is the content of an exmple model config file in json format
+    Example::
+        # Here is the content of an example model config file in json format
 
-                {
-                  "hidden_size": 768,
-                  "num_hidden_layers" 12,
-                  "num_attention_heads": 12,
-                  "intermediate_size": 3072,
-                  ...
-                  "pooling": {
-                    "hidden_size":  768,
-                    "hidden_act": "gelu",
-                    "dropout": 0.1
-                  }
-                }
+            {
+              "hidden_size": 768,
+              "num_hidden_layers" 12,
+              "num_attention_heads": 12,
+              "intermediate_size": 3072,
+              ...
+              "pooling": {
+                "hidden_size":  768,
+                "hidden_act": "gelu",
+                "dropout": 0.1
+              }
+            }
 
     """
 
@@ -234,7 +183,7 @@ class PoolConfig(AbsModelConfig):
         """Constructs PoolConfig.
 
         Args:
-           `config`: the config of the model. The field of pool config will be initalized with the 'pooling' field in model config.
+           `config`: the config of the model. The field of pool config will be initialized with the 'pooling' field in model config.
         """
 
         self.hidden_size = 768
@@ -250,8 +199,7 @@ class PoolConfig(AbsModelConfig):
 
 
 class TraceMode:
-    """ Trace context used when tracing modules contains customer operators/Functions
-  """
+    """Trace context used when tracing modules contains customer operators/Functions"""
 
     def __enter__(self):
         os.environ["JIT_TRACE"] = "True"
@@ -284,27 +232,24 @@ class ContextPooler(nn.Module):
 
 @traceable
 class XSoftmax(torch.autograd.Function):
-    """ Masked Softmax which is optimized for saving memory
+    """Masked Softmax which is optimized for saving memory
 
-  Args:
-    input (:obj:`torch.tensor`): The input tensor that will apply softmax.
-    mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax caculation.
-    dim (int): The dimenssion that will apply softmax.
-  Example::
-    import torch
-    from DeBERTa.deberta import XSoftmax
-    # Make a tensor
-    x = torch.randn([4,20,100])
-    # Create a mask
-    mask = (x>0).int()
-    y = XSoftmax.apply(x, mask, dim=-1)
-  """
+    Args:
+      input (:obj:`torch.tensor`): The input tensor that will apply softmax.
+      mask (:obj:`torch.IntTensor`): The mask matrix where 0 indicate that element will be ignored in the softmax caculation.
+      dim (int): The dimenssion that will apply softmax.
+    Example::
+      import torch
+      from transformers.modeling_deroberta import XSoftmax
+      # Make a tensor
+      x = torch.randn([4,20,100])
+      # Create a mask
+      mask = (x>0).int()
+      y = XSoftmax.apply(x, mask, dim=-1)
+    """
 
     @staticmethod
     def forward(self, input, mask, dim):
-        """
-    """
-
         self.dim = dim
         if version.Version(torch.__version__) >= version.Version("1.2.0a"):
             rmask = ~(mask.bool())
@@ -319,9 +264,6 @@ class XSoftmax(torch.autograd.Function):
 
     @staticmethod
     def backward(self, grad_output):
-        """
-    """
-
         (output,) = self.saved_tensors
         inputGrad = _softmax_backward_data(grad_output, output, self.dim, output)
         return inputGrad, None, None
@@ -359,6 +301,8 @@ def get_mask(input, local_context):
 
 @traceable
 class XDropout(torch.autograd.Function):
+    """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
+
     @staticmethod
     def forward(ctx, input, local_ctx):
         mask, dropout = get_mask(input, local_ctx)
@@ -379,13 +323,13 @@ class XDropout(torch.autograd.Function):
 
 
 class StableDropout(torch.nn.Module):
-    """ Optimized dropout module for stabilizing the training
+    """Optimized dropout module for stabilizing the training
 
-  Args:
+    Args:
 
-    drop_prob (float): the dropout probabilities
+        drop_prob (float): the dropout probabilities
 
-  """
+    """
 
     def __init__(self, drop_prob):
         super().__init__()
@@ -394,13 +338,13 @@ class StableDropout(torch.nn.Module):
         self.context_stack = None
 
     def forward(self, x):
-        """ Call the module
+        """Call the module
 
-    Args:
-      x (:obj:`torch.tensor`): The input tensor to apply dropout
+        Args:
+            x (:obj:`torch.tensor`): The input tensor to apply dropout
 
 
-    """
+        """
         if self.training and self.drop_prob > 0:
             return XDropout.apply(x, self.get_context())
         return x
@@ -430,21 +374,21 @@ class StableDropout(torch.nn.Module):
 
 
 def MaskedLayerNorm(layerNorm, input, mask=None):
-    """ Masked LayerNorm which will apply mask over the output of LayerNorm to avoid inaccurate updatings to the LayerNorm module.
-  Args:
-    layernorm (:obj:`~DeBERTa.deberta.BertLayerNorm`): LayerNorm module or function
-    input (:obj:`torch.tensor`): The input tensor
-    mask (:obj:`torch.IntTensor`): The mask to applied on the output of LayerNorm where `0` indicate the output of that element will be ignored, i.e. set to `0`
+    """Masked LayerNorm which will apply mask over the output of LayerNorm to avoid inaccurate updatings to the LayerNorm module.
+    Args:
+      layernorm (:obj:`~DeBERTa.deberta.BertLayerNorm`): LayerNorm module or function
+      input (:obj:`torch.tensor`): The input tensor
+      mask (:obj:`torch.IntTensor`): The mask to applied on the output of LayerNorm where `0` indicate the output of that element will be ignored, i.e. set to `0`
 
-  Example::
+    Example::
 
-    # Create a tensor b x n x d
-    x = torch.randn([1,10,100])
-    m = torch.tensor([[1,1,1,0,0,0,0,0,0,0]], dtype=torch.int)
-    LayerNorm = DeBERTa.deberta.BertLayerNorm(100)
-    y = MaskedLayerNorm(LayerNorm, x, m)
+      # Create a tensor b x n x d
+      x = torch.randn([1,10,100])
+      m = torch.tensor([[1,1,1,0,0,0,0,0,0,0]], dtype=torch.int)
+      LayerNorm = DeBERTa.deberta.BertLayerNorm(100)
+      y = MaskedLayerNorm(LayerNorm, x, m)
 
-  """
+    """
     output = layerNorm(input).to(input)
     if mask is None:
         return output
@@ -457,8 +401,7 @@ def MaskedLayerNorm(layerNorm, input, mask=None):
 
 
 class BertLayerNorm(nn.Module):
-    """LayerNorm module in the TF style (epsilon inside the square root).
-  """
+    """LayerNorm module in the TF style (epsilon inside the square root)."""
 
     def __init__(self, size, eps=1e-12):
         super().__init__()
@@ -594,8 +537,7 @@ class BertLayer(nn.Module):
 
 
 class DeBERTaEncoder(nn.Module):
-    """ Modified BertEncoder with relative position bias support
-  """
+    """Modified BertEncoder with relative position bias support"""
 
     def __init__(self, config):
         super().__init__()
@@ -681,7 +623,7 @@ class DeBERTaEncoder(nn.Module):
 
 
 def build_relative_position(query_size, key_size, device):
-    """ Build relative position according to the query and key
+    """Build relative position according to the query and key
 
     We assume the absolute position of query :math:`P_q` is range from (0, query_size) and the absolute position of key :math:`P_k` is range from (0, key_size),
     The relative positions from query to key is
@@ -725,7 +667,7 @@ class DisentangledSelfAttention(torch.nn.Module):
     Parameters:
         config (:obj:`str`):
             A model config class instance with the configuration to build a new model. The schema is similar to `BertConfig`, \
-            for more details, please refer :class:`~DeBERTa.deberta.ModelConfig`
+            for more details, please refer :class:`~transformers.DeBERTaConfig`
 
     """
 
@@ -780,7 +722,7 @@ class DisentangledSelfAttention(torch.nn.Module):
         relative_pos=None,
         rel_embeddings=None,
     ):
-        """  Call the module
+        """Call the module
 
         Args:
             hidden_states (:obj:`torch.FloatTensor`):
@@ -919,8 +861,7 @@ class DisentangledSelfAttention(torch.nn.Module):
 
 
 class DeBERTaEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings.
-  """
+    """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
@@ -974,8 +915,8 @@ class DeBERTaEmbeddings(nn.Module):
 
 
 class DeBERTaPreTrainedModel(PreTrainedModel):
-    """ An abstract class to handle weights initialization and
-        a simple interface for downloading and loading pretrained models.
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
     config_class = DeBERTaConfig
@@ -991,7 +932,7 @@ class DeBERTaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-DeBERTa_START_DOCSTRING = r"""    The DeBERTa model was proposed in
+DEBERTA_START_DOCSTRING = r"""    The DeBERTa model was proposed in
     `DeBERTa: Decoding-enhanced BERT with Disentangled Attention`_
     by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of BERT/RoBERTa with two improvements, i.e.
     disentangled attention and enhanced mask decoder. With those two improvements, it out perform BERT/RoBERTa on a majority
@@ -1012,7 +953,7 @@ DeBERTa_START_DOCSTRING = r"""    The DeBERTa model was proposed in
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-DeBERTa_INPUTS_DOCSTRING = r"""
+DEBERTA_INPUTS_DOCSTRING = r"""
     Inputs:
         **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Indices of input sequence tokens in the vocabulary.
@@ -1054,8 +995,8 @@ DeBERTa_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare DeBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-    DeBERTa_START_DOCSTRING,
-    DeBERTa_INPUTS_DOCSTRING,
+    DEBERTA_START_DOCSTRING,
+    DEBERTA_INPUTS_DOCSTRING,
 )
 class DeBERTaModel(DeBERTaPreTrainedModel):
     r"""
@@ -1079,8 +1020,8 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
 
     Examples::
 
-        tokenizer = DeBERTaTokenizer.from_pretrained('deberta-base-uncased')
-        model = DeBERTaModel.from_pretrained('deberta-base-uncased')
+        tokenizer = DeBERTaTokenizer.from_pretrained('microsoft/deberta-base')
+        model = DeBERTaModel.from_pretrained('microsoft/deberta-base')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -1103,9 +1044,9 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
         self.embeddings.word_embeddings = new_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         raise NotImplementedError("The prune function is not implemented in DeBERTa model.")
 
@@ -1117,7 +1058,9 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        return_tuple=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1155,14 +1098,21 @@ class DeBERTaModel(DeBERTaPreTrainedModel):
 
         sequence_output = encoded_layers[-1]
 
-        return (sequence_output, sequence_output[:, 0])
+        if not return_dict:
+            return (sequence_output, sequence_output[:, 0])
+        else:
+            return BaseModelOutputWithPooling(
+                last_hidden_state=sequence_output,
+                pooler_output=sequence_output[:, 0],
+                hidden_states=encoded_layers,
+            )
 
 
 @add_start_docstrings(
     """DeBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
-    DeBERTa_START_DOCSTRING,
-    DeBERTa_INPUTS_DOCSTRING,
+    DEBERTA_START_DOCSTRING,
+    DEBERTA_INPUTS_DOCSTRING,
 )
 class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
     r"""
@@ -1187,8 +1137,8 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
 
     Examples::
 
-        tokenizer = DeBERTaTokenizer.from_pretrained('deberta-base-uncased')
-        model = DeBERTaForSequenceClassification.from_pretrained('deberta-base-uncased')
+        tokenizer = DeBERTaTokenizer.from_pretrained('microsoft/deberta-base')
+        model = DeBERTaForSequenceClassification.from_pretrained('microsoft/deberta-base')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -1222,8 +1172,9 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
         token_type_ids=None,
         position_ids=None,
         labels=None,
+        output_attentions=None,
         output_hidden_states=None,
-        return_tuple=True,
+        return_dict=None,
     ):
 
         encoder_layer, cls = self.bert(
@@ -1253,4 +1204,10 @@ class DeBERTaForSequenceClassification(DeBERTaPreTrainedModel):
             else:
                 log_softmax = torch.nn.LogSoftmax(-1)
                 loss = -((log_softmax(logits) * labels).sum(-1)).mean()
-        return (loss, logits)
+        if not return_dict:
+            return (loss, logits)
+        else:
+            return SequenceClassifierOutput(
+                loss=loss,
+                logits=logits,
+            )

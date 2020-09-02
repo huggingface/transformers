@@ -22,8 +22,9 @@ import unicodedata
 from functools import lru_cache
 from zipfile import ZipFile
 
-import requests
 import tqdm
+
+import requests
 
 from .tokenization_utils import PreTrainedTokenizer
 
@@ -183,7 +184,10 @@ class Encoder:
 
 
 def get_encoder(encoder, vocab):
-    return Encoder(encoder=encoder, bpe_merges=vocab,)
+    return Encoder(
+        encoder=encoder,
+        bpe_merges=vocab,
+    )
 
 
 def _is_whitespace(char):
@@ -358,44 +362,44 @@ class GPT2Tokenizer(object):
         self.ids_to_tokens = self.symbols
 
     def tokenize(self, text):
-        """ Convert an input text to tokens.
+        """Convert an input text to tokens.
 
-      Args:
-        text (:obj:`str`): input text to be tokenized.
+        Args:
+          text (:obj:`str`): input text to be tokenized.
 
-      Returns:
-        A list of byte tokens where each token represent the byte id in GPT2 byte dictionary
+        Returns:
+          A list of byte tokens where each token represent the byte id in GPT2 byte dictionary
 
-      Example::
-        >>> tokenizer = GPT2Tokenizer()
-        >>> text = "Hello world!"
-        >>> tokens = tokenizer.tokenize(text)
-        >>> print(tokens)
-        ['15496', '995', '0']
-    """
+        Example::
+          >>> tokenizer = GPT2Tokenizer()
+          >>> text = "Hello world!"
+          >>> tokens = tokenizer.tokenize(text)
+          >>> print(tokens)
+          ['15496', '995', '0']
+        """
         bpe = self._encode(text)
 
         return [t for t in bpe.split(" ") if t]
 
     def convert_tokens_to_ids(self, tokens):
-        """ Convert list of tokens to ids.
-      Args:
-        tokens (:obj:`list<str>`): list of tokens
+        """Convert list of tokens to ids.
+        Args:
+          tokens (:obj:`list<str>`): list of tokens
 
-      Returns:
-        List of ids
-    """
+        Returns:
+          List of ids
+        """
 
         return [self.vocab[t] for t in tokens]
 
     def convert_ids_to_tokens(self, ids):
-        """ Convert list of ids to tokens.
-      Args:
-        ids (:obj:`list<int>`): list of ids
+        """Convert list of ids to tokens.
+        Args:
+          ids (:obj:`list<int>`): list of ids
 
-      Returns:
-        List of tokens
-    """
+        Returns:
+          List of tokens
+        """
 
         tokens = []
         for i in ids:
@@ -406,33 +410,33 @@ class GPT2Tokenizer(object):
         return self.bpe.split_to_words(text)
 
     def decode(self, tokens):
-        """ Decode list of tokens to text strings.
-      Args:
-        tokens (:obj:`list<str>`): list of tokens.
+        """Decode list of tokens to text strings.
+        Args:
+          tokens (:obj:`list<str>`): list of tokens.
 
-      Returns:
-        Text string corresponds to the input tokens.
+        Returns:
+          Text string corresponds to the input tokens.
 
-      Example::
-        >>> tokenizer = GPT2Tokenizer()
-        >>> text = "Hello world!"
-        >>> tokens = tokenizer.tokenize(text)
-        >>> print(tokens)
-        ['15496', '995', '0']
-        >>> tokenizer.decode(tokens)
-        'Hello world!'
-    """
+        Example::
+          >>> tokenizer = GPT2Tokenizer()
+          >>> text = "Hello world!"
+          >>> tokens = tokenizer.tokenize(text)
+          >>> print(tokens)
+          ['15496', '995', '0']
+          >>> tokenizer.decode(tokens)
+          'Hello world!'
+        """
         return self.bpe.decode([int(t) for t in tokens if t not in self.special_tokens])
 
     def add_special_token(self, token):
         """Adds a special token to the dictionary.
-      Args:
-        token (:obj:`str`): Tthe new token/word to be added to the vocabulary.
+        Args:
+          token (:obj:`str`): Tthe new token/word to be added to the vocabulary.
 
-      Returns:
-        The id of new token in the vocabulary.
+        Returns:
+          The id of new token in the vocabulary.
 
-    """
+        """
         self.special_tokens.append(token)
         return self.add_symbol(token)
 
@@ -459,14 +463,14 @@ class GPT2Tokenizer(object):
 
     def add_symbol(self, word, n=1):
         """Adds a word to the dictionary.
-      Args:
-        word (:obj:`str`): Tthe new token/word to be added to the vocabulary.
-        n (int, optional): The frequency of the word.
+        Args:
+          word (:obj:`str`): Tthe new token/word to be added to the vocabulary.
+          n (int, optional): The frequency of the word.
 
-      Returns:
-        The id of the new word.
+        Returns:
+          The id of the new word.
 
-    """
+        """
         if word in self.indices:
             idx = self.indices[word]
             self.count[idx] = self.count[idx] + n
@@ -549,8 +553,7 @@ class DeBERTaTokenizer(PreTrainedTokenizer):
         return vocab
 
     def _tokenize(self, text):
-        """ Take as input a string and return a list of strings (tokens) for words/sub-words
-        """
+        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         if self.do_lower_case:
             text = text.lower()
         return self.gpt2_tokenizer.tokenize(text)
@@ -605,7 +608,12 @@ class DeBERTaTokenizer(PreTrainedTokenizer):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formated with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0,))
+            return list(
+                map(
+                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
+                    token_ids_0,
+                )
+            )
 
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
