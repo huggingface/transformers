@@ -637,21 +637,22 @@ class FunnelEncoder(nn.Module):
                     hidden, attention_struct
                 )
             for (layer_index, layer) in enumerate(block):
-                do_pooling = (layer_index == 0) and pooling_flag
-                if do_pooling:
-                    q = pooled_hidden
-                    k = v = hidden if self.config.pool_q_only else pooled_hidden
-                else:
-                    q = k = v = hidden
-                layer_output = layer(q, k, v, attention_struct, output_attentions=output_attentions)
-                hidden = layer_output[0]
-                if do_pooling:
-                    attention_struct = self.attention_structure.post_attention_pooling(attention_struct)
+                for repeat_index in range(self.config.block_repeats[block_index]):
+                    do_pooling = (repeat_index == 0) and (layer_index == 0) and pooling_flag
+                    if do_pooling:
+                        q = pooled_hidden
+                        k = v = hidden if self.config.pool_q_only else pooled_hidden
+                    else:
+                        q = k = v = hidden
+                    layer_output = layer(q, k, v, attention_struct, output_attentions=output_attentions)
+                    hidden = layer_output[0]
+                    if do_pooling:
+                        attention_struct = self.attention_structure.post_attention_pooling(attention_struct)
 
-                if output_attentions:
-                    all_attentions = all_attentions + layer_output[1:]
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (hidden,)
+                    if output_attentions:
+                        all_attentions = all_attentions + layer_output[1:]
+                    if output_hidden_states:
+                        all_hidden_states = all_hidden_states + (hidden,)
 
         if not return_dict:
             return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)

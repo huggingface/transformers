@@ -53,6 +53,8 @@ class FunnelConfig(PretrainedConfig):
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
         block_sizes (:obj:`List[int]`, `optional`, defaults to :obj:`[4, 4, 4]`):
             The sizes of the blocks used in the model.
+        block_repeats (:obj:`List[int]`, `optional`):
+            If passed along, each layer of each block is repeated the number of times indicated.
         num_decoder_layers (:obj:`int`, `optional`, defaults to 2):
             The number of layers in the decoder (when not using the base model).
         d_model (:obj:`int`, `optional`, defaults to 768):
@@ -107,6 +109,7 @@ class FunnelConfig(PretrainedConfig):
         self,
         vocab_size=30522,
         block_sizes=[4, 4, 4],
+        block_repeats=None,
         num_decoder_layers=2,
         d_model=768,
         n_head=12,
@@ -132,6 +135,10 @@ class FunnelConfig(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
+        self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats
+        assert len(block_sizes) == len(
+            self.block_repeats
+        ), "`block_sizes` and `block_repeats` should have the same length."
         self.num_decoder_layers = num_decoder_layers
         self.d_model = d_model
         self.n_head = n_head

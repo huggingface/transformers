@@ -98,11 +98,11 @@ class FunnelModelTester:
         # Used in the tests to check the size of the first hidden state
         self.hidden_size = self.d_model
         # Used in the tests to check the number of output hidden states/attentions
-        self.num_hidden_layers = sum(block_sizes) + (0 if base else self.num_decoder_layers)
+        self.num_hidden_layers = sum(self.block_sizes) + (0 if base else self.num_decoder_layers)
         # FunnelModel adds two hidden layers: input embeddings and the sum of the upsampled encoder hidden state with
         # the last hidden state of the first block (which is the first hidden state of the decoder).
         if not base:
-            self.expected_num_hidden_layers = sum(block_sizes) + self.num_decoder_layers + 2
+            self.expected_num_hidden_layers = self.num_hidden_layers + 2
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
