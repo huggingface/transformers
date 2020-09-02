@@ -33,8 +33,11 @@ former task and comes within 0.5% F1 to the SotA on the latter. The exact scores
 
 ### BibTeX entry and citation info
 
+The training corpus, parameters and the evaluation methods are discussed in the
+[following PhD thesis](https://hlt.bme.hu/en/publ/nemeskey_2020):
+
 ```bibtex
-@PhDThesis{ Nemeskey:2020,                                                 
+@PhDThesis{ Nemeskey:2020,
   author = {Nemeskey, Dávid Márk},
   title  = {Natural Language Processing Methods for Language Modeling},
   year   = {2020},
