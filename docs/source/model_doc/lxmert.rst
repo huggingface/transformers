@@ -40,7 +40,7 @@ Tips:
 - The bi-directional cross-modality encoder attention only returns attention values when the language modality is used as the input and the vision modality is used as the context vector. Further,
   while the cross-modality encoder contains self-attention for each respective modality and cross-attention, only the cross attention is returned and both self attention outputs are disregarded.
 
-The code can be found `https://github.com/airsplay/lxmert`
+The code can be found `here <https://github.com/airsplay/lxmert>`__.
 
 
 LxmertConfig
