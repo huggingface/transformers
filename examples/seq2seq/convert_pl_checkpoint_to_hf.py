@@ -11,11 +11,6 @@ from transformers.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-try:
-    from .utils import lmap
-except Exception:
-    from utils import lmap
-
 
 def remove_prefix(text: str, prefix: str):
     if text.startswith(prefix):
