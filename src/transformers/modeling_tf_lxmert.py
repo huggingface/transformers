@@ -34,14 +34,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_tf_utils import (
-    TFMultipleChoiceLoss,
-    TFPreTrainedModel,
-    TFTokenClassificationLoss,
-    get_initializer,
-    keras_serializable,
-    shape_list,
-)
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 
 
 logger = logging.getLogger(__name__)
@@ -1125,9 +1118,9 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.decoder_dict = {
             key: tf.keras.layers.Dense(
-                config.hidden_size,
+                self.visual_losses[key]["num"],
                 kernel_initializer=get_initializer(config.initializer_range),
-                name=key,
+                name=f"decoder_dict.{key}",
             )
             for key in self.visual_losses
         }
@@ -1168,8 +1161,8 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         # Loss functions
         self.loss_fcts = {
             "l2": tf.keras.losses.Huber(delta=1.0, name="huber_loss"),
-            "visn_ce": TFMultipleChoiceLoss,
-            "ce": TFTokenClassificationLoss,
+            "visn_ce": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+            "ce": tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         }
 
         visual_losses = {}
@@ -1187,11 +1180,51 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             }
         if config.visual_obj_loss:
             visual_losses["feat"] = {
-                "shape": (-1, 2048),
+                "shape": (-1, config.visual_feat_dim),
                 "num": config.visual_feat_dim,
                 "loss": "l2",
             }
         self.visual_losses = visual_losses
+
+    @property
+    def dummy_inputs(self):
+        """Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        batch_size = 2
+        num_visual_features = 10
+        input_ids = tf.constant([[3, 5, 6], [2, 3, 4]])
+        visual_feats = tf.random.uniform((batch_size, num_visual_features, self.config.visual_feat_dim))
+        visual_pos = tf.random.uniform((batch_size, num_visual_features, 4))
+
+        if self.config.task_obj_predict:
+            obj_labels = {}
+        if self.config.visual_attr_loss and self.config.task_obj_predict:
+            obj_labels["attr"] = (
+                tf.ones([batch_size, num_visual_features]),
+                tf.ones([batch_size, num_visual_features]),
+            )
+        if self.config.visual_feat_loss and self.config.task_obj_predict:
+            obj_labels["feat"] = (
+                tf.ones([batch_size, num_visual_features, self.config.visual_feat_dim]),
+                tf.ones([batch_size, num_visual_features]),
+            )
+        if self.config.visual_obj_loss and self.config.task_obj_predict:
+            obj_labels["obj"] = (
+                tf.ones([batch_size, num_visual_features]),
+                tf.ones([batch_size, num_visual_features]),
+            )
+
+        return {
+            **{
+                "input_ids": input_ids,
+                "visual_feats": visual_feats,
+                "visual_pos": visual_pos,
+            },
+            **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
+        }
 
     @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1240,10 +1273,10 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             if len(inputs) > 10:
                 inputs = inputs[:10]
         elif isinstance(inputs, (dict, BatchEncoding)):
-            masked_lm_labels = inputs.pop("labels", masked_lm_labels)
-            obj_labels = inputs.pop("labels", obj_labels)
-            matched_label = inputs.pop("labels", matched_label)
-            ans = inputs.pop("labels", ans)
+            masked_lm_labels = inputs.pop("masked_lm_labels", masked_lm_labels)
+            obj_labels = inputs.pop("obj_labels", obj_labels)
+            matched_label = inputs.pop("matched_label", matched_label)
+            ans = inputs.pop("ans", ans)
 
         lxmert_output = self.lxmert(
             inputs,
@@ -1277,15 +1310,18 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         losses = ()
         if masked_lm_labels is not None and self.task_mask_lm:
             masked_lm_loss = self.loss_fcts["ce"](
-                lang_prediction_scores.view(-1, self.config.vocab_size),
-                masked_lm_labels.view(-1),
+                tf.reshape(masked_lm_labels, [-1]),
+                tf.reshape(lang_prediction_scores, [-1, self.config.vocab_size]),
             )
             total_loss += masked_lm_loss
-            losses += (masked_lm_loss.detach(),)
+            losses += (masked_lm_loss,)
         if matched_label is not None and self.task_matched:
-            matched_loss = self.loss_fcts["ce"](cross_relationship_score.view(-1, 2), matched_label.view(-1))
+            matched_loss = self.loss_fcts["ce"](
+                tf.reshape(matched_label, [-1]),
+                tf.reshape(cross_relationship_score, [-1, 2]),
+            )
             total_loss += matched_loss
-            losses += (matched_loss.detach(),)
+            losses += (matched_loss,)
         if obj_labels is not None and self.task_obj_predict:
             total_visn_loss = 0.0
             visn_prediction_scores_dict = self.obj_predict_head(visual_output)
@@ -1297,32 +1333,28 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
                 weight = self.visual_loss_normalizer
                 visn_loss_fct = self.loss_fcts[loss_fct_name]
                 visn_prediction_scores = visn_prediction_scores_dict[key]
-                if key != "feat":
-                    visn_loss = visn_loss_fct.compute_loss(
-                        visn_prediction_scores.view(-1, output_dim),
-                        label.view(*label_shape),
-                    )
-                else:
-                    visn_loss = visn_loss_fct(
-                        visn_prediction_scores.view(-1, output_dim),
-                        label.view(*label_shape),
-                    )
+                visn_loss = visn_loss_fct(
+                    tf.reshape(label, label_shape),
+                    tf.reshape(visn_prediction_scores, [-1, output_dim]),
+                )
 
-                if visn_loss.dim() > 1:  # Regression Losses
-                    visn_loss = visn_loss.mean(1)
-                visn_loss = (visn_loss * mask_conf.view(-1)).mean() * weight
+                if visn_loss.ndim > 1:  # Regression Losses
+                    visn_loss = tf.reduce_mean(visn_loss)
+                visn_loss = tf.reduce_mean(visn_loss * tf.cast(tf.reshape(mask_conf, [-1]), visn_loss.dtype)) * weight
                 total_visn_loss += visn_loss
-                losses += (visn_loss.detach(),)
+                losses += (visn_loss,)
             total_loss += total_visn_loss
         if ans is not None and self.task_qa:
-            answer_loss = self.loss_fcts["ce"](answer_score.view(-1, self.num_answers), ans.view(-1))
+            answer_loss = self.loss_fcts["ce"](
+                tf.reshape(ans, [-1]), tf.reshape(answer_score, [-1, self.num_qa_labels])
+            )
             # exclude "*2" here to match the effect of QA losses.
             # Previous: (loss *0) for 6 epochs, (loss *2) for 6 epochs.   (Used 10 instead of 6 in EMNLP paper)
             # Now     : (loss *1) for 12 epochs
             #
             # * 2       # Multiply by 2 because > half of the data will not have label
             total_loss += answer_loss
-            losses += (answer_loss.detach(),)
+            losses += (answer_loss,)
         # return total_loss, tf.stack(losses)[tf.new_axis, ...], answer_score.detach()
 
         if not return_dict:

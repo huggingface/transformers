@@ -271,6 +271,92 @@ class TFLxmertModelTester(object):
 
         return config, inputs_dict
 
+    def create_and_check_lxmert_for_pretraining(
+        self,
+        config,
+        input_ids,
+        visual_feats,
+        bounding_boxes,
+        token_type_ids,
+        input_mask,
+        obj_labels,
+        masked_lm_labels,
+        matched_label,
+        ans,
+        output_attentions,
+    ):
+        model = TFLxmertForPreTraining(config=config)
+        result = model(
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+            obj_labels=obj_labels,
+            matched_label=matched_label,
+            ans=ans,
+            output_attentions=output_attentions,
+            return_dict=True,
+        )
+        result = model(
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+            output_attentions=not output_attentions,
+            return_dict=False,
+        )
+        result = model(
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+        )
+        result = model(
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            obj_labels=obj_labels,
+        )
+        result = model(
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            matched_label=matched_label,
+        )
+        result = model(
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            ans=ans,
+        )
+        result = model(
+            input_ids,
+            visual_feats,
+            bounding_boxes,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            masked_lm_labels=masked_lm_labels,
+            obj_labels=obj_labels,
+            matched_label=matched_label,
+            ans=ans,
+            output_attentions=not output_attentions,
+            return_dict=True,
+        )
+
+        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
 
 @require_tf
 class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -287,6 +373,10 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_lxmert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lxmert_model(*config_and_inputs)
+
+    def test_lxmert_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_lxmert_for_pretraining(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -391,39 +481,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
             del inputs_dict["output_hidden_states"]
             config.output_hidden_states = True
             check_hidden_states_output(config, inputs_dict, model_class)
-
-    def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        for model_class in self.all_model_classes:
-            input_ids = tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32")
-            visual_feats = tf.keras.Input(
-                batch_shape=(2, 10, self.model_tester.visual_feat_dim), name="visual_feats", dtype="float32"
-            )
-            visual_pos = tf.keras.Input(batch_shape=(2, 10, 4), name="visual_pos", dtype="float32")
-
-            # Prepare our model
-            model = model_class(config)
-
-            # Let's load it from the disk to be sure we can use pretrained weights
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                outputs = model(self._prepare_for_class(inputs_dict, model_class))  # build the model
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-
-            outputs_dict = model(input_ids, visual_feats, visual_pos)
-            hidden_states = outputs_dict[0]
-
-            # Add a dense layer on top to test integration with other keras modules
-            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-            # Compile extended model
-            extended_model = tf.keras.Model(inputs=[input_ids, visual_feats, visual_pos], outputs=[outputs])
-            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
     def test_pt_tf_model_equivalence(self):
         from transformers import is_torch_available
@@ -556,3 +613,68 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
 
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 6e-2)
+
+    def test_save_load(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
+                return_obj_labels="PreTraining" in model_class.__name__
+            )
+
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+                after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+                self.assert_outputs_same(after_outputs, outputs)
+
+    def test_compile_tf_model(self):
+        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(
+                return_obj_labels="PreTraining" in model_class.__name__
+            )
+
+            input_ids = tf.keras.Input(
+                batch_shape=(self.model_tester.batch_size, self.model_tester.seq_length),
+                name="input_ids",
+                dtype="int32",
+            )
+            visual_feats = tf.keras.Input(
+                batch_shape=(
+                    self.model_tester.batch_size,
+                    self.model_tester.num_visual_features,
+                    self.model_tester.visual_feat_dim,
+                ),
+                name="visual_feats",
+                dtype="int32",
+            )
+            visual_pos = tf.keras.Input(
+                batch_shape=(self.model_tester.batch_size, self.model_tester.num_visual_features, 4),
+                name="visual_pos",
+                dtype="int32",
+            )
+
+            # Prepare our model
+            model = model_class(config)
+
+            # Let's load it from the disk to be sure we can use pretrained weights
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))  # build the model
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+
+            outputs_dict = model(input_ids, visual_feats, visual_pos)
+            hidden_states = outputs_dict[0]
+
+            # Add a dense layer on top to test integration with other keras modules
+            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
+
+            # Compile extended model
+            extended_model = tf.keras.Model(inputs=[input_ids, visual_feats, visual_pos], outputs=[outputs])
+            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
