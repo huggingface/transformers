@@ -28,6 +28,7 @@ from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from .configuration_marian import MarianConfig
 from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 from .configuration_mobilebert import MobileBertConfig
@@ -66,6 +67,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -166,6 +168,10 @@ CONFIG_MAPPING = OrderedDict(
             "encoder-decoder",
             EncoderDecoderConfig,
         ),
+        (
+            "lxmert",
+            LxmertConfig,
+        ),
     ]
 )
 
@@ -261,11 +267,11 @@ class AutoConfig:
             config = AutoConfig.from_pretrained('bert-base-uncased')  # Download configuration from S3 and cache.
             config = AutoConfig.from_pretrained('./test/bert_saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = AutoConfig.from_pretrained('./test/bert_saved_model/my_configuration.json')
-            config = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
-            assert config.output_attention == True
-            config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attention=True,
+            config = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+            assert config.output_attentions == True
+            config, unused_kwargs = AutoConfig.from_pretrained('bert-base-uncased', output_attentions=True,
                                                                foo=False, return_unused_kwargs=True)
-            assert config.output_attention == True
+            assert config.output_attentions == True
             assert unused_kwargs == {'foo': False}
 
         """

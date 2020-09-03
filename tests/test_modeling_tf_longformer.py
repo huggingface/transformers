@@ -264,9 +264,6 @@ class TFLongformerModelTester:
 
 @require_tf
 class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
-    test_pruning = False  # pruning is not supported
-    test_headmasking = False  # head masking is not supported
-    test_torchscript = False
 
     all_model_classes = (
         (

@@ -4,7 +4,7 @@ This model was trained for sentiment classification of German language texts. To
 we provide a Python package that bundles the code need for the preprocessing and inferencing. 
 
 The model uses the Googles Bert architecture and was trained on 1.834 million German-language samples. The training data contains texts from various domains like Twitter, Facebook and movie, app and hotel reviews. 
-You can find more information about the dataset and the training process in the [paper](http://www.lrec-conf.org/proceedings/lrec2020/pdf/2020.lrec-1.201.pdf).
+You can find more information about the dataset and the training process in the [paper](http://www.lrec-conf.org/proceedings/lrec2020/pdf/2020.lrec-1.202.pdf).
 
 ## Using the Python package
 

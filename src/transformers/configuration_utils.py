@@ -195,7 +195,6 @@ class PretrainedConfig(object):
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
         self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forwar", 0)
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
@@ -301,11 +300,11 @@ class PretrainedConfig(object):
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
-            config = BertConfig.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
-            assert config.output_attention == True
-            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attention=True,
+            config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+            assert config.output_attentions == True
+            config, unused_kwargs = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True,
                                                                foo=False, return_unused_kwargs=True)
-            assert config.output_attention == True
+            assert config.output_attentions == True
             assert unused_kwargs == {'foo': False}
 
         """

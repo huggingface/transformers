@@ -27,13 +27,13 @@ It can be used as an improvement for Elasticsearch Results and boosts the releva
 
 **Architecture:** On top of BERT there is a Densly Connected NN which takes the 768 Dimensional [CLS] Token as input and provides the output ([Arxiv](https://arxiv.org/abs/1901.04085)).
 
-**Output:** Just a single value between between 0-1
+**Output:** Just a single value between between -10 and 10. Better matching query,passage pairs tend to have a higher a score.
 
 
 
 ## Intended uses & limitations
 Both query[1] and passage[2] have to fit in 512 Tokens.
-As you normally want to rerank the first dozens of search results keep in mind the inference time. 
+As you normally want to rerank the first dozens of search results keep in mind the inference time of approximately 300 ms/query.
 
 #### How to use
 
@@ -70,7 +70,7 @@ We see nearly similar performance than the English only Model in the English [Bi
 
 Fine-tuned Models                                                                   | Dependency                                                                   | Eval Set                                                           | Search Boost<a href='#benchmarks'> | Speed on GPU
 ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------- | ----------------------------------
-**`amberoad/Multilingual-uncased-MSMARCO`**  (This Model)                                       | <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-blue"/>          |  <a href ='http://www.msmarco.org/'>bing queries</a>               | **+61%** <sub><sup>(0.29 vs 0.18)</sup></sub>         | - <a href='#footnotes'>
+**`amberoad/Multilingual-uncased-MSMARCO`**  (This Model)                                       | <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-blue"/>          |  <a href ='http://www.msmarco.org/'>bing queries</a>               | **+61%** <sub><sup>(0.29 vs 0.18)</sup></sub>         | ~300 ms/query <a href='#footnotes'>
 `nboost/pt-tinybert-msmarco`                                          | <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-red"/>          |  <a href ='http://www.msmarco.org/'>bing queries</a>               | **+45%** <sub><sup>(0.26 vs 0.18)</sup></sub>         | ~50ms/query <a href='#footnotes'>
 `nboost/pt-bert-base-uncased-msmarco`                                               | <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-red"/>          | <a href ='http://www.msmarco.org/'>bing queries</a>                | **+62%** <sub><sup>(0.29 vs 0.18)</sup></sub>         | ~300 ms/query<a href='#footnotes'>
 `nboost/pt-bert-large-msmarco`                                                      | <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-red"/>          | <a href ='http://www.msmarco.org/'>bing queries</a>                | **+77%** <sub><sup>(0.32 vs 0.18)</sup></sub>         | -
