@@ -263,9 +263,8 @@ class TestSummarizationDistiller(unittest.TestCase):
             return model
         contents = os.listdir(output_dir)
         contents = {os.path.basename(p) for p in contents}
-        ckpt_files = [p for p in contents if p.endswith('ckpt')]
+        ckpt_files = [p for p in contents if p.endswith("ckpt")]
         assert len(ckpt_files) > 0
-
 
         self.assertIn("test_generations.txt", contents)
         self.assertIn("test_results.txt", contents)
