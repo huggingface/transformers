@@ -306,9 +306,7 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
         parser.add_argument("--eval_beams", type=int, default=None, required=False)
-        parser.add_argument(
-            "--val_metric", type=str, default=None, required=False, choices=["bleu", "rouge2", "loss", None]
-        )
+        parser.add_argument("--val_metric", type=str, default=None, required=False)
         parser.add_argument("--save_top_k", type=int, default=1, required=False, help="How many checkpoints to save")
         parser.add_argument(
             "--early_stopping_patience",
@@ -368,17 +366,14 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
     else:
         es_callback = False
-
-    lower_is_better = args.val_metric == "loss"
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
-        checkpoint_callback=get_checkpoint_callback(
-            args.output_dir, model.val_metric, args.save_top_k, lower_is_better
-        ),
+        checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric, args.save_top_k),
         early_stopping_callback=es_callback,
         logger=logger,
+        # TODO: early stopping callback seems messed up
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
