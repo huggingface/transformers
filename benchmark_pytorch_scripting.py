@@ -4,9 +4,12 @@ from transformers import BertConfig, BertModel, PyTorchBenchmark, PyTorchBenchma
 import torch
 
 
-def get_model(torchscript=False, device="cpu", config=None):
+def get_model(torchscript=False, device="cpu", config=None, max_seq_length=None):
+    input_ids = torch.ones((1, max_seq_length), device=device, dtype=torch.long)
     if not torchscript:
-        return BertModel(config).to(device).eval()
+        model = BertModel(config).to(device).eval()
+        traced_model = torch.jit.trace(model, input_ids)
+        return traced_model
     model = BertScriptableModel(config).to(device).eval()
     return torch.jit.script(model)
 
@@ -26,7 +29,7 @@ def get_input_ids(input_tensor_type="single", config=None, batch_size=None, sequ
 
 
 def get_inference_func(device, config, sequence_length, batch_size, input_tensor_type, torchscript):
-    model = get_model(torchscript, device, config)
+    model = get_model(torchscript, device, config, sequence_length)
     input_ids = get_input_ids(input_tensor_type=input_tensor_type, config=config, batch_size=batch_size, sequence_length=sequence_length, device=device)
 
     @torch.no_grad()
