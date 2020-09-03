@@ -114,7 +114,9 @@ class ReformerConfig(PretrainedConfig):
             The token id for the <PAD> token.
         vocab_size (:obj:`int`, optional, defaults to 320):
             Vocabulary size of the Reformer model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ReformerModel`.
+            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ReformerModel`
+        tie_word_embeddings (:obj:`bool`, optional, defaults to False):
+            Whether to tie input and output embeddings
 
     Example::
 
