@@ -247,11 +247,11 @@ class BartSummarizationDistiller(SummarizationModule):
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
         student_states = torch.stack([hidden_states[i] for i in range(len(matches))])
-        normed_student_states = F.layer_norm(student_states, student_states.shape[1:])
+        student_states = F.layer_norm(student_states, student_states.shape[1:])
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
-        normed_teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
+        teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
         hidden_losses = (
-            F.mse_loss(normed_student_states, normed_teacher_states, reduction="none")
+            F.mse_loss(student_states, teacher_states, reduction="none")
             * mask.unsqueeze(0).unsqueeze(-1)
         ).sum() / valid_count
         return hidden_losses
@@ -268,6 +268,7 @@ def add_distill_args(parser):
     parser.add_argument("--no_teacher", action="store_true", default=False)
     parser.add_argument("--length_penalty", type=float, default=-1)
     parser.add_argument("--supervise_forward", action="store_true", default=False)
+    parser.add_argument("--normalize_hidden", action="store_true", default=False)
 
 
 class BartTranslationDistiller(BartSummarizationDistiller):
@@ -285,6 +286,8 @@ class BartTranslationDistiller(BartSummarizationDistiller):
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
+
+        self.norm_func = F.layer_norm  if hparams.normalize_hidden else nn.Identity()
 
     def calc_generative_metrics(self, preds, target) -> dict:
         return calculate_bleu(preds, target)
