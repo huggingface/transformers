@@ -31,6 +31,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    LxmertConfig,
     MBartConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
@@ -116,6 +117,7 @@ from .modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
+from .modeling_lxmert import LxmertForPreTraining, LxmertModel
 from .modeling_marian import MarianMTModel
 from .modeling_mbart import MBartForConditionalGeneration
 from .modeling_mobilebert import (
@@ -200,6 +202,7 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
+        (LxmertConfig, LxmertModel),
     ]
 )
 
@@ -224,6 +227,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
+        (LxmertConfig, LxmertForPreTraining),
     ]
 )
 
