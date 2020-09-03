@@ -52,7 +52,7 @@ def convert_pl_to_hf(pl_ckpt_path: str, hf_src_model_dir: str, save_path: str) -
         assert ckpt_files, f"could not find any ckpt files inside the {pl_ckpt_path} directory"
 
     if len(ckpt_files) > 1:
-        logger.info(f"averaging {ckpt_files}")
+        logger.info(f"averaging the weights of {ckpt_files}")
 
     state_dicts = [sanitize(torch.load(x, map_location="cpu")["state_dict"]) for x in ckpt_files]
     state_dict = average_state_dicts(state_dicts)
