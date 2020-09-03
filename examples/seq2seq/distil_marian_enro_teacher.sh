@@ -16,5 +16,5 @@ python distillation.py \
   --train_batch_size=$BS --eval_batch_size=$BS \
   --tokenizer_name Helsinki-NLP/opus-mt-en-ro \
   --warmup_steps 500 --logger_name wandb \
-  --fp16_opt_level O1 --task translation \
+  --fp16_opt_level O1 --task translation --normalize_hidden \
   "$@"
