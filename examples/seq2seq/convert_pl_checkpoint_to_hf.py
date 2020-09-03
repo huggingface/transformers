@@ -39,7 +39,7 @@ def convert_pl_to_hf(pl_ckpt_path: str, hf_src_model_dir: str, save_path: str) -
     Args:
         pl_ckpt_path (:obj:`str`): Path to a .ckpt file saved by pytorch_lightning or dir containing ckpt files.
             If a directory is passed, all .ckpt files inside it will be averaged!
-        hf_src_model_dir: (str) path to a directory containing a correctly shaped checkpoint
+        hf_src_model_dir (:obj:`str`): Path to a directory containing a correctly shaped checkpoint
         save_path: (str) directory to save the new model
 
     """
