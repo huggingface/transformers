@@ -202,6 +202,7 @@ class SummarizationModule(BaseTransformer):
             attention_mask=batch["attention_mask"],
             use_cache=True,
             decoder_start_token_id=self.decoder_start_token_id,
+            num_beams=self.eval_beams,
         )
         gen_time = (time.time() - t0) / batch["input_ids"].shape[0]
         preds: List[str] = self.ids_to_clean_text(generated_ids)
