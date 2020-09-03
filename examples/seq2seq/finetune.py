@@ -202,7 +202,7 @@ class SummarizationModule(BaseTransformer):
             attention_mask=batch["attention_mask"],
             use_cache=True,
             decoder_start_token_id=self.decoder_start_token_id,
-            num_beams=2,
+            num_beams=self.eval_beams,
         )
         gen_time = (time.time() - t0) / batch["input_ids"].shape[0]
         preds: List[str] = self.ids_to_clean_text(generated_ids)
@@ -306,7 +306,8 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
         parser.add_argument("--eval_beams", type=int, default=None, required=False)
-        parser.add_argument("--val_metric", type=str, default=None, required=False)
+        parser.add_argument("--val_metric", type=str, default=None, required=False, choices=['bleu', 'rouge2', 'loss', None])
+        parser.add_argument("--save_top_k", type=int, default=1, required=False, help="How many checkpoints to save")
         parser.add_argument(
             "--early_stopping_patience",
             type=int,
@@ -337,7 +338,7 @@ def main(args, model=None) -> SummarizationModule:
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
-        if args.task == "summarization":
+        if "summarization" in args.task:
             model: SummarizationModule = SummarizationModule(args)
         else:
             model: SummarizationModule = TranslationModule(args)
@@ -365,14 +366,16 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
     else:
         es_callback = False
+
+    lower_is_better = (args.val_metric == 'loss')
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
-        checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
+        checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric, args.save_top_k, lower_is_better),
         early_stopping_callback=es_callback,
         logger=logger,
-        # TODO: early stopping callback seems messed up
+
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
