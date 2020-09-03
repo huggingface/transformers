@@ -256,6 +256,9 @@ class Trainer:
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
 
+        # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
+        self._loggers_initialized = False
+
         # Create output directory if needed
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
@@ -505,7 +508,9 @@ class Trainer:
         """
         return len(dataloader.dataset)
 
-    def _logger_setup(self):
+    def _setup_loggers(self):
+        if self._loggers_initialized:
+            return
         if is_wandb_available():
             self.setup_wandb()
         elif os.environ.get("WANDB_DISABLED") != "true":
@@ -520,6 +525,7 @@ class Trainer:
                 "To use comet_ml logging, run `pip/conda install comet_ml` "
                 "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
+        self._loggers_initialized = True
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """ HP search setup code """
@@ -576,9 +582,6 @@ class Trainer:
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
         """
-        # Set up loggers like W&B or Comet ML
-        self._logger_setup()
-
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
 
@@ -909,6 +912,9 @@ class Trainer:
             iterator (:obj:`tqdm`, `optional`):
                 A potential tqdm progress bar to write the logs on.
         """
+        # Set up loggers like W&B or Comet ML
+        self._setup_loggers()
+
         if hasattr(self, "_log"):
             warnings.warn(
                 "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
