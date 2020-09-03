@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import is_torch_available
+from transformers import FunnelTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -24,8 +24,9 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
-        FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
         FunnelBaseModel,
         FunnelConfig,
         FunnelForMaskedLM,
@@ -388,9 +389,15 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST[0]
-        model = FunnelModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+        tokenizer = FunnelTokenizer.from_pretrained("huggingface/funnel-small")
+        model = FunnelModel.from_pretrained("huggingface/funnel-small")
+        inputs = tokenizer("Hello! I am the Funnel Transformer model.", return_tensors="pt")
+        output = model(**inputs)[0]
+
+        expected_output_sum = torch.tensor(235.7827)
+        expected_output_mean = torch.tensor(0.0256)
+        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
+        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
 
 
 @require_torch
