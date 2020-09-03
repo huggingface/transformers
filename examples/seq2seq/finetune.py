@@ -178,18 +178,25 @@ class SummarizationModule(BaseTransformer):
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]}
-        if self.val_metric in rouges:
-            rouge_tensor: torch.FloatTensor = torch.tensor(rouges[self.val_metric]).type_as(loss)
-        else:
-            rouge_tensor: torch.FloatTensor = torch.tensor(losses[self.val_metric]).type_as(loss)
-        rouges.update({k: v.item() for k, v in losses.items()})
-        losses.update(rouges)
-        metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
-        metrics["step_count"] = self.step_count
-        self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
+        generative_metrics = {
+            k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
+        }
+        metric_val = (
+            generative_metrics[self.val_metric] if self.val_metric in generative_metrics else losses[self.val_metric]
+        )
+        metric_tensor: torch.FloatTensor = torch.tensor(metric_val).type_as(loss)
+        generative_metrics.update({k: v.item() for k, v in losses.items()})
+        losses.update(generative_metrics)
+        all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
+        all_metrics["step_count"] = self.step_count
+        self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": rouge_tensor}
+        return {
+            "log": all_metrics,
+            "preds": preds,
+            f"{prefix}_loss": loss,
+            f"{prefix}_{self.val_metric}": metric_tensor,
+        }
 
     def save_metrics(self, latest_metrics, type_path) -> None:
         self.metrics[type_path].append(latest_metrics)
