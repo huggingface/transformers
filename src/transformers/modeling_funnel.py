@@ -192,7 +192,7 @@ class FunnelAttentionStructure(nn.Module):
 
     def init_attention_inputs(self, input_embeds, attention_mask=None, token_type_ids=None):
         """ Returns the attention inputs associated to the inputs of the model. """
-        # input_embdeds has shape batch_size x seq_len x d_model
+        # input_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
         self.seq_len = seq_len = input_embeds.size(1)
