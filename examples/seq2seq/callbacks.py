@@ -91,7 +91,7 @@ def get_checkpoint_callback(output_dir, metric, save_top_k=1, lower_is_better=Fa
     checkpoint_callback = ModelCheckpoint(
         filepath=os.path.join(output_dir, exp),
         monitor=f"val_{metric}",
-        mode="min" if 'loss' in metric else 'max',
+        mode="min" if "loss" in metric else "max",
         save_top_k=save_top_k,
         period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.
     )
@@ -101,7 +101,7 @@ def get_checkpoint_callback(output_dir, metric, save_top_k=1, lower_is_better=Fa
 def get_early_stopping_callback(metric, patience):
     return EarlyStopping(
         monitor=f"val_{metric}",  # does this need avg?
-        mode="min" if 'loss' in metric else 'max',
+        mode="min" if "loss" in metric else "max",
         patience=patience,
         verbose=True,
     )
