@@ -1,4 +1,4 @@
-# PhoBERT: Pre-trained language models for Vietnamese <a name="introduction"></a>
+# <a name="introduction"></a> PhoBERT: Pre-trained language models for Vietnamese 
 
 Pre-trained PhoBERT models are the state-of-the-art language models for Vietnamese ([Pho](https://en.wikipedia.org/wiki/Pho), i.e. "Phở", is a popular food in Vietnam): 
 
@@ -15,33 +15,36 @@ The general architecture and experimental results of PhoBERT can be found in our
     year      = {2020}
     }
 
-**Please CITE** our paper when PhoBERT is used to help produce published results or incorporated into other software.
+**Please CITE** our paper when PhoBERT is used to help produce published results or is incorporated into other software.
 
 For further information or requests, please go to [PhoBERT's homepage](https://github.com/VinAIResearch/PhoBERT)!
 
-## Using PhoBERT in HuggingFace's [`transformers`](https://github.com/huggingface/transformers) <a name="transformers"></a>
-
-### Installation <a name="install2"></a>
+## Installation <a name="install2"></a>
  - Python version >= 3.6
  - [PyTorch](http://pytorch.org/) version >= 1.4.0
- - [`transformers`](https://github.com/huggingface/transformers): `pip3 install transformers`
+ - `pip3 install transformers`
 
-### Pre-trained models <a name="models2"></a>
+## Pre-trained models <a name="models2"></a>
+
 
 Model | #params | Arch.	 | Pre-training data
 ---|---|---|---
 `vinai/phobert-base` | 135M | base | 20GB  of texts
 `vinai/phobert-large` | 370M | large | 20GB  of texts
 
-### Example usage <a name="usage2"></a>
+## Example usage <a name="usage2"></a>
 
 ```python
 import torch
 from transformers import PhobertModel, PhobertTokenizer
 
 phobert = PhobertModel.from_pretrained("vinai/phobert-large")
-
 tokenizer = PhobertTokenizer.from_pretrained("vinai/phobert-large")
+
+# PhoBERT can be also loaded in the `Auto` mode
+# from transformers import AutoModel, AutoTokenizer
+# phobert = AutoModel.from_pretrained("vinai/phobert-large")
+# tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-large")
 
 # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
 line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
