@@ -148,10 +148,10 @@ class SummarizationModule(BaseTransformer):
         lm_logits = outputs[0]
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
-            loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
+            ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
 
             assert lm_logits.shape[-1] == self.model.config.vocab_size
-            loss = loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
+            loss = ce_loss_fct(lm_logits.view(-1, lm_logits.shape[-1]), tgt_ids.view(-1))
         else:
             lprobs = torch.nn.functional.log_softmax(lm_logits, dim=-1)
             loss, nll_loss = label_smoothed_nll_loss(
@@ -178,15 +178,25 @@ class SummarizationModule(BaseTransformer):
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]}
-        rouge_tensor: torch.FloatTensor = torch.tensor(rouges[self.val_metric]).type_as(loss)
-        rouges.update({k: v.item() for k, v in losses.items()})
-        losses.update(rouges)
-        metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
-        metrics["step_count"] = self.step_count
-        self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
+        generative_metrics = {
+            k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
+        }
+        metric_val = (
+            generative_metrics[self.val_metric] if self.val_metric in generative_metrics else losses[self.val_metric]
+        )
+        metric_tensor: torch.FloatTensor = torch.tensor(metric_val).type_as(loss)
+        generative_metrics.update({k: v.item() for k, v in losses.items()})
+        losses.update(generative_metrics)
+        all_metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
+        all_metrics["step_count"] = self.step_count
+        self.save_metrics(all_metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": rouge_tensor}
+        return {
+            "log": all_metrics,
+            "preds": preds,
+            f"{prefix}_loss": loss,
+            f"{prefix}_{self.val_metric}": metric_tensor,
+        }
 
     def save_metrics(self, latest_metrics, type_path) -> None:
         self.metrics[type_path].append(latest_metrics)
@@ -306,7 +316,9 @@ class SummarizationModule(BaseTransformer):
         parser.add_argument("--src_lang", type=str, default="", required=False)
         parser.add_argument("--tgt_lang", type=str, default="", required=False)
         parser.add_argument("--eval_beams", type=int, default=None, required=False)
-        parser.add_argument("--val_metric", type=str, default=None, required=False)
+        parser.add_argument(
+            "--val_metric", type=str, default=None, required=False, choices=["bleu", "rouge2", "loss", None]
+        )
         parser.add_argument("--save_top_k", type=int, default=1, required=False, help="How many checkpoints to save")
         parser.add_argument(
             "--early_stopping_patience",
@@ -366,14 +378,17 @@ def main(args, model=None) -> SummarizationModule:
         es_callback = get_early_stopping_callback(model.val_metric, args.early_stopping_patience)
     else:
         es_callback = False
+
+    lower_is_better = args.val_metric == "loss"
     trainer: pl.Trainer = generic_train(
         model,
         args,
         logging_callback=Seq2SeqLoggingCallback(),
-        checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric, args.save_top_k),
+        checkpoint_callback=get_checkpoint_callback(
+            args.output_dir, model.val_metric, args.save_top_k, lower_is_better
+        ),
         early_stopping_callback=es_callback,
         logger=logger,
-        # TODO: early stopping callback seems messed up
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
     if not args.do_predict:
