@@ -18,6 +18,7 @@ from transformers.hf_api import HfApi
 from transformers.modeling_bart import shift_tokens_right
 from transformers.testing_utils import CaptureStderr, CaptureStdout, require_multigpu, require_torch_and_cuda, slow
 
+from .convert_pl_checkpoint_to_hf import convert_pl_to_hf
 from .distillation import distill_main, evaluate_checkpoint
 from .finetune import SummarizationModule, main
 from .pack_dataset import pack_data_dir
@@ -32,7 +33,8 @@ CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
     "label_smoothing": 0.2,
     "eval_beams": 1,
-    "val_metric": None,
+    "val_metric": "loss",
+    "save_top_k": 1,
     "adafactor": True,
     "early_stopping_patience": 2,
     "logger_name": "default",
@@ -173,6 +175,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertTrue(Path(out_path).exists())
 
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
+        out_path_new = tempfile.mkdtemp()
+        convert_pl_to_hf(ckpts[0], transformer_ckpts[0].parent, out_path_new)
+        assert os.path.exists(os.path.join(out_path_new, "pytorch_model.bin"))
 
     def test_loss_fn(self):
         model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY, return_dict=True)
@@ -257,9 +262,9 @@ class TestSummarizationDistiller(unittest.TestCase):
         if not check_contents:
             return model
         contents = os.listdir(output_dir)
-        ckpt_name = "val_avg_rouge2=0.0000-step_count=2.ckpt"  # "val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
         contents = {os.path.basename(p) for p in contents}
-        self.assertIn(ckpt_name, contents)
+        ckpt_files = [p for p in contents if p.endswith("ckpt")]
+        assert len(ckpt_files) > 0
 
         self.assertIn("test_generations.txt", contents)
         self.assertIn("test_results.txt", contents)

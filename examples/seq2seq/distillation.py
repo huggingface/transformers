@@ -416,7 +416,7 @@ def create_module(args):
 
 
 def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
-    # TODO(SS): DELETE?
+    # TODO(SS): DELETE? Better to convert_pl_ckpt_to_hf and run_eval.py
     exp_dir = ckpt_path.parent
     if dest_dir is None:
         dest_dir = exp_dir

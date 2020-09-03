@@ -344,7 +344,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         sa_output = self.attention(x, x, x, attn_mask, head_mask, output_attentions, training=training)
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
-        else:  # To handle these `output_attention` or `output_hidden_states` cases returning tuples
+        else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
             # assert type(sa_output) == tuple
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
