@@ -387,18 +387,6 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        tokenizer = FunnelTokenizer.from_pretrained("huggingface/funnel-small")
-        model = FunnelModel.from_pretrained("huggingface/funnel-small")
-        inputs = tokenizer("Hello! I am the Funnel Transformer model.", return_tensors="pt")
-        output = model(**inputs)[0]
-
-        expected_output_sum = torch.tensor(235.7827)
-        expected_output_mean = torch.tensor(0.0256)
-        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
-        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
-
 
 @require_torch
 class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
@@ -426,3 +414,42 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+
+@require_torch
+class FunnelModelIntegrationTest(unittest.TestCase):
+    def test_inference_tiny_model(self):
+        batch_size = 13
+        sequence_length = 7
+        vocab_size = 99
+        input_ids = torch.arange(0, batch_size * sequence_length).long().reshape(batch_size, sequence_length)
+        lengths = [0, 1, 2, 3, 4, 5, 6, 4, 1, 3, 5, 0, 1]
+        token_type_ids = torch.tensor([[2] + [0] * a + [1] * (sequence_length - a - 1) for a in lengths])
+
+        model = FunnelModel.from_pretrained("sgugger/funnel-random-tiny")
+        output = model(input_ids, token_type_ids=token_type_ids)[0].abs()
+
+        expected_output_sum = torch.tensor(2344.9023)
+        expected_output_mean = torch.tensor(0.8053)
+        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
+        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
+
+        attention_mask = torch.tensor([[1] * 7, [1] * 4 + [0] * 3] * 6 + [[0, 1, 1, 0, 0, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0].abs()
+
+        expected_output_sum = torch.tensor(2363.2178)
+        expected_output_mean = torch.tensor(0.8115)
+        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
+        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
+
+    @slow
+    def test_inference_model(self):
+        tokenizer = FunnelTokenizer.from_pretrained("huggingface/funnel-small")
+        model = FunnelModel.from_pretrained("huggingface/funnel-small")
+        inputs = tokenizer("Hello! I am the Funnel Transformer model.", return_tensors="pt")
+        output = model(**inputs)[0]
+
+        expected_output_sum = torch.tensor(235.7827)
+        expected_output_mean = torch.tensor(0.0256)
+        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
+        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
