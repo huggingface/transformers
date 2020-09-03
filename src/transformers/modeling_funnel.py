@@ -66,7 +66,7 @@ FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 FunnelLayerNorm = nn.LayerNorm
 
-INF = 1e6
+INF = 10000
 
 
 def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
@@ -186,6 +186,8 @@ class FunnelAttentionStructure(nn.Module):
         self.config = config
         self.sin_dropout = nn.Dropout(config.hidden_dropout)
         self.cos_dropout = nn.Dropout(config.hidden_dropout)
+        # Track where we are at in terms of pooling from the original input, e.g., by how much the sequence length was
+        # dividide.
         self.pooling_mult = None
 
     def init_attention_structure(self, input_embeds, attention_mask=None, token_type_ids=None):
@@ -348,14 +350,15 @@ class FunnelAttentionStructure(nn.Module):
             return type(tensor)(self.pool_tensor(tensor, mode=mode, stride=stride) for x in tensor)
 
         if self.config.separate_cls:
-            t = tensor[:, :-1] if self.config.truncate_seq else tensor
-            tensor = torch.cat([tensor[:, :1], t], dim=1)
+            suffix = tensor[:, :-1] if self.config.truncate_seq else tensor
+            tensor = torch.cat([tensor[:, :1], suffix], dim=1)
 
         ndim = tensor.ndim
         if ndim == 2:
             tensor = tensor[:, None, :, None]
         elif ndim == 3:
             tensor = tensor[:, None, :, :]
+        # Stride is applied on the second-to-last dimension.
         stride = (stride, 1)
 
         tensor = tensor.float()
@@ -408,22 +411,20 @@ class FunnelAttentionStructure(nn.Module):
         return attention_struct
 
 
-def _relative_shift_gather(x, context_len, shift):
-    batch_size, n_head, seq_len, max_rel_len = x.shape
+def _relative_shift_gather(positional_attn, context_len, shift):
+    batch_size, n_head, seq_len, max_rel_len = positional_attn.shape
     # max_rel_len = 2 * context_len + shift -1 is the numbers of possible relative positions i-j
 
     # What's next is the same as doing the following gather, which might be clearer code but less efficient.
     # idxs = context_len + torch.arange(0, context_len).unsqueeze(0) - torch.arange(0, context_len).unsqueeze(1)
     # # matrix of context_len + i-j
-    # y = x.gather(3, idxs.expand([bs, n_head, context_len, context_len]))
+    # return positional_attn.gather(3, idxs.expand([bs, n_head, context_len, context_len]))
 
-    y = torch.reshape(x, [batch_size, n_head, max_rel_len, seq_len])
-    y = y[:, :, shift:, :]
-    # y = torch.narrow(y, 2, shift, max_rel_len - shift)
-    y = torch.reshape(y, [batch_size, n_head, seq_len, max_rel_len - shift])
-    y = y[..., :context_len]
-    # y = torch.narrow(y, 3, 0, context_len)
-    return y
+    positional_attn = torch.reshape(positional_attn, [batch_size, n_head, max_rel_len, seq_len])
+    positional_attn = positional_attn[:, :, shift:, :]
+    positional_attn = torch.reshape(positional_attn, [batch_size, n_head, seq_len, max_rel_len - shift])
+    positional_attn = positional_attn[..., :context_len]
+    return positional_attn
 
 
 class FunnelRelMultiheadAttention(nn.Module):
@@ -516,20 +517,20 @@ class FunnelRelMultiheadAttention(nn.Module):
             token_type_attn *= cls_mask
         return token_type_attn
 
-    def forward(self, q, k, v, attention_struct, head_mask=None, output_attentions=False):
+    def forward(self, query, key, value, attention_struct, head_mask=None, output_attentions=False):
         # q has shape batch_size x seq_len x d_model
         # k and v have shapes batch_size x context_len x d_model
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_struct
 
-        batch_size, seq_len, _ = q.shape
-        context_len = k.shape[1]
+        batch_size, seq_len, _ = query.shape
+        context_len = key.shape[1]
         n_head, d_head = self.config.n_head, self.config.d_head
 
         # Shape batch_size x seq_len x n_head x d_head
-        q_head = self.q_head(q).view(batch_size, seq_len, n_head, d_head)
+        q_head = self.q_head(query).view(batch_size, seq_len, n_head, d_head)
         # Shapes batch_size x context_len x n_head x d_head
-        k_head = self.k_head(k).view(batch_size, context_len, n_head, d_head)
-        v_head = self.v_head(v).view(batch_size, context_len, n_head, d_head)
+        k_head = self.k_head(key).view(batch_size, context_len, n_head, d_head)
+        v_head = self.v_head(value).view(batch_size, context_len, n_head, d_head)
 
         q_head = q_head * self.scale
         # Shape n_head x d_head
@@ -549,19 +550,17 @@ class FunnelRelMultiheadAttention(nn.Module):
         if attention_mask is not None:
             attn_score = attn_score - INF * attention_mask[:, None, None].float()
         # attention probability
-        attn_prob = torch.softmax(attn_score, dim=-1)
-        attn_prob = attn_prob.type(dtype)
-
+        attn_prob = torch.softmax(attn_score, dim=-1, dtype=dtype)
         attn_prob = self.attention_dropout(attn_prob)
 
         # attention output, shape batch_size x seq_len x n_head x d_head
         attn_vec = torch.einsum("bnij,bjnd->bind", attn_prob, v_head)
 
         # Shape shape batch_size x seq_len x d_model
-        attn_out = self.post_proj(attn_vec.contiguous().view(batch_size, seq_len, n_head * d_head))
+        attn_out = self.post_proj(attn_vec.reshape(batch_size, seq_len, n_head * d_head))
         attn_out = self.hidden_dropout(attn_out)
 
-        output = self.layer_norm(q + attn_out)
+        output = self.layer_norm(query + attn_out)
         return (output, attn_prob) if output_attentions else (output,)
 
 
@@ -575,13 +574,13 @@ class FunnelPositionwiseFFN(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = FunnelLayerNorm(config.d_model, config.layer_norm_eps)
 
-    def forward(self, x):
-        h = self.linear_1(x)
+    def forward(self, hidden):
+        h = self.linear_1(hidden)
         h = self.activation_function(h)
         h = self.activation_dropout(h)
         h = self.linear_2(h)
         h = self.dropout(h)
-        return self.layer_norm(x + h)
+        return self.layer_norm(hidden + h)
 
 
 class FunnelLayer(nn.Module):
@@ -660,6 +659,8 @@ class FunnelEncoder(nn.Module):
 
 
 def upsample(x, stride, target_len, separate_cls=True, truncate_seq=False):
+    """Upsample tensor `x` to match `target_len` by repeating the tokens `stride` time on the sequence length
+    dimension."""
     if stride == 1:
         return x
     if separate_cls:
@@ -853,7 +854,8 @@ FUNNEL_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare base Funnel Transformer Model transformer outputting raw hidden-states without decoder or any specific head on top.",
+    """ The base Funnel Transformer Model transformer outputting raw hidden-states without upsampling head (also called
+    decoder) or any task-specific head on top.""",
     FUNNEL_START_DOCSTRING,
 )
 class FunnelBaseModel(FunnelPreTrainedModel):
@@ -1001,8 +1003,8 @@ class FunnelModel(FunnelPreTrainedModel):
         )
 
         decoder_outputs = self.decoder(
-            encoder_outputs[0],
-            encoder_outputs[1][self.config.block_sizes[0]],
+            final_hidden=encoder_outputs[0],
+            first_block_hidden=encoder_outputs[1][self.config.block_sizes[0]],
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             output_attentions=output_attentions,
@@ -1036,6 +1038,8 @@ add_start_docstrings(
     generated tokens.""",
     FUNNEL_START_DOCSTRING,
 )
+
+
 class FunnelForPreTraining(FunnelPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
