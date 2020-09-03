@@ -15,7 +15,6 @@
 """ Auto Tokenizer class. """
 
 
-import logging
 from collections import OrderedDict
 
 from .configuration_auto import (
@@ -31,8 +30,12 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     LongformerConfig,
+    LxmertConfig,
+    MarianConfig,
     MBartConfig,
+    MobileBertConfig,
     OpenAIGPTConfig,
+    PegasusConfig,
     PhobertConfig,
     ReformerConfig,
     RetriBertConfig,
@@ -43,11 +46,9 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
 )
-from .configuration_marian import MarianConfig
-from .configuration_mobilebert import MobileBertConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
-from .tokenization_bart import BartTokenizer, MBartTokenizer
+from .tokenization_bart import BartTokenizer, BartTokenizerFast
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
@@ -57,10 +58,13 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
-from .tokenization_longformer import LongformerTokenizer
+from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_marian import MarianTokenizer
+from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_pegasus import PegasusTokenizer
 from .tokenization_phobert import PhobertTokenizer
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
@@ -70,9 +74,10 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 
 TOKENIZER_MAPPING = OrderedDict(
@@ -85,14 +90,16 @@ TOKENIZER_MAPPING = OrderedDict(
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
+        (PegasusConfig, (PegasusTokenizer, None)),
         (MBartConfig, (MBartTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (MarianConfig, (MarianTokenizer, None)),
-        (BartConfig, (BartTokenizer, None)),
-        (LongformerConfig, (LongformerTokenizer, None)),
+        (BartConfig, (BartTokenizer, BartTokenizerFast)),
+        (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
+        (LxmertConfig, (LxmertTokenizer, LxmertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -107,6 +114,7 @@ TOKENIZER_MAPPING = OrderedDict(
 
 class AutoTokenizer:
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
+<<<<<<< HEAD
         that will be instantiated as one of the tokenizer classes of the library
         when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
         class method.
@@ -134,6 +142,34 @@ class AutoTokenizer:
             - `electra`: ElectraTokenizer (Google ELECTRA model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
+=======
+    that will be instantiated as one of the tokenizer classes of the library
+    when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
+    class method.
+
+    The `from_pretrained()` method takes care of returning the correct tokenizer class instance
+    based on the `model_type` property of the config object, or when it's missing,
+    falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+
+        - `t5`: T5Tokenizer (T5 model)
+        - `distilbert`: DistilBertTokenizer (DistilBert model)
+        - `albert`: AlbertTokenizer (ALBERT model)
+        - `camembert`: CamembertTokenizer (CamemBERT model)
+        - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
+        - `longformer`: LongformerTokenizer (AllenAI Longformer model)
+        - `roberta`: RobertaTokenizer (RoBERTa model)
+        - `bert`: BertTokenizer (Bert model)
+        - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+        - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
+        - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
+        - `xlnet`: XLNetTokenizer (XLNet model)
+        - `xlm`: XLMTokenizer (XLM model)
+        - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+        - `electra`: ElectraTokenizer (Google ELECTRA model)
+        - `lxmert`: LxmertTokenizer (Lxmert model)
+
+    This class cannot be instantiated using `__init__()` (throw an error).
+>>>>>>> 722b5807d8768acc4a1165ad48e8c90c936d4313
     """
 
     def __init__(self):
@@ -144,7 +180,7 @@ class AutoTokenizer:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
-        r""" Instantiate one of the tokenizer classes of the library
+        r"""Instantiate one of the tokenizer classes of the library
         from a pre-trained model vocabulary.
 
         The tokenizer class to instantiate is selected
@@ -169,6 +205,7 @@ class AutoTokenizer:
             - `xlm`: XLMTokenizer (XLM model)
             - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
             - `electra`: ElectraTokenizer (Google ELECTRA model)
+            - `lxmert`: LxmertTokenizer (Lxmert model)
 
         Params:
             pretrained_model_name_or_path: either:

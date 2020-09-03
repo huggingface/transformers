@@ -1,13 +1,13 @@
-import logging
 import warnings
 from dataclasses import dataclass, field
 from typing import Tuple
 
 from .file_utils import cached_property, is_tf_available, tf_required
 from .training_args import TrainingArguments
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 if is_tf_available():
     import tensorflow as tf
@@ -95,10 +95,13 @@ class TFTrainingArguments(TrainingArguments):
             at the next training step under the keyword argument ``mems``.
         tpu_name (:obj:`str`, `optional`):
             The name of the TPU the process is running on.
+        run_name (:obj:`str`, `optional`):
+            A descriptor for the run. Notably used for wandb logging.
     """
 
     tpu_name: str = field(
-        default=None, metadata={"help": "Name of TPU"},
+        default=None,
+        metadata={"help": "Name of TPU"},
     )
 
     @cached_property
@@ -162,7 +165,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     def eval_batch_size(self) -> int:
@@ -175,7 +178,7 @@ class TFTrainingArguments(TrainingArguments):
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_replicas)
+        return per_device_batch_size * self.n_replicas
 
     @property
     @tf_required

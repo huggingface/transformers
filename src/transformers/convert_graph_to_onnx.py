@@ -3,7 +3,7 @@ from os import listdir, makedirs
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from packaging.version import parse
+from packaging.version import Version, parse
 
 from transformers import is_tf_available, is_torch_available
 from transformers.file_utils import ModelOutput
@@ -38,24 +38,39 @@ class OnnxConverterArgumentParser(ArgumentParser):
         super().__init__("ONNX Converter")
 
         self.add_argument(
-            "--pipeline", type=str, choices=SUPPORTED_PIPELINES, default="feature-extraction",
+            "--pipeline",
+            type=str,
+            choices=SUPPORTED_PIPELINES,
+            default="feature-extraction",
         )
         self.add_argument(
-            "--model", type=str, required=True, help="Model's id or path (ex: bert-base-cased)",
+            "--model",
+            type=str,
+            required=True,
+            help="Model's id or path (ex: bert-base-cased)",
         )
         self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
         self.add_argument(
-            "--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model",
+            "--framework",
+            type=str,
+            choices=["pt", "tf"],
+            help="Framework for loading the model",
         )
         self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
         self.add_argument(
-            "--check-loading", action="store_true", help="Check ONNX is able to load the model",
+            "--check-loading",
+            action="store_true",
+            help="Check ONNX is able to load the model",
         )
         self.add_argument(
-            "--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb",
+            "--use-external-format",
+            action="store_true",
+            help="Allow exporting model >= than 2Gb",
         )
         self.add_argument(
-            "--quantize", action="store_true", help="Quantize the neural network to be run with int8",
+            "--quantize",
+            action="store_true",
+            help="Quantize the neural network to be run with int8",
         )
         self.add_argument("output")
 
@@ -72,7 +87,7 @@ def generate_identified_filename(filename: Path, identifier: str) -> Path:
     return filename.parent.joinpath(filename.stem + identifier).with_suffix(filename.suffix)
 
 
-def ensure_onnxruntime_installed():
+def check_onnxruntime_requirements(minimum_version: Version):
     """
     Check onnxruntime is installed and if the installed version match is recent enough.
     Raises:
@@ -88,7 +103,7 @@ def ensure_onnxruntime_installed():
         if ort_version < ORT_QUANTIZE_MINIMUM_VERSION:
             raise ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
-                f"but we require onnxruntime to be >= 1.4.0 to enable all the conversions options.\n"
+                f"but we require onnxruntime to be >= {minimum_version} to enable all the conversions options.\n"
                 f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
             )
 
@@ -273,7 +288,9 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
-        from keras2onnx import convert_keras, save_model, __version__ as k2ov
+
+        from keras2onnx import __version__ as k2ov
+        from keras2onnx import convert_keras, save_model
 
         print(f"Using framework TensorFlow: {tf.version.VERSION}, keras2onnx: {k2ov}")
 
@@ -330,6 +347,30 @@ def convert(
         convert_tensorflow(nlp, opset, output)
 
 
+def optimize(onnx_model_path: Path) -> Path:
+    """
+    Load the model at the specified path and let onnxruntime look at transformations on the graph
+    to enable all the optimizations possible
+    Args:
+        onnx_model_path: filepath where the model binary description is stored
+
+    Returns: Path where the optimized model binary description has been saved
+
+    """
+    from onnxruntime import InferenceSession, SessionOptions
+
+    # Generate model name with suffix "optimized"
+    opt_model_path = generate_identified_filename(onnx_model_path, "-optimized")
+    sess_option = SessionOptions()
+    sess_option.optimized_model_filepath = opt_model_path.as_posix()
+    _ = InferenceSession(onnx_model_path.as_posix(), sess_option)
+
+    print(f"Optimized model has been written at {opt_model_path}: \N{heavy check mark}")
+    print("/!\\ Optimized model contains hardware specific operators which might not be portable. /!\\")
+
+    return opt_model_path
+
+
 def quantize(onnx_model_path: Path) -> Path:
     """
     Quantize the weights of the model from float32 to in8 to allow very efficient inference on modern CPU.
@@ -338,38 +379,39 @@ def quantize(onnx_model_path: Path) -> Path:
 
     Returns: The Path generated for the quantized
     """
+    import onnx
+    from onnxruntime.quantization import QuantizationMode, quantize
 
-    try:
-        ensure_onnxruntime_installed()
-        import onnx
-        from onnxruntime import __version__ as ort_version
-        from onnxruntime.quantization import quantize, QuantizationMode
+    onnx_model = onnx.load(onnx_model_path.as_posix())
 
-        print(f"Found ONNX: {onnx.__version__}")
-        print(f"Found ONNXRuntime: {ort_version}")
+    # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
+    print(
+        "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
+        "This limitation will be removed in the next release of onnxruntime."
+    )
 
-        onnx_model = onnx.load(onnx_model_path.as_posix())
-        quantized_model = quantize(
-            model=onnx_model, quantization_mode=QuantizationMode.IntegerOps, force_fusions=True, symmetric_weight=True,
-        )
+    quantized_model = quantize(
+        model=onnx_model,
+        quantization_mode=QuantizationMode.IntegerOps,
+        force_fusions=True,
+        symmetric_weight=True,
+    )
 
-        # Append "-quantized" at the end of the model's name
-        quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
+    # Append "-quantized" at the end of the model's name
+    quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
-        # Save model
-        print(f"Storing quantized model at {quantized_model_path}")
-        onnx.save(quantized_model, quantized_model_path.as_posix())
+    # Save model
+    print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
+    onnx.save_model(quantized_model, quantized_model_path.as_posix())
 
-        return quantized_model_path
-    except ImportError as ie:
-        print(f"Error while quantizing the model:\n{str(ie)}")
+    return quantized_model_path
 
 
 def verify(path: Path):
     from onnxruntime import InferenceSession, SessionOptions
     from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
 
-    print(f"Checking ONNX model loading from: {path}")
+    print(f"Checking ONNX model loading from: {path} ...")
     try:
         onnx_options = SessionOptions()
         _ = InferenceSession(path.as_posix(), onnx_options, providers=["CPUExecutionProvider"])
@@ -386,6 +428,7 @@ if __name__ == "__main__":
     args.output = Path(args.output).absolute()
 
     try:
+        print("\n====== Converting model to ONNX ======")
         # Convert
         convert(
             args.framework,
@@ -398,11 +441,33 @@ if __name__ == "__main__":
         )
 
         if args.quantize:
-            args.quantized_output = quantize(args.output)
+            # Ensure requirements for quantization on onnxruntime is met
+            check_onnxruntime_requirements(ORT_QUANTIZE_MINIMUM_VERSION)
+
+            # onnxruntime optimizations doesn't provide the same level of performances on TensorFlow than PyTorch
+            if args.framework == "tf":
+                print(
+                    "\t Using TensorFlow might not provide the same optimization level compared to PyTorch.\n"
+                    "\t For TensorFlow users you can try optimizing the model directly through onnxruntime_tools.\n"
+                    "\t For more information, please refer to the onnxruntime documentation:\n"
+                    "\t\thttps://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers\n"
+                )
+
+            print("\n====== Optimizing ONNX model ======")
+
+            # Quantization works best when using the optimized version of the model
+            args.optimized_output = optimize(args.output)
+
+            # Do the quantization on the right graph
+            args.quantized_output = quantize(args.optimized_output)
 
         # And verify
         if args.check_loading:
+            print("\n====== Check exported ONNX model(s) ======")
             verify(args.output)
+
+            if hasattr(args, "optimized_output"):
+                verify(args.optimized_output)
 
             if hasattr(args, "quantized_output"):
                 verify(args.quantized_output)

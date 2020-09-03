@@ -62,8 +62,8 @@ Here is the workflow for the adding tests:
 
 Here is the workflow for documentation:
 
-- [ ] Make sure all your arguments are properly documened in your configuration and tokenizer.
-- [ ] Most of the documentation of the models is automatically generated, you just ahve to male sure that
+- [ ] Make sure all your arguments are properly documented in your configuration and tokenizer.
+- [ ] Most of the documentation of the models is automatically generated, you just have to make sure that
   `XXX_START_DOCSTRING` contains an introduction to the model you're adding and a link to the original
   article and that `XXX_INPUTS_DOCSTRING` contains all the inputs of your model.
 - [ ] Create a new page `xxx.rst` in the folder `docs/source/model_doc` and add this file in `docs/source/index.rst`.
@@ -79,7 +79,6 @@ You can then finish the addition step by adding imports for your classes in the 
 - [ ] Add your configuration in `configuration_auto.py`.
 - [ ] Add your PyTorch and TF 2.0 model respectively in `modeling_auto.py` and `modeling_tf_auto.py`.
 - [ ] Add your tokenizer in `tokenization_auto.py`.
-- [ ] Add your models and tokenizer to `pipeline.py`.
 - [ ] Add a link to your conversion script in the main conversion utility (in `commands/convert.py`)
 - [ ] Edit the PyTorch to TF 2.0 conversion script to add your model in the `convert_pytorch_checkpoint_to_tf2.py`
   file.

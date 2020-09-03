@@ -2,9 +2,11 @@ import argparse
 import json
 import os
 import shutil
+import socket
+import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 from zipfile import ZipFile
 
 import numpy as np
@@ -13,6 +15,87 @@ from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 from transformers.hf_api import HfApi
+
+
+def remove_suffix(text: str, suffix: str):
+    if text.endswith(suffix):
+        return text[: -len(suffix)]
+    return text  # or whatever
+
+
+def _process_benchmark_table_row(x):
+    fields = lmap(str.strip, x.replace("\t", "").split("|")[1:-1])
+    assert len(fields) == 3
+    return (fields[0], float(fields[1]), float(fields[2]))
+
+
+def process_last_benchmark_table(readme_path) -> List[Tuple[str, float, float]]:
+    md_content = Path(readme_path).open().read()
+    entries = md_content.split("## Benchmarks")[-1].strip().split("\n")[2:]
+    data = lmap(_process_benchmark_table_row, entries)
+    return data
+
+
+def check_if_models_are_dominated(old_repo_path="OPUS-MT-train/models", new_repo_path="Tatoeba-Challenge/models/"):
+    """Make a blacklist for models where we have already ported the same language pair, and the ported model has higher BLEU score."""
+    import pandas as pd
+
+    released_cols = [
+        "url_base",
+        "pair",  # (ISO639-3/ISO639-5 codes),
+        "short_pair",  # (reduced codes),
+        "chrF2_score",
+        "bleu",
+        "brevity_penalty",
+        "ref_len",
+        "src_name",
+        "tgt_name",
+    ]
+
+    released = pd.read_csv(f"{new_repo_path}/released-models.txt", sep="\t", header=None).iloc[:-1]
+    released.columns = released_cols
+    old_reg = make_registry(repo_path=old_repo_path)
+    old_reg = pd.DataFrame(old_reg, columns=["id", "prepro", "url_model", "url_test_set"])
+    assert old_reg.id.value_counts().max() == 1
+    old_reg = old_reg.set_index("id")
+
+    released["fname"] = released["url_base"].apply(
+        lambda x: remove_suffix(remove_prefix(x, "https://object.pouta.csc.fi/Tatoeba-Challenge/opus"), ".zip")
+    )
+
+    released["2m"] = released.fname.str.startswith("2m")
+    released["date"] = pd.to_datetime(released["fname"].apply(lambda x: remove_prefix(remove_prefix(x, "2m-"), "-")))
+
+    newest_released = released.dsort("date").drop_duplicates(["short_pair"], keep="first")
+
+    short_to_new_bleu = newest_released.set_index("short_pair").bleu
+
+    assert released.groupby("short_pair").pair.nunique().max() == 1
+
+    short_to_long = released.groupby("short_pair").pair.first().to_dict()
+
+    overlap_short = old_reg.index.intersection(released.short_pair.unique())
+    overlap_long = [short_to_long[o] for o in overlap_short]
+    new_reported_bleu = [short_to_new_bleu[o] for o in overlap_short]
+
+    def get_old_bleu(o) -> float:
+        pat = old_repo_path + "/{}/README.md"
+        bm_data = process_last_benchmark_table(pat.format(o))
+        tab = pd.DataFrame(bm_data, columns=["testset", "bleu", "chr-f"])
+        tato_bleu = tab.loc[lambda x: x.testset.str.startswith("Tato")].bleu
+        if tato_bleu.shape[0] > 0:
+            return tato_bleu.iloc[0]
+        else:
+            return np.nan
+
+    old_bleu = [get_old_bleu(o) for o in overlap_short]
+    cmp_df = pd.DataFrame(
+        dict(short=overlap_short, long=overlap_long, old_bleu=old_bleu, new_bleu=new_reported_bleu)
+    ).fillna(-1)
+
+    dominated = cmp_df[cmp_df.old_bleu > cmp_df.new_bleu]
+    blacklist = dominated.long.unique().tolist()  # 3 letter codes
+    return dominated, blacklist
 
 
 def remove_prefix(text: str, prefix: str):
@@ -149,37 +232,91 @@ def convert_hf_name_to_opus_name(hf_model_name):
     return remove_prefix(opus_w_prefix, "opus-mt-")
 
 
+def get_system_metadata(repo_root):
+    import git
+
+    return dict(
+        helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
+        transformers_git_sha=git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
+        port_machine=socket.gethostname(),
+        port_time=time.strftime("%Y-%m-%d-%H:%M"),
+    )
+
+
+front_matter = """---
+language: {}
+tags:
+- translation
+
+license: apache-2.0
+---
+
+"""
+
+
 def write_model_card(
     hf_model_name: str,
-    repo_path="OPUS-MT-train/models/",
+    repo_root="OPUS-MT-train",
+    save_dir=Path("marian_converted"),
     dry_run=False,
-    model_card_dir=Path("marian_converted/model_cards/Helsinki-NLP/"),
+    extra_metadata={},
 ) -> str:
     """Copy the most recent model's readme section from opus, and add metadata.
-    upload command: s3cmd sync --recursive model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/
+    upload command: aws s3 sync model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
     """
+    import pandas as pd
+
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     opus_name: str = convert_hf_name_to_opus_name(hf_model_name)
+    assert repo_root in ("OPUS-MT-train", "Tatoeba-Challenge")
+    opus_readme_path = Path(repo_root).joinpath("models", opus_name, "README.md")
+    assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
+
     opus_src, opus_tgt = [x.split("+") for x in opus_name.split("-")]
-    readme_url = OPUS_GITHUB_URL + f"{opus_name}/README.md"
+
+    readme_url = f"https://github.com/Helsinki-NLP/{repo_root}/tree/master/models/{opus_name}/README.md"
+
     s, t = ",".join(opus_src), ",".join(opus_tgt)
-    extra_markdown = f"### {hf_model_name}\n\n* source languages: {s}\n* target languages: {t}\n*  OPUS readme: [{opus_name}]({readme_url})\n"
+    metadata = {
+        "hf_name": hf_model_name,
+        "source_languages": s,
+        "target_languages": t,
+        "opus_readme_url": readme_url,
+        "original_repo": repo_root,
+        "tags": ["translation"],
+    }
+    metadata.update(extra_metadata)
+    metadata.update(get_system_metadata(repo_root))
+
     # combine with opus markdown
-    opus_readme_path = Path(f"{repo_path}{opus_name}/README.md")
-    assert opus_readme_path.exists(), opus_readme_path
+
+    extra_markdown = f"### {hf_model_name}\n\n* source group: {metadata['src_name']} \n* target group: {metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
+
     content = opus_readme_path.open().read()
     content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
-    content = "*".join(content.split("*")[1:])
-    content = extra_markdown + "\n* " + content.replace("download", "download original weights")
+    splat = content.split("*")[2:]
+    print(splat[3])
+    content = "*".join(splat)
+    content = (
+        front_matter.format(metadata["src_alpha2"])
+        + extra_markdown
+        + "\n* "
+        + content.replace("download", "download original weights")
+    )
+
+    items = "\n\n".join([f"- {k}: {v}" for k, v in metadata.items()])
+    sec3 = "\n### System Info: \n" + items
+    content += sec3
     if dry_run:
-        return content
-    # Save string to model_cards/hf_model_name/readme.md
-    model_card_dir.mkdir(exist_ok=True)
-    sub_dir = model_card_dir / hf_model_name
+        return content, metadata
+    sub_dir = save_dir / f"opus-mt-{hf_model_name}"
     sub_dir.mkdir(exist_ok=True)
     dest = sub_dir / "README.md"
     dest.open("w").write(content)
-    return content
+    pd.Series(metadata).to_json(sub_dir / "metadata.json")
+
+    # if dry_run:
+    return content, metadata
 
 
 def get_clean_model_id_mapping(multiling_model_ids):
@@ -193,13 +330,28 @@ def make_registry(repo_path="Opus-MT-train/models"):
             "You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git before calling."
         )
     results = {}
-    for p in Path(repo_path).ls():
+    for p in Path(repo_path).iterdir():
         n_dash = p.name.count("-")
         if n_dash == 0:
             continue
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
+    return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
+
+
+def make_tatoeba_registry(repo_path="Tatoeba-Challenge/models"):
+    if not (Path(repo_path) / "zho-eng" / "README.md").exists():
+        raise ValueError(
+            f"repo_path:{repo_path} does not exist: "
+            "You must run: git clone git@github.com:Helsinki-NLP/Tatoeba-Challenge.git before calling."
+        )
+    results = {}
+    for p in Path(repo_path).iterdir():
+        if len(p.name) != 7:
+            continue
+        lns = list(open(p / "README.md").readlines())
+        results[p.name] = _parse_readme(lns)
     return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
 
@@ -231,7 +383,9 @@ def fetch_test_set(test_set_url):
     src = lmap(str.strip, lns[::4])
     gold = lmap(str.strip, lns[1::4])
     mar_model = lmap(str.strip, lns[2::4])
-    assert len(gold) == len(mar_model) == len(src)
+    assert (
+        len(gold) == len(mar_model) == len(src)
+    ), f"Gold, marian and source lengths {len(gold)}, {len(mar_model)}, {len(src)} mismatched"
     os.remove(fname)
     return src, mar_model, gold
 
@@ -374,20 +528,21 @@ class OpusState:
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
         assert cfg["dim-vocabs"][0] == cfg["dim-vocabs"][1]
-        assert "Wpos" not in self.state_dict
+        assert "Wpos" not in self.state_dict, "Wpos key in state dictionary"
         self.state_dict = dict(self.state_dict)
         self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
         self.pad_token_id = self.wemb.shape[0] - 1
         cfg["vocab_size"] = self.pad_token_id + 1
         # self.state_dict['Wemb'].sha
         self.state_keys = list(self.state_dict.keys())
-        if "Wtype" in self.state_dict:
-            raise ValueError("found Wtype key")
+        assert "Wtype" not in self.state_dict, "Wtype key in state dictionary"
         self._check_layer_entries()
         self.source_dir = source_dir
         self.cfg = cfg
         hidden_size, intermediate_shape = self.state_dict["encoder_l1_ffn_W1"].shape
-        assert hidden_size == cfg["dim-emb"] == 512
+        assert (
+            hidden_size == cfg["dim-emb"] == 512
+        ), f"Hidden size {hidden_size} and configured size {cfg['dim_emb']} mismatched or not 512"
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
@@ -448,12 +603,14 @@ class OpusState:
     def load_marian_model(self) -> MarianMTModel:
         state_dict, cfg = self.state_dict, self.hf_config
 
-        assert cfg.static_position_embeddings
+        assert cfg.static_position_embeddings, "config.static_position_embeddings should be True"
         model = MarianMTModel(cfg)
 
         assert "hidden_size" not in cfg.to_dict()
         load_layers_(
-            model.model.encoder.layers, state_dict, BART_CONVERTER,
+            model.model.encoder.layers,
+            state_dict,
+            BART_CONVERTER,
         )
         load_layers_(model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True)
 
@@ -476,7 +633,9 @@ class OpusState:
             raise NotImplementedError("Need to convert layernorm_embedding")
 
         assert not self.extra_keys, f"Failed to convert {self.extra_keys}"
-        assert model.model.shared.padding_idx == self.pad_token_id
+        assert (
+            model.model.shared.padding_idx == self.pad_token_id
+        ), f"Padding tokens {model.model.shared.padding_idx} and {self.pad_token_id} mismatched"
         return model
 
 
@@ -500,26 +659,15 @@ def convert(source_dir: Path, dest_dir):
     save_tokenizer(tokenizer, dest_dir)
 
     opus_state = OpusState(source_dir)
-    assert opus_state.cfg["vocab_size"] == len(tokenizer.encoder)
+    assert opus_state.cfg["vocab_size"] == len(
+        tokenizer.encoder
+    ), f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
     # save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
     # ^^ Save human readable marian config for debugging
 
     model = opus_state.load_marian_model()
     model.save_pretrained(dest_dir)
     model.from_pretrained(dest_dir)  # sanity check
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model dir", default="en-de")
-    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
-    args = parser.parse_args()
-
-    source_dir = Path(args.src)
-    assert source_dir.exists()
-    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
-    convert(source_dir, dest_dir)
 
 
 def load_yaml(path):
@@ -537,3 +685,23 @@ def save_json(content: Union[Dict, List], path: str) -> None:
 def unzip(zip_path: str, dest_dir: str) -> None:
     with ZipFile(zip_path, "r") as zipObj:
         zipObj.extractall(dest_dir)
+
+
+if __name__ == "__main__":
+    """
+    To bulk convert, run
+    >>> from transformers.convert_marian_to_pytorch import make_tatoeba_registry, convert_all_sentencepiece_models
+    >>> reg = make_tatoeba_registry()
+    >>> convert_all_sentencepiece_models(model_list=reg)  # saves to marian_converted
+    (bash) aws s3 sync marian_converted s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
+    """
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument("--src", type=str, help="path to marian model dir", default="en-de")
+    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
+    args = parser.parse_args()
+
+    source_dir = Path(args.src)
+    assert source_dir.exists(), f"Source directory {source_dir} not found"
+    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
+    convert(source_dir, dest_dir)

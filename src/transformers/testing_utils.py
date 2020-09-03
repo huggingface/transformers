@@ -1,6 +1,13 @@
+import inspect
 import os
+import re
+import shutil
+import sys
+import tempfile
 import unittest
 from distutils.util import strtobool
+from io import StringIO
+from pathlib import Path
 
 from .file_utils import _tf_available, _torch_available, _torch_tpu_available
 
@@ -136,3 +143,217 @@ def require_torch_and_cuda(test_case):
         return unittest.skip("test requires CUDA")
     else:
         return test_case
+
+
+def get_tests_dir():
+    """
+    returns the full path to the `tests` dir, so that the tests can be invoked from anywhere
+    """
+    # this function caller's __file__
+    caller__file__ = inspect.stack()[1][1]
+    return os.path.abspath(os.path.dirname(caller__file__))
+
+
+#
+# Helper functions for dealing with testing text outputs
+# The original code came from:
+# https://github.com/fastai/fastai/blob/master/tests/utils/text.py
+
+# When any function contains print() calls that get overwritten, like progress bars,
+# a special care needs to be applied, since under pytest -s captured output (capsys
+# or contextlib.redirect_stdout) contains any temporary printed strings, followed by
+# \r's. This helper function ensures that the buffer will contain the same output
+# with and without -s in pytest, by turning:
+# foo bar\r tar mar\r final message
+# into:
+# final message
+# it can handle a single string or a multiline buffer
+def apply_print_resets(buf):
+    return re.sub(r"^.*\r", "", buf, 0, re.M)
+
+
+def assert_screenout(out, what):
+    out_pr = apply_print_resets(out).lower()
+    match_str = out_pr.find(what.lower())
+    assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
+
+
+class CaptureStd:
+    """Context manager to capture:
+    stdout, clean it up and make it available via obj.out
+    stderr, and make it available via obj.err
+
+    init arguments:
+    - out - capture stdout: True/False, default True
+    - err - capture stdout: True/False, default True
+
+    Examples:
+
+    with CaptureStdout() as cs:
+        print("Secret message")
+    print(f"captured: {cs.out}")
+
+    import sys
+    with CaptureStderr() as cs:
+        print("Warning: ", file=sys.stderr)
+    print(f"captured: {cs.err}")
+
+    # to capture just one of the streams, but not the other
+    with CaptureStd(err=False) as cs:
+        print("Secret message")
+    print(f"captured: {cs.out}")
+    # but best use the stream-specific subclasses
+
+    """
+
+    def __init__(self, out=True, err=True):
+        if out:
+            self.out_buf = StringIO()
+            self.out = "error: CaptureStd context is unfinished yet, called too early"
+        else:
+            self.out_buf = None
+            self.out = "not capturing stdout"
+
+        if err:
+            self.err_buf = StringIO()
+            self.err = "error: CaptureStd context is unfinished yet, called too early"
+        else:
+            self.err_buf = None
+            self.err = "not capturing stderr"
+
+    def __enter__(self):
+        if self.out_buf:
+            self.out_old = sys.stdout
+            sys.stdout = self.out_buf
+
+        if self.err_buf:
+            self.err_old = sys.stderr
+            sys.stderr = self.err_buf
+
+        return self
+
+    def __exit__(self, *exc):
+        if self.out_buf:
+            sys.stdout = self.out_old
+            self.out = apply_print_resets(self.out_buf.getvalue())
+
+        if self.err_buf:
+            sys.stderr = self.err_old
+            self.err = self.err_buf.getvalue()
+
+    def __repr__(self):
+        msg = ""
+        if self.out_buf:
+            msg += f"stdout: {self.out}\n"
+        if self.err_buf:
+            msg += f"stderr: {self.err}\n"
+        return msg
+
+
+# in tests it's the best to capture only the stream that's wanted, otherwise
+# it's easy to miss things, so unless you need to capture both streams, use the
+# subclasses below (less typing). Or alternatively, configure `CaptureStd` to
+# disable the stream you don't need to test.
+
+
+class CaptureStdout(CaptureStd):
+    """ Same as CaptureStd but captures only stdout """
+
+    def __init__(self):
+        super().__init__(err=False)
+
+
+class CaptureStderr(CaptureStd):
+    """ Same as CaptureStd but captures only stderr """
+
+    def __init__(self):
+        super().__init__(out=False)
+
+
+class TestCasePlus(unittest.TestCase):
+    """This class extends `unittest.TestCase` with additional features.
+
+    Feature 1: Flexible auto-removable temp dirs which are guaranteed to get
+    removed at the end of test.
+
+    In all the following scenarios the temp dir will be auto-removed at the end
+    of test, unless `after=False`.
+
+    # 1. create a unique temp dir, `tmp_dir` will contain the path to the created temp dir
+    def test_whatever(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+    # 2. create a temp dir of my choice and delete it at the end - useful for debug when you want to
+    # monitor a specific directory
+    def test_whatever(self):
+        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
+
+    # 3. create a temp dir of my choice and do not delete it at the end - useful for when you want
+    # to look at the temp results
+    def test_whatever(self):
+        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
+
+    # 4. create a temp dir of my choice and ensure to delete it right away - useful for when you
+    # disabled deletion in the previous test run and want to make sure the that tmp dir is empty
+    # before the new test is run
+    def test_whatever(self):
+        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
+
+    Note 1: In order to run the equivalent of `rm -r` safely, only subdirs of the
+    project repository checkout are allowed if an explicit `tmp_dir` is used, so
+    that by mistake no `/tmp` or similar important part of the filesystem will
+    get nuked. i.e. please always pass paths that start with `./`
+
+    Note 2: Each test can register multiple temp dirs and they all will get
+    auto-removed, unless requested otherwise.
+
+    """
+
+    def setUp(self):
+        self.teardown_tmp_dirs = []
+
+    def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=False):
+        """
+        Args:
+            tmp_dir (:obj:`string`, `optional`, defaults to :obj:`None`):
+                use this path, if None a unique path will be assigned
+            before (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                if `True` and tmp dir already exists make sure to empty it right away
+            after (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                delete the tmp dir at the end of the test
+
+        Returns:
+            tmp_dir(:obj:`string`):
+                either the same value as passed via `tmp_dir` or the path to the auto-created tmp dir
+        """
+        if tmp_dir is not None:
+            # using provided path
+            path = Path(tmp_dir).resolve()
+
+            # to avoid nuking parts of the filesystem, only relative paths are allowed
+            if not tmp_dir.startswith("./"):
+                raise ValueError(
+                    f"`tmp_dir` can only be a relative path, i.e. `./some/path`, but received `{tmp_dir}`"
+                )
+
+            # ensure the dir is empty to start with
+            if before is True and path.exists():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+            path.mkdir(parents=True, exist_ok=True)
+
+        else:
+            # using unique tmp dir (always empty, regardless of `before`)
+            tmp_dir = tempfile.mkdtemp()
+
+        if after is True:
+            # register for deletion
+            self.teardown_tmp_dirs.append(tmp_dir)
+
+        return tmp_dir
+
+    def tearDown(self):
+        # remove registered temp dirs
+        for path in self.teardown_tmp_dirs:
+            shutil.rmtree(path, ignore_errors=True)
+        self.teardown_tmp_dirs = []

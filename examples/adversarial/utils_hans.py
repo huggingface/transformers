@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import tqdm
-from filelock import FileLock
 
+from filelock import FileLock
 from transformers import (
     BartTokenizer,
     BartTokenizerFast,
@@ -112,7 +112,10 @@ if is_torch_available():
             cached_features_file = os.path.join(
                 data_dir,
                 "cached_{}_{}_{}_{}".format(
-                    "dev" if evaluate else "train", tokenizer.__class__.__name__, str(max_seq_length), task,
+                    "dev" if evaluate else "train",
+                    tokenizer.__class__.__name__,
+                    str(max_seq_length),
+                    task,
                 ),
             )
             label_list = processor.get_labels()
@@ -255,7 +258,11 @@ class HansProcessor(DataProcessor):
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "heuristics_evaluation_set.txt")), "dev")
 
     def get_labels(self):
-        """See base class."""
+        """See base class.
+        Note that we follow the standard three labels for MNLI
+        (see :class:`~transformers.data.processors.utils.MnliProcessor`)
+        but the HANS evaluation groups `contradiction` and `neutral` into `non-entailment` (label 0) while
+        `entailment` is label 1."""
         return ["contradiction", "entailment", "neutral"]
 
     def _create_examples(self, lines, set_type):
@@ -268,13 +275,16 @@ class HansProcessor(DataProcessor):
             text_a = line[5]
             text_b = line[6]
             pairID = line[7][2:] if line[7].startswith("ex") else line[7]
-            label = line[-1]
+            label = line[0]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label, pairID=pairID))
         return examples
 
 
 def hans_convert_examples_to_features(
-    examples: List[InputExample], label_list: List[str], max_length: int, tokenizer: PreTrainedTokenizer,
+    examples: List[InputExample],
+    label_list: List[str],
+    max_length: int,
+    tokenizer: PreTrainedTokenizer,
 ):
     """
     Loads a data file into a list of ``InputFeatures``

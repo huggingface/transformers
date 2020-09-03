@@ -1,7 +1,8 @@
 from argparse import ArgumentParser, Namespace
-from logging import getLogger
 
 from transformers.commands import BaseTransformersCLICommand
+
+from ..utils import logging
 
 
 def convert_command_factory(args: Namespace):
@@ -52,7 +53,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         finetuning_task_name: str,
         *args
     ):
-        self._logger = getLogger("transformers-cli/converting")
+        self._logger = logging.get_logger("transformers-cli/converting")
 
         self._logger.info("Loading model {}".format(model_type))
         self._model_type = model_type
@@ -154,5 +155,13 @@ class ConvertCommand(BaseTransformersCLICommand):
             )
 
             convert_xlm_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
+        elif self._model_type == "lxmert":
+            from transformers.convert_lxmert_original_pytorch_checkpoint_to_pytorch import (
+                convert_lxmert_checkpoint_to_pytorch,
+            )
+
+            convert_lxmert_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
         else:
-            raise ValueError("--model_type should be selected in the list [bert, gpt, gpt2, transfo_xl, xlnet, xlm]")
+            raise ValueError(
+                "--model_type should be selected in the list [bert, gpt, gpt2, transfo_xl, xlnet, xlm, lxmert]"
+            )

@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 class Seq2SeqLoggingCallback(pl.Callback):
+    def on_batch_end(self, trainer, pl_module):
+        lrs = {f"lr_group_{i}": param["lr"] for i, param in enumerate(pl_module.trainer.optimizers[0].param_groups)}
+        pl_module.logger.log_metrics(lrs)
+
     @rank_zero_only
     def _write_logs(
         self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
@@ -93,4 +97,9 @@ def get_checkpoint_callback(output_dir, metric):
 
 
 def get_early_stopping_callback(metric, patience):
-    return EarlyStopping(monitor=f"val_{metric}", mode="max", patience=patience, verbose=True,)
+    return EarlyStopping(
+        monitor=f"val_{metric}",
+        mode="max",
+        patience=patience,
+        verbose=True,
+    )

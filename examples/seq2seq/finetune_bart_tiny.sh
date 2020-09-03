@@ -23,7 +23,7 @@ python finetune.py \
 --output_dir=$OUTPUT_DIR \
 --num_train_epochs=1  \
 --gpus=0 \
---do_train $@
+--do_train "$@"
 
 rm -rf cnn_tiny
 rm -rf $OUTPUT_DIR

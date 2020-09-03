@@ -6,29 +6,33 @@ Copyright by the AllenNLP authors.
 
 import fnmatch
 import json
-import logging
 import os
 import re
 import shutil
 import sys
 import tarfile
 import tempfile
+from collections import OrderedDict
 from contextlib import contextmanager
+from dataclasses import fields
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
-import requests
-from filelock import FileLock
+import numpy as np
 from tqdm.auto import tqdm
 
+import requests
+from filelock import FileLock
+
 from . import __version__
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 try:
     USE_TF = os.environ.get("USE_TF", "AUTO").upper()
@@ -60,6 +64,14 @@ try:
 except (ImportError, AssertionError):
     _tf_available = False  # pylint: disable=invalid-name
 
+
+try:
+    import nlp  # noqa: F401
+
+    _nlp_available = True
+
+except ImportError:
+    _nlp_available = False
 
 try:
     from torch.hub import _get_torch_home
@@ -141,6 +153,10 @@ def is_torch_tpu_available():
     return _torch_tpu_available
 
 
+def is_nlp_available():
+    return _nlp_available
+
+
 def is_psutil_available():
     return _psutil_available
 
@@ -187,11 +203,21 @@ def add_end_docstrings(*docstr):
     return docstring_decorator
 
 
-RETURN_INTRODUCTION = r"""
+PT_RETURN_INTRODUCTION = r"""
     Returns:
         :class:`~{full_output_type}` or :obj:`tuple(torch.FloatTensor)`:
-        A :class:`~{full_output_type}` or a tuple of :obj:`torch.FloatTensor` (if ``return_tuple=True`` is passed or
-        when ``config.return_tuple=True``) comprising various elements depending on the configuration
+        A :class:`~{full_output_type}` (if ``return_dict=True`` is passed or when ``config.return_dict=True``) or a
+        tuple of :obj:`torch.FloatTensor` comprising various elements depending on the configuration
+        (:class:`~transformers.{config_class}`) and inputs.
+
+"""
+
+
+TF_RETURN_INTRODUCTION = r"""
+    Returns:
+        :class:`~{full_output_type}` or :obj:`tuple(tf.Tensor)`:
+        A :class:`~{full_output_type}` (if ``return_dict=True`` is passed or when ``config.return_dict=True``) or a
+        tuple of :obj:`tf.Tensor` comprising various elements depending on the configuration
         (:class:`~transformers.{config_class}`) and inputs.
 
 """
@@ -246,7 +272,8 @@ def _prepare_output_docstrings(output_type, config_class):
 
     # Add the return introduction
     full_output_type = f"{output_type.__module__}.{output_type.__name__}"
-    intro = RETURN_INTRODUCTION.format(full_output_type=full_output_type, config_class=config_class)
+    intro = TF_RETURN_INTRODUCTION if output_type.__name__.startswith("TF") else PT_RETURN_INTRODUCTION
+    intro = intro.format(full_output_type=full_output_type, config_class=config_class)
     return intro + docstrings
 
 
@@ -257,7 +284,7 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
@@ -274,16 +301,17 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        >>> inputs = tokenizer(question, text, return_tensors='pt')
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 
         >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
-        >>> start_scores = outputs.start_scores
-        >>> end_scores = outputs.end_scores
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
 """
 
 PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
@@ -293,7 +321,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
@@ -309,7 +337,7 @@ PT_MASKED_LM_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> input_ids = tokenizer("Hello, my dog is cute", return_tensors="pt")["input_ids"]
 
@@ -325,7 +353,7 @@ PT_BASE_MODEL_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -340,7 +368,7 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
@@ -362,7 +390,7 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
@@ -730,7 +758,7 @@ def http_get(url, temp_file, proxies=None, resume_size=0, user_agent: Union[Dict
         total=total,
         initial=resume_size,
         desc="Downloading",
-        disable=bool(logger.getEffectiveLevel() == logging.NOTSET),
+        disable=bool(logging.get_verbosity() == logging.NOTSET),
     )
     for chunk in response.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
@@ -900,30 +928,91 @@ def tf_required(func):
     return wrapper
 
 
-class ModelOutput:
+def is_tensor(x):
+    """ Tests if ``x`` is a :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`. """
+    if is_torch_available():
+        import torch
+
+        if isinstance(x, torch.Tensor):
+            return True
+    if is_tf_available():
+        import tensorflow as tf
+
+        if isinstance(x, tf.Tensor):
+            return True
+    return isinstance(x, np.ndarray)
+
+
+class ModelOutput(OrderedDict):
     """
     Base class for all model outputs as dataclass. Has a ``__getitem__`` that allows indexing by integer or slice (like
-    a tuple) or strings (like a dictionnary) that will ignore the ``None`` attributes.
+    a tuple) or strings (like a dictionnary) that will ignore the ``None`` attributes. Otherwise behaves like a
+    regular python dictionary.
+
+    .. warning::
+        You can't unpack a :obj:`ModelOutput` directly. Use the :meth:`~transformers.file_utils.ModelOutput.to_tuple`
+        method to convert it to a tuple before.
     """
 
-    def to_tuple(self):
+    def __post_init__(self):
+        class_fields = fields(self)
+
+        # Safety and consistency checks
+        assert len(class_fields), f"{self.__class__.__name__} has no fields."
+        assert all(
+            field.default is None for field in class_fields[1:]
+        ), f"{self.__class__.__name__} should not have more than one required field."
+
+        first_field = getattr(self, class_fields[0].name)
+        other_fields_are_none = all(getattr(self, field.name) is None for field in class_fields[1:])
+
+        if other_fields_are_none and not is_tensor(first_field):
+            try:
+                iterator = iter(first_field)
+                first_field_iterator = True
+            except TypeError:
+                first_field_iterator = False
+
+            # if we provided an iterator as first field and the iterator is a (key, value) iterator
+            # set the associated fields
+            if first_field_iterator:
+                for element in iterator:
+                    if (
+                        not isinstance(element, (list, tuple))
+                        or not len(element) == 2
+                        or not isinstance(element[0], str)
+                    ):
+                        break
+                    setattr(self, element[0], element[1])
+                    if element[1] is not None:
+                        self[element[0]] = element[1]
+        else:
+            for field in class_fields:
+                v = getattr(self, field.name)
+                if v is not None:
+                    self[field.name] = v
+
+    def __delitem__(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``__delitem__`` on a {self.__class__.__name__} instance.")
+
+    def setdefault(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``setdefault`` on a {self.__class__.__name__} instance.")
+
+    def pop(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``pop`` on a {self.__class__.__name__} instance.")
+
+    def update(self, *args, **kwargs):
+        raise Exception(f"You cannot use ``update`` on a {self.__class__.__name__} instance.")
+
+    def __getitem__(self, k):
+        if isinstance(k, str):
+            inner_dict = {k: v for (k, v) in self.items()}
+            return inner_dict[k]
+        else:
+            return self.to_tuple()[k]
+
+    def to_tuple(self) -> Tuple[Any]:
         """
-        Converts :obj:`self` to a tuple.
-
-        Return: A tuple containing all non-:obj:`None` attributes of the :obj:`self`.
+        Convert self to a tuple containing all the attributes/keys that are not ``None``.
         """
-        return tuple(getattr(self, f) for f in self.__dataclass_fields__.keys() if getattr(self, f, None) is not None)
-
-    def to_dict(self):
-        """
-        Converts :obj:`self` to a Python dictionary.
-
-        Return: A dictionary containing all non-:obj:`None` attributes of the :obj:`self`.
-        """
-        return {f: getattr(self, f) for f in self.__dataclass_fields__.keys() if getattr(self, f, None) is not None}
-
-    def __getitem__(self, i):
-        return self.to_dict()[i] if isinstance(i, str) else self.to_tuple()[i]
-
-    def __len__(self):
-        return len(self.to_tuple())
+        return tuple(self[k] for k in self.keys())

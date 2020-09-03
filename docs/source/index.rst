@@ -124,13 +124,20 @@ conversion utilities for the following models:
 22. `DPR <https://github.com/facebookresearch/DPR>`_ (from Facebook) released with the paper `Dense Passage Retrieval
     for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_ by Vladimir Karpukhin, Barlas Oğuz, Sewon
     Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
-23. `BERTweet <https://github.com/VinAIResearch/BERTweet>`_ (from VinAI Research) released with the paper `BERTweet: 
+23. `Pegasus <https://github.com/google-research/pegasus>`_ (from Google) released with the paper `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
+    <https://arxiv.org/abs/1912.08777>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
+24. `MBart <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`_ (from Facebook) released with the paper  `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov,
+    Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.  
+25. `LXMERT <https://github.com/airsplay/lxmert>`_ (from UNC Chapel Hill) released with the paper `LXMERT: Learning
+    Cross-Modality Encoder Representations from Transformers for Open-Domain Question
+    Answering <https://arxiv.org/abs/1908.07490>`_ by Hao Tan and Mohit Bansal.
+26. `BERTweet <https://github.com/VinAIResearch/BERTweet>`_ (from VinAI Research) released with the paper `BERTweet: 
     A pre-trained language model for English Tweets <https://arxiv.org/abs/2005.10200>`_ by Dat Quoc Nguyen, Thanh Vu 
     and Anh Tuan Nguyen.
-24. `PhoBERT <https://github.com/VinAIResearch/PhoBERT>`_ (from VinAI Research) released with the paper `PhoBERT: 
+27. `PhoBERT <https://github.com/VinAIResearch/PhoBERT>`_ (from VinAI Research) released with the paper `PhoBERT: 
     Pre-trained language models for Vietnamese <https://arxiv.org/abs/2003.00744>`_ by Dat Quoc Nguyen and Anh 
     Tuan Nguyen.
-25. `Other community models <https://huggingface.co/models>`_, contributed by the `community
+28. `Other community models <https://huggingface.co/models>`_, contributed by the `community
     <https://huggingface.co/users>`_.
 
 .. toctree::
@@ -160,6 +167,7 @@ conversion utilities for the following models:
 
     pretrained_models
     examples
+    custom_datasets
     notebooks
     converting_tensorflow_models
     migration
@@ -186,6 +194,7 @@ conversion utilities for the following models:
     main_classes/trainer
     main_classes/optimizer_schedules
     main_classes/processors
+    main_classes/logging
     model_doc/auto
     model_doc/encoderdecoder
     model_doc/bert
@@ -211,7 +220,11 @@ conversion utilities for the following models:
     model_doc/retribert
     model_doc/mobilebert
     model_doc/dpr
+    model_doc/pegasus
+    model_doc/mbart
+    model_doc/lxmert
     model_doc/bertweet
     model_doc/phobert
     internal/modeling_utils
-    
+    internal/tokenization_utils
+    internal/pipelines_utils
