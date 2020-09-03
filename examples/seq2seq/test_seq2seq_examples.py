@@ -34,6 +34,7 @@ CHEAP_ARGS = {
     "label_smoothing": 0.2,
     "eval_beams": 1,
     "val_metric": None,
+    "save_top_k": 1,
     "adafactor": True,
     "early_stopping_patience": 2,
     "logger_name": "default",
