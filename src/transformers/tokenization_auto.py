@@ -114,35 +114,6 @@ TOKENIZER_MAPPING = OrderedDict(
 
 class AutoTokenizer:
     r""":class:`~transformers.AutoTokenizer` is a generic tokenizer class
-<<<<<<< HEAD
-        that will be instantiated as one of the tokenizer classes of the library
-        when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
-        class method.
-
-        The `from_pretrained()` method takes care of returning the correct tokenizer class instance
-        based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
-
-            - `t5`: T5Tokenizer (T5 model)
-            - `distilbert`: DistilBertTokenizer (DistilBert model)
-            - `albert`: AlbertTokenizer (ALBERT model)
-            - `camembert`: CamembertTokenizer (CamemBERT model)
-            - `bertweet`: BertweetTokenizer (BERTweet model)
-            - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
-            - `longformer`: LongformerTokenizer (AllenAI Longformer model)
-            - `roberta`: RobertaTokenizer (RoBERTa model)
-            - `bert`: BertTokenizer (Bert model)
-            - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
-            - `phobert`: PhobertTokenizer (PhoBERT model)
-            - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
-            - `xlnet`: XLNetTokenizer (XLNet model)
-            - `xlm`: XLMTokenizer (XLM model)
-            - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
-            - `electra`: ElectraTokenizer (Google ELECTRA model)
-
-        This class cannot be instantiated using `__init__()` (throw an error).
-=======
     that will be instantiated as one of the tokenizer classes of the library
     when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
     class method.
@@ -155,11 +126,13 @@ class AutoTokenizer:
         - `distilbert`: DistilBertTokenizer (DistilBert model)
         - `albert`: AlbertTokenizer (ALBERT model)
         - `camembert`: CamembertTokenizer (CamemBERT model)
+        - `bertweet`: BertweetTokenizer (BERTweet model)
         - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
         - `longformer`: LongformerTokenizer (AllenAI Longformer model)
         - `roberta`: RobertaTokenizer (RoBERTa model)
         - `bert`: BertTokenizer (Bert model)
         - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+        - `phobert`: PhobertTokenizer (PhoBERT model)
         - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
         - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
         - `xlnet`: XLNetTokenizer (XLNet model)
@@ -169,7 +142,6 @@ class AutoTokenizer:
         - `lxmert`: LxmertTokenizer (Lxmert model)
 
     This class cannot be instantiated using `__init__()` (throw an error).
->>>>>>> 722b5807d8768acc4a1165ad48e8c90c936d4313
     """
 
     def __init__(self):
