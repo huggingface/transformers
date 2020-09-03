@@ -32,6 +32,7 @@ from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Flau
 from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from .configuration_marian import MarianConfig
 from .configuration_mbart import MBartConfig
 from .configuration_mmbt import MMBTConfig
@@ -158,6 +159,7 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_funnel import FunnelTokenizer, FunnelTokenizerFast
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_lxmert import LxmertTokenizer, LxmertTokenizerFast
 from .tokenization_mbart import MBartTokenizer
 from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
@@ -356,6 +358,15 @@ if is_torch_available():
         LongformerForTokenClassification,
         LongformerModel,
         LongformerSelfAttention,
+    )
+    from .modeling_lxmert import (
+        LxmertEncoder,
+        LxmertForPreTraining,
+        LxmertForQuestionAnswering,
+        LxmertModel,
+        LxmertPreTrainedModel,
+        LxmertVisualFeatureEncoder,
+        LxmertXLayer,
     )
     from .modeling_marian import MarianMTModel
     from .modeling_mbart import MBartForConditionalGeneration
@@ -586,6 +597,14 @@ if is_tf_available():
         TFLongformerForQuestionAnswering,
         TFLongformerModel,
         TFLongformerSelfAttention,
+    )
+    from .modeling_tf_lxmert import (
+        TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFLxmertForPreTraining,
+        TFLxmertMainLayer,
+        TFLxmertModel,
+        TFLxmertPreTrainedModel,
+        TFLxmertVisualFeatureEncoder,
     )
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
