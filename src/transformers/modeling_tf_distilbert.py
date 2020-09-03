@@ -263,9 +263,12 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, q_length, k_length)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))            # (bs, n_heads, q_length, k_length)
-        scores = scores - 1e30 * (1.0 - mask)
 
-        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
+        scores_dtype = scores.dtype
+        # calculate `scores` in `tf.float32` to avoid numeric overflow
+        scores = tf.cast(scores, dtype=tf.float32) - 1e30 * (1.0 - tf.cast(mask, dtype=tf.float32))
+
+        weights = tf.cast(tf.nn.softmax(scores, axis=-1), dtype=scores_dtype)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
