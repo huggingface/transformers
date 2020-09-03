@@ -66,7 +66,7 @@ FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 FunnelLayerNorm = nn.LayerNorm
 
-INF = 10000
+INF = 1e6
 
 
 def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
@@ -190,8 +190,8 @@ class FunnelAttentionStructure(nn.Module):
         # dividide.
         self.pooling_mult = None
 
-    def init_attention_structure(self, input_embeds, attention_mask=None, token_type_ids=None):
-        """ Returns the attention structure associated to the inputs. """
+    def init_attention_inputs(self, input_embeds, attention_mask=None, token_type_ids=None):
+        """ Returns the attention inputs associated to the inputs of the model. """
         # input_embdeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
@@ -208,14 +208,23 @@ class FunnelAttentionStructure(nn.Module):
     def token_type_ids_to_mat(self, token_type_ids):
         """Convert `token_type_ids` to `token_type_mat`."""
         token_type_mat = token_type_ids[:, :, None] == token_type_ids[:, None]
-        # Treat [cls] as in the same segment as both A & B
+        # Treat <cls> as in the same segment as both A & B
         cls_ids = token_type_ids == self.cls_token_type_id
         cls_mat = cls_ids[:, :, None] | cls_ids[:, None]
         return cls_mat | token_type_mat
 
     def get_position_embeds(self, seq_len, dtype, device):
         """
-        Create and cache inputs related to relative position encoding.
+        Create and cache inputs related to relative position encoding. Those are very different depending on whether we
+        are using the factorized or the relative shift attention:
+
+        For the factorized attention, it returns the matrices (phi, pi, psi, omega) used in the paper, appendix A.2.2,
+        final formula.
+
+        For the relative shif attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
+        formula.
+
+        Paper link: https://arxiv.org/abs/2006.03236
         """
         d_model = self.config.d_model
         if self.config.attention_type == "factorized":
@@ -287,7 +296,7 @@ class FunnelAttentionStructure(nn.Module):
         Pool `pos_id` while keeping the cls token separate (if `config.separate_cls=True`).
         """
         if self.config.separate_cls:
-            # Under separate [cls], we treat the [cls] as the first token in
+            # Under separate <cls>, we treat the <cls> as the first token in
             # the previous block of the 1st real block. Since the 1st real
             # block always has position 1, the position of the previous block
             # will be at `1 - 2 ** block_index`.
@@ -377,9 +386,9 @@ class FunnelAttentionStructure(nn.Module):
             return tensor[:, 0]
         return tensor
 
-    def pre_attention_pooling(self, output, attention_struct):
-        """ Pool `output` and the proper parts of `attention_struct` before the attention layer. """
-        position_embeds, token_type_mat, attention_mask, cls_mask = attention_struct
+    def pre_attention_pooling(self, output, attention_inputs):
+        """ Pool `output` and the proper parts of `attention_inputs` before the attention layer. """
+        position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.config.pool_q_only:
             if self.config.attention_type == "factorized":
                 position_embeds = self.stride_pool(position_embeds[:2], 0) + position_embeds[2:]
@@ -394,12 +403,12 @@ class FunnelAttentionStructure(nn.Module):
             cls_mask = self.stride_pool(cls_mask, [1, 2])
             attention_mask = self.pool_tensor(attention_mask, mode="min")
             output = self.pool_tensor(output, mode=self.config.pooling_type)
-        attention_struct = (position_embeds, token_type_mat, attention_mask, cls_mask)
-        return output, attention_struct
+        attention_inputs = (position_embeds, token_type_mat, attention_mask, cls_mask)
+        return output, attention_inputs
 
-    def post_attention_pooling(self, attention_struct):
-        """ Pool the proper parts of `attention_struct` after the attention layer. """
-        position_embeds, token_type_mat, attention_mask, cls_mask = attention_struct
+    def post_attention_pooling(self, attention_inputs):
+        """ Pool the proper parts of `attention_inputs` after the attention layer. """
+        position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.config.pool_q_only:
             self.pooling_mult *= 2
             if self.config.attention_type == "factorized":
@@ -407,8 +416,8 @@ class FunnelAttentionStructure(nn.Module):
             token_type_mat = self.stride_pool(token_type_mat, 2)
             cls_mask = self.stride_pool(cls_mask, 1)
             attention_mask = self.pool_tensor(attention_mask, mode="min")
-        attention_struct = (position_embeds, token_type_mat, attention_mask, cls_mask)
-        return attention_struct
+        attention_inputs = (position_embeds, token_type_mat, attention_mask, cls_mask)
+        return attention_inputs
 
 
 def _relative_shift_gather(positional_attn, context_len, shift):
@@ -455,7 +464,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         """ Relative attention score for the positional encodings """
         # q_head has shape batch_size x sea_len x n_head x d_head
         if self.config.attention_type == "factorized":
-            # Notations from the paper, appending A.2.2, final formula
+            # Notations from the paper, appending A.2.2, final formula (https://arxiv.org/abs/2006.03236)
             # phi and pi have shape seq_len x d_model, psi and omega have shape context_len x d_model
             phi, pi, psi, omega = position_embeds
             # Shape n_head x d_head
@@ -474,7 +483,7 @@ class FunnelRelMultiheadAttention(nn.Module):
             )
         else:
             shift = 2 if q_head.shape[1] != context_len else 1
-            # Notations from the paper, appending A.2.1, final formula
+            # Notations from the paper, appending A.2.1, final formula (https://arxiv.org/abs/2006.03236)
             # Grab the proper positional encoding, shape max_rel_len x d_model
             r = position_embeds[self.block_index][shift - 1]
             # Shape n_head x d_head
@@ -517,10 +526,10 @@ class FunnelRelMultiheadAttention(nn.Module):
             token_type_attn *= cls_mask
         return token_type_attn
 
-    def forward(self, query, key, value, attention_struct, head_mask=None, output_attentions=False):
+    def forward(self, query, key, value, attention_inputs, head_mask=None, output_attentions=False):
         # q has shape batch_size x seq_len x d_model
         # k and v have shapes batch_size x context_len x d_model
-        position_embeds, token_type_mat, attention_mask, cls_mask = attention_struct
+        position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
 
         batch_size, seq_len, _ = query.shape
         context_len = key.shape[1]
@@ -589,8 +598,8 @@ class FunnelLayer(nn.Module):
         self.attention = FunnelRelMultiheadAttention(config, block_index)
         self.ffn = FunnelPositionwiseFFN(config)
 
-    def forward(self, q, k, v, attention_struct, output_attentions=False):
-        attn = self.attention(q, k, v, attention_struct, output_attentions=output_attentions)
+    def forward(self, q, k, v, attention_inputs, output_attentions=False):
+        attn = self.attention(q, k, v, attention_inputs, output_attentions=output_attentions)
         output = self.ffn(attn[0])
         return (output, attn[1]) if output_attentions else (output,)
 
@@ -618,7 +627,7 @@ class FunnelEncoder(nn.Module):
     ):
         # The pooling is not implemented on long tensors, so we convert this mask.
         attention_mask = attention_mask.type_as(inputs_embeds)
-        attention_struct = self.attention_structure.init_attention_structure(
+        attention_inputs = self.attention_structure.init_attention_inputs(
             inputs_embeds,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -632,21 +641,21 @@ class FunnelEncoder(nn.Module):
             pooling_flag = hidden.size(1) > (2 if self.config.separate_cls else 1)
             pooling_flag = pooling_flag and block_index > 0
             if pooling_flag:
-                pooled_hidden, attention_struct = self.attention_structure.pre_attention_pooling(
-                    hidden, attention_struct
+                pooled_hidden, attention_inputs = self.attention_structure.pre_attention_pooling(
+                    hidden, attention_inputs
                 )
             for (layer_index, layer) in enumerate(block):
                 for repeat_index in range(self.config.block_repeats[block_index]):
                     do_pooling = (repeat_index == 0) and (layer_index == 0) and pooling_flag
                     if do_pooling:
-                        q = pooled_hidden
-                        k = v = hidden if self.config.pool_q_only else pooled_hidden
+                        query = pooled_hidden
+                        key = value = hidden if self.config.pool_q_only else pooled_hidden
                     else:
-                        q = k = v = hidden
-                    layer_output = layer(q, k, v, attention_struct, output_attentions=output_attentions)
+                        query = key = value = hidden
+                    layer_output = layer(query, key, value, attention_inputs, output_attentions=output_attentions)
                     hidden = layer_output[0]
                     if do_pooling:
-                        attention_struct = self.attention_structure.post_attention_pooling(attention_struct)
+                        attention_inputs = self.attention_structure.post_attention_pooling(attention_inputs)
 
                     if output_attentions:
                         all_attentions = all_attentions + layer_output[1:]
@@ -706,14 +715,14 @@ class FunnelDecoder(nn.Module):
         all_hidden_states = (hidden,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        attention_struct = self.attention_structure.init_attention_structure(
+        attention_inputs = self.attention_structure.init_attention_inputs(
             hidden,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
         )
 
         for layer in self.layers:
-            layer_output = layer(hidden, hidden, hidden, attention_struct, output_attentions=output_attentions)
+            layer_output = layer(hidden, hidden, hidden, attention_inputs, output_attentions=output_attentions)
             hidden = layer_output[0]
 
             if output_attentions:
