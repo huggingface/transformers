@@ -176,7 +176,7 @@ class FunnelEmbeddings(nn.Module):
 
 class FunnelAttentionStructure(nn.Module):
     """
-    Contains helpers for `FunnelTfmRelMultiheadAttention`.
+    Contains helpers for `FunnelRelMultiheadAttention `.
     """
 
     cls_token_type_id: int = 2

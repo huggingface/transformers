@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2010, XXX authors
+# Copyright 2020, Hugging Face 
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,8 +49,8 @@ class FunnelConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BertModel`.
+            Vocabulary size of the Funnel transformer. Defines the different tokens that
+            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.FunnelModel`.
         block_sizes (:obj:`List[int]`, `optional`, defaults to :obj:`[4, 4, 4]`):
             The sizes of the blocks used in the model.
         block_repeats (:obj:`List[int]`, `optional`):
