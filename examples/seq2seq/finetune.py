@@ -157,7 +157,15 @@ class SummarizationModule(BaseTransformer):
             loss, nll_loss = label_smoothed_nll_loss(
                 lprobs, tgt_ids, self.hparams.label_smoothing, ignore_index=pad_token_id
             )
+<<<<<<< Updated upstream
         return (loss,)
+=======
+        loss2 = loss + self.hparams.wd_alpha * enc_wd_loss + self.hparams.wd_alpha * dec_wd_loss
+        return (loss2, loss, enc_wd_loss, dec_wd_loss)
+
+    def calc_weight_decay_loss(self, hidden_states):
+        return
+>>>>>>> Stashed changes
 
     @property
     def pad(self) -> int:
@@ -336,7 +344,7 @@ def main(args, model=None) -> SummarizationModule:
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
-        if args.task == "summarization":
+        if "summarization" in args.task
             model: SummarizationModule = SummarizationModule(args)
         else:
             model: SummarizationModule = TranslationModule(args)
