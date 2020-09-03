@@ -44,7 +44,7 @@ class TFTrainingArguments(TrainingArguments):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
             .. warning::
-            
+
                 When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
                 logging, evaluation, save will be conducted every ``gradient_accumulation_steps * xxx_step`` training
                 examples.
