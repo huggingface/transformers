@@ -89,7 +89,7 @@ BART_CONFIG_ARGS_DOC = r"""
             Google "layerdrop arxiv", as its not explainable in one line.
         extra_pos_embeddings: (:obj:`int`, optional, defaults to 2):
             How many extra learned positional embeddings to use. Should be pad_token_id+1 for bart.
-        num_labels: (:obj:`int`, optional, defaults to 2):
+        num_labels: (:obj:`int`, optional, defaults to 3):
             for SequenceClassification
         is_encoder_decoder (:obj:`bool`, optional, defaults to True):
             Whether this is an encoder/decoder model
