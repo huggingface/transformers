@@ -92,7 +92,7 @@ BART_CONFIG_ARGS_DOC = r"""
         num_labels: (:obj:`int`, optional, defaults to 2):
             for SequenceClassification
         is_encoder_decoder (:obj:`bool`, optional, defaults to True):
-            True
+            Whether this is an encoder/decoder model
         force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
 
