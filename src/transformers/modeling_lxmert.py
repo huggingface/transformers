@@ -112,8 +112,7 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.k.
-        question_answering_score: (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,
-        n_qa_answers)`, `optional`):
+        question_answering_score: (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, n_qa_answers)`, `optional`):
             Prediction scores of question answering objective (classification).
         language_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for input features + one for the output of each cross-modality layer)
@@ -1387,8 +1386,8 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels: (``Torch.Tensor`` of shape ``(batch_size)``):
-            a one hot representation hof the correct answer `optional`
+        labels: (``Torch.Tensor`` of shape ``(batch_size)``, `optional`):
+            a one hot representation of the correct answer
 
         Returns:
         """
