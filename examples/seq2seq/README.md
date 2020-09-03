@@ -40,7 +40,7 @@ this should make a directory called `wmt_en_ro/` with 6 files.
 #### WMT English-German:
 ```bash
 wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_de.tgz
-tar -xzvf wmt_en_de.tar.gz
+tar -xzvf wmt_en_de.tgz
 export DATA_DIR=${PWD}/wmt_en_de
 ```
 
