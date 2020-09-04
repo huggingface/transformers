@@ -315,7 +315,7 @@ class TestCasePlus(unittest.TestCase):
     def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=False):
         """
         Args:
-            tmp_dir (:obj:`string`, `optional`, defaults to :obj:`None`):
+            tmp_dir (:obj:`string`, `optional`):
                 use this path, if None a unique path will be assigned
             before (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 if `True` and tmp dir already exists make sure to empty it right away

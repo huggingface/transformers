@@ -176,7 +176,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
                 :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
                 `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask_query (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            attention_mask_query (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on queries padding token indices.
                 Mask values selected in ``[0, 1]``:
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
@@ -184,7 +184,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
                 `What are attention masks? <../glossary.html#attention-mask>`__
             input_ids_doc (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary for the documents in a batch.
-            attention_mask_doc (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            attention_mask_doc (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on documents padding token indices.
 
             checkpoint_batch_size (:obj:`int`, `optional`, defaults to `:obj:`-1`):
