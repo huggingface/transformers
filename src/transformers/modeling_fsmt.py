@@ -31,14 +31,13 @@ import logging
 import math
 import random
 import warnings
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
-from .activations import ACT2FN
 from .configuration_fsmt import FSMTConfig
 from .file_utils import (
     add_code_sample_docstrings,
@@ -47,7 +46,7 @@ from .file_utils import (
     add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
-from .modeling_bart import Attention, DecoderLayer, EncoderLayer
+from .modeling_bart import DecoderLayer, EncoderLayer
 from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
 from .modeling_utils import PreTrainedModel
 
