@@ -247,13 +247,13 @@ class BartSummarizationDistiller(SummarizationModule):
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
         student_states = torch.stack([hidden_states[i] for i in range(len(matches))])
-        student_states = F.layer_norm(student_states, student_states.shape[1:])
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
-        teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
-        hidden_losses = (
-            F.mse_loss(student_states, teacher_states, reduction="none") * mask.unsqueeze(0).unsqueeze(-1)
-        ).sum() / valid_count
-        return hidden_losses
+        if self.hparams.normalize_hidden:
+            student_states = F.layer_norm(student_states, student_states.shape[1:])
+            teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
+        mse = F.mse_loss(student_states, teacher_states, reduction="none")
+        masked_mse = (mse * mask.unsqueeze(0).unsqueeze(-1)).sum() / valid_count
+        return masked_mse
 
 
 def add_distill_args(parser):
@@ -285,8 +285,6 @@ class BartTranslationDistiller(BartSummarizationDistiller):
         self.dataset_kwargs["tgt_lang"] = hparams.tgt_lang
         if self.model.config.decoder_start_token_id is None and isinstance(self.tokenizer, MBartTokenizer):
             self.decoder_start_token_id = self.tokenizer.lang_code_to_id[hparams.tgt_lang]
-
-        self.norm_func = F.layer_norm if hparams.normalize_hidden else nn.Identity()
 
     def calc_generative_metrics(self, preds, target) -> dict:
         return calculate_bleu(preds, target)

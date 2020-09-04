@@ -32,7 +32,7 @@ logger = logging.getLogger()
 CUDA_AVAILABLE = torch.cuda.is_available()
 CHEAP_ARGS = {
     "supervise_forward": True,
-    "normalize_hidden": False,
+    "normalize_hidden": True,
     "label_smoothing": 0.2,
     "eval_beams": 1,
     "val_metric": "loss",
