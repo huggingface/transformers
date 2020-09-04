@@ -65,7 +65,7 @@ BART_CONFIG_ARGS_DOC = r"""
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, optional, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        add_bias_logits (:obj:`int`, optional, defaults to False):
+        add_bias_logits (:obj:`bool`, optional, defaults to False):
             True for marian only.
         normalize_before (:obj:`bool`, optional, defaults to False):
             Call layernorm before attention ops. True for pegasus, mbart. False for bart. FIXME: marian?
@@ -89,10 +89,10 @@ BART_CONFIG_ARGS_DOC = r"""
             Google "layerdrop arxiv", as its not explainable in one line.
         extra_pos_embeddings: (:obj:`int`, optional, defaults to 2):
             How many extra learned positional embeddings to use. Should be pad_token_id+1 for bart.
-        num_labels: (:obj:`int`, optional, defaults to 2):
+        num_labels: (:obj:`int`, optional, defaults to 3):
             for SequenceClassification
-        is_encoder_decoder (:obj:`int`, optional, defaults to True):
-            True
+        is_encoder_decoder (:obj:`bool`, optional, defaults to True):
+            Whether this is an encoder/decoder model
         force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only true for `bart-large-cnn`.
 
