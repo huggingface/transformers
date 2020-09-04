@@ -58,10 +58,10 @@ _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 
 
 FSMT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-ru-en/"
-    "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-ru/"
-    "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-de-en/"
-    "https://s3.amazonaws.com/models.huggingface.co/bert/stas/fsmt-wmt19-en-de/"
+    "stas/fsmt-wmt19-ru-en"
+    "stas/fsmt-wmt19-en-ru"
+    "stas/fsmt-wmt19-de-en"
+    "stas/fsmt-wmt19-en-de"
 ]
 
 
