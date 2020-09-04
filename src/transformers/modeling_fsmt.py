@@ -56,15 +56,6 @@ logger = logging.getLogger(__name__)
 _CONFIG_FOR_DOC = "FSMTConfig"
 _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 
-
-FSMT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "stas/fsmt-wmt19-ru-en",
-    "stas/fsmt-wmt19-en-ru",
-    "stas/fsmt-wmt19-de-en",
-    "stas/fsmt-wmt19-en-de",
-]
-
-
 # See all FSMT models at https://huggingface.co/models?search=fsmt
 
 

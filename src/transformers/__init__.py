@@ -329,12 +329,7 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
-    from .modeling_fsmt import (
-        FSMT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        FSMTForConditionalGeneration,
-        FSMTModel,
-        PretrainedFSMTModel,
-    )
+    from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
     from .modeling_gpt2 import (
         GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2DoubleHeadsModel,
