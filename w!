@@ -1044,10 +1044,9 @@ class GenerationMixin:
         if do_sample is True:
             dist_warper = sample_warper( )# instantiate correct samplers
         else:
-            dist_warper = greedy_warper( )
+            dist_warper = beam_warper( )
 
         if num_beams > 1:
-            beam_scorer = BeamScorer() # get bigger BeamScoring class
 
     @torch.no_grad()
     def greedy_decode(self, dist_wrapper, post_processor, kwargs):
@@ -1102,7 +1101,7 @@ class CausalLMGenerationMixin(GenerationMixin):
         beam_scorer,
         model_kwargs,
     ):
-        next_beam_scores, unfinished_sents, sent_lengths = init(...)
+        unfinished_sents, sent_lengths = init(...)
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -1111,22 +1110,19 @@ class CausalLMGenerationMixin(GenerationMixin):
             next_token_logits = outputs.logits[:, -1, :]
             scores = dist_warper(next_token_logits)
 
-            # special for beam_decode
-            scores = scores + next_beam_scores
-            next_scores, next_tokens = torch.topk(scores)
+            scores = scores + beam_scores
+            next_token = torch.topk(scores)
 
-            beam_scorer.update(next_scores, next_tokens)
 
-            next_beam_scores = beam_scorer.get_next_scores()
-            next_beam_tokens = beam_scorer.get_next_tokens()
-            next_beam_idx = beam_scorer.get_next_beam_idx()
 
-            input_ids = torch.cat([input_ids[next_beam_idx, :], next_beam_tokens.unsqueeze(-1)], dim=-1)
+            # add token and increase length by one
+            input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
 
-            past = self._reorder_cache(next_beam_idx) 
+            past, attention_mask, unfished_sents, sent_length = update(...)
 
-            if beam_scorer.is_done()
+            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            if unfinished_sents.max() == 0:
                 break
 
 
