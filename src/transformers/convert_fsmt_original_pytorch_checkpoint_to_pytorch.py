@@ -380,7 +380,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
     print(f"transformers-cli upload {model_dir}")
-    print(f"Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to force redownload")
+    print("Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to force redownload")
 
 
 if __name__ == "__main__":
