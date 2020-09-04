@@ -15,9 +15,9 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 logger = getLogger(__name__)
 
 try:
-    from .utils import calculate_bleu, calculate_rouge, use_task_specific_params
+    from .utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
 except ImportError:
-    from utils import calculate_bleu, calculate_rouge, use_task_specific_params
+    from utils import calculate_bleu, calculate_rouge, parse_numeric_cl_kwargs, use_task_specific_params
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -70,27 +70,6 @@ def generate_summaries_or_translations(
     return dict(n_obs=n_obs, runtime=runtime, seconds_per_sample=round(runtime / n_obs, 4))
 
 
-def cast_to_type(value: str):
-    for caster in [int, float]:
-        try:
-            return caster(value)
-        except ValueError:
-            continue
-    return value
-
-
-def cl_to_dict(unparsed_args: list):
-    i = 0
-    result = {}
-    assert len(unparsed_args) % 2 == 0, f"got odd number of unparsed args: {unparsed_args}"
-    while i < len(unparsed_args) - 1:
-        assert unparsed_args[i].startswith("--")
-        value = cast_to_type(unparsed_args[i + 1])
-        result[unparsed_args[i][2:]] = value
-        i += 2
-    return result
-
-
 def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
@@ -107,7 +86,7 @@ def run_generate():
     parser.add_argument("--fp16", action="store_true")
     # Unspecified args like --num_beams=2 --decoder_start_token_id=4 are passed to model.generate
     args, rest = parser.parse_known_args()
-    parsed = cl_to_dict(rest)
+    parsed = parse_numeric_cl_kwargs(rest)
     if parsed:
         print(f"parsed the following generate kwargs: {parsed}")
     examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path).readlines()]
