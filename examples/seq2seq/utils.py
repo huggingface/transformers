@@ -311,7 +311,7 @@ def assert_not_all_frozen(model):
     assert any(model_grads), f"none of {npars} weights require grad"
 
 
-### CLI Parsing utils
+# CLI Parsing utils
 
 
 def parse_numeric_cl_kwargs(unparsed_args: List[str]) -> Dict[str, Union[int, float]]:
