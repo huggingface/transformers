@@ -1,3 +1,7 @@
+---
+language: kn
+---
+
 # Welcome to KanBERTo (ಕನ್ಬರ್ಟೋ)
 
 ## Model Description
