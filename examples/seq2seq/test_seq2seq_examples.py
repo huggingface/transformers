@@ -300,6 +300,10 @@ def test_run_eval(model):
         score_path,
         "--task",
         task,
+        "--num_beams",
+        "2",
+        "--length_penalty",
+        "2.0",
     ]
     with patch.object(sys, "argv", testargs):
         run_generate()
