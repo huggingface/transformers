@@ -24,8 +24,11 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
+    import tensorflow as tf
+
     from transformers.modeling_tf_bertweet import (
         TFBertweetForMaskedLM,
+        TFBertweetForMultipleChoice,
         TFBertweetForQuestionAnswering,
         TFBertweetForSequenceClassification,
         TFBertweetForTokenClassification,
@@ -43,6 +46,7 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
             TFBertweetForQuestionAnswering,
             TFBertweetForSequenceClassification,
             TFBertweetForTokenClassification,
+            TFBertweetForMultipleChoice,
         )
         if is_tf_available()
         else ()
@@ -205,6 +209,22 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
+        def create_and_check_bertweet_for_multiple_choice(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = TFBertweetForMultipleChoice(config=config)
+            multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+            multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+            multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+            inputs = {
+                "input_ids": multiple_choice_inputs_ids,
+                "attention_mask": multiple_choice_input_mask,
+                "token_type_ids": multiple_choice_token_type_ids,
+            }
+            result = model(inputs)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -245,6 +265,10 @@ class TFBertweetModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bertweet_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bertweet_for_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

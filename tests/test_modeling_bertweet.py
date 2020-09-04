@@ -27,6 +27,7 @@ if is_torch_available():
     from transformers import (
         BertweetConfig,
         BertweetForMaskedLM,
+        BertweetForMultipleChoice,
         BertweetForQuestionAnswering,
         BertweetForSequenceClassification,
         BertweetForTokenClassification,
@@ -45,6 +46,7 @@ class BertweetModelTest(ModelTesterMixin, unittest.TestCase):
             BertweetForQuestionAnswering,
             BertweetForSequenceClassification,
             BertweetForTokenClassification,
+            BertweetForMultipleChoice,
         )
         if is_torch_available()
         else ()
@@ -232,6 +234,24 @@ class BertweetModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
+        def create_and_check_bertweet_for_multiple_choice(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = BertweetForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            result = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                token_type_ids=multiple_choice_token_type_ids,
+                labels=choice_labels,
+            )
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -272,6 +292,10 @@ class BertweetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bertweet_for_token_classification(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bertweet_for_multiple_choice(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
