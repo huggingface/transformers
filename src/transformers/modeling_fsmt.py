@@ -217,17 +217,17 @@ FSMT_INPUTS_DOCSTRING = r"""
                Indices of input sequence tokens in the vocabulary. Use FSMTTokenizer.encode to produce them.
             Padding will be ignored by default should you provide it.
             Indices can be obtained using :class:`transformers.FSMTTokenizer.encode(text)`.
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
+        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
-            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
+            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`) is a sequence of hidden-states at the output of the last layer of the encoder.
             Used in the cross-attention of the decoder.
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
             If you want to change padding behavior, you should read :func:`~transformers.modeling_fairseqtranslator._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
@@ -240,11 +240,11 @@ FSMT_INPUTS_DOCSTRING = r"""
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If `use_cache` is True, ``past_key_values`` are returned and can be used to speed up decoding (see
             ``past_key_values``).
-        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_attentions (:obj:`bool`, `optional`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        output_hidden_states (:obj:`bool`, `optional`):
             If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        return_dict (:obj:`bool`, `optional`):
             If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
             plain tuple.
 """
@@ -1151,7 +1151,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         **unused,
     ):
         r"""
-            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Labels for computing the masked language modeling loss.
                 Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens

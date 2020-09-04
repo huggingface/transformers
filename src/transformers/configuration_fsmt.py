@@ -67,17 +67,17 @@ FSMT_CONFIG_ARGS_DOC = r"""
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, optional, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        add_bias_logits (:obj:`bool`, optional, defaults to False):
+        add_bias_logits (:obj:`bool`, optional, defaults to :obj:`False`):
             True for marian only.
-        normalize_before (:obj:`bool`, optional, defaults to False):
+        normalize_before (:obj:`bool`, optional, defaults to :obj:`False`):
             Call layernorm before attention ops.
-        normalize_embedding (:obj:`bool`, optional, defaults to False):
+        normalize_embedding (:obj:`bool`, optional, defaults to :obj:`False`):
             Call layernorm after embeddings.
-        static_position_embeddings (:obj:`bool`, optional, defaults to True):
+        static_position_embeddings (:obj:`bool`, optional, defaults to :obj:`True`):
             Don't learn positional embeddings, use sinusoidal.
-        add_final_layer_norm (:obj:`bool`, optional, defaults to False):
+        add_final_layer_norm (:obj:`bool`, optional, defaults to :obj:`False`):
             Why not add another layernorm?
-        scale_embedding (:obj:`bool`, optional, defaults to True):
+        scale_embedding (:obj:`bool`, optional, defaults to :obj:`True`):
             Scale embeddings by diving by sqrt(d_model).
         bos_token_id (:obj:`int`, optional, defaults to 0)
             Beginning of stream token id.
@@ -89,9 +89,9 @@ FSMT_CONFIG_ARGS_DOC = r"""
             Google "layerdrop arxiv", as its not explainable in one line.
         decoder_layerdrop: (:obj:`float`, optional, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        is_encoder_decoder (:obj:`bool`, optional, defaults to True):
+        is_encoder_decoder (:obj:`bool`, optional, defaults to :obj:`True`):
             Whether this is an encoder/decoder model.
-        tie_word_embeddings (:obj:`bool`, optional, defaults to False):
+        tie_word_embeddings (:obj:`bool`, optional, defaults to :obj:`False`):
             Whether to tie input and output embeddings.
 """
 
