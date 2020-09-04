@@ -12,7 +12,7 @@ metrics:
 - http://www.statmt.org/wmt19/metrics-task.html
 ---
 
-# Model name
+# FSMT
 
 ## Model description
 
@@ -40,9 +40,7 @@ mname = "fsmt-wmt19-en-de"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
 
-pair = ["en", "de"]
 input = "Machine learning is great, isn't it?
-
 input_ids = tokenizer.encode(input, return_tensors="pt")
 outputs = model.generate(input_ids)
 decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)

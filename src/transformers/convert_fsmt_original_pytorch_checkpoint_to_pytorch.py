@@ -162,9 +162,7 @@ mname = "fsmt-wmt19-{src_lang}-{tgt_lang}"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
 
-pair = ["{src_lang}", "{tgt_lang}"]
 input = "{texts[src_lang]}
-
 input_ids = tokenizer.encode(input, return_tensors="pt")
 outputs = model.generate(input_ids)
 decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -382,7 +380,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     print("\nLast step is to upload the files to s3")
     print(f"cd {data_root}")
     print(f"transformers-cli upload {model_dir}")
-    print("Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to force redownload")
+    print(f"Note: CDN caches files for up to 24h, so use `from_pretrained(mname, use_cdn=False)` to force redownload")
 
 
 if __name__ == "__main__":
