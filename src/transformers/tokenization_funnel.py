@@ -43,7 +43,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "funnel-transformer/small-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small-base/vocab.txt",
         "funnel-transformer/medium": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium/vocab.txt",
         "funnel-transformer/medium-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium-base/vocab.txt",
-        "funnel-transformer/intemediate": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate/vocab.txt",
+        "funnel-transformer/intermediate": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate/vocab.txt",
         "funnel-transformer/intermediate-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate-base/vocab.txt",
         "funnel-transformer/large": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large/vocab.txt",
         "funnel-transformer/large-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large-base/vocab.txt",
