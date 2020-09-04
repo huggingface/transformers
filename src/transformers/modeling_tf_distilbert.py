@@ -76,7 +76,7 @@ def gelu(x):
         0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         Also see https://arxiv.org/abs/1606.08415
     """
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
+    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.cast(tf.math.sqrt(2.0), dtype=x.dtype)))
     return x * cdf
 
 
@@ -168,7 +168,9 @@ class TFEmbeddings(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-        position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
+        position_embeddings = tf.cast(
+            self.position_embeddings(position_ids), inputs_embeds.dtype
+        )  # (bs, max_seq_length, dim)
 
         embeddings = inputs_embeds + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
@@ -261,9 +263,12 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, q_length, k_length)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))            # (bs, n_heads, q_length, k_length)
-        scores = scores - 1e30 * (1.0 - mask)
 
-        weights = tf.nn.softmax(scores, axis=-1)  # (bs, n_heads, qlen, klen)
+        scores_dtype = scores.dtype
+        # calculate `scores` in `tf.float32` to avoid numeric overflow
+        scores = tf.cast(scores, dtype=tf.float32) - 1e30 * (1.0 - tf.cast(mask, dtype=tf.float32))
+
+        weights = tf.cast(tf.nn.softmax(scores, axis=-1), dtype=scores_dtype)  # (bs, n_heads, qlen, klen)
         weights = self.dropout(weights, training=training)  # (bs, n_heads, qlen, klen)
 
         # Mask heads if we want to
